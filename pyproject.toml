@@ -1,0 +1,67 @@
+[project]
+name = "qalpha"
+version = "0.1.0"
+description = "Q-Alpha — quantitative wealth engine for Indian equities (Phase 0: strategy validation)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "scipy>=1.13",
+    "scikit-learn>=1.5",
+    "pyarrow>=16.0",
+    "yfinance>=0.2.40",
+    "structlog>=24.1",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pre-commit>=3.8",
+    "pandas-stubs>=2.2",
+    "types-pyyaml",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qalpha"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "C4", "RUF"]
+# E501: line length handled by formatter.
+# RUF001-003: comments/strings intentionally use unicode (₹, ×, –, § references to Q_alpha.md).
+ignore = ["E501", "RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+disallow_untyped_defs = true
+ignore_missing_imports = true   # yfinance/sklearn ship no stubs
+# pandas-stubs/numpy frequently infer Any for elementwise ops; chasing those with casts adds noise
+# without catching real bugs. We keep full strictness on OUR signatures but relax this one sub-flag.
+warn_return_any = false
+plugins = []
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["src/qalpha"]
