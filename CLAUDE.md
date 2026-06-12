@@ -30,9 +30,43 @@ book (5→13 rebalances), **neutral in-sample** (18.4 vs 18.5) and **fixed holdo
 on the holdout (8.1 vs 7.1), AND across rolling 3y holds** (dominates every percentile, worst-3y
 +3.6% vs 1/N −8.7%, ≥1/N in 67%). First optimiser change to clear the iron-rule bar *and* survive
 the out-of-time holdout. So the edge is BOTH the tax engine AND a modest robust 1/N-anchored return
-tilt — not pure index-tracking after all. **Recommended production config: `weighting="shrink"`,
-`force_refresh=True`, annual, gate 2.0, band 0.10, Nifty 50 TRI** (code defaults unchanged pending
-your OK to flip). No DB / broker / dashboard yet. CI green.
+tilt — not pure index-tracking after all. No DB / broker / dashboard yet. CI green.
+
+## ⏯️ NEXT SESSION — START HERE
+
+**Phase 0 is done and committed** on branch **`phase0-validated`** (commit `c36a93f`, **not pushed**).
+Working tree clean; all four gates green (ruff, ruff-format, mypy strict, pytest).
+
+**The validated config is now the default** of `scripts/run_phase0.py` (no args needed):
+PIT universe + **Nifty 50 TRI** benchmark + **annual** rebalance + **`weighting=shrink`** (½ min-var +
+½ equal, the anchor-to-1/N edge) + **`force_refresh=True`** (anti-ossification) + §4.6 gate 2.0 + band
+0.10. Reproduce the headline (**18.2% CAGR / Sharpe 1.13 / GO**, beats Nifty TRI 14.5% and 1/N 17.7%):
+```bash
+uv run python scripts/build_nifty_universe.py        # regenerate the PIT universe CSV (gitignored)
+uv run python scripts/run_phase0.py --end 2024-12-31 # the validated run → reports/phase0_report.md
+```
+Engine low-level defaults were left neutral (minvar / monthly / no-refresh) so the test-suite stays
+green; the *application* layer (run_phase0) carries the validated defaults.
+
+**What's proven vs not:** the strategy edge is validated as far as *simulation* can go (walk-forward +
+2025-26 holdout + shrink beats 1/N). What remains is **live-only** validation that no simulator can
+replace — data-feed integrity, real fills/slippage, FIFO-vs-broker tax reconciliation, the
+human-in-the-loop process, and certainty of no look-ahead (we found one look-ahead bug already). That
+is the unskippable forward paper run; it can be *de-risked* fast (replay the production code over
+history; validate FIFO vs a real Zerodha Tax P&L) and run *in parallel* with the build, but the
+forward calendar time itself (pipeline survives N days + ≥1 volatility event) cannot be simulated away.
+
+**Three candidate next moves (pick one):**
+1. **`git push` / open a PR** for `phase0-validated` (currently local-only).
+2. **STRATEGY.md Stage 1 — founder-as-user build**: Zerodha data pipeline + FIFO-vs-Tax-P&L (§14
+   crit 4) + a replay harness; this also starts the real-time paper-trading clock.
+3. **STRATEGY.md Stage 2 — the tax-alpha whitepaper**: now backed by a result that is *both* tax-alpha
+   *and* a real 1/N-beating return edge.
+
+**Read-me-first docs:** `reports/PHASE0_VERDICT.md` (full evidence chain + verdict), `STRATEGY.md`
+(market scan, regulatory reality, 4-stage industry-ready plan), `PLAN.md` (technical track).
+Experiment scripts: `walkforward.py`, `calibrate_gate.py`, `holdout_2025.py`, `exp_breadth.py`,
+`exp_frequency_lookback.py`, `build_nifty_universe.py`.
 
 ### Original static result (Phase 0b, 2012–2024, net of cost + tax) — vs Nifty *price*
 | | final ₹ (from ₹2L) | CAGR | Sharpe | max abs DD |
