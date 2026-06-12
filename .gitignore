@@ -15,6 +15,7 @@ data/fundamentals/*
 data/universes/*
 data/bhavcopy/*
 !data/**/.gitkeep
+!data/**/README.md
 
 # Reports
 reports/*.html

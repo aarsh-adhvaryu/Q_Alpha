@@ -151,12 +151,23 @@ def main() -> None:
     parser.add_argument(
         "--no-fundamentals", action="store_true", help="force Phase 0a (price/volume factors only)"
     )
+    parser.add_argument(
+        "--universe-csv",
+        default=None,
+        help="point-in-time membership CSV (ticker,start_date,end_date). "
+        "Without it, a STATIC survivor universe is used and the verdict is capped at CONDITIONAL.",
+    )
     args = parser.parse_args()
 
     cfg = Config()
     prices, benchmark = _load_or_download(args.start, args.end, args.refresh)
     sector_of = _yf_sector_map()
-    universe = Universe.static(prices.tickers)
+    if args.universe_csv and Path(args.universe_csv).exists():
+        universe = Universe.from_csv(args.universe_csv)
+        print(f"Universe: point-in-time from {args.universe_csv}")
+    else:
+        universe = Universe.static(prices.tickers)
+        print("Universe: STATIC survivor set (survivorship-biased) → verdict capped at CONDITIONAL")
 
     # Phase 0b: use Screener fundamentals if any xlsx are present (re-ingest to pick up new files).
     fundamentals: FundamentalsStore | None = None

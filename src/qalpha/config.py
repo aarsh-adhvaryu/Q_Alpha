@@ -119,7 +119,10 @@ class OptimizerConfig:
     max_single_stock: float = 0.20  # 20% of core
     ewma_halflife_days: int = 60  # §3.8
     drift_threshold: float = 0.05  # §3.4 (5–10%; start at 5%)
-    rebalance_net_benefit_multiple: Decimal = Decimal("2.0")  # §4.6 risk improvement > 2× cost
+    # §4.6: rebalance only if risk improvement > this × (cost+tax). Spec value 2.0. NOTE: a Phase-0b
+    # sweep (2012–24) found 2.0 too lenient — 3.0 roughly halved tax AND improved CAGR/Sharpe. Kept
+    # at 2.0 pending walk-forward (out-of-sample) calibration (§6.2) rather than in-sample tuning.
+    rebalance_net_benefit_multiple: Decimal = Decimal("2.0")
 
 
 @dataclass(frozen=True)
