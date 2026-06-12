@@ -21,10 +21,12 @@ data/bhavcopy/*
 reports/*.html
 reports/*.png
 
-# Secrets — never commit broker creds (Kite api_key/secret)
+# Secrets — never commit broker creds (Kite api_key/secret) or minted sessions
 .env
 *.env
+!.env.example
 secrets/
+.kite_session.json
 
 # Notebooks scratch
 .ipynb_checkpoints/
