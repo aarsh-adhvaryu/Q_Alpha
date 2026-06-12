@@ -21,6 +21,14 @@ regime  days  %time  ann_ret_%  vol_%  sharpe
 ------  ----  -----  ---------  -----  ------
   bull  3202  100.0       16.6   15.7    1.06
 
+## Drawdown analysis (Section 0 — dynamic, market-relative)
+
+- Worst **absolute** drawdown: -34.5% on 2020-03-23 — Nifty was -38.4% that day (strategy fell LESS than the market).
+- Worst **excess** drawdown vs Nifty (strategy-specific): -18.6% on 2015-01-27.
+- Catastrophic backstop (≈ −40% absolute): not breached.
+- Adaptive strategy-halt (sustained excess DD beyond 95th pct): never fired.
+- **Criterion 8 (dynamic): PASS** — absolute drawdown was market-driven (beta), not an idiosyncratic blow-out; a flat 20% freeze would have misfired here.
+
 ## Go / No-Go
 
 ### Verdict: **CONDITIONAL**

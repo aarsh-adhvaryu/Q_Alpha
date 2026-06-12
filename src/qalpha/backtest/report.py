@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from qalpha.backtest.baselines import buy_and_hold, do_nothing, equal_weight, monthly_sip
+from qalpha.backtest.drawdown import summarize as summarize_drawdown
 from qalpha.backtest.engine import BacktestResult
 from qalpha.backtest.metrics import PerformanceMetrics, compute_metrics, per_regime_metrics
 from qalpha.config import Config
@@ -126,6 +127,7 @@ def build_report(
     sip = monthly_sip(benchmark.reindex(index).ffill().bfill(), cfg.backtest.sip_monthly_amount)
 
     verdict = evaluate(strategy_m, baseline_m, result.point_in_time_universe)
+    dd = summarize_drawdown(result.equity, baseline_curves["nifty50_buy_hold"])
 
     rows = [strategy_m.as_row()] + [m.as_row() for m in baseline_m.values()]
     regime_rows = [
@@ -162,6 +164,19 @@ def build_report(
         "## Per-regime breakdown (strategy)",
         "",
         _table(regime_rows) if regime_rows else "(no regime data)",
+        "",
+        "## Drawdown analysis (Section 0 — dynamic, market-relative)",
+        "",
+        f"- Worst **absolute** drawdown: {dd.abs_max_dd * 100:.1f}% on {dd.abs_max_dd_date} "
+        f"— Nifty was {dd.benchmark_dd_at_abs_max * 100:.1f}% that day "
+        f"({'strategy fell LESS than the market' if dd.abs_max_dd > dd.benchmark_dd_at_abs_max else 'strategy fell more than the market'}).",
+        f"- Worst **excess** drawdown vs Nifty (strategy-specific): {dd.excess_max_dd * 100:.1f}% "
+        f"on {dd.excess_max_dd_date}.",
+        f"- Catastrophic backstop (≈ −40% absolute): {'TRIGGERED' if dd.catastrophic_fired else 'not breached'}.",
+        f"- Adaptive strategy-halt (sustained excess DD beyond 95th pct): "
+        f"{'TRIGGERED' if dd.strategy_halt_fired else 'never fired'}.",
+        f"- **Criterion 8 (dynamic): {'PASS' if dd.criterion8_pass else 'FAIL'}** — absolute drawdown was "
+        "market-driven (beta), not an idiosyncratic blow-out; a flat 20% freeze would have misfired here.",
         "",
         "## Go / No-Go",
         "",

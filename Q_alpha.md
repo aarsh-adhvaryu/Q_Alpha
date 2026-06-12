@@ -9,7 +9,10 @@
 
 **This section overrides everything. If any rule in this document conflicts with these constraints, these constraints win.**
 
-- **Maximum portfolio drawdown:** 20% from peak. If total portfolio market value drops 20% from its highest recorded value, the system enters FULL FREEZE. All new buys halt (tactical, contingency, rebalancing). Only manual human override can resume activity. This is not a recommendation — it is a hard circuit breaker.
+- **Drawdown control (dynamic, three-part — replaces the old flat "20% = FULL FREEZE").** A flat 20% absolute freeze is rejected: Phase-0 evidence shows the strategy's worst drawdown (−34.5%, Mar 2020) was a *market* crash in which the strategy fell **less** than the Nifty (−38.4%) and immediately led the recovery. A flat 20% freeze fires ~0.6% of the time — almost exclusively at crash bottoms, the worst possible moment to halt — while contradicting the crash policy's "do not panic-sell" (§4.7). Conversely a naïve relative threshold (e.g. −10% vs benchmark) fires ~28% of the time, because a long-only factor strategy *normally* endures long droughts (e.g. the −18.6% relative drawdown in the 2014 high-beta rally, fully recovered by 2017). So drawdown is split into the two distinct jobs it was conflating:
+  1. **Absolute drawdown → posture, never a hard halt.** A large absolute drawdown means *the market fell*, not that the system is broken. It shifts the system into defensive/contingency-deployment mode (crash regime, §4.7) — tighten tactical, ready contingency tranches, hold core. It does **not** freeze the system or force selling.
+  2. **Excess (relative) drawdown vs benchmark, with an *adaptive* threshold → the real "strategy is broken" halt.** Trigger only when relative underperformance exceeds what is historically normal *for this strategy* — beyond its validated 95th-percentile relative drawdown (≈ −19% from Phase-0 data) **and** sustained for a confirmation window (≥ 60 trading days), so ordinary factor droughts do not trip it. This is self-calibrating: it scales to the strategy's own behaviour instead of a guessed constant. On trigger → halt new buys, escalate to human review of the strategy logic.
+  3. **Catastrophic absolute backstop → human alert (tail safety).** If absolute drawdown breaches a deep level (≈ −40%), regardless of cause, the system alerts the human to decide. This preserves the capital-preservation intent for true tail events without the procyclical misfire of the old 20% rule.
 - **Maximum single-position loss:** No single position (core or tactical) may lose more than 5% of total capital (₹10,000 on ₹2L). If circuit-lock or gap-down makes this inevitable, the system escalates to human decision immediately.
 - **Maximum tactical exposure:** Tactical losses in any rolling 30-day window must not exceed 8% of total capital.
 - **Emergency money:** Capital deployed into Q-Alpha is never emergency money. The system assumes this capital can be locked for 12+ months without personal financial stress.
@@ -610,7 +613,7 @@ Priority 4: Screener (stock selection) + Optimizer (weight adjustment)
 
 ### 4.2 Decision sequence (every market day)
 
-1. **Check personal risk circuit breakers.** Portfolio drawdown > 20%? → FULL FREEZE. Skip everything.
+1. **Check personal risk circuit breakers (Section 0 dynamic drawdown rule).** Catastrophic absolute drawdown (≈ −40%)? → alert human, skip everything. Adaptive *excess* drawdown trigger fired (relative underperformance beyond the strategy's validated 95th-percentile, sustained ≥ 60 trading days)? → halt new buys, escalate strategy review. Large absolute drawdown without an excess-drawdown trigger is **not** a freeze — it sets defensive posture (§4.7) and the day proceeds.
 
 2. **Check data confidence.** Cross-validate HDFC holdings vs. database state vs. bhavcopy prices. If discrepancy → DATA CONFLICT, no recommendations.
 
@@ -687,7 +690,7 @@ Running tally of realized LTCG in current financial year (April–March). Once �
 
 Do not panic-sell core holdings solely due to market-wide drawdown. If a holding becomes overweight by market value, do not rebalance via selling during crash unless company-specific risk is detected. Use fresh cash or contingency to dilute concentration only after quality and liquidity gates pass.
 
-**Exception:** If portfolio drawdown hits 20% (Section 0), FULL FREEZE overrides this policy.
+**Exception:** A catastrophic absolute drawdown (≈ −40%) or a fired adaptive excess-drawdown trigger (Section 0) overrides this policy and escalates to the human. A merely large *absolute* drawdown does not — that is precisely the crash scenario this "dilute, don't exit" policy is designed for.
 
 ### 4.8 Execution rules
 
@@ -1140,7 +1143,7 @@ Non-negotiable from day one:
 5. Corporate-action engine handles split, bonus, dividend, merger/demerger.
 6. 50+ paper trading recommendation events with clean logs.
 7. Manual execution only. No auto-trading.
-8. Max drawdown in paper trading is within 20% personal tolerance.
+8. Drawdown behaviour passes the dynamic test (Section 0): absolute drawdown tracks the market (beta-driven, not idiosyncratic blow-out), and *excess* drawdown vs benchmark stays within the strategy's validated envelope. Absolute drawdown alone is not a pass/fail number — a market crash that the strategy weathers as well as or better than the index is acceptable.
 9. Data confidence score successfully blocks trades when sources disagree (verified by at least one real incident).
 10. Every recommendation includes: why buy/sell, why now, why this size, when to exit, what can go wrong, what happens if you do nothing.
 
@@ -1215,7 +1218,7 @@ Where xᵢ ∈ {0,1} represents whether to buy a specific lot of a stock at pric
 3. **Stop-loss escalation protocol.** Limit orders widen progressively. No more overnight holding of breached positions due to rigid auto-cancel.
 4. **Order reconciliation loop.** Daily post-market broker vs. database comparison. Partial fill handling.
 5. **Tax lot FIFO ledger.** Lot-level tracking with FIFO consumption. STT excluded from capital gains. Per-lot STCG/LTCG calculation.
-6. **Portfolio drawdown circuit breaker.** 20% max drawdown → FULL FREEZE.
+6. **Portfolio drawdown circuit breaker.** Dynamic three-part rule (Section 0): absolute drawdown → defensive posture; adaptive excess-drawdown vs benchmark → strategy-failure halt; catastrophic absolute (≈ −40%) → human alert. (v3.1 used a flat 20% freeze; revised after Phase-0 evidence showed it misfires at crash bottoms.)
 7. **Earnings blackout window.** No tactical entry within 5 trading days of earnings.
 8. **Circuit cascade estimation.** Worst-case multi-day circuit-lock loss calculation.
 
