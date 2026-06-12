@@ -1,14 +1,14 @@
 # Q-Alpha — Phase 0 Backtest Report
 
-**Window:** 2012-01-02 → 2024-12-30  |  **Starting capital:** ₹200,000  |  **Rebalances:** 9
-**Costs charged (strategy):** ₹7,277.15  |  **Capital-gains tax:** ₹2,737.79
+**Window:** 2012-01-02 → 2024-12-30  |  **Starting capital:** ₹200,000  |  **Rebalances:** 46
+**Costs charged (strategy):** ₹43,130.97  |  **Capital-gains tax:** ₹78,271.14
 
 ## Performance vs baselines (strategy is net of Zerodha cost + capital-gains tax;
 ## baselines are idealised, cost-free and tax-free)
 
         strategy    final_₹  total_return_%  cagr_%  vol_%  sharpe  sortino  max_dd_%  calmar
 ----------------  ---------  --------------  ------  -----  ------  -------  --------  ------
-Q-Alpha strategy  1136672.0           468.3    14.6   15.1    0.98     1.29     -33.6    0.44
+Q-Alpha strategy  1412776.0           606.4    16.6   15.7    1.06     1.41     -34.5    0.48
       do_nothing   200000.0             0.0     0.0    0.0     0.0      0.0       0.0     0.0
 nifty50_buy_hold   992378.0           396.2    13.4   16.4    0.85     1.07     -38.4    0.35
     equal_weight  1579511.0           689.8    17.7   16.2    1.09     1.41     -35.6     0.5
@@ -19,16 +19,16 @@ nifty50_buy_hold   992378.0           396.2    13.4   16.4    0.85     1.07     
 
 regime  days  %time  ann_ret_%  vol_%  sharpe
 ------  ----  -----  ---------  -----  ------
-  bull  3202  100.0       14.8   15.1    0.98
+  bull  3202  100.0       16.6   15.7    1.06
 
 ## Go / No-Go
 
 ### Verdict: **CONDITIONAL**
 
-- ✓ beats do-nothing (₹1,136,672 vs ₹200,000)
-- ✓ beats Nifty 50 value (₹1,136,672 vs ₹992,378)
-- ✓ beats Nifty 50 Sharpe (0.98 vs 0.85)
-- ◦ vs equal-weight (informational): ₹1,136,672 vs ₹1,579,511
+- ✓ beats do-nothing (₹1,412,776 vs ₹200,000)
+- ✓ beats Nifty 50 value (₹1,412,776 vs ₹992,378)
+- ✓ beats Nifty 50 Sharpe (1.06 vs 0.85)
+- ◦ vs equal-weight (informational): ₹1,412,776 vs ₹1,579,511
 - ✓ criterion 1 met (beats all baselines net of cost+tax)
 - ⚠ criterion 3 unmet: static universe carries SURVIVORSHIP BIAS — re-run on a point-in-time universe before trusting the edge
 

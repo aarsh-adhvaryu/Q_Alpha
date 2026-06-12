@@ -13,8 +13,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
+import openpyxl
 import pandas as pd
 
 from qalpha.backtest.engine import run_backtest
@@ -59,6 +61,54 @@ WATCHLIST: dict[str, str] = {
 PRICES_PARQUET = Path("data/historical/prices.parquet")
 BENCH_PARQUET = Path("data/historical/benchmark.parquet")
 BENCHMARK = "^NSEI"
+
+# Screener "COMPANY NAME" (normalized: lowercased, alphanumerics only) -> NSE base symbol. Keying on
+# the company name *inside* the file makes ingestion robust to however the export file was named.
+_COMPANY_TO_SYMBOL: dict[str, str] = {
+    "tataconsultancyservicesltd": "TCS",
+    "infosysltd": "INFY",
+    "wiproltd": "WIPRO",
+    "hdfcbankltd": "HDFCBANK",
+    "icicibankltd": "ICICIBANK",
+    "statebankofindia": "SBIN",
+    "kotakmahindrabankltd": "KOTAKBANK",
+    "relianceindustriesltd": "RELIANCE",
+    "oilnaturalgascorpnltd": "ONGC",
+    "ntpcltd": "NTPC",
+    "hindustanunileverltd": "HINDUNILVR",
+    "itcltd": "ITC",
+    "nestleindialtd": "NESTLEIND",
+    "marutisuzukiindialtd": "MARUTI",
+    "tatamotorsltd": "TATAMOTORS",
+    "tatamotorsdvr": "TATAMOTORS",
+    "mahindramahindraltd": "M&M",
+    "sunpharmaceuticalindustriesltd": "SUNPHARMA",
+    "ciplaltd": "CIPLA",
+    "drreddyslaboratoriesltd": "DRREDDY",
+    "tatasteelltd": "TATASTEEL",
+    "hindalcoindustriesltd": "HINDALCO",
+    "jswsteelltd": "JSWSTEEL",
+    "larsentoubroltd": "LT",
+    "ultratechcementltd": "ULTRACEMCO",
+    "grasimindustriesltd": "GRASIM",
+}
+
+
+def _normalize(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def _build_fundamentals_filemap(raw_dir: Path) -> dict[str, str]:
+    """Map each xlsx filename -> NSE ticker by reading its internal Screener company name."""
+    mapping: dict[str, str] = {}
+    for xlsx in sorted(raw_dir.glob("*.xlsx")):
+        company = openpyxl.load_workbook(xlsx, data_only=True)["Data Sheet"].cell(1, 2).value
+        symbol = _COMPANY_TO_SYMBOL.get(_normalize(str(company)))
+        if symbol is None:
+            print(f"  WARN: no ticker mapping for '{xlsx.name}' (company '{company}') — skipped")
+            continue
+        mapping[xlsx.name] = f"{symbol}.NS"
+    return mapping
 
 
 def _yf_sector_map() -> dict[str, str]:
@@ -112,15 +162,18 @@ def main() -> None:
     fundamentals: FundamentalsStore | None = None
     have_xlsx = list(RAW_FUNDAMENTALS_DIR.glob("*.xlsx"))
     if have_xlsx and not args.no_fundamentals:
-        ingest_dir(RAW_FUNDAMENTALS_DIR)
+        filemap = _build_fundamentals_filemap(RAW_FUNDAMENTALS_DIR)
+        ingest_dir(RAW_FUNDAMENTALS_DIR, filename_to_ticker=filemap)
         fundamentals = FundamentalsStore.from_parquet()
-        covered = sum(1 for t in prices.tickers if t in set(fundamentals.tickers))
-        phase = (
-            "0b (six-factor)"
-            if covered >= len(prices.tickers)
-            else f"0b partial ({covered}/{len(prices.tickers)} have fundamentals)"
+        covered_set = set(fundamentals.tickers) & set(prices.tickers)
+        missing = sorted(set(prices.tickers) - set(fundamentals.tickers))
+        phase = "0b six-factor" if len(covered_set) >= len(prices.tickers) else "0b partial"
+        print(
+            f"Fundamentals: {len(covered_set)}/{len(prices.tickers)} priced tickers covered "
+            f"→ Phase {phase}"
         )
-        print(f"Fundamentals loaded for {len(fundamentals.tickers)} tickers → Phase {phase}")
+        if missing:
+            print(f"  No fundamentals (price-only factors): {missing}")
     else:
         print("No fundamentals → Phase 0a (3 price/volume factors)")
 
