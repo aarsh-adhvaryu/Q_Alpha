@@ -12,7 +12,7 @@ Phase 0 deploys the full starting capital into the core strategy so the comparis
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -20,9 +20,9 @@ from typing import cast
 
 import pandas as pd
 
+from qalpha.backtest.decision import RebalanceDecision, decide_rebalance
 from qalpha.backtest.defensive import GovernanceEvents, idiosyncratic_exit_flags
 from qalpha.backtest.portfolio import Portfolio, TradeRecord, to_decimal_price
-from qalpha.backtest.strategy import select_and_weight
 from qalpha.config import Config
 from qalpha.data.fundamentals import FundamentalsStore
 from qalpha.data.prices import PriceData
@@ -73,65 +73,9 @@ def _rebalance_dates(
     return list(period_last)
 
 
-def _drift(current: Mapping[str, float], target: pd.Series) -> float:
-    """Sum of absolute weight deviations / 2 (Q_alpha.md §3.4)."""
-    tickers = set(current) | {str(t) for t in target.index}
-    total = 0.0
-    for t in tickers:
-        cur = current.get(t, 0.0)
-        tgt = float(target.get(t, 0.0))
-        total += abs(cur - tgt)
-    return total / 2.0
-
-
 def _default_regime_fn(_d: date) -> Regime:
     """Static BULL regime. Real India-VIX regime detection is a §16 calibration task."""
     return Regime.BULL
-
-
-def _annualized_vol(weights: Mapping[str, float], returns: pd.DataFrame, halflife: int) -> float:
-    """Annualized portfolio volatility for ``weights`` using conditioned covariance of ``returns``."""
-    import numpy as np
-
-    from qalpha.alloc.conditioning import conditioned_covariance
-
-    cols = [t for t in returns.columns if weights.get(str(t), 0.0) != 0.0]
-    if len(cols) < 2:
-        return 0.0
-    cov = conditioned_covariance(returns[cols], halflife=halflife)
-    w = np.array([weights.get(str(t), 0.0) for t in cov.tickers], dtype=float)
-    var = float(w @ cov.matrix @ w)
-    return float(np.sqrt(max(var, 0.0) * 252.0))
-
-
-def _net_benefit_ok(
-    portfolio: Portfolio,
-    target: pd.Series,
-    prices_dec: Mapping[str, Decimal],
-    returns: pd.DataFrame,
-    cfg: Config,
-    min_trade_fraction: float,
-) -> bool:
-    """§4.6 gate: execute only if annual risk reduction (₹) exceeds 2× the trade's cost+tax.
-
-    Risk benefit is the drop in annualized portfolio volatility (a ₹/yr figure when scaled by
-    portfolio value); cost is the real Zerodha cost + FIFO capital-gains tax from a dry-run.
-    """
-    value = float(portfolio.market_value(prices_dec))
-    current_w = portfolio.current_weights(prices_dec)
-    target_w = {str(t): float(w) for t, w in target.items()}
-
-    vol_now = _annualized_vol(current_w, returns, cfg.optimizer.ewma_halflife_days)
-    vol_target = _annualized_vol(target_w, returns, cfg.optimizer.ewma_halflife_days)
-    risk_benefit_rs = max(0.0, vol_now - vol_target) * value
-
-    cost, tax, _ = portfolio.estimate_rebalance(
-        date.today(), target, prices_dec, min_trade_fraction=min_trade_fraction
-    )
-    friction = float(cost + tax)
-    if friction <= 0:
-        return True  # nothing to sell (no tax) and ~no cost: harmless to apply
-    return risk_benefit_rs > float(cfg.optimizer.rebalance_net_benefit_multiple) * friction
 
 
 def run_backtest(
@@ -152,6 +96,7 @@ def run_backtest(
     force_refresh: bool = False,
     weighting: str = "minvar",
     n_stocks_override: int | None = None,
+    on_decision: Callable[[RebalanceDecision], None] | None = None,
 ) -> BacktestResult:
     """Run the walk-forward backtest and return a :class:`BacktestResult`.
 
@@ -206,51 +151,36 @@ def run_backtest(
         regime = regime_fn(d)
 
         if day in rebalance_set:
-            members = universe.members_on(d)
-            asof = prices.as_of(d, lookback=lookback)
             blacklist = governance_events.blacklisted_asof(d) if governance_events else set()
-            in_scope = [t for t in members if t in asof.tickers and t not in blacklist]
-            if len(in_scope) >= 2:
-                asof = asof.subset(in_scope)
-                core_value = portfolio.market_value(prices_dec)
-                n_stocks = n_stocks_override or cfg.capital.max_core_stocks(core_value)
-                target = select_and_weight(
-                    asof,
-                    sector_of,
-                    regime,
-                    cfg,
-                    weighting=weighting,
-                    n_stocks=n_stocks,
-                    fundamentals=fundamentals,
-                    as_of=d,
-                )
-                if not target.empty:
-                    current_w = portfolio.current_weights(prices_dec)
-                    drift = _drift(current_w, target)
-                    first = last_target is None
-                    drift_ok = drift > cfg.optimizer.drift_threshold
-                    benefit_ok = (not tax_aware) or _net_benefit_ok(
-                        portfolio, target, prices_dec, asof.returns(), cfg, min_trade_fraction
+            decision = decide_rebalance(
+                prices=prices,
+                universe=universe,
+                sector_of=sector_of,
+                cfg=cfg,
+                portfolio=portfolio,
+                as_of=d,
+                regime=regime,
+                prices_dec=prices_dec,
+                last_target=last_target,
+                lookback=lookback,
+                blacklist=blacklist,
+                tax_aware=tax_aware,
+                min_trade_fraction=min_trade_fraction,
+                force_refresh=force_refresh,
+                weighting=weighting,
+                n_stocks_override=n_stocks_override,
+                fundamentals=fundamentals,
+            )
+            if on_decision is not None:
+                on_decision(decision)
+            target = decision.target
+            if decision.execute and target is not None and not target.empty:
+                trades.extend(
+                    portfolio.rebalance(
+                        d, target, prices_dec, min_trade_fraction=min_trade_fraction
                     )
-                    # Deploying idle settled cash is tax-free and never "churn" — so it must not be
-                    # blocked by the variance-reduction gate (cash→stocks looks like a risk *rise*).
-                    # Without this, a portfolio driven to cash by defensive exits stays locked out
-                    # of re-investing (§2.9 fresh-capital routing: overflow buys the underweights).
-                    mv = core_value
-                    cash_frac = float(portfolio.cash / mv) if mv > 0 else 0.0
-                    under_invested = cash_frac > min_trade_fraction
-                    # ``force_refresh`` makes the *scheduled* rebalance always execute (the no-trade
-                    # band still suppresses dust trades, so it stays tax-efficient). It exists because
-                    # the all-or-nothing §4.6 benefit gate, by refusing to sell appreciated winners,
-                    # can FREEZE the book for years — leaving it holding stale picks (the 2025-26
-                    # holdout failure mode). Refreshing re-selects current factor leaders on schedule.
-                    if first or under_invested or force_refresh or (drift_ok and benefit_ok):
-                        trades.extend(
-                            portfolio.rebalance(
-                                d, target, prices_dec, min_trade_fraction=min_trade_fraction
-                            )
-                        )
-                        last_target = target
+                )
+                last_target = target
         elif day in defensive_days:
             held = [t for t, q in portfolio.positions().items() if q > 0]
             if held:
