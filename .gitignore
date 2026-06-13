@@ -14,6 +14,7 @@ data/historical/*
 data/fundamentals/*
 data/universes/*
 data/bhavcopy/*
+data/paper/*
 !data/**/.gitkeep
 !data/**/README.md
 

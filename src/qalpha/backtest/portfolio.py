@@ -21,6 +21,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from typing import cast
 
 import pandas as pd
 
@@ -63,6 +64,35 @@ class Portfolio:
 
     def __post_init__(self) -> None:
         self.gains = CapitalGainsCalculator(self.tax_cfg)
+
+    # ---- persistence (live/paper book survives across daily runs) --------
+
+    def to_state(self) -> dict[str, object]:
+        """JSON-safe full state: cash + open FIFO lots + the per-FY LTCG exemption tally.
+
+        Enough to reconstruct an identical accountant — the tally matters because the ₹1.25L LTCG
+        exemption is carried across the financial year (see :class:`CapitalGainsCalculator`).
+        """
+        lots = [
+            lot.to_dict() for t in self.ledger.all_tickers() for lot in self.ledger.open_lots(t)
+        ]
+        return {
+            "cash": str(self.cash),
+            "lots": lots,
+            "ltcg_by_fy": {str(fy): str(v) for fy, v in self.gains.realized_ltcg_by_fy().items()},
+        }
+
+    @classmethod
+    def from_state(
+        cls, state: Mapping[str, object], cost_cfg: CostConfig, tax_cfg: TaxConfig
+    ) -> Portfolio:
+        """Reconstruct a portfolio from :meth:`to_state` (inverse round-trip)."""
+        pf = cls(cost_cfg, tax_cfg, cash=Decimal(str(state["cash"])))
+        for raw in cast(list[Mapping[str, str | None]], state["lots"]):
+            pf.ledger.add_lot(TaxLot.from_dict(raw))
+        ltcg = cast(Mapping[str, str], state["ltcg_by_fy"])
+        pf.gains.restore_ltcg_by_fy({int(fy): Decimal(v) for fy, v in ltcg.items()})
+        return pf
 
     # ---- valuation -------------------------------------------------------
 

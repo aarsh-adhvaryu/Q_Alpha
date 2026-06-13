@@ -30,6 +30,7 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 from kiteconnect import KiteConnect
+from kiteconnect.exceptions import KiteException
 
 from qalpha.live.credentials import REPO_ROOT, KiteCredentials, load_credentials
 
@@ -177,6 +178,16 @@ def main(argv: list[str] | None = None) -> int:
         interactive_login(manual=args.manual, port=args.port)
     except (RuntimeError, ValueError, TimeoutError) as exc:
         print(f"login failed: {exc}", file=sys.stderr)
+        return 1
+    except KiteException as exc:
+        print(f"Kite rejected the login: {exc}", file=sys.stderr)
+        if "not enabled" in str(exc).lower():
+            print(
+                "  → 'user not enabled for the app': log in with the SAME Zerodha account whose "
+                "Client ID is registered on the app. Check the app's 'Zerodha Client ID' field at "
+                "https://developers.kite.trade/apps and confirm the Connect subscription is active.",
+                file=sys.stderr,
+            )
         return 1
     return 0
 

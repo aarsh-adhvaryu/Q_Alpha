@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
@@ -62,6 +63,43 @@ class TaxLot:
     def cost_basis_per_share(self) -> Decimal:
         """Per-share acquisition cost (consideration + allocated buy expenses)."""
         return self.total_buy_cost / self.quantity_original
+
+    def to_dict(self) -> dict[str, str | None]:
+        """JSON-safe snapshot of the lot (Decimals→str, date→ISO) for persisting a live book."""
+        return {
+            "ticker": self.ticker,
+            "acquisition_date": self.acquisition_date.isoformat(),
+            "quantity_original": str(self.quantity_original),
+            "buy_price": str(self.buy_price),
+            "pool": self.pool,
+            "brokerage": str(self.brokerage),
+            "stamp_duty": str(self.stamp_duty),
+            "other_costs": str(self.other_costs),
+            "lot_id": self.lot_id,
+            "broker_trade_id": self.broker_trade_id,
+            "quantity_remaining": str(self.quantity_remaining),
+        }
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, str | None]) -> TaxLot:
+        """Reconstruct a lot from :meth:`to_dict` (inverse round-trip)."""
+
+        def dec(key: str) -> Decimal:
+            return Decimal(str(d[key]))
+
+        return cls(
+            ticker=str(d["ticker"]),
+            acquisition_date=date.fromisoformat(str(d["acquisition_date"])),
+            quantity_original=dec("quantity_original"),
+            buy_price=dec("buy_price"),
+            pool=str(d["pool"]),
+            brokerage=dec("brokerage"),
+            stamp_duty=dec("stamp_duty"),
+            other_costs=dec("other_costs"),
+            lot_id=str(d["lot_id"]),
+            broker_trade_id=d["broker_trade_id"],
+            quantity_remaining=dec("quantity_remaining"),
+        )
 
 
 @dataclass(frozen=True)
