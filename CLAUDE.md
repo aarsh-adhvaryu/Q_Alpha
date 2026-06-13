@@ -9,8 +9,12 @@ architecture is specified in [Q_alpha.md](Q_alpha.md) (v3.1). The codebase is bu
 phase**; the spec mandates that **Phase 0 (strategy validation by backtest) must beat baselines
 after costs and taxes before any production infrastructure is built**.
 
-**Current state: Phase 0 COMPLETE — defensible Phase-0 GO (backtest gates 1-3), validated OOS.**
-See `reports/PHASE0_VERDICT.md`. The original headline (6-factor, 24 survivors, vs Nifty *price*)
+**Current state: Phase 0 COMPLETE + live build well underway — all on `main`.** Beyond the validated
+Phase-0 GO, the repo now has the live layer (Kite auth, replay harness), a running **paper-trading
+book** (notional, started 2026-06-12) with a **dashboard + autonomous daily pipeline**, and a
+**quantum research track** (QUBO + QAOA). See the "NEXT SESSION" block for the active plan (a
+deterministic tax-smart advisor + a live Zerodha-wired dashboard). Phase-0 evidence:
+`reports/PHASE0_VERDICT.md`. The original headline (6-factor, 24 survivors, vs Nifty *price*)
 was stress-tested through two fairness fixes (point-in-time universe + TRI benchmark) and an
 out-of-sample walk-forward; the edge survived once rebalancing slowed to low turnover. §14 gates
 **1 ✅ (OOS) · 2 ✅ · 3 ✅**; criteria 4-10 are Phases 1-6 (infra/broker/paper-trading) — the
@@ -34,8 +38,31 @@ tilt — not pure index-tracking after all. No DB / broker / dashboard yet. CI g
 
 ## ⏯️ NEXT SESSION — START HERE
 
-**Phase 0 is done and committed** on branch **`phase0-validated`** (commit `c36a93f`, **not pushed**).
-Working tree clean; all four gates green (ruff, ruff-format, mypy strict, pytest).
+**Everything is merged to `main`** (6 PRs, as of 2026-06-13): Phase 0 (validated GO) + a **live layer**
+(`src/qalpha/live/`: Kite Connect auth, replay harness, the shared `decide_rebalance`) + a
+**paper-trading runner** (`scripts/paper.py`, notional ₹2L book started 2026-06-12, 5 holdings) + a
+**dashboard + autonomous daily GitHub Actions pipeline** (`reports/paper_dashboard.md`, `paper.yml`) +
+a **quantum research track** (`src/qalpha/research/`: QUBO + exact/SA solvers + **QAOA**, behind an
+optional `quantum` extra). Working tree clean; four gates green.
+
+**🎯 USER'S VISION + AGREED NEXT PLAN (the active direction — build this):** the user trades **manually
+(all his own decisions)** and wants an **advisor + proper live web dashboard wired to his REAL Zerodha
+account** — it reads his holdings (`kite.holdings()`) + live prices, reflects every trade *he* makes,
+and tells him the **tax-smart move**. It NEVER auto-executes. Tax math is **deterministic** (exact/
+auditable — NOT an LLM computing numbers; an LLM "concierge" that routes NL questions to the engine is
+an optional *later* flourish, never the calculator). **Build order:**
+1. **Deterministic tax-smart advisor** (= §14 criterion 10, the recommendation layer): input "sell X"
+   or "add ₹Y" → output the tax-optimal move + ₹ saved vs naive. Levers: new money → underweights =
+   ₹0 tax (§2.9 routing, in-engine); sell long-term lots before short; use the ₹1.25L FY LTCG
+   exemption; wait out the 365-day line. Build on the paper book now (account is empty), source-
+   agnostic so it swaps to live Zerodha later. Output = a template filled with engine numbers (no AI).
+2. **Live web dashboard** (Streamlit) — real portfolio + live prices + advisor suggestions, replacing
+   the static markdown; data source = paper book now → `kite.holdings()` later.
+3. **Live Zerodha holdings reader** as the dashboard's source once he funds/trades.
+**Trust gate** before real-money reliance: validate the FIFO tax engine vs his real Zerodha Tax P&L
+export (needs real trades first). **Parked (declined/deferred):** auto-execution, LLM-for-numbers,
+Monte Carlo, GPU, more quantum. Paper cron is scheduled but **not yet fired** — verify via a manual
+"Run workflow" (workflow_dispatch).
 
 **The validated config is now the default** of `scripts/run_phase0.py` (no args needed):
 PIT universe + **Nifty 50 TRI** benchmark + **annual** rebalance + **`weighting=shrink`** (½ min-var +
@@ -56,12 +83,9 @@ is the unskippable forward paper run; it can be *de-risked* fast (replay the pro
 history; validate FIFO vs a real Zerodha Tax P&L) and run *in parallel* with the build, but the
 forward calendar time itself (pipeline survives N days + ≥1 volatility event) cannot be simulated away.
 
-**Three candidate next moves (pick one):**
-1. **`git push` / open a PR** for `phase0-validated` (currently local-only).
-2. **STRATEGY.md Stage 1 — founder-as-user build**: Zerodha data pipeline + FIFO-vs-Tax-P&L (§14
-   crit 4) + a replay harness; this also starts the real-time paper-trading clock.
-3. **STRATEGY.md Stage 2 — the tax-alpha whitepaper**: now backed by a result that is *both* tax-alpha
-   *and* a real 1/N-beating return edge.
+_(Superseded — those original "three candidate moves" are done: branch pushed/merged, Stage-1
+founder-as-user build + paper clock live, QUBO/QAOA built. The active plan is the advisor-first one
+above. The tax-alpha whitepaper remains a good resume capstone once the advisor exists.)_
 
 **Read-me-first docs:** `reports/PHASE0_VERDICT.md` (full evidence chain + verdict), `STRATEGY.md`
 (market scan, regulatory reality, 4-stage industry-ready plan), `PLAN.md` (technical track).
@@ -152,8 +176,10 @@ All four gates (ruff, ruff-format, mypy strict, pytest) must pass before committ
 data/         price panel (yfinance→Parquet), point-in-time universe, Screener fundamentals
 factors/      momentum, volatility, liquidity (0a) + value, quality, dividend (0b); regime; scoring
 alloc/        Ledoit-Wolf+EWMA covariance conditioning → scipy sector allocator → scipy optimizer
-accounting/   FIFO tax lots + Zerodha costs + capital-gains tax   (reused by the future live system)
-backtest/     walk-forward engine, portfolio accountant, baselines, metrics, go/no-go report
+accounting/   FIFO tax lots + Zerodha costs + capital-gains tax   (reused live; Portfolio.to_state persists a book)
+backtest/     walk-forward engine, portfolio accountant, baselines, metrics, report; decision.py = shared decide_rebalance
+live/         Kite auth + replay harness + paper-trading book (PaperBook) + dashboard renderer   (the live system)
+research/     QUBO portfolio selection + exact/SA solvers + QAOA (optional `quantum` extra; §15, AUM-gated)
 config.py     every tunable parameter (Q_alpha.md §16) in one place
 ```
 
@@ -179,9 +205,10 @@ regime's weights → top-N selection → sector allocator → portfolio optimize
 Status: **1 ✅ walk-forward validated (low-turnover 3-factor PIT beats TRI in 93% of 3y holds & beat
 TRI+1/N in all 3 independent sub-periods, best downside; the *thesis* holds OOS though not a magic
 frequency — see Phase A) |
-2 ✅ | 3 ✅ PIT universe built (Phase A) | 4 ⚠️ validate vs real Zerodha Tax P&L | 5 ❌ corp-actions
-(Phase 1) | 6 ❌ 50+ paper events, 3–6 mo (Phase 5, unskippable) | 7 ✅ | 8 ✅ (dynamic rule) | 9 ❌
-data-confidence (Phase 1) | 10 ❌ recommendation layer (Phase 4)**. Phase A cleared survivorship (3)
+2 ✅ | 3 ✅ PIT universe built (Phase A) | 4 ⚠️ validate vs real Zerodha Tax P&L (needs real trades) |
+5 ❌ corp-actions (Phase 1) | 6 ⏳ paper clock STARTED 2026-06-12, accumulating (3–6 mo, unskippable) |
+7 ✅ | 8 ✅ (dynamic rule) | 9 🟡 pipeline built, needs the live run | 10 🟡 dashboard built; the
+deterministic tax-smart advisor is the active build**. Phase A cleared survivorship (3)
 and — once rebalancing slowed to annual — re-cleared criterion 1 on the *fair* test. Remaining for a
 defensible Phase-0 GO: **walk-forward validation** of the rebalance frequency (don't trust one
 bull-heavy window), then optionally the 6-factor PIT run. The *real-money GO* remains months away,
