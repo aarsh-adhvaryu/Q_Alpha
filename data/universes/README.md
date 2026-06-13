@@ -4,43 +4,60 @@ Q_alpha.md §5.4: the backtest must, at each historical date, see exactly the st
 investable **on that date** — including names that later delisted, went bankrupt, or were dropped
 from the index. Using today's survivors overstates returns.
 
-## File format
+## What's here
 
-A CSV consumed by `Universe.from_csv(path)`:
+`nifty50_membership.csv` — a genuine point-in-time NIFTY 50 membership for **2012-01-01 → 2024-12-31**,
+built by `scripts/build_nifty_universe.py`. 81 distinct names, 83 membership intervals (Vedanta and
+Grasim each have two stints), columns `ticker,start_date,end_date,sector`. Consumed by
+`Universe.from_csv` (ticker/start/end) and `run_phase0.py --universe-csv` (also lifts the sector map).
 
-```csv
-ticker,start_date,end_date
-RELIANCE.NS,2010-01-01,
-SUZLON.NS,2010-01-01,2017-08-31     # dropped from the index / collapsed — MUST be present
-TATAMOTORS.NS,2010-01-01,
-```
+It **includes the dead/dropped names** that survivorship bias would erase — Reliance Power, Reliance
+Infrastructure, JP Associates, DLF, Yes Bank, Zee, Idea/Vodafone Idea, Vedanta, Indiabulls Housing,
+Unitech-era cyclicals, SAIL, NMDC, BHEL, ACC, Ambuja, Lupin, GAIL, HPCL, etc.
 
-- `ticker` — yfinance NSE symbol (`.NS`).
-- `start_date` — first date the name was an index member (ISO `YYYY-MM-DD`).
-- `end_date` — last date as a member; **blank means still a member**.
+## How it's built (reverse-apply from a known endpoint, validated)
 
-`Universe.from_csv` sets `point_in_time=True`, which lets the go/no-go report clear the §14
-criterion-3 (survivorship) gate.
+We know the **current** NIFTY 50 constituents exactly, and the chronological list of index changes
+(NSE reconstitutions, mirrored on Wikipedia's "Index changes" table). Walking the changes *backward*
+from the current set reconstructs membership at any past date. Each reverse step **asserts
+consistency** — a name being "added" must currently be present (so we can remove it); a name being
+"removed" must currently be absent (so we can add it). A failed assertion reveals a gap/error in the
+change list instead of letting it silently corrupt the universe. This validation actually caught:
 
-## ⚠️ Honesty note — why the current run is still CONDITIONAL
+- **4 mis-transcribed Wikipedia rows** (Apr-2018 listed Tata Power & HPCL as Nifty-50 removals; they
+  were Nifty-*100* actions — the real Nifty-50 removals were Ambuja, Aurobindo, Bosch). Resolved
+  against Business Standard / Moneylife / DNA primary reporting.
+- **2 missing exits** Wikipedia omits entirely — Idea Cellular and BHEL both left in the **March 2018**
+  review (→ Indiabulls Housing + IOC), pinned via news sources.
 
-The curated 25-name watchlist in `scripts/run_phase0.py` is **today's survivors**. Writing a CSV for
-just those names (all continuously listed since before 2012) would **not** remove the real bias:
-the dead/dropped companies are simply absent from the data. Flipping `point_in_time=True` on a
-survivor-only file would falsely earn a GO. We deliberately do **not** do that.
+After fixes the reconstruction balances to exactly 50 members at every probe date **except one**:
 
-A genuine fix needs **historical index constituents including names that later left/died**, e.g.
-the Nifty 50 / Nifty 200 membership history. Sources:
+## Known limitations (documented, not hidden)
 
-- NSE index "reconstitution" / review circulars (free, but must be assembled into the CSV above).
-- Community datasets of historical NSE index membership (verify accuracy).
-- A paid vendor with point-in-time constituents.
+1. **Bank of Baroda** is an *orphan add* — it entered (Sep 2012) but its later exit isn't in the
+   source, so it's kept as a member through window-end (member count reads 51, not 50). BoB is a
+   still-listed liquid PSU bank, so this is a membership inaccuracy, **not** a survivorship
+   distortion (no dead name is wrongly included or excluded by it).
+2. **Unpriceable names (yfinance can't serve them — merged/renamed/delisted away):** `HDFC` (HDFC
+   Ltd, merged into HDFC Bank Jul-2023), `TATAMOTORS` (NSE symbol retired post-2025 demerger),
+   `CAIRN`, `IDFC`, `STER`, plus `LTIM` (brief 2023-24 stint). They stay in the CSV (membership is
+   *true*) but have no price column, so the engine skips them. Crucially these are **survivors or
+   merged-into-survivors, not dead names** — their absence makes the test slightly *harder*, not
+   easier, so it does not flatter the survivorship correction. (HDFC Ltd is the only material one; it
+   is highly correlated with HDFC Bank, which *is* present.)
+3. **Transition dates are at reconstitution granularity** and the change list is Wikipedia-sourced
+   (corrected where primary sources contradicted it). Early-2012 membership before the first change
+   (28 Sep 2012) is assumed constant; it doesn't affect any trade because the strategy's first
+   rebalance is ~mid-2013 after its 252+90-day warm-up.
 
-This is a **data-acquisition task** analogous to the Screener.in fundamentals — until that data is
-in this folder, the backtest universe stays static and the verdict stays CONDITIONAL by design.
-
-## Usage
+## Rebuild / use
 
 ```bash
-uv run python scripts/run_phase0.py --universe-csv data/universes/nifty_membership.csv
+uv run python scripts/build_nifty_universe.py        # regenerate nifty50_membership.csv (validated)
+uv run python scripts/run_phase0.py \
+    --universe-csv data/universes/nifty50_membership.csv \
+    --benchmark NIFTYBEES.NS --start 2012-01-01 --end 2024-12-31
 ```
+
+`--benchmark NIFTYBEES.NS` uses the ETF's dividend-reinvested adj-close as the **Nifty 50 TRI** proxy
+(the fair bar vs a TR-adjusted strategy); the loader sanitises yfinance bad ticks (§5.1).

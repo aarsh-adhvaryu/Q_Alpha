@@ -13,13 +13,14 @@ Phase 0 deploys the full starting capital into the core strategy so the comparis
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from typing import cast
 
 import pandas as pd
 
+from qalpha.backtest.defensive import GovernanceEvents, idiosyncratic_exit_flags
 from qalpha.backtest.portfolio import Portfolio, TradeRecord, to_decimal_price
 from qalpha.backtest.strategy import select_and_weight
 from qalpha.config import Config
@@ -40,6 +41,7 @@ class BacktestResult:
     regimes: pd.Series  # daily regime label (str), indexed by date
     point_in_time_universe: bool
     starting_capital: Decimal
+    defensive_exits: list[tuple[date, str]] = field(default_factory=list)  # (date, ticker) stops
 
     @property
     def total_costs(self) -> Decimal:
@@ -54,14 +56,21 @@ class BacktestResult:
         return len({t.date for t in self.trades})
 
 
-def _rebalance_dates(trading_days: pd.DatetimeIndex, min_history: int) -> list[pd.Timestamp]:
-    """Last trading day of each month, excluding the first ``min_history`` warm-up days."""
+def _rebalance_dates(
+    trading_days: pd.DatetimeIndex, min_history: int, freq: str = "M"
+) -> list[pd.Timestamp]:
+    """Last trading day of each period, excluding the first ``min_history`` warm-up days.
+
+    ``freq`` is a pandas period alias: ``M`` (monthly, default), ``Q`` (quarterly), ``Y`` (annual).
+    Lower frequency = longer holds = fewer taxable events and more lots crossing the 365-day
+    LTCG line (Q_alpha.md §2.1 "core is rarely touched"; §4.6 tax-aware gate).
+    """
     if len(trading_days) <= min_history:
         return []
     eligible = trading_days[min_history:]
     s = pd.Series(eligible, index=eligible)
-    month_last = s.groupby([eligible.year, eligible.month]).last()
-    return list(month_last)
+    period_last = s.groupby(eligible.to_period(freq)).last()
+    return list(period_last)
 
 
 def _drift(current: Mapping[str, float], target: pd.Series) -> float:
@@ -137,12 +146,27 @@ def run_backtest(
     tax_aware: bool = False,
     min_trade_fraction: float = 0.0,
     fundamentals: FundamentalsStore | None = None,
+    rebalance_freq: str = "M",
+    defensive: bool = False,
+    governance_events: GovernanceEvents | None = None,
+    force_refresh: bool = False,
+    weighting: str = "minvar",
+    n_stocks_override: int | None = None,
 ) -> BacktestResult:
     """Run the walk-forward backtest and return a :class:`BacktestResult`.
 
     ``tax_aware=True`` applies the §4.6 net-benefit gate (suppress a rebalance whose risk benefit
     doesn't beat 2× its real cost+tax). ``min_trade_fraction`` adds a per-name no-trade band.
     Passing ``fundamentals`` switches the funnel to the full six-factor model (Phase 0b).
+    ``rebalance_freq`` (M/Q/Y) sets how often rebalancing is even *considered* — lower frequency
+    means longer holds, fewer taxable events, and more lots maturing past the 365-day LTCG line.
+    ``defensive=True`` adds the §3.6 *price* overlay: on month-ends between core rebalances it exits
+    a holding in a sustained idiosyncratic breakdown (shown to whipsaw quality names — kept for the
+    record). ``governance_events`` adds the §3.11 *event-driven* defence: a CRITICAL governance event
+    freezes its ticker — exited between rebalances and blacklisted from re-purchase — which fires on
+    a broken business (Yes Bank, Zee) without touching a merely-out-of-favour blue-chip.
+    ``force_refresh=True`` makes every scheduled rebalance execute (band-limited) so the §4.6 gate
+    can't freeze the book holding stale picks for years (the 2025-26 holdout failure mode).
     """
     regime_fn = regime_fn or _default_regime_fn
     adj = prices.adj_close
@@ -154,11 +178,19 @@ def run_backtest(
 
     min_history = cfg.factor.momentum_lookback_days + 1
     lookback = cfg.factor.momentum_lookback_days + 90
-    rebalance_set = set(_rebalance_dates(trading_days, min_history))
+    rebalance_set = set(_rebalance_dates(trading_days, min_history, rebalance_freq))
+    # Defensive scan runs on month-ends that are NOT core rebalance days (between rebalances).
+    defensive_on = defensive or governance_events is not None
+    defensive_days = (
+        set(_rebalance_dates(trading_days, min_history, "M")) - rebalance_set
+        if defensive_on
+        else set()
+    )
 
     portfolio = Portfolio(cfg.cost, cfg.tax, cash=cfg.capital.starting_capital)
     last_target: pd.Series | None = None
     trades: list[TradeRecord] = []
+    defensive_exits: list[tuple[date, str]] = []
 
     equity_rows: list[tuple[pd.Timestamp, float]] = []
     regime_rows: list[tuple[pd.Timestamp, str]] = []
@@ -176,16 +208,18 @@ def run_backtest(
         if day in rebalance_set:
             members = universe.members_on(d)
             asof = prices.as_of(d, lookback=lookback)
-            in_scope = [t for t in members if t in asof.tickers]
+            blacklist = governance_events.blacklisted_asof(d) if governance_events else set()
+            in_scope = [t for t in members if t in asof.tickers and t not in blacklist]
             if len(in_scope) >= 2:
                 asof = asof.subset(in_scope)
                 core_value = portfolio.market_value(prices_dec)
-                n_stocks = cfg.capital.max_core_stocks(core_value)
+                n_stocks = n_stocks_override or cfg.capital.max_core_stocks(core_value)
                 target = select_and_weight(
                     asof,
                     sector_of,
                     regime,
                     cfg,
+                    weighting=weighting,
                     n_stocks=n_stocks,
                     fundamentals=fundamentals,
                     as_of=d,
@@ -198,13 +232,38 @@ def run_backtest(
                     benefit_ok = (not tax_aware) or _net_benefit_ok(
                         portfolio, target, prices_dec, asof.returns(), cfg, min_trade_fraction
                     )
-                    if first or (drift_ok and benefit_ok):
+                    # Deploying idle settled cash is tax-free and never "churn" — so it must not be
+                    # blocked by the variance-reduction gate (cash→stocks looks like a risk *rise*).
+                    # Without this, a portfolio driven to cash by defensive exits stays locked out
+                    # of re-investing (§2.9 fresh-capital routing: overflow buys the underweights).
+                    mv = core_value
+                    cash_frac = float(portfolio.cash / mv) if mv > 0 else 0.0
+                    under_invested = cash_frac > min_trade_fraction
+                    # ``force_refresh`` makes the *scheduled* rebalance always execute (the no-trade
+                    # band still suppresses dust trades, so it stays tax-efficient). It exists because
+                    # the all-or-nothing §4.6 benefit gate, by refusing to sell appreciated winners,
+                    # can FREEZE the book for years — leaving it holding stale picks (the 2025-26
+                    # holdout failure mode). Refreshing re-selects current factor leaders on schedule.
+                    if first or under_invested or force_refresh or (drift_ok and benefit_ok):
                         trades.extend(
                             portfolio.rebalance(
                                 d, target, prices_dec, min_trade_fraction=min_trade_fraction
                             )
                         )
                         last_target = target
+        elif day in defensive_days:
+            held = [t for t, q in portfolio.positions().items() if q > 0]
+            if held:
+                flags: set[str] = set()
+                if governance_events is not None:  # §3.11 event freeze (fires on broken businesses)
+                    flags |= governance_events.blacklisted_asof(d) & set(held)
+                if defensive:  # §3.6 price overlay (kept for the record; whipsaws quality names)
+                    asof = prices.as_of(d, lookback=cfg.defensive.lookback_days + 10)
+                    flags |= set(idiosyncratic_exit_flags(asof.adj_close, held, cfg.defensive))
+                if flags:
+                    recs = portfolio.liquidate(d, sorted(flags), prices_dec)
+                    trades.extend(recs)
+                    defensive_exits.extend((d, r.ticker) for r in recs)
 
         equity_rows.append((day, float(portfolio.market_value(prices_dec))))
         regime_rows.append((day, regime.value))
@@ -225,4 +284,5 @@ def run_backtest(
         regimes=regimes,
         point_in_time_universe=universe.point_in_time,
         starting_capital=cfg.capital.starting_capital,
+        defensive_exits=defensive_exits,
     )

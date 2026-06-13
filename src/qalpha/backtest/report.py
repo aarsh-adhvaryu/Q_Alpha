@@ -17,12 +17,19 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from qalpha.backtest.baselines import buy_and_hold, do_nothing, equal_weight, monthly_sip
+from qalpha.backtest.baselines import (
+    buy_and_hold,
+    do_nothing,
+    equal_weight,
+    equal_weight_pit,
+    monthly_sip,
+)
 from qalpha.backtest.drawdown import summarize as summarize_drawdown
 from qalpha.backtest.engine import BacktestResult
 from qalpha.backtest.metrics import PerformanceMetrics, compute_metrics, per_regime_metrics
 from qalpha.config import Config
 from qalpha.data.prices import PriceData
+from qalpha.data.universe import Universe
 
 
 @dataclass(frozen=True)
@@ -111,19 +118,38 @@ def build_report(
     prices: PriceData,
     benchmark: pd.Series,
     cfg: Config,
+    universe: Universe | None = None,
+    benchmark_label: str = "Nifty 50 (price)",
 ) -> str:
-    """Build the full markdown go/no-go report string."""
+    """Build the full markdown go/no-go report string.
+
+    When ``universe`` is point-in-time, the 1/N baseline respects membership intervals
+    (:func:`equal_weight_pit`) so it cannot front-run names before they joined the index; on a
+    static universe the simpler buy-and-hold :func:`equal_weight` is equivalent.
+
+    ``benchmark_label`` names the index series (e.g. "Nifty 50 TRI (NIFTYBEES)") for display and the
+    caveat; the §14 gate still keys on ``nifty50_buy_hold`` regardless of label.
+    """
     capital = result.starting_capital
     index = result.equity.index
     assert isinstance(index, pd.DatetimeIndex)
 
     strategy_m = compute_metrics(result.equity, "Q-Alpha strategy")
+    if universe is not None and universe.point_in_time:
+        ew_curve = equal_weight_pit(prices, universe, index, capital)
+    else:
+        ew_curve = equal_weight(prices, index, capital)
     baseline_curves = {
         "do_nothing": do_nothing(index, capital),
         "nifty50_buy_hold": buy_and_hold(benchmark, index, capital),
-        "equal_weight": equal_weight(prices, index, capital),
+        "equal_weight": ew_curve,
     }
-    baseline_m = {name: compute_metrics(curve, name) for name, curve in baseline_curves.items()}
+    # Display label decoupled from the gate key: the nifty row shows ``benchmark_label``.
+    display = {"nifty50_buy_hold": benchmark_label}
+    baseline_m = {
+        name: compute_metrics(curve, display.get(name, name))
+        for name, curve in baseline_curves.items()
+    }
     sip = monthly_sip(benchmark.reindex(index).ffill().bfill(), cfg.backtest.sip_monthly_amount)
 
     verdict = evaluate(strategy_m, baseline_m, result.point_in_time_universe)
@@ -189,8 +215,13 @@ def build_report(
         "**Notes & caveats:**",
         "- Criterion 2 (no look-ahead): guaranteed by `PriceData.as_of` slicing + tests.",
         f"- Universe is {'point-in-time' if result.point_in_time_universe else 'STATIC (survivorship-biased)'}.",
-        "- Benchmark is the Nifty 50 *price* series; a Total-Return index would lift the bar "
-        "slightly (the strategy is TR-adjusted). Use Nifty 50 TRI in calibration.",
+        f"- Benchmark: **{benchmark_label}**. "
+        + (
+            "TRI (dividends reinvested) is the fair bar since the strategy trades TR-adjusted prices."
+            if "TRI" in benchmark_label
+            else "This is a *price* series; Nifty 50 TRI would lift the bar ~1.1%/yr "
+            "(the strategy is TR-adjusted) — use NIFTYBEES.NS adj-close as the TRI proxy."
+        ),
         "- Phase 0a uses 3 price/volume factors; Value/Quality/Dividend (0b) need historical "
         "fundamentals before the six-factor verdict is final.",
     ]
