@@ -1,14 +1,17 @@
 """Tax-smart advisor CLI — the deterministic recommendation layer (Q_alpha.md §14 crit 10).
 
-Answers the tax question at the moment of a *manual* trade, against the current paper book (and,
-once funded, a live Zerodha holdings snapshot — same code). No AI: every figure comes from the
-validated FIFO/cost/tax engine.
+Answers the tax question at the moment of a *manual* trade. No AI: every figure comes from the
+validated FIFO/cost/tax engine. Works on the notional paper book, or — with ``--source live`` — on
+the **real Zerodha account** (``kite.holdings()`` + ``ltp()``), proving the advisor is source-agnostic.
 
     uv run python scripts/advisor.py sell TCS.NS --qty 10     # tax of selling + smart alternatives
     uv run python scripts/advisor.py raise-cash 50000         # least-tax way to raise ₹50k
     uv run python scripts/advisor.py deploy 50000             # route ₹50k new money, ₹0 tax
+    uv run python scripts/advisor.py deploy 50000 --source live   # ...against the live account
 
 `--as-of DATE` overrides the valuation date (default: latest price date). Read-only — never trades.
+Live holdings carry no purchase dates, so live tax is approximate until a tradebook is imported
+(criterion 4); the CLI prints that caveat.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 from paper import BOOK_PATH, _load_market
 
+from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
@@ -35,6 +39,42 @@ def _as_of(prices: PriceData, arg: str | None) -> date:
     return date.fromisoformat(arg) if arg else prices.dates[-1].date()
 
 
+def _add_common(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--as-of", default=None)
+    p.add_argument(
+        "--source",
+        choices=["paper", "live"],
+        default="paper",
+        help="portfolio source: the notional paper book (default) or the live Zerodha account",
+    )
+
+
+def _resolve_portfolio(
+    source: str, book: PaperBook, cfg: Config, as_of: date, prices: PriceData
+) -> tuple[Portfolio, dict[str, Decimal]] | None:
+    """Return (portfolio, marking prices) for the chosen source, or None if the live account is empty."""
+    if source == "paper":
+        return book.portfolio, _prices_on(prices, as_of)
+
+    from qalpha.live.client import authenticated_kite
+    from qalpha.live.holdings import (
+        fetch_available_cash,
+        fetch_holdings,
+        fetch_prices,
+        portfolio_from_holdings,
+    )
+
+    kite = authenticated_kite()
+    holdings = fetch_holdings(kite)
+    if not holdings:
+        print("live Zerodha account holds no equity — nothing to advise on yet.", file=sys.stderr)
+        return None
+    live = portfolio_from_holdings(holdings, cfg, as_of=as_of, cash=fetch_available_cash(kite))
+    if live.tax_caveat:
+        print(f"⚠️  {live.tax_caveat}\n", file=sys.stderr)
+    return live.portfolio, fetch_prices(kite, holdings)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -42,15 +82,15 @@ def main(argv: list[str] | None = None) -> int:
     p_sell = sub.add_parser("sell", help="tax of selling a holding + smart alternatives")
     p_sell.add_argument("ticker")
     p_sell.add_argument("--qty", type=str, default=None, help="shares to sell (default: all)")
-    p_sell.add_argument("--as-of", default=None)
+    _add_common(p_sell)
 
     p_raise = sub.add_parser("raise-cash", help="least-tax way to raise a cash amount")
     p_raise.add_argument("amount", type=str)
-    p_raise.add_argument("--as-of", default=None)
+    _add_common(p_raise)
 
     p_deploy = sub.add_parser("deploy", help="route new money into underweights (₹0 tax)")
     p_deploy.add_argument("amount", type=str)
-    p_deploy.add_argument("--as-of", default=None)
+    _add_common(p_deploy)
 
     args = parser.parse_args(argv)
     cfg = Config()
@@ -64,7 +104,11 @@ def main(argv: list[str] | None = None) -> int:
     prices, universe, sector_of = _load_market()
     book = PaperBook.load(BOOK_PATH, cfg)
     as_of = _as_of(prices, args.as_of)
-    prices_dec = _prices_on(prices, as_of)
+
+    resolved = _resolve_portfolio(args.source, book, cfg, as_of, prices)
+    if resolved is None:
+        return 1
+    portfolio, prices_dec = resolved
 
     if args.cmd == "sell":
         price = prices_dec.get(args.ticker)
@@ -72,15 +116,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"no price for {args.ticker} on {as_of}", file=sys.stderr)
             return 1
         qty = Decimal(args.qty) if args.qty else None
-        print(advise_sell(book.portfolio, args.ticker, price, as_of, cfg, quantity=qty).render())
+        print(advise_sell(portfolio, args.ticker, price, as_of, cfg, quantity=qty).render())
         return 0
 
     if args.cmd == "raise-cash":
-        advice = advise_raise_cash(book.portfolio, Decimal(args.amount), prices_dec, as_of)
-        print(advice.render())
+        print(advise_raise_cash(portfolio, Decimal(args.amount), prices_dec, as_of).render())
         return 0
 
-    # deploy: needs target weights — use the funnel's current target (or the last applied one).
+    # deploy: the target weights come from the model funnel (source-independent).
     target = _current_target(book, prices, universe, sector_of, as_of)
     if target is None:
         print(
@@ -88,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    print(advise_deploy(book.portfolio, Decimal(args.amount), target, prices_dec, as_of).render())
+    print(advise_deploy(portfolio, Decimal(args.amount), target, prices_dec, as_of).render())
     return 0
 
 
