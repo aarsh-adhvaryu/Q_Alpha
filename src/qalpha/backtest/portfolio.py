@@ -25,8 +25,8 @@ from typing import cast
 
 import pandas as pd
 
-from qalpha.accounting.capital_gains import CapitalGainsCalculator
-from qalpha.accounting.costs import Side, compute_costs
+from qalpha.accounting.capital_gains import CapitalGainsCalculator, RealizedGain
+from qalpha.accounting.costs import CostBreakdown, Side, compute_costs
 from qalpha.accounting.tax_lots import FIFOLedger, TaxLot
 from qalpha.config import CostConfig, TaxConfig
 
@@ -93,6 +93,10 @@ class Portfolio:
         ltcg = cast(Mapping[str, str], state["ltcg_by_fy"])
         pf.gains.restore_ltcg_by_fy({int(fy): Decimal(v) for fy, v in ltcg.items()})
         return pf
+
+    def clone(self) -> Portfolio:
+        """A deep copy — cash, FIFO ledger, and FY exemption tally — for dry-running trades."""
+        return copy.deepcopy(self)
 
     # ---- valuation -------------------------------------------------------
 
@@ -223,6 +227,45 @@ class Portfolio:
         tax = sum((t.tax for t in trades), Decimal("0.00"))
         turnover = sum((t.quantity * t.price for t in trades), Decimal("0.00"))
         return cost, tax, turnover
+
+    def sell(self, on_date: date, ticker: str, qty: Decimal, price: Decimal) -> TradeRecord:
+        """Sell ``qty`` shares of ``ticker`` at ``price`` (mutates: FIFO, cost, tax, cash).
+
+        The public single-name sell — the live execution layer fills specific quantities, and the
+        tax-smart advisor uses it to cost a multi-name raise-cash plan exactly (the FY LTCG exemption
+        depletes across sequential sells, so the order matters). Reuses the same ``_sell`` path as
+        every rebalance, so the FIFO/cost/tax numbers are identical to the validated backtest.
+        """
+        if qty <= 0:
+            raise ValueError("sell quantity must be positive")
+        return self._sell(on_date, ticker, qty, price)
+
+    def buy(self, on_date: date, ticker: str, qty: Decimal, price: Decimal) -> TradeRecord | None:
+        """Buy ``qty`` shares of ``ticker`` at ``price`` (mutates; affordability-capped by cash).
+
+        The public single-name buy, symmetric with :meth:`sell`: the live execution layer fills
+        specific quantities, and the advisor uses it to route fresh capital into underweights. Reuses
+        the same ``_buy`` path (whole shares, Zerodha costs, cash cap) as every rebalance. Returns
+        ``None`` if not even one share is affordable.
+        """
+        if qty <= 0:
+            raise ValueError("buy quantity must be positive")
+        return self._buy(on_date, ticker, qty, price)
+
+    def preview_sell(
+        self, on_date: date, ticker: str, qty: Decimal, price: Decimal
+    ) -> tuple[list[RealizedGain], CostBreakdown]:
+        """Dry-run a single sell WITHOUT mutating: return its per-lot realized gains + cost breakdown.
+
+        Deep-copies the ledger + FY exemption tally and replays the FIFO consumption on the copy, so
+        the advisor can show exactly which lots a sale consumes (STCG vs LTCG, holding days, tax) and
+        how much the ₹1.25L exemption shelters — using the same engine that executes the trade.
+        """
+        clone = copy.deepcopy(self)
+        cb = compute_costs(Side.SELL, qty, price, self.cost_cfg)
+        consumptions = clone.ledger.consume(ticker, qty, on_date)
+        realized = clone.gains.compute_sell(consumptions, price, cb.deductible_for_gains)
+        return realized, cb
 
     def _sell(self, on_date: date, ticker: str, qty: Decimal, price: Decimal) -> TradeRecord:
         cb = compute_costs(Side.SELL, qty, price, self.cost_cfg)
