@@ -16,6 +16,7 @@ import pandas as pd
 from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
+from qalpha.live.dashboard import equity_csv, render_markdown
 from qalpha.live.paper import PaperBook
 
 SECTORS = ["FIN", "IT", "PHARMA", "ENERGY", "AUTO", "FMCG"]
@@ -95,3 +96,35 @@ def test_second_plan_is_not_first_deployment(tmp_path: Path) -> None:
     assert reloaded.last_target is not None
     next_plan = reloaded.plan(prices, universe, sector_of, as_of)
     assert "first deployment" not in next_plan.decision.reason
+
+
+def test_mark_records_equity_and_persists(tmp_path: Path) -> None:
+    book, prices, universe, sector_of, as_of = _setup(tmp_path)
+    book.apply(prices, book.plan(prices, universe, sector_of, as_of))
+
+    eq = book.mark(prices, as_of)
+    assert eq > 0
+    assert len(book.equity_curve) == 1
+    book.mark(prices, as_of)  # same date → overwrite, not duplicate
+    assert len(book.equity_curve) == 1
+
+    reloaded = PaperBook.load(book.path, Config())
+    assert reloaded.equity_curve == book.equity_curve
+    assert reloaded.starting_capital == Decimal("200000")
+
+
+def test_dashboard_renders_committable_artifacts(tmp_path: Path) -> None:
+    book, prices, universe, sector_of, as_of = _setup(tmp_path)
+    book.apply(prices, book.plan(prices, universe, sector_of, as_of))
+    book.mark(prices, as_of)
+    plan = book.plan(prices, universe, sector_of, as_of)
+    benchmark = pd.Series([100.0, 101.0], index=pd.DatetimeIndex([as_of, as_of]), name="nifty_tri")
+
+    md = render_markdown(book, prices, benchmark, plan, as_of)
+    assert "# Q-Alpha — Paper-Trading Dashboard" in md
+    assert "Today's recommendation" in md
+    assert "Holdings" in md
+
+    csv = equity_csv(book)
+    assert csv.startswith("date,equity,cash,return_pct")
+    assert len(csv.strip().splitlines()) == 2  # header + one mark

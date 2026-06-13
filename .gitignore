@@ -13,10 +13,13 @@ htmlcov/
 data/historical/*
 data/fundamentals/*
 data/universes/*
+# point-in-time membership = small reference data; track it (the pipeline/CI needs it)
+!data/universes/*.csv
 data/bhavcopy/*
-data/paper/*
 !data/**/.gitkeep
 !data/**/README.md
+# data/paper/ (the notional paper book + track record) is TRACKED on purpose — no secrets, and the
+# daily pipeline commits it as the durable record.
 
 # Reports
 reports/*.html
