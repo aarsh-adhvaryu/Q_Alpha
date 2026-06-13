@@ -59,6 +59,7 @@ WATCHLIST: dict[str, str] = {
 }
 
 PRICES_PARQUET = Path("data/historical/prices.parquet")
+PIT_PRICES_PARQUET = Path("data/historical/prices_pit.parquet")
 BENCH_PARQUET = Path("data/historical/benchmark.parquet")
 BENCHMARK = "^NSEI"
 
@@ -136,6 +137,91 @@ def _load_or_download(start: str, end: str | None, refresh: bool) -> tuple[Price
     return prices, benchmark
 
 
+def _load_universe_csv(csv_path: Path) -> tuple[list[str], dict[str, str]]:
+    """Read a point-in-time membership CSV → (distinct .NS tickers, sector map keyed by .NS).
+
+    The CSV (from ``scripts/build_nifty_universe.py``) carries a ``sector`` column alongside the
+    ticker/start/end that ``Universe.from_csv`` consumes; we lift the sector map from it so the
+    funnel needs no hand-maintained watchlist for the PIT run.
+    """
+    df = pd.read_csv(csv_path)
+    if "sector" not in df.columns:
+        raise ValueError(f"{csv_path} has no 'sector' column — rebuild via build_nifty_universe.py")
+    sector_of = {str(t): str(s) for t, s in zip(df["ticker"], df["sector"], strict=True)}
+    tickers = sorted(sector_of)
+    return tickers, sector_of
+
+
+def _load_or_download_pit(
+    tickers: list[str], start: str, end: str | None, refresh: bool
+) -> PriceData:
+    """Download (or load cached) prices for the full PIT ticker set, including dropped/dead names.
+
+    Names yfinance can no longer price (merged/delisted away — e.g. HDFC Ltd, Tata Motors) simply
+    fail to download and are absent from the panel; the engine then skips them at each rebalance.
+    Coverage is reported so the residual survivorship gap is explicit, not hidden.
+    """
+    if not refresh and PIT_PRICES_PARQUET.exists():
+        prices = load_parquet(PIT_PRICES_PARQUET)
+    else:
+        print(
+            f"Downloading {len(tickers)} PIT-universe names from yfinance (incl. dropped/dead)..."
+        )
+        price_df = download_prices(tickers, start, end)
+        save_parquet(price_df, PIT_PRICES_PARQUET)
+        prices = PriceData.from_long(price_df)
+    got = set(prices.tickers)
+    missing = sorted(t for t in tickers if t not in got)
+    print(f"PIT price coverage: {len(got)}/{len(tickers)} names priced.")
+    if missing:
+        print(f"  Unpriceable (merged/delisted away; engine skips them): {missing}")
+    return prices
+
+
+def _sanitize_series(s: pd.Series) -> pd.Series:
+    """Repair isolated yfinance bad ticks (Q_alpha.md §5.1 — silent corruption is the #1 data risk).
+
+    A Nifty 50 ETF never moves ±40% from its own 5-day median; such points are split/print glitches
+    (e.g. NIFTYBEES shows two days at ₹13 vs ~₹129 neighbours in Dec-2019). We flag points that
+    deviate >40% from the centred rolling median, blank them, and linearly interpolate. The
+    cumulative level is unaffected; the daily-return-based risk metrics (vol, Sharpe, drawdown) are
+    no longer poisoned by the spike-and-rebound.
+    """
+    med = s.rolling(5, center=True, min_periods=1).median()
+    ratio = s / med
+    bad = (ratio < 0.6) | (ratio > 1.6)
+    if bool(bad.any()):
+        dates = ", ".join(str(d.date()) for d in s.index[bad])
+        print(f"  Benchmark sanitizer: repaired {int(bad.sum())} bad tick(s) at {dates}")
+        s = s.mask(bad).interpolate().bfill().ffill()
+    return s
+
+
+def _load_benchmark(ticker: str, start: str, end: str | None, refresh: bool) -> pd.Series:
+    """Load (or download+cache) a benchmark's TR-adjusted series.
+
+    For ``^NSEI`` adj-close == close (an index pays no dividends) → a *price* benchmark. For an ETF
+    like ``NIFTYBEES.NS`` the adj-close reinvests dividends → a Nifty 50 *total-return* proxy, the
+    fair bar against a TR-adjusted strategy. Cached per ticker so switching benchmarks is cheap.
+    """
+    safe = re.sub(r"[^A-Za-z0-9]", "", ticker)
+    path = (
+        BENCH_PARQUET if ticker == BENCHMARK else Path(f"data/historical/benchmark_{safe}.parquet")
+    )
+    if not refresh and path.exists():
+        bench_df = pd.read_parquet(path)
+    else:
+        print(f"Downloading benchmark {ticker}...")
+        bench_df = download_prices([ticker], start, end)
+        save_parquet(bench_df, path)
+    series = (
+        bench_df.assign(date=pd.to_datetime(bench_df["date"]))
+        .set_index("date")["adj_close"]
+        .sort_index()
+    )
+    return _sanitize_series(series)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--start", default="2012-01-01")
@@ -149,23 +235,64 @@ def main() -> None:
     )
     parser.add_argument("--band", type=float, default=0.10, help="no-trade band (fraction of MV)")
     parser.add_argument(
+        "--rebalance",
+        default="Y",
+        choices=["M", "Q", "Y"],
+        help="rebalance frequency: M(onthly), Q(uarterly), Y(early, DEFAULT — the validated config). "
+        "Lower = longer holds = less tax (more LTCG, fewer events).",
+    )
+    parser.add_argument(
+        "--weighting",
+        default="shrink",
+        choices=["minvar", "equal", "score", "shrink"],
+        help="final weighting. shrink (DEFAULT) = ½ min-var + ½ equal-weight (anchor-to-1/N) — the "
+        "Phase-0 validated edge over both index and 1/N. minvar = concentrated (old default).",
+    )
+    parser.add_argument(
+        "--force-refresh",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="force the scheduled rebalance to execute (anti-ossification, DEFAULT on); "
+        "--no-force-refresh lets the §4.6 gate freeze the book (the 2025-26 holdout failure mode).",
+    )
+    parser.add_argument(
         "--no-fundamentals", action="store_true", help="force Phase 0a (price/volume factors only)"
     )
     parser.add_argument(
         "--universe-csv",
-        default=None,
-        help="point-in-time membership CSV (ticker,start_date,end_date). "
-        "Without it, a STATIC survivor universe is used and the verdict is capped at CONDITIONAL.",
+        default="data/universes/nifty50_membership.csv",
+        help="point-in-time membership CSV (DEFAULT: the survivorship-free Nifty 50). "
+        "Pass an empty string for the STATIC survivor universe (verdict capped at CONDITIONAL).",
+    )
+    parser.add_argument(
+        "--benchmark",
+        default="NIFTYBEES.NS",
+        help="benchmark ticker. DEFAULT NIFTYBEES.NS = Nifty 50 TRI proxy (ETF adj-close = dividends "
+        "reinvested), the fair bar vs a TR-adjusted strategy. ^NSEI = Nifty 50 price.",
     )
     args = parser.parse_args()
 
     cfg = Config()
-    prices, benchmark = _load_or_download(args.start, args.end, args.refresh)
-    sector_of = _yf_sector_map()
-    if args.universe_csv and Path(args.universe_csv).exists():
+    benchmark_label = (
+        "Nifty 50 TRI (NIFTYBEES)" if "NIFTYBEES" in args.benchmark.upper() else "Nifty 50 (price)"
+    )
+    pit_mode = bool(args.universe_csv and Path(args.universe_csv).exists())
+    if pit_mode:
+        # Point-in-time run: universe, tickers and sectors all come from the membership CSV.
+        tickers, sector_of = _load_universe_csv(Path(args.universe_csv))
+        prices = _load_or_download_pit(tickers, args.start, args.end, args.refresh)
+        benchmark = _load_benchmark(args.benchmark, args.start, args.end, args.refresh)
         universe = Universe.from_csv(args.universe_csv)
-        print(f"Universe: point-in-time from {args.universe_csv}")
+        print(f"Universe: POINT-IN-TIME from {args.universe_csv} (survivorship-free)")
+        if not args.no_fundamentals:
+            # We only hold Screener fundamentals for the 24 static names; scoring the ~76 PIT names
+            # on a mix of 6- and 3-factor models would be apples-to-oranges. Force a clean 0a run.
+            print("  Forcing Phase 0a (price/volume factors) for a clean survivorship comparison.")
+            args.no_fundamentals = True
     else:
+        prices, _ = _load_or_download(args.start, args.end, args.refresh)
+        benchmark = _load_benchmark(args.benchmark, args.start, args.end, args.refresh)
+        sector_of = _yf_sector_map()
         universe = Universe.static(prices.tickers)
         print("Universe: STATIC survivor set (survivorship-biased) → verdict capped at CONDITIONAL")
 
@@ -198,8 +325,13 @@ def main() -> None:
         tax_aware=not args.no_tax_aware,
         min_trade_fraction=args.band,
         fundamentals=fundamentals,
+        rebalance_freq=args.rebalance,
+        weighting=args.weighting,
+        force_refresh=args.force_refresh,
     )
-    report = build_report(result, prices, benchmark, cfg)
+    report = build_report(
+        result, prices, benchmark, cfg, universe=universe, benchmark_label=benchmark_label
+    )
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

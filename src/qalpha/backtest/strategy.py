@@ -54,6 +54,13 @@ def _add_fundamental_factors(
     return factor_frame
 
 
+def _cap_renorm(w: pd.Series, cap: float) -> pd.Series:
+    """Clip weights to ``cap`` and renormalise to sum 1 (one pass; good enough for screens)."""
+    w = w.clip(upper=cap)
+    total = w.sum()
+    return w / total if total > 0 else w
+
+
 def select_and_weight(
     prices: PriceData,
     sector_of: dict[str, str],
@@ -63,12 +70,17 @@ def select_and_weight(
     n_stocks: int,
     fundamentals: FundamentalsStore | None = None,
     as_of: date | None = None,
+    weighting: str = "minvar",
 ) -> pd.Series:
     """Return target stock weights (sums to ~1), or an empty Series if nothing qualifies.
 
-    Steps: liquidity gate -> factor scores -> top-N selection -> sector allocator -> optimizer.
-    Passing ``fundamentals`` + ``as_of`` enables the full six-factor model (Phase 0b); otherwise the
-    three price/volume factors are used (Phase 0a).
+    Steps: liquidity gate -> factor scores -> top-N selection -> weighting. ``weighting`` chooses the
+    final step (the Track-A lever the OOS holdout motivated — 1/N keeps winning, so test breadth):
+      * ``minvar`` — sector allocator + min-variance optimiser (the concentrated production default);
+      * ``equal``  — 1/N across the selected names (breadth, like the winning baseline);
+      * ``score``  — tilt ∝ composite score (capped at the per-stock max);
+      * ``shrink`` — 50/50 blend of minvar and equal (the DeMiguel-style anchor-to-1/N hybrid).
+    Passing ``fundamentals`` + ``as_of`` enables the full six-factor model (Phase 0b).
     """
     # 1) Liquidity gate (core ADV threshold) — hard pre-screen (§3.2/§3.3).
     adv = liquidity(prices, cfg.liquidity.adv_window_days)
@@ -94,6 +106,15 @@ def select_and_weight(
 
     sel_panel = panel.subset(selected)
     returns = sel_panel.returns()
+    cap = cfg.optimizer.max_single_stock
+
+    # 3b) Non-minvar weighting schemes (breadth / anchor-to-1/N): return directly.
+    if weighting == "equal":
+        return _cap_renorm(pd.Series(1.0, index=selected), cap)
+    if weighting == "score":
+        pos = scores.loc[selected].clip(lower=0.0)
+        base = pos if pos.sum() > 0 else pd.Series(1.0, index=selected)
+        return _cap_renorm(base, cap)
 
     # 4) Sector allocator over the sectors present among selected stocks.
     sectors_present = {sector_of.get(t, "UNKNOWN") for t in selected}
@@ -111,4 +132,7 @@ def select_and_weight(
 
     # 5) Portfolio optimizer: exact stock weights within sector totals.
     weights = optimize_weights(returns, sector_of, sector_targets, cfg.optimizer)
+    if weighting == "shrink":  # anchor the optimiser halfway to 1/N (robust to covariance noise)
+        equal = pd.Series(1.0 / len(selected), index=selected)
+        weights = 0.5 * weights.reindex(selected).fillna(0.0) + 0.5 * equal
     return weights[weights > 1e-6]

@@ -126,6 +126,23 @@ class OptimizerConfig:
 
 
 @dataclass(frozen=True)
+class DefensiveConfig:
+    """Defensive overlay — systemic vs idiosyncratic exit (Q_alpha.md §3.6, §4.7).
+
+    Runs *between* the slow core rebalances. It exits a holding only when the name is in a
+    **sustained, idiosyncratic** breakdown — actually bleeding over the lookback AND badly lagging
+    the cross-sectional median (the 'market' proxy). A market-wide drawdown (everything down
+    together → small excess) is NOT flagged — §4.7 "do not panic-sell in a crash". This is the
+    asymmetric stop: slow to sell winners (core), fast to dump a lone bleeder. Thresholds are
+    a-priori/round and must be **walk-forward calibrated** (§6.2), never fit in-sample.
+    """
+
+    lookback_days: int = 126  # ~6 months: a sustained bleed, not a blip
+    abs_drawdown_exit: float = 0.10  # must actually be down > 10% over the window
+    rel_underperf_exit: float = 0.10  # AND lag the cross-sectional median by > 10% (idiosyncratic)
+
+
+@dataclass(frozen=True)
 class CapitalConfig:
     """Capital structure (Q_alpha.md §2). Phase 0 backtests the core sleeve primarily."""
 
@@ -160,6 +177,7 @@ class Config:
     factor: FactorConfig = field(default_factory=FactorConfig)
     regime: RegimeConfig = field(default_factory=RegimeConfig)
     optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
+    defensive: DefensiveConfig = field(default_factory=DefensiveConfig)
     capital: CapitalConfig = field(default_factory=CapitalConfig)
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
 

@@ -17,7 +17,7 @@ Accounting choices (documented because they matter for the net-of-cost result):
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
@@ -151,6 +151,23 @@ class Portfolio:
                 rec = self._buy(on_date, ticker, des - cur, prices[ticker])
                 if rec is not None:
                     records.append(rec)
+        return records
+
+    def liquidate(
+        self, on_date: date, tickers: Iterable[str], prices: Mapping[str, Decimal]
+    ) -> list[TradeRecord]:
+        """Fully sell the named holdings to cash — the defensive stop-loss exit (Q_alpha.md §3.6).
+
+        Unconditional by design: a stop bypasses the §4.6 net-benefit gate (§4.6 "cost never
+        overrides a stop — you exit regardless"). Proceeds sit as cash until the next core
+        rebalance redeploys them. Reuses the same FIFO/cost/tax ``_sell`` path as every other trade.
+        """
+        held = self.positions()
+        records: list[TradeRecord] = []
+        for t in sorted(set(tickers)):
+            qty = held.get(t, Decimal("0"))
+            if qty > 0 and t in prices and prices[t] > 0:
+                records.append(self._sell(on_date, t, qty, prices[t]))
         return records
 
     def estimate_rebalance(
