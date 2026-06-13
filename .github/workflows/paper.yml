@@ -1,0 +1,35 @@
+name: Paper daily
+
+# The autonomous paper-trading pipeline (no AI in the loop): every weekday after NSE close it
+# refreshes prices, marks the notional book to market, regenerates the dashboard, and commits the
+# track record back to the repo. It NEVER trades — on rebalance days the dashboard flags
+# "ACTION NEEDED" and a human approves the orders (`paper.py apply`).
+
+on:
+  schedule:
+    - cron: "0 12 * * 1-5" # 12:00 UTC = 17:30 IST, after the 15:30 IST close, weekdays only
+  workflow_dispatch: {} # allow a manual run from the Actions tab
+
+permissions:
+  contents: write # to commit the updated book + dashboard
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: uv sync --extra dev --frozen
+      - name: Daily mark + dashboard (refreshes data; never trades)
+        run: uv run python scripts/paper.py daily
+      - name: Commit the track record
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/paper/book.json reports/paper_dashboard.md reports/paper_equity.csv
+          git diff --staged --quiet || git commit -m "paper: daily mark $(date -u +%F) [skip ci]"
+          git push

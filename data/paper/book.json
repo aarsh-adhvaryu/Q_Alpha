@@ -1,0 +1,148 @@
+{
+  "start_date": "2026-06-12",
+  "starting_capital": "200000",
+  "params": {
+    "band": 0.1,
+    "weighting": "shrink",
+    "tax_aware": true,
+    "force_refresh": true
+  },
+  "portfolio": {
+    "cash": "7335.38",
+    "lots": [
+      {
+        "ticker": "APOLLOHOSP.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "4",
+        "buy_price": "8498.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.10",
+        "other_costs": "1.23",
+        "lot_id": "96419e6c-24ec-452b-8fba-1f82df143e92",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "ASIANPAINT.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "14",
+        "buy_price": "2747.40",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.77",
+        "other_costs": "1.39",
+        "lot_id": "4c9110c1-ffc3-4830-b5c5-5d0a4f8bf307",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "BEL.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "98",
+        "buy_price": "406.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.98",
+        "other_costs": "1.44",
+        "lot_id": "344fd21e-f10f-4a22-b3f6-5c4355b2547f",
+        "broker_trade_id": null,
+        "quantity_remaining": "98"
+      },
+      {
+        "ticker": "NTPC.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "113",
+        "buy_price": "353.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "6.00",
+        "other_costs": "1.45",
+        "lot_id": "bd5a6abd-ec68-418f-961a-8a4ddefe191d",
+        "broker_trade_id": null,
+        "quantity_remaining": "113"
+      },
+      {
+        "ticker": "SUNPHARMA.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "22",
+        "buy_price": "1807.70",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.97",
+        "other_costs": "1.44",
+        "lot_id": "4bb57c46-703b-41ff-ba8a-20720e2fe13a",
+        "broker_trade_id": null,
+        "quantity_remaining": "22"
+      }
+    ],
+    "ltcg_by_fy": {}
+  },
+  "history": [
+    {
+      "as_of": "2026-06-12",
+      "reason": "first deployment of capital",
+      "orders": [
+        {
+          "date": "2026-06-12",
+          "ticker": "APOLLOHOSP.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "8498.00",
+          "cost": "108.30",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-06-12",
+          "ticker": "ASIANPAINT.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "2747.40",
+          "cost": "122.55",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-06-12",
+          "ticker": "BEL.NS",
+          "side": "BUY",
+          "quantity": "98",
+          "price": "406.50",
+          "cost": "126.93",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-06-12",
+          "ticker": "NTPC.NS",
+          "side": "BUY",
+          "quantity": "113",
+          "price": "353.90",
+          "cost": "127.42",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-06-12",
+          "ticker": "SUNPHARMA.NS",
+          "side": "BUY",
+          "quantity": "22",
+          "price": "1807.70",
+          "cost": "126.72",
+          "tax": "0.00"
+        }
+      ]
+    }
+  ],
+  "last_target": {
+    "NTPC.NS": 0.2007637341399515,
+    "ASIANPAINT.NS": 0.2007637341399515,
+    "SUNPHARMA.NS": 0.1992362658600485,
+    "APOLLOHOSP.NS": 0.1992362658600485,
+    "BEL.NS": 0.2
+  },
+  "equity_curve": [
+    {
+      "date": "2026-06-12",
+      "equity": "199388.08",
+      "cash": "7335.38"
+    }
+  ]
+}

@@ -106,20 +106,25 @@ class PaperBook:
         cfg: Config,
         *,
         start_date: date,
+        starting_capital: Decimal,
         portfolio: Portfolio,
         params: StrategyParams,
         history: list[dict[str, object]],
         last_target: pd.Series | None = None,
+        equity_curve: list[dict[str, str]] | None = None,
     ) -> None:
         self.path = path
         self.cfg = cfg
         self.start_date = start_date
+        self.starting_capital = starting_capital
         self.portfolio = portfolio
         self.params = params
         self.history = history
         # The last applied target weights — lets decide_rebalance tell a genuine first deployment
         # from a later rebalance (the §4.6 ``first`` override). Persisted across runs.
         self.last_target = last_target
+        # Daily marked-to-market equity points (the track record): [{date, equity, cash}].
+        self.equity_curve: list[dict[str, str]] = equity_curve or []
 
     # ---- lifecycle -------------------------------------------------------
 
@@ -138,6 +143,7 @@ class PaperBook:
             path,
             cfg,
             start_date=start_date,
+            starting_capital=starting_capital,
             portfolio=portfolio,
             params=params or StrategyParams(),
             history=[],
@@ -157,10 +163,12 @@ class PaperBook:
             path,
             cfg,
             start_date=date.fromisoformat(str(raw["start_date"])),
+            starting_capital=Decimal(str(raw["starting_capital"])),
             portfolio=portfolio,
             params=StrategyParams.from_dict(cast("dict[str, object]", raw["params"])),
             history=cast("list[dict[str, object]]", raw["history"]),
             last_target=last_target,
+            equity_curve=cast("list[dict[str, str]]", raw.get("equity_curve", [])),
         )
 
     def save(self) -> None:
@@ -171,10 +179,12 @@ class PaperBook:
         )
         payload = {
             "start_date": self.start_date.isoformat(),
+            "starting_capital": str(self.starting_capital),
             "params": self.params.to_dict(),
             "portfolio": self.portfolio.to_state(),
             "history": self.history,
             "last_target": last_target,
+            "equity_curve": self.equity_curve,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(payload, indent=2) + "\n")
@@ -244,9 +254,38 @@ class PaperBook:
     def equity(self, prices: PriceData, as_of: date) -> Decimal:
         return self.portfolio.market_value(_prices_on(prices, as_of))
 
+    def mark(self, prices: PriceData, as_of: date, *, persist: bool = True) -> Decimal:
+        """Record (idempotently) the marked-to-market equity for ``as_of`` — builds the track record.
+
+        Pure valuation, never a trade — safe to run unattended every day. Re-marking the same date
+        overwrites that point so reruns don't duplicate it.
+        """
+        prices_dec = _prices_on(prices, as_of)
+        equity = self.portfolio.market_value(prices_dec)
+        point = {
+            "date": as_of.isoformat(),
+            "equity": str(equity),
+            "cash": str(self.portfolio.cash),
+        }
+        self.equity_curve = [p for p in self.equity_curve if p["date"] != point["date"]]
+        self.equity_curve.append(point)
+        self.equity_curve.sort(key=lambda p: p["date"])
+        if persist:
+            self.save()
+        return equity
+
     def realized_tax(self) -> Decimal:
         total = Decimal("0")
         for event in self.history:
             for order in cast("list[dict[str, str]]", event["orders"]):
                 total += Decimal(order["tax"])
         return total
+
+    def total_return_pct(self, prices: PriceData, as_of: date) -> float:
+        """Return since inception (%), measured against the notional starting capital."""
+        if self.starting_capital <= 0:
+            return 0.0
+        return (
+            float((self.equity(prices, as_of) - self.starting_capital) / self.starting_capital)
+            * 100.0
+        )

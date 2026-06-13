@@ -20,18 +20,23 @@ from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+import pandas as pd
 from run_phase0 import _load_universe_csv
 
 from qalpha.config import Config
 from qalpha.data.ingest import download_prices, load_parquet, save_parquet
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
+from qalpha.live.dashboard import equity_csv, render_markdown
 from qalpha.live.paper import PaperBook
 
 BOOK_PATH = Path("data/paper/book.json")
+DASHBOARD_MD = Path("reports/paper_dashboard.md")
+EQUITY_CSV = Path("reports/paper_equity.csv")
 # Current (through-2026) point-in-time Nifty 50 + its price panel; `paper.py refresh` extends it.
 UNIVERSE_CSV = "data/universes/nifty50_membership_2026.csv"
 PRICES_PARQUET = Path("data/historical/prices_pit_2026.parquet")
+BENCHMARK_PARQUET = Path("data/historical/benchmark_NIFTYBEESNS_2026.parquet")
 
 
 def _load_market() -> tuple[PriceData, Universe, dict[str, str]]:
@@ -50,6 +55,31 @@ def _refresh_prices() -> PriceData:
     prices = PriceData.from_long(panel)
     print(f"✓ Prices refreshed to {prices.dates[-1].date()} → {PRICES_PARQUET}")
     return prices
+
+
+def _refresh_benchmark() -> None:
+    """Re-pull the Nifty 50 TRI proxy (NIFTYBEES adj-close) through today and cache it."""
+    panel = download_prices(["NIFTYBEES.NS"], "2012-01-01", None)
+    save_parquet(panel, str(BENCHMARK_PARQUET))
+
+
+def _load_benchmark_series() -> pd.Series:
+    df = pd.read_parquet(BENCHMARK_PARQUET)
+    return pd.Series(
+        df["adj_close"].to_numpy(), index=pd.DatetimeIndex(df["date"]), name="nifty_tri"
+    )
+
+
+def _generate_dashboard(
+    book: PaperBook, prices: PriceData, universe: Universe, sector_of: dict[str, str], as_of: date
+) -> bool:
+    """Mark the book, render the dashboard + equity CSV. Returns True if orders await approval."""
+    book.mark(prices, as_of)  # pure valuation, persisted — no trades
+    plan = book.plan(prices, universe, sector_of, as_of)
+    DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
+    DASHBOARD_MD.write_text(render_markdown(book, prices, _load_benchmark_series(), plan, as_of))
+    EQUITY_CSV.write_text(equity_csv(book))
+    return plan.has_orders
 
 
 def _as_of(prices: PriceData, arg: str | None) -> date:
@@ -88,6 +118,8 @@ def main(argv: list[str] | None = None) -> int:
     p_init.add_argument("--start", default=None, help="start date (default: latest price date)")
 
     sub.add_parser("refresh", help="re-pull prices from yfinance through today")
+    sub.add_parser("dashboard", help="mark the book + regenerate the dashboard report")
+    sub.add_parser("daily", help="refresh + mark + dashboard (for cron; never trades)")
     for name in ("plan", "apply", "status"):
         sp = sub.add_parser(name)
         if name in ("plan", "apply"):
@@ -102,6 +134,11 @@ def main(argv: list[str] | None = None) -> int:
         _refresh_prices()
         return 0
 
+    # `daily` (the cron entry point) refreshes prices + benchmark first so a fresh CI checkout (which
+    # has the committed universe CSV + book, but not the large/gitignored parquets) can rebuild them.
+    if args.cmd == "daily":
+        _refresh_prices()
+        _refresh_benchmark()
     prices, universe, sector_of = _load_market()
 
     if args.cmd == "init":
@@ -122,6 +159,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     book = PaperBook.load(BOOK_PATH, cfg)
+
+    if args.cmd in ("dashboard", "daily"):
+        as_of = prices.dates[-1].date()
+        action = _generate_dashboard(book, prices, universe, sector_of, as_of)
+        flag = "  ⚠️ ACTION NEEDED — orders await approval (run: paper.py apply)" if action else ""
+        print(f"✓ Dashboard → {DASHBOARD_MD} · equity → {EQUITY_CSV} (as of {as_of}){flag}")
+        return 0
 
     if args.cmd == "plan":
         _print_plan(book, prices, universe, sector_of, _as_of(prices, args.as_of))
