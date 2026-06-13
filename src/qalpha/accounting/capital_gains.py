@@ -13,6 +13,7 @@ encoded here:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
@@ -64,6 +65,14 @@ class CapitalGainsCalculator:
 
     def ltcg_realized(self, fy: int) -> Decimal:
         return self._ltcg_realized_by_fy.get(fy, Decimal("0.00"))
+
+    def realized_ltcg_by_fy(self) -> dict[int, Decimal]:
+        """Snapshot the per-FY LTCG tally — needed to persist a live/paper book across days."""
+        return dict(self._ltcg_realized_by_fy)
+
+    def restore_ltcg_by_fy(self, by_fy: Mapping[int, Decimal]) -> None:
+        """Restore the per-FY LTCG tally from a snapshot (inverse of realized_ltcg_by_fy)."""
+        self._ltcg_realized_by_fy = {int(fy): Decimal(str(v)) for fy, v in by_fy.items()}
 
     def compute_sell(
         self,
