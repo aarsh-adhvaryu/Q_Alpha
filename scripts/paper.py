@@ -20,26 +20,36 @@ from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from run_phase0 import (
-    PIT_PRICES_PARQUET,
-    _load_universe_csv,
-)
+from run_phase0 import _load_universe_csv
 
 from qalpha.config import Config
-from qalpha.data.ingest import load_parquet
+from qalpha.data.ingest import download_prices, load_parquet, save_parquet
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.live.paper import PaperBook
 
 BOOK_PATH = Path("data/paper/book.json")
-UNIVERSE_CSV = "data/universes/nifty50_membership.csv"
+# Current (through-2026) point-in-time Nifty 50 + its price panel; `paper.py refresh` extends it.
+UNIVERSE_CSV = "data/universes/nifty50_membership_2026.csv"
+PRICES_PARQUET = Path("data/historical/prices_pit_2026.parquet")
 
 
 def _load_market() -> tuple[PriceData, Universe, dict[str, str]]:
     _tickers, sector_of = _load_universe_csv(Path(UNIVERSE_CSV))
-    prices = load_parquet(PIT_PRICES_PARQUET)
+    prices = load_parquet(str(PRICES_PARQUET))
     universe = Universe.from_csv(UNIVERSE_CSV)
     return prices, universe, sector_of
+
+
+def _refresh_prices() -> PriceData:
+    """Re-pull the current universe from yfinance through today and cache it for the daily run."""
+    tickers, _sector_of = _load_universe_csv(Path(UNIVERSE_CSV))
+    print(f"Downloading {len(tickers)} names from yfinance through today...")
+    panel = download_prices(tickers, "2012-01-01", None)
+    save_parquet(panel, str(PRICES_PARQUET))
+    prices = PriceData.from_long(panel)
+    print(f"✓ Prices refreshed to {prices.dates[-1].date()} → {PRICES_PARQUET}")
+    return prices
 
 
 def _as_of(prices: PriceData, arg: str | None) -> date:
@@ -77,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_init.add_argument("--start", default=None, help="start date (default: latest price date)")
 
+    sub.add_parser("refresh", help="re-pull prices from yfinance through today")
     for name in ("plan", "apply", "status"):
         sp = sub.add_parser(name)
         if name in ("plan", "apply"):
@@ -86,6 +97,11 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     cfg = Config()
+
+    if args.cmd == "refresh":
+        _refresh_prices()
+        return 0
+
     prices, universe, sector_of = _load_market()
 
     if args.cmd == "init":
