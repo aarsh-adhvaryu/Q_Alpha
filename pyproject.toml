@@ -27,6 +27,11 @@ dev = [
     "pandas-stubs>=2.2",
     "types-pyyaml",
 ]
+# Interactive live dashboard (the consumer-facing web view). UI-only, run locally — NOT needed by
+# CI or the headless daily pipeline — so install with `uv sync --extra dashboard`.
+dashboard = [
+    "streamlit>=1.37",
+]
 # Research-only (Q_alpha.md §15): the quantum optimiser stack. Heavy + AUM-gated, so it is NOT a
 # core or dev dependency — install with `uv sync --extra quantum`. The QAOA tests skip without it.
 quantum = [
