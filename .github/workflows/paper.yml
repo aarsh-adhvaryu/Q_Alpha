@@ -7,7 +7,11 @@ name: Paper daily
 
 on:
   schedule:
-    - cron: "0 12 * * 1-5" # 12:00 UTC = 17:30 IST, after the 15:30 IST close, weekdays only
+    # 12:23 UTC = 17:53 IST, after the 15:30 IST (10:00 UTC) close, weekdays only.
+    # Deliberately OFF the top of the hour: GitHub heavily throttles on-the-hour
+    # schedules under load and silently drops them (why "0 12" never fired). An
+    # odd minute lands in an uncongested slot. Holidays just re-mark last close (harmless).
+    - cron: "23 12 * * 1-5"
   workflow_dispatch: {} # allow a manual run from the Actions tab
 
 permissions:
