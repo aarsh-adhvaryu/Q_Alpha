@@ -80,6 +80,10 @@ turnover. If nothing beats 1/N, the production answer is the hybrid anchored at 
 
 ## Phase C — Track B: quantum / QUBO research track — weeks 2–3, parallel
 
+> **Moved out:** this track now lives in the separate **`Q_Alpha_Research`** repo
+> (`github.com/aarsh-adhvaryu/Q_Alpha_Research`), which imports this engine as a dependency.
+> The notes below are retained as the original design record.
+
 Lives in `research/` (spec §15) — production code does not import from it. Reuses the harness
 from Phase B for any walk-forward claims.
 
