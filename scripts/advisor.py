@@ -8,10 +8,12 @@ the **real Zerodha account** (``kite.holdings()`` + ``ltp()``), proving the advi
     uv run python scripts/advisor.py raise-cash 50000         # least-tax way to raise ₹50k
     uv run python scripts/advisor.py deploy 50000             # route ₹50k new money, ₹0 tax
     uv run python scripts/advisor.py deploy 50000 --source live   # ...against the live account
+    uv run python scripts/advisor.py sell INFY.NS --source live --tradebook tb.csv  # exact dated tax
 
 `--as-of DATE` overrides the valuation date (default: latest price date). Read-only — never trades.
-Live holdings carry no purchase dates, so live tax is approximate until a tradebook is imported
-(criterion 4); the CLI prints that caveat.
+Live holdings carry no purchase dates, so live tax is approximate unless `--tradebook CSV` (a Zerodha
+Console tradebook export) is given — that replays exact dated FIFO lots (criterion 4). Without it the
+CLI prints the short-term-assumption caveat.
 """
 
 from __future__ import annotations
@@ -47,10 +49,15 @@ def _add_common(p: argparse.ArgumentParser) -> None:
         default="paper",
         help="portfolio source: the notional paper book (default) or the live Zerodha account",
     )
+    p.add_argument(
+        "--tradebook",
+        default=None,
+        help="Zerodha Console tradebook CSV → exact dated FIFO tax (with --source live)",
+    )
 
 
 def _resolve_portfolio(
-    source: str, book: PaperBook, cfg: Config, as_of: date, prices: PriceData
+    source: str, book: PaperBook, cfg: Config, as_of: date, prices: PriceData, tradebook: str | None
 ) -> tuple[Portfolio, dict[str, Decimal]] | None:
     """Return (portfolio, marking prices) for the chosen source, or None if the live account is empty."""
     if source == "paper":
@@ -69,10 +76,25 @@ def _resolve_portfolio(
     if not holdings:
         print("live Zerodha account holds no equity — nothing to advise on yet.", file=sys.stderr)
         return None
+    prices_dec = fetch_prices(kite, holdings)
+
+    if tradebook:
+        from qalpha.live.tradebook import parse_tradebook, replay_tradebook
+
+        result = replay_tradebook(parse_tradebook(tradebook), cfg, cash=fetch_available_cash(kite))
+        for w in result.warnings:
+            print(f"⚠️  {w}", file=sys.stderr)
+        print(
+            f"Exact tax from {result.n_trades} tradebook trades "
+            f"(realized tax to date ₹{result.realized_tax:,.2f}).\n",
+            file=sys.stderr,
+        )
+        return result.portfolio, prices_dec
+
     live = portfolio_from_holdings(holdings, cfg, as_of=as_of, cash=fetch_available_cash(kite))
     if live.tax_caveat:
         print(f"⚠️  {live.tax_caveat}\n", file=sys.stderr)
-    return live.portfolio, fetch_prices(kite, holdings)
+    return live.portfolio, prices_dec
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -105,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     book = PaperBook.load(BOOK_PATH, cfg)
     as_of = _as_of(prices, args.as_of)
 
-    resolved = _resolve_portfolio(args.source, book, cfg, as_of, prices)
+    resolved = _resolve_portfolio(args.source, book, cfg, as_of, prices, args.tradebook)
     if resolved is None:
         return 1
     portfolio, prices_dec = resolved
