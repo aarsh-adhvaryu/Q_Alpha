@@ -36,16 +36,30 @@ on the holdout (8.1 vs 7.1), AND across rolling 3y holds** (dominates every perc
 the out-of-time holdout. So the edge is BOTH the tax engine AND a modest robust 1/N-anchored return
 tilt — not pure index-tracking after all. No DB / broker / dashboard yet. CI green.
 
-## ⏯️ NEXT SESSION — START HERE
+## ⏯️ NEXT SESSION — START HERE (a brainstorm; build is paused here)
 
-**Everything is merged to `main`** (9 PRs, as of 2026-06-13): Phase 0 (validated GO) + a **live layer**
-(`src/qalpha/live/`: Kite Connect auth, replay harness, the shared `decide_rebalance`) + a
-**paper-trading runner** (`scripts/paper.py`, notional ₹2L book started 2026-06-12, 5 holdings) + a
-**dashboard + autonomous daily GitHub Actions pipeline** (`reports/paper_dashboard.md`, `paper.yml`) +
-a **quantum research track** (`src/qalpha/research/`: QUBO + exact/SA solvers + **QAOA**, behind an
-optional `quantum` extra) + the **deterministic tax-smart advisor** (`advisor.py`) and a **live
-Streamlit dashboard** (`scripts/dashboard_app.py`, optional `dashboard` extra). Working tree clean;
-four gates green.
+**Next session = brainstorming, not a queued build.** Everything below is current. Two PRs are open
+and **awaiting the user's manual merge — order #10 then #11** (or merge #10 and retarget #11 to main):
+- **PR #10 `cleanups`→main:** deploy cash-utilization fix + CLAUDE.md refresh + **live Zerodha
+  holdings reader** (`src/qalpha/live/holdings.py`, advisor `--source live`, dashboard Live toggle).
+- **PR #11 `tradebook-upload`→`cleanups` (stacked):** upload a Zerodha Console **tradebook CSV** in the
+  dashboard → exact **dated** FIFO tax (`src/qalpha/live/tradebook.py`), `advisor --tradebook`.
+
+**On `main` (9 PRs merged, 2026-06-13):** Phase 0 (validated GO) + a **live layer** (`src/qalpha/live/`:
+Kite auth, replay harness, shared `decide_rebalance`) + a **paper-trading runner** (`scripts/paper.py`,
+notional ₹2L book started 2026-06-12, 5 holdings) + a **dashboard + autonomous daily GitHub Actions
+pipeline** (`paper.yml`) + a **quantum research track** (QUBO + exact/SA + QAOA, optional `quantum`
+extra) + the **deterministic tax-smart advisor** + a **live Streamlit dashboard**. The advisor/
+dashboard/holdings/tradebook pieces are on the two open PRs above. Four gates green; 105 tests.
+
+**⭐ USER MADE FIRST REAL TRADES (2026-06-13):** funded YHK037, **HDFCBANK BUY 5 @₹785.45 COMPLETE**
+(CNC/delivery), INFY BUY 5 still OPEN/pending; cash ₹445.75. **A same-day delivery buy sits in
+`positions()` day-book, NOT `holdings()`** (→ T+1 it lands in `holdings()` as `t1_quantity`), so
+`--source live` (which reads `holdings()`) shows EMPTY until tomorrow. Possible quick win:
+also read `positions()` for same-day visibility (offered, not built). Kite token expires daily
+~06:00 IST → re-mint `python -m qalpha.live.auth --manual`. **Streamlit server can't run in the agent
+harness** (sandbox kills port-binding, exit 144); the user runs it + forwards port 8501 via VSCode
+PORTS. I verify rendering with Streamlit `AppTest` (in-process, no socket).
 
 **🎯 USER'S VISION + AGREED NEXT PLAN (the active direction — build this):** the user trades **manually
 (all his own decisions)** and wants an **advisor + proper live web dashboard wired to his REAL Zerodha
@@ -66,12 +80,24 @@ an optional *later* flourish, never the calculator). **Build order:**
    Source = paper book now → `kite.holdings()` later (the `_load` seam). `streamlit` is an optional
    **`dashboard`** extra (UI-only, not in CI/pipeline). Run: `uv run --extra dashboard streamlit run
    scripts/dashboard_app.py`. `AppTest` smoke test skips dev-only (CI) / without on-disk data.
-3. ⏳ **NEXT — Live Zerodha holdings reader** as the dashboard/advisor source once he funds/trades
-   (small swap by design: replace the paper book in `_load` with `kite.holdings()` + `ltp()` prices).
-**Trust gate** before real-money reliance: validate the FIFO tax engine vs his real Zerodha Tax P&L
-export (needs real trades first — see the criterion-4 checklist). **Parked (declined/deferred):**
-auto-execution, LLM-for-numbers, Monte Carlo, GPU, more quantum. Paper cron is scheduled but **not yet
-verified to have fired** — confirm via a manual "Run workflow" (workflow_dispatch).
+3. ✅ **DONE — Live Zerodha holdings reader** (PR #10): `src/qalpha/live/holdings.py` reads
+   `kite.holdings()` + `ltp()` + `margins()` into the same `Portfolio`. Source swap is a sidebar toggle
+   (dashboard) / `--source live` (CLI). **Caveat:** `holdings()` has no purchase dates → undated lots
+   (tax short-term-assumed) flagged via `LiveHoldings.lots_dated`/`.tax_caveat`.
+4. ✅ **DONE — Tradebook upload → exact dated tax** (PR #11, the criterion-4 reconstruction half):
+   `src/qalpha/live/tradebook.py` (`parse_tradebook` path-or-file, `replay_tradebook`→`ReplayResult`,
+   `reconcile_positions`). Dashboard Live view has an `st.file_uploader`; upload the Console tradebook
+   CSV → exact dated FIFO lots + realized tax + holdings reconciliation; advisor uses the accurate book.
+**Trust gate** before real-money reliance: **criterion 4** = reconcile our realized tax vs the real
+Zerodha **Tax P&L** export. Reconstruction (tradebook replay) is built; still needs a real **SELL**
+(only buys so far) → export Console **Tax P&L** + **Tradebook** (T+1) → build a Tax P&L parser →
+reconcile to the rupee. **Parked (declined/deferred):** auto-execution, LLM-for-numbers, Monte Carlo,
+GPU, more quantum. Paper cron is scheduled but **not yet verified to have fired** (workflow_dispatch).
+
+**🧠 NEXT SESSION IS A BRAINSTORM** — no committed plan yet. Likely threads to weigh: same-day
+`positions()` reading; the Tax P&L parser + crit-4 reconciliation (once a sell exists); verify the
+paper cron; corporate-actions (crit 5); the tax-alpha whitepaper; LLM "concierge" routing NL → the
+deterministic engine. Let the user steer.
 
 **The validated config is now the default** of `scripts/run_phase0.py` (no args needed):
 PIT universe + **Nifty 50 TRI** benchmark + **annual** rebalance + **`weighting=shrink`** (½ min-var +
@@ -189,7 +215,7 @@ factors/      momentum, volatility, liquidity (0a) + value, quality, dividend (0
 alloc/        Ledoit-Wolf+EWMA covariance conditioning → scipy sector allocator → scipy optimizer
 accounting/   FIFO tax lots + Zerodha costs + capital-gains tax   (reused live; Portfolio.to_state persists a book)
 backtest/     walk-forward engine, portfolio accountant, baselines, metrics, report; decision.py = shared decide_rebalance
-live/         Kite auth + replay harness + paper-trading book (PaperBook) + dashboard renderer + advisor.py (tax-smart recommendation layer, §14 crit 10)
+live/         Kite auth + replay harness + paper book (PaperBook) + dashboard renderer + advisor.py (tax-smart layer, crit 10) + holdings.py (live reader) + tradebook.py (Console CSV → dated FIFO, crit 4)
 scripts/      run_phase0, paper, advisor (CLI), dashboard_app (Streamlit, `dashboard` extra), build_nifty_universe, experiments
 research/     QUBO portfolio selection + exact/SA solvers + QAOA (optional `quantum` extra; §15, AUM-gated)
 config.py     every tunable parameter (Q_alpha.md §16) in one place
@@ -217,7 +243,8 @@ regime's weights → top-N selection → sector allocator → portfolio optimize
 Status: **1 ✅ walk-forward validated (low-turnover 3-factor PIT beats TRI in 93% of 3y holds & beat
 TRI+1/N in all 3 independent sub-periods, best downside; the *thesis* holds OOS though not a magic
 frequency — see Phase A) |
-2 ✅ | 3 ✅ PIT universe built (Phase A) | 4 ⚠️ validate vs real Zerodha Tax P&L (needs real trades) |
+2 ✅ | 3 ✅ PIT universe built (Phase A) | 4 🟡 reconstruction built (tradebook replay → dated FIFO,
+`tradebook.py`); reconciliation vs real Zerodha **Tax P&L** still needs a real SELL + the Tax P&L parser |
 5 ❌ corp-actions (Phase 1) | 6 ⏳ paper clock STARTED 2026-06-12, accumulating (3–6 mo, unskippable) |
 7 ✅ | 8 ✅ (dynamic rule) | 9 🟡 pipeline built, needs the live run | 10 ✅ deterministic tax-smart
 advisor + live dashboard built (`advisor.py`, `dashboard_app.py`)**. Phase A cleared survivorship (3)
