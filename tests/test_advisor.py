@@ -122,3 +122,6 @@ def test_deploy_routes_new_money_to_underweights_tax_free() -> None:
     # ...whereas a full rebalance would trim the appreciated AAA and realize tax.
     assert adv.naive_tax > 0
     assert adv.tax_saved == adv.naive_tax
+    # The greedy whole-share fill drives idle cash below one share of the cheapest name (BBB ₹100),
+    # not a share's worth stranded per name.
+    assert adv.leftover_cash < Decimal("200")

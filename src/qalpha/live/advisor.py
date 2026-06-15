@@ -35,6 +35,9 @@ from qalpha.config import Config
 _ZERO = Decimal("0")
 # How close to the 365-day line a short-term lot must be before "just wait" is worth surfacing.
 _BOUNDARY_WINDOW_DAYS = 60
+# Safety cap on the greedy whole-share deploy loop (huge ₹ ÷ a penny-stock price); never hit in
+# practice — it deploys idle cash + new money one share at a time toward the most underweight name.
+_MAX_DEPLOY_SHARES = 1_000_000
 
 
 def _rupees(value: Decimal) -> str:
@@ -379,38 +382,49 @@ def advise_deploy(
 ) -> DeployAdvice:
     """Advise deploying ``amount`` of fresh capital toward ``target`` weights with zero tax.
 
-    Smart path: spend the new cash filling the **underweight** gaps (target value − current value)
-    only, largest gap first — pure buys, so no capital-gains tax is realized (§2.9 fresh-capital
-    routing). Naive path: a full rebalance to ``target`` on the same post-injection book, which sells
-    the overweights and realizes capital-gains tax. ``tax_saved`` is that avoided tax.
+    Smart path: spend the idle cash + new money buying whole shares toward ``target``, always topping
+    up the **most underweight** name that is still affordable, until no further share fits — pure
+    buys, so no capital-gains tax is realized (§2.9 fresh-capital routing). Buying whole shares one at
+    a time toward the largest shortfall both tracks target weights and drives idle cash down to less
+    than one share of the cheapest name (a single bulk floor would strand a share's worth per name).
+    Naive path: a full rebalance to ``target`` on the same post-injection book, which sells the
+    overweights and realizes capital-gains tax. ``tax_saved`` is that avoided tax.
     """
     total_after = portfolio.market_value(prices) + amount
-    current_value = {t: qty * prices[t] for t, qty in portfolio.positions().items() if t in prices}
     desired_value = {
         str(t): Decimal(str(w)) * total_after
         for t, w in target.items()
         if float(w) > 0 and str(t) in prices
     }
-    gaps = {
-        t: desired_value[t] - current_value.get(t, _ZERO)
-        for t in desired_value
-        if desired_value[t] > current_value.get(t, _ZERO)
-    }
 
-    # Buy toward the biggest underweight first; ``buy`` is affordability-capped, so the last order
-    # absorbs whatever cash remains. No sells are ever issued → ₹0 capital-gains tax by construction.
+    # Allocate whole-share buys greedily against the available cash (idle + new), leaving a small
+    # buffer for the ~0.3% buy cost so the executed orders below don't get affordability-capped.
+    held = portfolio.positions()
+    buffered = {t: prices[t] * Decimal("1.004") for t in desired_value}
+    shares: dict[str, Decimal] = dict.fromkeys(desired_value, _ZERO)
+    available = portfolio.cash + amount
+    for _ in range(_MAX_DEPLOY_SHARES):
+        best, best_shortfall = None, _ZERO
+        for t in desired_value:
+            if buffered[t] > available:
+                continue
+            shortfall = desired_value[t] - (held.get(t, _ZERO) + shares[t]) * prices[t]
+            if shortfall > best_shortfall:
+                best, best_shortfall = t, shortfall
+        if best is None:
+            break  # nothing left that is both underweight and affordable
+        shares[best] += 1
+        available -= buffered[best]
+
+    # Execute one buy per name (no sells → ₹0 capital-gains tax by construction).
     smart = portfolio.clone()
     smart.cash += amount
     buy_orders: list[TradeRecord] = []
-    for ticker in sorted(gaps, key=lambda k: gaps[k], reverse=True):
-        if smart.cash <= 0:
-            break
-        shares = (gaps[ticker] / prices[ticker]).to_integral_value(rounding=ROUND_DOWN)
-        if shares <= 0:
-            continue
-        order = smart.buy(as_of, ticker, shares, prices[ticker])
-        if order is not None:
-            buy_orders.append(order)
+    for ticker in sorted(shares, key=lambda k: shares[k] * prices[k], reverse=True):
+        if shares[ticker] > 0:
+            order = smart.buy(as_of, ticker, shares[ticker], prices[ticker])
+            if order is not None:
+                buy_orders.append(order)
 
     naive = portfolio.clone()
     naive.cash += amount
