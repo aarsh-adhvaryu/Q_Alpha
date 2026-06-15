@@ -11,8 +11,10 @@ after costs and taxes before any production infrastructure is built**.
 
 **Current state: Phase 0 COMPLETE + live build well underway — all on `main`.** Beyond the validated
 Phase-0 GO, the repo now has the live layer (Kite auth, replay harness), a running **paper-trading
-book** (notional, started 2026-06-12) with a **dashboard + autonomous daily pipeline**, and a
-**quantum research track** (QUBO + QAOA). See the "NEXT SESSION" block for the active plan (a
+book** (notional, started 2026-06-12) with a **dashboard + autonomous daily pipeline**. The
+**research track (quantum QUBO/QAOA, + planned regime/bubble & agentic work) now lives in a separate
+repo** — `github.com/aarsh-adhvaryu/Q_Alpha_Research` — which imports this engine as a dependency, so
+this repo stays product-clean. See the "NEXT SESSION" block for the active plan (a
 deterministic tax-smart advisor + a live Zerodha-wired dashboard). Phase-0 evidence:
 `reports/PHASE0_VERDICT.md`. The original headline (6-factor, 24 survivors, vs Nifty *price*)
 was stress-tested through two fairness fixes (point-in-time universe + TRI benchmark) and an
@@ -48,9 +50,8 @@ and **awaiting the user's manual merge — order #10 then #11** (or merge #10 an
 **On `main` (9 PRs merged, 2026-06-13):** Phase 0 (validated GO) + a **live layer** (`src/qalpha/live/`:
 Kite auth, replay harness, shared `decide_rebalance`) + a **paper-trading runner** (`scripts/paper.py`,
 notional ₹2L book started 2026-06-12, 5 holdings) + a **dashboard + autonomous daily GitHub Actions
-pipeline** (`paper.yml`) + a **quantum research track** (QUBO + exact/SA + QAOA, optional `quantum`
-extra) + the **deterministic tax-smart advisor** + a **live Streamlit dashboard**. The advisor/
-dashboard/holdings/tradebook pieces are on the two open PRs above. Four gates green; 105 tests.
+pipeline** (`paper.yml`) + the **deterministic tax-smart advisor** + a **live Streamlit dashboard**.
+(The quantum research track was moved to the separate `Q_Alpha_Research` repo.) Four gates green.
 
 **⭐ USER MADE FIRST REAL TRADES (2026-06-13):** funded YHK037, **HDFCBANK BUY 5 @₹785.45 COMPLETE**
 (CNC/delivery), INFY BUY 5 still OPEN/pending; cash ₹445.75. **A same-day delivery buy sits in
@@ -217,8 +218,8 @@ accounting/   FIFO tax lots + Zerodha costs + capital-gains tax   (reused live; 
 backtest/     walk-forward engine, portfolio accountant, baselines, metrics, report; decision.py = shared decide_rebalance
 live/         Kite auth + replay harness + paper book (PaperBook) + dashboard renderer + advisor.py (tax-smart layer, crit 10) + holdings.py (live reader) + tradebook.py (Console CSV → dated FIFO, crit 4)
 scripts/      run_phase0, paper, advisor (CLI), dashboard_app (Streamlit, `dashboard` extra), build_nifty_universe, experiments
-research/     QUBO portfolio selection + exact/SA solvers + QAOA (optional `quantum` extra; §15, AUM-gated)
 config.py     every tunable parameter (Q_alpha.md §16) in one place
+              (the research track — QUBO/QAOA §15 + planned regime/agentic — lives in the separate Q_Alpha_Research repo)
 ```
 
 Data flow each rebalance: `as_of` slice (no look-ahead) → liquidity gate → factor scores under the
@@ -271,7 +272,8 @@ gated by a mandatory paper-trading run.
   now supports `minvar|equal|score|shrink`; engine takes `weighting=` + `n_stocks_override=`. Pure
   broad-equal and score-tilt LOST (dilute/concentrate) — only the principled blend won. **Remaining
   optimizer ideas:** HRP/NCO (another robust route), and QUBO/VQE as the §15 research showcase
-  (AUM-gated ₹50L+). Discipline held: it cleared the "beat 1/N walk-forward net of cost+tax" bar.
+  (AUM-gated ₹50L+; now in the `Q_Alpha_Research` repo). Discipline held: it cleared the "beat 1/N
+  walk-forward net of cost+tax" bar.
 - **Defensive engine — two modes tested (`run_backtest(defensive=...|governance_events=...)`).**
   (1) *Price-based* idiosyncratic-drawdown exit (§3.6, `defensive.py:idiosyncratic_exit_flags`):
   on the annual core it cuts drawdown (-24%→-19%) and plugs the 2022 hole (-10%→+11%) but costs

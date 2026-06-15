@@ -32,14 +32,9 @@ dev = [
 dashboard = [
     "streamlit>=1.37",
 ]
-# Research-only (Q_alpha.md §15): the quantum optimiser stack. Heavy + AUM-gated, so it is NOT a
-# core or dev dependency — install with `uv sync --extra quantum`. The QAOA tests skip without it.
-quantum = [
-    "qiskit>=1.0",
-    "qiskit-aer>=0.14",
-    "qiskit-algorithms>=0.3",
-    "qiskit-optimization>=0.6",
-]
+# NOTE: the research track (quantum QUBO/QAOA, and the planned regime + agentic work) lives in a
+# separate repo — github.com/aarsh-adhvaryu/Q_Alpha_Research — which imports this engine as a
+# dependency. Production never imports from it, so it carries no extras here.
 
 [build-system]
 requires = ["hatchling"]
