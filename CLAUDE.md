@@ -38,14 +38,27 @@ on the holdout (8.1 vs 7.1), AND across rolling 3y holds** (dominates every perc
 the out-of-time holdout. So the edge is BOTH the tax engine AND a modest robust 1/N-anchored return
 tilt — not pure index-tracking after all. No DB / broker / dashboard yet. CI green.
 
-## ⏯️ NEXT SESSION — START HERE (a brainstorm; build is paused here)
+## ⏯️ NEXT SESSION — START HERE (build paused; an open research thread to pick up)
 
-**Next session = brainstorming, not a queued build.** Everything below is current. Two PRs are open
-and **awaiting the user's manual merge — order #10 then #11** (or merge #10 and retarget #11 to main):
-- **PR #10 `cleanups`→main:** deploy cash-utilization fix + CLAUDE.md refresh + **live Zerodha
-  holdings reader** (`src/qalpha/live/holdings.py`, advisor `--source live`, dashboard Live toggle).
-- **PR #11 `tradebook-upload`→`cleanups` (stacked):** upload a Zerodha Console **tradebook CSV** in the
-  dashboard → exact **dated** FIFO tax (`src/qalpha/live/tradebook.py`), `advisor --tradebook`.
+**🆕 REPO SPLIT (2026-06-15):** the research/frontier track now lives in a **separate private repo,
+`github.com/aarsh-adhvaryu/Q_Alpha_Research`**, which imports this engine as a dependency (never
+copies it — one source of truth for the tax-aware engine). This repo stays product-clean.
+- **PR [#13](https://github.com/aarsh-adhvaryu/Q_Alpha/pull/13) `split-research`→main is OPEN, awaiting your merge.** It removes the quantum
+  subpackage (`src/qalpha/research/`), its tests/scripts, the quantum benchmark report, and the
+  `quantum` extra (all relocated to Q_Alpha_Research). Gates green (101 tests). **Merge it to make
+  `main` pristine.** (Earlier PRs #10/#12 — holdings reader + tradebook upload — are already merged.)
+
+**🔬 OPEN RESEARCH THREAD — pick up here (in the Q_Alpha_Research repo):** started the **regime
+(bubble/crash) track**. Pre-registered (`regime/PREREGISTRATION.md`) + ran **LPPLS** on Nifty 50
+2012–2026 → **honest NEGATIVE result** (`reports/lppls_nifty_findings.md`): LPPLS does NOT clear the
+bar — Nifty large-cap had no parabolic bubbles (max confidence ~0.33, no useful lead), but correctly
+silent before the exogenous COVID crash + near-zero false positives. Fitter is validated (recovers
+synthetic `tc` to 4dp). **DECISION FOR NEXT SESSION (left open, user to steer):** point next at —
+(a) **HMM + valuation/breadth risk-state** on the index (most likely to clear the money test), or
+(b) **LPPLS on midcaps/single names** (its real habitat — Indian parabolic bubbles live there), or
+(c) **scaffold the agentic news/macro track** (the info-driven falls LPPLS can't see). Compute note:
+all of (a)/(b) are CPU; GPU only earns its keep on **quantum scaling** or a **local-LLM** agentic
+design — keep studio on CPU by default.
 
 **On `main` (9 PRs merged, 2026-06-13):** Phase 0 (validated GO) + a **live layer** (`src/qalpha/live/`:
 Kite auth, replay harness, shared `decide_rebalance`) + a **paper-trading runner** (`scripts/paper.py`,
