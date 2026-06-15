@@ -8,8 +8,9 @@ and the **live Zerodha account** (``kite.holdings()`` + ``ltp()``) — same advi
     uv run --extra dashboard streamlit run scripts/dashboard_app.py
 
 Read-only: the page never places or commits a trade — it shows what the system *recommends*; the user
-acts in his own broker. Live holdings carry no purchase dates, so live tax is approximate until a
-tradebook is imported (criterion 4); the page shows that caveat.
+acts in his own broker. Live holdings carry no purchase dates, so live tax is approximate until you
+**upload a Zerodha Console tradebook CSV** in the Live view — that replays exact dated FIFO lots
+(criterion 4) and switches the page to exact-tax mode; otherwise it shows the short-term caveat.
 """
 
 from __future__ import annotations
@@ -106,9 +107,7 @@ def main() -> None:
         live = _load_live(cfg, as_of)
         if live is None:
             return
-        portfolio = live.portfolio
-        prices_dec = live.prices
-        _live_overview(live)
+        portfolio, prices_dec = _live_section(live, cfg)
 
     st.divider()
     st.subheader("Ask the advisor")
@@ -157,16 +156,59 @@ def _paper_overview(
         st.dataframe(_holdings_frame(book.portfolio, prices_dec), hide_index=True, width="stretch")
 
 
-def _live_overview(live: LiveHoldings) -> None:
-    equity = live.portfolio.market_value(live.prices)
+def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str, Decimal]]:
+    """Render the live overview, with an optional tradebook upload that makes the tax exact.
+
+    Returns the portfolio + marking prices the advisor tabs should use: the dated tradebook replay
+    when a CSV is uploaded (exact holding periods), else the holdings snapshot (short-term assumed).
+    """
+    st.caption(
+        "Upload your Zerodha **Console → Reports → Tradebook** CSV for *exact* holding-period tax. "
+        "Without it, tax assumes short-term (holdings carry no purchase dates)."
+    )
+    uploaded = st.file_uploader("Tradebook CSV", type=["csv"], key="tradebook")
+
+    if uploaded is not None:
+        from qalpha.live.tradebook import parse_tradebook, reconcile_positions, replay_tradebook
+
+        try:
+            trades = parse_tradebook(uploaded)
+            result = replay_tradebook(trades, cfg, cash=live.portfolio.cash)
+        except Exception as exc:  # malformed CSV → fall back to the holdings snapshot
+            st.error(f"Could not read the tradebook: {exc}")
+        else:
+            st.success(
+                f"Loaded {result.n_trades} trades → dated FIFO lots. "
+                f"Realized capital-gains tax to date: ₹{result.realized_tax:,.2f}."
+            )
+            for w in result.warnings:
+                st.warning(w)
+            issues = reconcile_positions(result.portfolio, live.portfolio.positions())
+            if issues:
+                st.warning(
+                    "Reconstructed holdings differ from the broker:\n- " + "\n- ".join(issues)
+                )
+            else:
+                st.caption("✓ Reconstructed holdings match your broker account exactly.")
+            _live_overview(result.portfolio, live.prices, caveat=None)
+            return result.portfolio, live.prices
+
+    _live_overview(live.portfolio, live.prices, caveat=live.tax_caveat)
+    return live.portfolio, live.prices
+
+
+def _live_overview(portfolio: Portfolio, prices: dict[str, Decimal], *, caveat: str | None) -> None:
+    equity = portfolio.market_value(prices)
     c1, c2, c3 = st.columns(3)
     c1.metric("Equity", f"₹{equity:,.0f}")
-    c2.metric("Cash", f"₹{live.portfolio.cash:,.0f}")
-    c3.metric("Holdings", str(len(live.portfolio.positions())))
-    if live.tax_caveat:
-        st.warning(live.tax_caveat)
+    c2.metric("Cash", f"₹{portfolio.cash:,.0f}")
+    c3.metric("Holdings", str(len(portfolio.positions())))
+    if caveat:
+        st.warning(caveat)
+    else:
+        st.success("Exact tax mode — holding periods dated from your tradebook.")
     st.subheader("Holdings")
-    st.dataframe(_holdings_frame(live.portfolio, live.prices), hide_index=True, width="stretch")
+    st.dataframe(_holdings_frame(portfolio, prices), hide_index=True, width="stretch")
 
 
 def _advisor_tabs(
