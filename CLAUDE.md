@@ -93,12 +93,42 @@ an optional *later* flourish, never the calculator). **Build order:**
 Zerodha **Tax P&L** export. Reconstruction (tradebook replay) is built; still needs a real **SELL**
 (only buys so far) → export Console **Tax P&L** + **Tradebook** (T+1) → build a Tax P&L parser →
 reconcile to the rupee. **Parked (declined/deferred):** auto-execution, LLM-for-numbers, Monte Carlo,
-GPU, more quantum. Paper cron is scheduled but **not yet verified to have fired** (workflow_dispatch).
+GPU, more quantum.
 
-**🧠 NEXT SESSION IS A BRAINSTORM** — no committed plan yet. Likely threads to weigh: same-day
-`positions()` reading; the Tax P&L parser + crit-4 reconciliation (once a sell exists); verify the
-paper cron; corporate-actions (crit 5); the tax-alpha whitepaper; LLM "concierge" routing NL → the
-deterministic engine. Let the user steer.
+**✅ PAPER CRON FIXED (2026-06-15, PR [#14](https://github.com/aarsh-adhvaryu/Q_Alpha/pull/14), merged).** Root cause of the never-firing
+schedule: `cron: "0 12"` was the **top of the hour** — GitHub throttles/silently-drops on-the-hour
+scheduled workflows under load. Moved to `"23 12 * * 1-5"` (off-hour). Proved the pipeline works
+end-to-end via a manual `workflow_dispatch` run (green; it marked the book + pushed the track record,
+commit `1a799e1`). First scheduled firing expected next weekday 12:23 UTC — **still verify it fires
+on schedule** (dispatch ≠ cron). The job itself was always sound; only the trigger timing was broken.
+
+**🅿️ PARKED VISION (2026-06-15, user said "do later") — autonomous system + Nifty 100–200.** The
+user wants the product to become **autonomous data→scoring→recommendation, human approves + trades
+manually** (never auto-executes — already the design). Daily data refresh + a weekly decision/advisor
+run (two cron cadences; the `paper.yml` skeleton already does the no-AI-in-loop pattern). Scale the
+universe **5 → Nifty 100–200** (user's chosen scope). Two findings that reshape this:
+1. **Kite Connect API does NOT expose fundamentals/Tijori** (verified vs kite.trade/docs/connect/v3:
+   categories are auth/orders/GTT/alerts/portfolio/quotes/WebSocket/historical-candles/MF/margin — no
+   fundamentals). Tijori on Zerodha is the **consumer Kite UI only**; programmatic Tijori = its own
+   **separate paid API**. So fundamentals can't ride the existing Kite integration.
+2. **The validated edge is 3-factor (price/volume) — it needs ZERO fundamentals.** So scaling to
+   Nifty 100–200 is **data-cheap** (price history via yfinance + the bad-tick sanitizer; no data
+   deal). Fundamentals/6-factor stays the *optional later* enhancement (only then weigh Tijori-API vs
+   NSE/BSE-filings parsing). **Critical path for the expansion (a fresh, pre-registered Phase-0 pass —
+   the Nifty-50 result does NOT auto-transfer):** (a) extend the PIT universe 50→~200 via
+   `build_nifty_universe.py`; (b) add the **square-root slippage law** `impact≈k·σ·√(value/ADV)`
+   *before* trusting mid-cap numbers (flat 0.2% is too optimistic off large-caps — see §13 / the
+   open-threads slippage item); (c) re-validate 3-factor net cost+tax, walk-forward, **vs 1/N**. Run
+   as a **validation experiment**; promote the new universe into the product default **only after it
+   clears the bar** (keep qalpha pristine — see the research-untouched rule). **Trap to avoid:** a
+   "weekly decision" cadence must NOT loosen the §4.6 gate — weekly *monitoring* is fine, but actual
+   trades must stay rare (low realized turnover is the validated edge).
+
+**🧠 OTHER OPEN THREADS** — same-day `positions()` reading; the Tax P&L parser + crit-4 reconciliation
+(once a real sell exists); corporate-actions (crit 5); the tax-alpha whitepaper; LLM "concierge"
+routing NL → the deterministic engine; an equity-curve chart + dashboard screenshot in the README
+(the only "last-mile" polish for resume-readiness — repo is otherwise resume-ready: 100 tests green,
+CI green, honest README). Let the user steer.
 
 **The validated config is now the default** of `scripts/run_phase0.py` (no args needed):
 PIT universe + **Nifty 50 TRI** benchmark + **annual** rebalance + **`weighting=shrink`** (½ min-var +
