@@ -24,7 +24,7 @@ from qalpha.accounting.costs import Side
 from qalpha.accounting.tax_lots import InsufficientSharesError
 from qalpha.backtest.portfolio import Portfolio, to_decimal_price
 from qalpha.config import Config
-from qalpha.live.holdings import to_ticker
+from qalpha.live.holdings import canonical_ticker
 
 # A sentinel cash balance so replaying buys is never affordability-capped (the trades already
 # happened; the tradebook does not encode the cash account). The caller sets real cash afterwards.
@@ -59,8 +59,10 @@ class ReplayResult:
 def parse_tradebook(source: str | IO[bytes] | IO[str]) -> list[TradebookTrade]:
     """Parse a Zerodha Console tradebook CSV (path or uploaded file) into normalized trades.
 
-    Tolerant to header case/spacing and an ``exchange`` column (defaults to NSE). Raises if the
-    required columns (symbol, trade_date, trade_type, quantity, price) are absent.
+    Tolerant to header case/spacing. Any ``exchange`` column is ignored — every symbol resolves to
+    its canonical NSE ticker (same ISIN/demat; NSE is our single price/universe source), so a BSE
+    leg and its NSE counterpart reconcile to the same lot. Raises if the required columns (symbol,
+    trade_date, trade_type, quantity, price) are absent.
     """
     df = pd.read_csv(source)
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
@@ -68,16 +70,14 @@ def parse_tradebook(source: str | IO[bytes] | IO[str]) -> list[TradebookTrade]:
     if missing:
         raise ValueError(f"tradebook is missing columns {missing}; got {list(df.columns)}")
 
-    has_exchange = "exchange" in df.columns
     has_time = "order_execution_time" in df.columns
     trades: list[TradebookTrade] = []
     for _, row in df.iterrows():
         side = Side.BUY if "buy" in str(row["trade_type"]).strip().lower() else Side.SELL
-        exchange = str(row["exchange"]).strip().upper() if has_exchange else "NSE"
         trades.append(
             TradebookTrade(
                 trade_date=pd.to_datetime(row["trade_date"]).date(),
-                ticker=to_ticker(str(row["symbol"]).strip(), exchange),
+                ticker=canonical_ticker(str(row["symbol"]).strip()),
                 side=side,
                 quantity=Decimal(str(int(abs(float(row["quantity"]))))),
                 price=to_decimal_price(float(row["price"])),
