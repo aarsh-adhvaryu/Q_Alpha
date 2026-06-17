@@ -20,6 +20,7 @@ from typing import cast
 
 import pandas as pd
 
+from qalpha.accounting.slippage import SquareRootSlippage
 from qalpha.backtest.decision import RebalanceDecision, decide_rebalance
 from qalpha.backtest.defensive import GovernanceEvents, idiosyncratic_exit_flags
 from qalpha.backtest.portfolio import Portfolio, TradeRecord, to_decimal_price
@@ -78,6 +79,27 @@ def _default_regime_fn(_d: date) -> Regime:
     return Regime.BULL
 
 
+def _impact_model(prices: PriceData, as_of: date, cfg: Config) -> SquareRootSlippage:
+    """Build a causal (as-of) square-root-slippage snapshot: per-ticker ₹ADV + daily vol (§13).
+
+    Uses only data ≤ ``as_of`` (via ``PriceData.as_of``), so the cost charged to a historical trade
+    never peeks at future liquidity/volatility. ADV is the §3.3 rolling traded value; daily vol is
+    the std of recent daily returns over the volatility window.
+    """
+    win = max(cfg.liquidity.adv_window_days, cfg.factor.volatility_window_days)
+    asof = prices.as_of(as_of, lookback=win + 10)
+    adv = asof.adv(cfg.liquidity.adv_window_days).iloc[-1]
+    rets = asof.returns()
+    vol = rets.iloc[-cfg.factor.volatility_window_days :].std()
+    return SquareRootSlippage(
+        adv={str(t): float(v) for t, v in adv.items()},
+        daily_vol={str(t): float(v) for t, v in vol.items()},
+        k=cfg.cost.impact_k,
+        floor=cfg.cost.slippage_floor_pct,
+        cap=cfg.cost.slippage_cap_pct,
+    )
+
+
 def run_backtest(
     prices: PriceData,
     sector_of: dict[str, str],
@@ -97,6 +119,7 @@ def run_backtest(
     weighting: str = "minvar",
     n_stocks_override: int | None = None,
     on_decision: Callable[[RebalanceDecision], None] | None = None,
+    dynamic_slippage: bool = False,
 ) -> BacktestResult:
     """Run the walk-forward backtest and return a :class:`BacktestResult`.
 
@@ -112,6 +135,9 @@ def run_backtest(
     a broken business (Yes Bank, Zee) without touching a merely-out-of-favour blue-chip.
     ``force_refresh=True`` makes every scheduled rebalance execute (band-limited) so the §4.6 gate
     can't freeze the book holding stale picks for years (the 2025-26 holdout failure mode).
+    ``dynamic_slippage=True`` replaces the flat slippage with the size-aware square-root market-impact
+    law (§13): per trade, ``impact_k·σ_daily·√(value/ADV)`` from a causal as-of ADV+vol snapshot — so
+    the cost of moving a large notional through a thin name is charged honestly and the gate avoids it.
     """
     regime_fn = regime_fn or _default_regime_fn
     adj = prices.adj_close
@@ -151,6 +177,10 @@ def run_backtest(
         regime = regime_fn(d)
 
         if day in rebalance_set:
+            # Set the size-aware slippage snapshot BEFORE the §4.6 gate so its dry-run cost and the
+            # executed trade use the same (causal) market-impact model.
+            if dynamic_slippage:
+                portfolio.slippage_model = _impact_model(prices, d, cfg)
             blacklist = governance_events.blacklisted_asof(d) if governance_events else set()
             decision = decide_rebalance(
                 prices=prices,
@@ -184,6 +214,8 @@ def run_backtest(
         elif day in defensive_days:
             held = [t for t, q in portfolio.positions().items() if q > 0]
             if held:
+                if dynamic_slippage:
+                    portfolio.slippage_model = _impact_model(prices, d, cfg)
                 flags: set[str] = set()
                 if governance_events is not None:  # §3.11 event freeze (fires on broken businesses)
                     flags |= governance_events.blacklisted_asof(d) & set(held)

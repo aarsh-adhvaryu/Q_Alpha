@@ -27,6 +27,7 @@ import pandas as pd
 
 from qalpha.accounting.capital_gains import CapitalGainsCalculator, RealizedGain
 from qalpha.accounting.costs import CostBreakdown, Side, compute_costs
+from qalpha.accounting.slippage import SlippageModel
 from qalpha.accounting.tax_lots import FIFOLedger, TaxLot
 from qalpha.config import CostConfig, TaxConfig
 
@@ -60,6 +61,10 @@ class Portfolio:
     tax_cfg: TaxConfig
     cash: Decimal = Decimal("0")
     ledger: FIFOLedger = field(default_factory=FIFOLedger)
+    # Optional size-aware slippage (Q_alpha.md §13). When None, trades use the flat
+    # ``cost_cfg.default_slippage_pct``; the backtest engine sets a ``SquareRootSlippage`` snapshot
+    # (causal as-of ADV + daily vol) per rebalance date when run with ``dynamic_slippage=True``.
+    slippage_model: SlippageModel | None = None
     gains: CapitalGainsCalculator = field(init=False)
 
     def __post_init__(self) -> None:
@@ -267,8 +272,16 @@ class Portfolio:
         realized = clone.gains.compute_sell(consumptions, price, cb.deductible_for_gains)
         return realized, cb
 
+    def _slippage_pct(self, ticker: str, qty: Decimal, price: Decimal) -> Decimal | None:
+        """Per-trade slippage fraction from the active model (None ⇒ flat ``default_slippage_pct``)."""
+        if self.slippage_model is None:
+            return None
+        return self.slippage_model.pct(ticker, qty * price)
+
     def _sell(self, on_date: date, ticker: str, qty: Decimal, price: Decimal) -> TradeRecord:
-        cb = compute_costs(Side.SELL, qty, price, self.cost_cfg)
+        cb = compute_costs(
+            Side.SELL, qty, price, self.cost_cfg, self._slippage_pct(ticker, qty, price)
+        )
         consumptions = self.ledger.consume(ticker, qty, on_date)
         realized = self.gains.compute_sell(consumptions, price, cb.deductible_for_gains)
         tax = sum((g.tax for g in realized), Decimal("0.00"))
@@ -276,29 +289,36 @@ class Portfolio:
         self.cash += proceeds
         return TradeRecord(on_date, ticker, Side.SELL, qty, price, cb.total, tax)
 
-    def _affordable_qty(self, price: Decimal, cash: Decimal) -> Decimal:
+    def _affordable_qty(self, ticker: str, price: Decimal, cash: Decimal) -> Decimal:
         """Largest whole-share quantity whose all-in buy outlay fits in ``cash``.
 
         Starts from a cost-inclusive estimate (buy costs are ~0.3% — STT, slippage, stamp) then
-        decrements to the exact boundary.
+        decrements to the exact boundary. Slippage is re-evaluated at each candidate size so the
+        size-aware model stays self-consistent.
         """
         estimate = (cash / (price * Decimal("1.004"))).to_integral_value(rounding=ROUND_DOWN)
         qty = max(Decimal("0"), estimate)
         while qty > 0:
-            cb = compute_costs(Side.BUY, qty, price, self.cost_cfg)
+            cb = compute_costs(
+                Side.BUY, qty, price, self.cost_cfg, self._slippage_pct(ticker, qty, price)
+            )
             if qty * price + cb.total <= cash:
                 break
             qty -= 1
         return qty
 
     def _buy(self, on_date: date, ticker: str, qty: Decimal, price: Decimal) -> TradeRecord | None:
-        cb = compute_costs(Side.BUY, qty, price, self.cost_cfg)
+        cb = compute_costs(
+            Side.BUY, qty, price, self.cost_cfg, self._slippage_pct(ticker, qty, price)
+        )
         outlay = qty * price + cb.total
         if outlay > self.cash:
-            qty = self._affordable_qty(price, self.cash)
+            qty = self._affordable_qty(ticker, price, self.cash)
             if qty <= 0:
                 return None
-            cb = compute_costs(Side.BUY, qty, price, self.cost_cfg)
+            cb = compute_costs(
+                Side.BUY, qty, price, self.cost_cfg, self._slippage_pct(ticker, qty, price)
+            )
             outlay = qty * price + cb.total
         self.cash -= outlay
         # Cost basis excludes STT + slippage (not deductible); keeps deductible statutory charges.
