@@ -107,12 +107,15 @@ def deploy_target(
     *,
     tilt: float = 1.0,
     max_sector_weight: float = 0.30,
+    max_names: int | None = None,
 ) -> pd.Series:
     """Diversified, sector-capped, cheapness-tilted target weights over the watchlist.
 
     Base is equal weight (diversification); each name is scaled by ``1 + tilt·cheapness`` so
     pulled-back names get a heavier target; then each sector's total is capped at
     ``max_sector_weight`` and the whole renormalised to sum to 1. ``tilt=0`` → pure equal weight.
+    ``max_names`` keeps only the top-N highest-target names (the concentration dial — fewer, bigger
+    positions instead of a thin sliver of everything), renormalised to sum to 1.
     """
     if not tickers:
         return pd.Series(dtype=float)
@@ -148,7 +151,11 @@ def deploy_target(
         w[names] = raw[names] / raw[names].sum() * max_sector_weight
     if float(w.sum()) > 0:  # renormalise (handles an infeasible cap gracefully)
         w = w / w.sum()
-    return w.sort_values(ascending=False)
+    w = w.sort_values(ascending=False)
+    if max_names is not None and len(w) > max_names:  # concentrate into the top-N, renormalise
+        w = w.head(max_names)
+        w = w / w.sum()
+    return w
 
 
 @dataclass(frozen=True)
@@ -183,6 +190,7 @@ def advise_deploy_into_weakness(
     tilt: float = 1.0,
     max_sector_weight: float = 0.30,
     max_name_fraction: float = 0.20,
+    max_names: int | None = None,
 ) -> WeaknessDeployAdvice:
     """Recommend deploying ``amount`` of new money across the Nifty-100 watchlist — diversified,
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
@@ -207,7 +215,12 @@ def advise_deploy_into_weakness(
 
     cheap = cheapness_scores(prices, universe, as_of)
     target = deploy_target(
-        universe, sector_of, cheap, tilt=tilt, max_sector_weight=max_sector_weight
+        universe,
+        sector_of,
+        cheap,
+        tilt=tilt,
+        max_sector_weight=max_sector_weight,
+        max_names=max_names,
     )
 
     price_dec: dict[str, Decimal] = {}
