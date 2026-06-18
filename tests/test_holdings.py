@@ -13,11 +13,11 @@ from qalpha.accounting.tax_lots import TaxLot
 from qalpha.config import Config
 from qalpha.live.holdings import (
     Holding,
+    canonical_ticker,
     fetch_available_cash,
     fetch_holdings,
     fetch_prices,
     portfolio_from_holdings,
-    to_ticker,
 )
 
 
@@ -37,10 +37,29 @@ class _StubKite:
         return self._margins
 
 
-def test_to_ticker() -> None:
-    assert to_ticker("RELIANCE", "NSE") == "RELIANCE.NS"
-    assert to_ticker("RELIANCE", "BSE") == "RELIANCE.BO"
-    assert to_ticker("FOO", "MCX") == "FOO.NS"  # unknown exchange defaults to NSE
+def test_canonical_ticker_is_always_nse() -> None:
+    # Same ISIN/demat → the canonical pricing ticker is NSE regardless of where it was bought.
+    assert canonical_ticker("RELIANCE") == "RELIANCE.NS"
+    assert canonical_ticker("INFY") == "INFY.NS"
+
+
+def test_bse_holding_resolves_to_nse_but_keeps_real_exchange() -> None:
+    # A BSE buy of INFY is the same lot as INFY.NS: price/advise off NSE, but remember the real venue.
+    kite = _StubKite(
+        holdings=[
+            {
+                "tradingsymbol": "INFY",
+                "exchange": "BSE",
+                "quantity": 3,
+                "t1_quantity": 0,
+                "average_price": 1130.0,
+                "last_price": 1135.0,
+            }
+        ]
+    )
+    h = fetch_holdings(kite)[0]
+    assert h.ticker == "INFY.NS"  # priced/advised off NSE (our single source of truth)
+    assert h.exchange == "BSE"  # the real venue is preserved (used for the live ltp() quote)
 
 
 def test_fetch_holdings_includes_t1_and_drops_zero() -> None:

@@ -256,6 +256,13 @@ def main() -> None:
         "--no-force-refresh lets the §4.6 gate freeze the book (the 2025-26 holdout failure mode).",
     )
     parser.add_argument(
+        "--dynamic-slippage",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="size-aware square-root market-impact slippage (§13, DEFAULT on): "
+        "impact_k·σ·√(value/ADV) per trade. --no-dynamic-slippage reverts to the flat 0.2%.",
+    )
+    parser.add_argument(
         "--no-fundamentals", action="store_true", help="force Phase 0a (price/volume factors only)"
     )
     parser.add_argument(
@@ -328,6 +335,7 @@ def main() -> None:
         rebalance_freq=args.rebalance,
         weighting=args.weighting,
         force_refresh=args.force_refresh,
+        dynamic_slippage=args.dynamic_slippage,
     )
     report = build_report(
         result, prices, benchmark, cfg, universe=universe, benchmark_label=benchmark_label

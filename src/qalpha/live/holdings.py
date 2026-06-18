@@ -26,9 +26,6 @@ from qalpha.accounting.tax_lots import TaxLot
 from qalpha.backtest.portfolio import Portfolio, to_decimal_price
 from qalpha.config import Config
 
-# Zerodha exchange → our yfinance-style suffix (the price panel / universe convention).
-_EXCHANGE_SUFFIX = {"NSE": ".NS", "BSE": ".BO"}
-
 
 @dataclass(frozen=True)
 class Holding:
@@ -42,9 +39,18 @@ class Holding:
     last_price: Decimal
 
 
-def to_ticker(tradingsymbol: str, exchange: str) -> str:
-    """Map a Zerodha (tradingsymbol, exchange) to our yfinance-style ticker (RELIANCE → RELIANCE.NS)."""
-    return f"{tradingsymbol}{_EXCHANGE_SUFFIX.get(exchange, '.NS')}"
+def canonical_ticker(tradingsymbol: str) -> str:
+    """Resolve a Zerodha tradingsymbol to our canonical **NSE** ticker (RELIANCE → RELIANCE.NS).
+
+    A share is held in demat by **ISIN, exchange-agnostic** — the same company bought on BSE or NSE
+    is the same lot in the same account. NSE is our single source of truth (the price panel, universe,
+    factor scores, and the ADV/slippage model are all NSE) and the more liquid venue, so we price and
+    advise **every** holding off its NSE listing regardless of where it was bought. The real execution
+    venue is kept separately on ``Holding.exchange`` and used only for the live ``ltp()`` quote call.
+    (A BSE-exclusive name with no NSE listing still marks live via its real exchange, but isn't in the
+    NSE universe so it can't be factor-advised — which is the intended scope, not a gap.)
+    """
+    return f"{tradingsymbol}.NS"
 
 
 def fetch_holdings(kite: KiteConnect) -> list[Holding]:
@@ -61,7 +67,7 @@ def fetch_holdings(kite: KiteConnect) -> list[Holding]:
         exchange = str(h.get("exchange", "NSE"))
         out.append(
             Holding(
-                ticker=to_ticker(str(h["tradingsymbol"]), exchange),
+                ticker=canonical_ticker(str(h["tradingsymbol"])),
                 tradingsymbol=str(h["tradingsymbol"]),
                 exchange=exchange,
                 quantity=qty,

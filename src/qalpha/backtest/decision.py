@@ -80,11 +80,17 @@ def _net_benefit_ok(
     returns: pd.DataFrame,
     cfg: Config,
     min_trade_fraction: float,
+    as_of: date,
 ) -> bool:
     """§4.6 gate: execute only if annual risk reduction (₹) exceeds 2× the trade's cost+tax.
 
     Risk benefit is the drop in annualized portfolio volatility (a ₹/yr figure when scaled by
     portfolio value); cost is the real Zerodha cost + FIFO capital-gains tax from a dry-run.
+
+    The dry-run is dated at ``as_of`` (the decision date), NOT wall-clock ``date.today()``: the FIFO
+    holding-period drives the STCG/LTCG split and the FY ₹1.25L exemption bucket, so a historical
+    backtest rebalance must estimate its tax as of *that* date — otherwise every lot looks long-term
+    and the gate systematically under-estimates tax. Live, ``as_of`` is today, so this is also correct.
     """
     value = float(portfolio.market_value(prices_dec))
     current_w = portfolio.current_weights(prices_dec)
@@ -95,7 +101,7 @@ def _net_benefit_ok(
     risk_benefit_rs = max(0.0, vol_now - vol_target) * value
 
     cost, tax, _ = portfolio.estimate_rebalance(
-        date.today(), target, prices_dec, min_trade_fraction=min_trade_fraction
+        as_of, target, prices_dec, min_trade_fraction=min_trade_fraction
     )
     friction = float(cost + tax)
     if friction <= 0:
@@ -160,7 +166,7 @@ def decide_rebalance(
     first = last_target is None
     drift_ok = drift > cfg.optimizer.drift_threshold
     benefit_ok = (not tax_aware) or _net_benefit_ok(
-        portfolio, target, prices_dec, asof.returns(), cfg, min_trade_fraction
+        portfolio, target, prices_dec, asof.returns(), cfg, min_trade_fraction, as_of
     )
     # Deploying idle settled cash is tax-free and never "churn" — so it must not be blocked by the
     # variance-reduction gate (cash→stocks looks like a risk *rise*). Without this, a portfolio
