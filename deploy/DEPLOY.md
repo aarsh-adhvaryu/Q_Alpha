@@ -1,8 +1,9 @@
 # Deploying the Q-Alpha dashboard (phone-accessible URL on AWS)
 
-> **Already on Lightning AI? Use [`DEPLOY_LIGHTNING.md`](DEPLOY_LIGHTNING.md) instead — it's a one-click
-> public URL, no AWS/Docker needed.** This AWS/Docker path is the portable alternative (any VPS), and
-> its only edge is a *free* 12-month always-on tier.
+> **New to AWS? Use [`DEPLOY_AWS_BEGINNER.md`](DEPLOY_AWS_BEGINNER.md)** — a click-by-click EC2 guide
+> with **no Docker** (run the app directly on Ubuntu). This file is the **Docker** version for those
+> who want containers. (And if you'd rather not touch AWS at all, [`DEPLOY_LIGHTNING.md`](DEPLOY_LIGHTNING.md)
+> is a one-click URL.)
 
 Goal: a private URL you open on your phone that shows your real holdings, live prices, the tax-smart
 advisor, the deploy-in-weakness engine, and the paper-run status — so the **only** manual step is
