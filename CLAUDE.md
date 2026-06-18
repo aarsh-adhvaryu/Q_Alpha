@@ -93,12 +93,42 @@ an optional *later* flourish, never the calculator). **Build order:**
 Zerodha **Tax P&L** export. Reconstruction (tradebook replay) is built; still needs a real **SELL**
 (only buys so far) → export Console **Tax P&L** + **Tradebook** (T+1) → build a Tax P&L parser →
 reconcile to the rupee. **Parked (declined/deferred):** auto-execution, LLM-for-numbers, Monte Carlo,
-GPU, more quantum. Paper cron is scheduled but **not yet verified to have fired** (workflow_dispatch).
+GPU, more quantum.
 
-**🧠 NEXT SESSION IS A BRAINSTORM** — no committed plan yet. Likely threads to weigh: same-day
-`positions()` reading; the Tax P&L parser + crit-4 reconciliation (once a sell exists); verify the
-paper cron; corporate-actions (crit 5); the tax-alpha whitepaper; LLM "concierge" routing NL → the
-deterministic engine. Let the user steer.
+**✅ PAPER CRON FIXED (2026-06-15, PR [#14](https://github.com/aarsh-adhvaryu/Q_Alpha/pull/14), merged).** Root cause of the never-firing
+schedule: `cron: "0 12"` was the **top of the hour** — GitHub throttles/silently-drops on-the-hour
+scheduled workflows under load. Moved to `"23 12 * * 1-5"` (off-hour). Proved the pipeline works
+end-to-end via a manual `workflow_dispatch` run (green; it marked the book + pushed the track record,
+commit `1a799e1`). First scheduled firing expected next weekday 12:23 UTC — **still verify it fires
+on schedule** (dispatch ≠ cron). The job itself was always sound; only the trigger timing was broken.
+
+**🅿️ PARKED VISION (2026-06-15, user said "do later") — autonomous system + Nifty 100–200.** The
+user wants the product to become **autonomous data→scoring→recommendation, human approves + trades
+manually** (never auto-executes — already the design). Daily data refresh + a weekly decision/advisor
+run (two cron cadences; the `paper.yml` skeleton already does the no-AI-in-loop pattern). Scale the
+universe **5 → Nifty 100–200** (user's chosen scope). Two findings that reshape this:
+1. **Kite Connect API does NOT expose fundamentals/Tijori** (verified vs kite.trade/docs/connect/v3:
+   categories are auth/orders/GTT/alerts/portfolio/quotes/WebSocket/historical-candles/MF/margin — no
+   fundamentals). Tijori on Zerodha is the **consumer Kite UI only**; programmatic Tijori = its own
+   **separate paid API**. So fundamentals can't ride the existing Kite integration.
+2. **The validated edge is 3-factor (price/volume) — it needs ZERO fundamentals.** So scaling to
+   Nifty 100–200 is **data-cheap** (price history via yfinance + the bad-tick sanitizer; no data
+   deal). Fundamentals/6-factor stays the *optional later* enhancement (only then weigh Tijori-API vs
+   NSE/BSE-filings parsing). **Critical path for the expansion (a fresh, pre-registered Phase-0 pass —
+   the Nifty-50 result does NOT auto-transfer):** (a) extend the PIT universe 50→~200 via
+   `build_nifty_universe.py`; (b) add the **square-root slippage law** `impact≈k·σ·√(value/ADV)`
+   *before* trusting mid-cap numbers (flat 0.2% is too optimistic off large-caps — see §13 / the
+   open-threads slippage item); (c) re-validate 3-factor net cost+tax, walk-forward, **vs 1/N**. Run
+   as a **validation experiment**; promote the new universe into the product default **only after it
+   clears the bar** (keep qalpha pristine — see the research-untouched rule). **Trap to avoid:** a
+   "weekly decision" cadence must NOT loosen the §4.6 gate — weekly *monitoring* is fine, but actual
+   trades must stay rare (low realized turnover is the validated edge).
+
+**🧠 OTHER OPEN THREADS** — same-day `positions()` reading; the Tax P&L parser + crit-4 reconciliation
+(once a real sell exists); corporate-actions (crit 5); the tax-alpha whitepaper; LLM "concierge"
+routing NL → the deterministic engine; an equity-curve chart + dashboard screenshot in the README
+(the only "last-mile" polish for resume-readiness — repo is otherwise resume-ready: 100 tests green,
+CI green, honest README). Let the user steer.
 
 **The validated config is now the default** of `scripts/run_phase0.py` (no args needed):
 PIT universe + **Nifty 50 TRI** benchmark + **annual** rebalance + **`weighting=shrink`** (½ min-var +
@@ -294,12 +324,39 @@ gated by a mandatory paper-trading run.
   monthly+gate loses to 1/N in ~half the windows. The robust turnover lever is **structural
   frequency (annual)**, not the multiplier — kept at spec default 2.0. (Iron rule: did not tune to
   manufacture a GO.) Side effect found+fixed: idle-cash redeploy lockout (monthly full 15.2→16.7%).
-- **Size-aware slippage.** Replace flat 0.2% with the **square-root law** `impact ≈ k·σ·√(value/ADV)`
-  before the ₹50L+ scaling numbers are trustworthy (spec §13).
+- **Size-aware slippage — ✅ DONE (2026-06-17).** Replaced the flat 0.2% with the **square-root law**
+  `slippage = impact_k·σ_daily·√(value/ADV)` (spec §13): new `accounting/slippage.py`
+  (`SquareRootSlippage`/`FlatSlippage`, `square_root_impact_pct`, tested), a `slippage_model` on
+  `Portfolio` used in `_sell`/`_buy`/`_affordable_qty`, and `run_backtest(dynamic_slippage=True)` which
+  sets a **causal as-of** per-rebalance ADV+vol snapshot (no look-ahead). Config in `CostConfig`
+  (`impact_k=1.0`, floor 2bps, cap 2%). At k=1 the law equals the old 0.2% exactly at the §3.3
+  order-size cap (1% of ADV, 2% daily vol), so it's a principled generalisation. **`run_phase0`
+  defaults it ON** (`--no-dynamic-slippage` reverts). **Honest Phase-0 impact (PIT, annual, shrink,
+  end 2024): headline barely moves — GO holds, Sharpe 1.13→1.14, CAGR ~18.2→18.3%, maxDD −25.2 flat,
+  still beats Nifty TRI + 1/N — but charged cost DROPS ₹22.2k→₹9.5k** because the strategy trades
+  small fractions of ADV in deep large-caps, so realistic impact is *below* the flat 0.2%. The model's
+  teeth are for the **Nifty 100–200 expansion**, where thin mid-caps in size get charged more — the
+  gate/optimiser then avoid them. Slippage is an execution *cost*, not portfolio risk.
 - **Benchmark fairness.** Move to **Nifty 50 TRI** (total-return, free from niftyindices.com) — raises
   the bar ~1.5%/yr; the strategy still clears it.
+- **BSE→NSE canonical-ticker robustness — ✅ DONE (2026-06-17).** A holding/trade is keyed by ISIN in
+  demat (exchange-agnostic), and NSE is our single source of truth (panel/universe/factors/slippage)
+  and the liquid venue. So `live/holdings.py` `to_ticker(symbol, exchange)` → **`canonical_ticker(symbol)`**
+  that always resolves to `.NS` (a BSE INFY buy tracks as `INFY.NS`); `Holding.exchange` keeps the real
+  venue for the live `ltp()` call. `tradebook.py` uses it too (a BSE leg + its NSE counterpart reconcile
+  to one lot). Deliberately did **NOT** build full dual-exchange (NSE+BSE) calibration — same companies,
+  thinner BSE book, Sensex⊂Nifty, BSE-only = illiquid small-caps → complexity tax, zero alpha, bloats
+  the clean repo. Tests in `test_holdings.py` (BSE→.NS, exchange preserved). 107 tests green.
+- **§4.6 gate tax-date bug — ✅ FIXED (2026-06-17).** `decision._net_benefit_ok` dry-ran the gate's
+  cost/tax estimate at wall-clock `date.today()` instead of the rebalance `as_of`, so in a historical
+  backtest every lot looked long-term → STCG under-estimated as LTCG → the gate traded too readily.
+  Now threads `as_of` (live, `as_of`≈today, so also correct). **Validated headline unaffected**
+  (force_refresh short-circuits the gate); only non-force-refresh `tax_aware` runs (older Phase A
+  monthly/quarterly tables, `calibrate_gate`) would shift slightly if re-run — qualitative conclusions
+  hold. 106 tests green.
 - **Tax-engine validation (criterion 4).** Validate the FIFO engine against a real **Zerodha Console →
-  Reports → Tax P&L** export (user action).
+  Reports → Tax P&L** export (user action). **Note:** LTCG *loss* set-off isn't implemented
+  (documented Phase-0 deferral) — it will surface in this reconciliation, so fix before reconciling.
 - **Risk-tolerance reckoning.** Backtest the full **50/25/25** pool structure (not 100% core) to see
   the blended drawdown, then confirm the real tolerance (long-only equity ≈ -30% in crashes; a hard
   ≤20% implies a hedging overlay = a v2 feature).

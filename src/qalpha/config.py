@@ -46,8 +46,20 @@ class CostConfig:
     dp_charge_per_sell: Decimal = Decimal("13.5")
 
     # Slippage assumption (fraction of trade value) used by the backtest when an explicit
-    # bid/ask spread is unavailable. §4.8 caps live slippage at 0.2%.
+    # bid/ask spread is unavailable. §4.8 caps live slippage at 0.2%. This is the FLAT fallback —
+    # the size-aware square-root model below supersedes it when a backtest runs with
+    # ``dynamic_slippage=True``.
     default_slippage_pct: Decimal = Decimal("0.002")
+
+    # Size-aware market impact (Q_alpha.md §13, the Almgren square-root law):
+    #   slippage_fraction = impact_k · σ_daily · √(trade_value / ADV),  clamped to [floor, cap].
+    # Flat slippage is blind to order size; this charges the true cost of pushing a large notional
+    # through a thinner name, so the §4.6 gate / optimiser naturally avoid (minimise) it. At
+    # impact_k=1 the law equals ~0.2% exactly when an order is 1% of ADV at 2% daily vol — i.e. it
+    # agrees with default_slippage_pct at the §3.3 order-size cap, and is cheaper below / dearer above.
+    impact_k: Decimal = Decimal("1.0")
+    slippage_floor_pct: Decimal = Decimal("0.0002")  # 2 bps: residual spread even for a tiny order
+    slippage_cap_pct: Decimal = Decimal("0.02")  # 2%: sanity cap for illiquid / oversized orders
 
 
 @dataclass(frozen=True)
