@@ -80,6 +80,21 @@ v1; the real-money GO remains gated by the unskippable forward paper run** (crit
 time cannot be compressed. QUBO/breadth stay in research; the fragility-gauge promotion (as a read-only
 "systemic risk" advisory) is the clean next integration if revisited.
 
+**🚀 DEPLOY STAGE 1 (2026-06-18) — phone-accessible hosted dashboard.** User wants a URL on his phone,
+always-on, realtime, with the paper-run shown (not trusted). Built (`deploy/`: Dockerfile +
+entrypoint.sh [bootstraps the gitignored price panels on first boot] + docker-compose.yml + DEPLOY.md
+[AWS EC2-free-tier / Lightsail step-by-step, security-group-to-own-IP, Caddy HTTPS option]). Dashboard
+gains: **password gate** (`APP_PASSWORD` env, open if unset for local dev), **paper-run freshness panel**
+(`live/dashboard.py:paper_freshness` + test — weekday-aware stale flag, the "see it's alive" piece),
+**phone one-tap Kite login** (captures the `request_token` from Kite's redirect via `st.query_params`,
+paste fallback — no CLI), and **auto-refresh** (`st.fragment(run_every=30)` on the live view →
+near-realtime ltp). **Kite reality (locked):** the daily session needs a one-tap human login — there is
+NO compliant fully-unattended token (declined auto-TOTP as ToS-violating/insecure). **Can't verify a
+live server here** (sandbox blocks ports; no AWS/Kite creds) → AppTest-smoke + pure-fn tests only; user
+verifies on the box. **▶ STAGE 2 (deferred, needs the box + live token): true tick-streaming via Kite
+`KiteTicker` WebSocket** — a background thread → latest-LTP store → fragment reads it; staged because it
+can only be built+verified against the live socket. Stage-1 auto-refresh is the near-realtime stand-in.
+
 **⭐ USER MADE FIRST REAL TRADES (2026-06-13):** funded YHK037, **HDFCBANK BUY 5 @₹785.45 COMPLETE**
 (CNC/delivery), INFY BUY 5 still OPEN/pending; cash ₹445.75. **A same-day delivery buy sits in
 `positions()` day-book, NOT `holdings()`** (→ T+1 it lands in `holdings()` as `t1_quantity`), so

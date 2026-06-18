@@ -8,13 +8,54 @@ curve vs Nifty 50 TRI, realized tax, and any orders awaiting human approval. Thi
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pandas as pd
 
 from qalpha.data.prices import PriceData
 from qalpha.live.paper import DailyPlan, PaperBook, _prices_on
+
+
+@dataclass(frozen=True)
+class PaperFreshness:
+    """Is the daily paper-run pipeline actually alive? (So the dashboard shows it, not assumes it.)"""
+
+    last_update: date | None
+    weekdays_stale: int  # full weekdays elapsed since the last mark (0 = up to date)
+    is_stale: bool
+    note: str
+
+
+def _weekdays_after(a: date, b: date) -> int:
+    """Count weekdays strictly after ``a`` up to and including ``b`` (0 if b <= a)."""
+    n, d = 0, a + timedelta(days=1)
+    while d <= b:
+        if d.weekday() < 5:  # Mon-Fri
+            n += 1
+        d += timedelta(days=1)
+    return n
+
+
+def paper_freshness(book: PaperBook, today: date) -> PaperFreshness:
+    """Freshness of the committed paper book vs the weekday cron meant to update it.
+
+    The pipeline runs weekdays, so one elapsed weekday (today's mark may not have run yet) is OK;
+    **two or more** means it missed a day → stale. Surfaced in the dashboard so the daily run is
+    *seen* working, not trusted blindly.
+    """
+    curve = book.equity_curve
+    if not curve:
+        return PaperFreshness(None, 0, True, "No marks yet — the daily pipeline hasn't run.")
+    last = date.fromisoformat(str(curve[-1]["date"]))
+    stale_days = max(0, _weekdays_after(last, today) - 1)  # 1 weekday grace (today not yet marked)
+    is_stale = stale_days >= 1
+    if is_stale:
+        note = f"⚠️ Stale — last marked {last}, {stale_days} weekday(s) missed. Check the cron."
+    else:
+        note = f"✓ Up to date — last marked {last}."
+    return PaperFreshness(last, stale_days, is_stale, note)
 
 
 def _benchmark_return_pct(benchmark: pd.Series, start: date, as_of: date) -> float | None:
