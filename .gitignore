@@ -22,10 +22,12 @@ data/bhavcopy/*
 # daily pipeline commits it as the durable record.
 
 # Broker exports — contain PAN / client-id / name PII; never commit (resume repo is public).
+# The crit-4 reconciliation reads these locally; tests use a hermetic synthetic fixture instead.
 data/tradebook-*.csv
 data/taxpnl-*
 data/*.jpeg
 data/*.jpg
+# Generated reconciliation report echoes the real client-id — keep it local (it's regenerable).
 reports/crit4_reconciliation.md
 
 # Reports

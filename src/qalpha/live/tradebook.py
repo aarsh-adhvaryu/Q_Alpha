@@ -20,6 +20,7 @@ from typing import IO
 
 import pandas as pd
 
+from qalpha.accounting.capital_gains import RealizedGain
 from qalpha.accounting.costs import Side
 from qalpha.accounting.tax_lots import InsufficientSharesError
 from qalpha.backtest.portfolio import Portfolio, to_decimal_price
@@ -54,6 +55,7 @@ class ReplayResult:
     warnings: list[str]
     realized_tax: Decimal  # total FIFO capital-gains tax across all sells in the tradebook
     n_trades: int
+    realized_gains: list[RealizedGain]  # per-lot realized gains from every sell (for crit-4 recon)
 
 
 def parse_tradebook(source: str | IO[bytes] | IO[str]) -> list[TradebookTrade]:
@@ -101,6 +103,7 @@ def replay_tradebook(
     pf = Portfolio(cfg.cost, cfg.tax, cash=_UNCONSTRAINED_CASH)
     warnings: list[str] = []
     realized_tax = Decimal("0")
+    realized_gains: list[RealizedGain] = []
     matched = 0
     ordered = sorted(
         trades, key=lambda t: (t.trade_date, t.exec_time, 0 if t.side is Side.BUY else 1)
@@ -110,6 +113,11 @@ def replay_tradebook(
             if t.side is Side.BUY:
                 pf.buy(t.trade_date, t.ticker, t.quantity, t.price)
             else:
+                # Capture the per-lot gains (preview is on the identical pre-sell state) before
+                # the sell mutates the ledger, so the crit-4 reconciliation can break down by
+                # STCG/LTCG and by symbol.
+                gains, _ = pf.preview_sell(t.trade_date, t.ticker, t.quantity, t.price)
+                realized_gains.extend(gains)
                 realized_tax += pf.sell(t.trade_date, t.ticker, t.quantity, t.price).tax
             matched += 1
         except InsufficientSharesError as exc:
@@ -119,7 +127,11 @@ def replay_tradebook(
             )
     pf.cash = cash
     return ReplayResult(
-        portfolio=pf, warnings=warnings, realized_tax=realized_tax, n_trades=matched
+        portfolio=pf,
+        warnings=warnings,
+        realized_tax=realized_tax,
+        n_trades=matched,
+        realized_gains=realized_gains,
     )
 
 

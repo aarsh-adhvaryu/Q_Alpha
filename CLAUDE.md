@@ -62,12 +62,22 @@ directly on Ubuntu EC2). Repo is **PUBLIC** so the box clones with no auth.
   dashboard (password gate / paper-run freshness panel / phone one-tap login / auto-refresh) + deploy
   scaffold (`deploy/`: AWS-beginner, AWS-Docker, Lightning). See the FINALIZATION + DEPLOY blocks below.
 
-**Next session = brainstorming, not a queued build.** Everything below is current. Two PRs are open
-and **awaiting the user's manual merge — order #10 then #11** (or merge #10 and retarget #11 to main):
-- **PR #10 `cleanups`→main:** deploy cash-utilization fix + CLAUDE.md refresh + **live Zerodha
-  holdings reader** (`src/qalpha/live/holdings.py`, advisor `--source live`, dashboard Live toggle).
-- **PR #11 `tradebook-upload`→`cleanups` (stacked):** upload a Zerodha Console **tradebook CSV** in the
-  dashboard → exact **dated** FIFO tax (`src/qalpha/live/tradebook.py`), `advisor --tradebook`.
+**Next session = brainstorming, not a queued build.** Everything below is current. **All PRs are
+merged** — the earlier "#10 then #11 awaiting manual merge" note is resolved: #10 `cleanups` merged,
+#11 `tradebook-upload` re-landed as **#12** (merged), plus #13/#14/#15. Nothing is pending.
+
+**✅ CRITERION 4 RECONCILED (2026-06-18) — the FIFO engine matches the real Zerodha Tax P&L to the
+paise.** The user made a **real SELL** (HDFCBANK 5 @ ₹790.50 on 17 Jun, bought on BSE / sold on NSE),
+exported the Console **Tax P&L** (`data/taxpnl-…xlsx`) + **Tradebook** (`data/tradebook-…csv`), and
+the reconciliation now runs end-to-end: new **`src/qalpha/live/taxpnl.py`** (`parse_taxpnl` +
+`reconcile_gross`), **`scripts/reconcile_taxpnl.py`** → `reports/crit4_reconciliation.md`, tests in
+`tests/test_taxpnl.py`; `ReplayResult` gained `realized_gains`. **Gross realized P&L (zero-cost replay)
+== Zerodha STCG ₹25.25, Δ ₹0.00** — proves FIFO lot-matching + STCG/LTCG classification + the BSE-buy/
+NSE-sell ISIN merge are correct. Our **net** taxable gain sits below gross by our modelled deductible
+transfer charges (DP charge dominant, ₹14.36 ≈ Zerodha's ₹15.34 "Other Credits & Debits"; STT
+correctly excluded) → STCG tax ₹2.18. Caveat: a tiny, single-sell, all-STCG case — it validates the
+*plumbing* exactly; a multi-lot / LTCG / loss-set-off case will exercise more (LTCG loss set-off still
+unimplemented — fix before a sell that triggers it). **§14 criterion 4 → ✅.**
 
 **On `main` (9 PRs merged, 2026-06-13):** Phase 0 (validated GO) + a **live layer** (`src/qalpha/live/`:
 Kite auth, replay harness, shared `decide_rebalance`) + a **paper-trading runner** (`scripts/paper.py`,
@@ -161,10 +171,11 @@ an optional *later* flourish, never the calculator). **Build order:**
    `reconcile_positions`). Dashboard Live view has an `st.file_uploader`; upload the Console tradebook
    CSV → exact dated FIFO lots + realized tax + holdings reconciliation; advisor uses the accurate book.
 **Trust gate** before real-money reliance: **criterion 4** = reconcile our realized tax vs the real
-Zerodha **Tax P&L** export. Reconstruction (tradebook replay) is built; still needs a real **SELL**
-(only buys so far) → export Console **Tax P&L** + **Tradebook** (T+1) → build a Tax P&L parser →
-reconcile to the rupee. **Parked (declined/deferred):** auto-execution, LLM-for-numbers, Monte Carlo,
-GPU, more quantum.
+Zerodha **Tax P&L** export. **✅ DONE (2026-06-18)** — real SELL made, Tax P&L parser built, gross
+reconciles to the paise (₹25.25 STCG, Δ ₹0.00); see the crit-4 block above + `reports/
+crit4_reconciliation.md`. Remaining hardening: a multi-lot/LTCG/loss case (this one was single-lot,
+all-STCG) and LTCG loss set-off. **Parked (declined/deferred):** auto-execution, LLM-for-numbers,
+Monte Carlo, GPU, more quantum.
 
 **✅ PAPER CRON FIXED (2026-06-15, PR [#14](https://github.com/aarsh-adhvaryu/Q_Alpha/pull/14), merged).** Root cause of the never-firing
 schedule: `cron: "0 12"` was the **top of the hour** — GitHub throttles/silently-drops on-the-hour
@@ -194,9 +205,26 @@ universe **5 → Nifty 100–200** (user's chosen scope). Two findings that resh
    clears the bar** (keep qalpha pristine — see the research-untouched rule). **Trap to avoid:** a
    "weekly decision" cadence must NOT loosen the §4.6 gate — weekly *monitoring* is fine, but actual
    trades must stay rare (low realized turnover is the validated edge).
+   - **▶ STAGE-1 BREADTH SCREEN DONE (2026-06-18) — INCONCLUSIVE, and instructively so.** Pre-reg
+     `reports/PREREGISTRATION_universe.md`; `scripts/build_static_universe.py` (current Nifty-100,
+     98 names) + `scripts/exp_universe_breadth.py` (parameterized walk-forward on a **separate** price
+     cache → validated panel untouched) → `reports/universe_breadth_findings.md`. Ran the validated
+     config (annual·shrink·force_refresh·dynamic-slippage) on a **static current-constituents** Nifty
+     100. Result: strategy 16.4% CAGR / Sharpe 1.06 (≈ its clean PIT-50 18.2%/1.13, **no visible
+     breadth bonus**), but "loses to 1/N by −9.9pt." **The −9.9pt is an artifact:** 1/N on a static
+     survivorship-biased universe (26.3% CAGR — implausible) is the *largest* survivorship beneficiary
+     (buy-and-hold-all-future-survivors), so it inflates **more** than a point-in-time factor strategy
+     → the gap is contaminated, not a real loss. **Methodological lesson: never benchmark vs 1/N on a
+     survivorship-biased universe; a static screen cannot adjudicate breadth.** Did NOT run Nifty 200
+     (same contamination → motion, not evidence). **The only valid path = Stage 2: a real PIT
+     Nifty-100/200 membership (NSE reconstitution circulars / niftyindices) — the data-blocked piece.**
+     Given no visible bonus even with the survivorship tailwind, the EV of that data effort is modest;
+     **keep the product at the validated Nifty 50** unless/until Stage-2 data is sourced. Not a
+     next-week item.
 
-**🧠 OTHER OPEN THREADS** — same-day `positions()` reading; the Tax P&L parser + crit-4 reconciliation
-(once a real sell exists); corporate-actions (crit 5); the tax-alpha whitepaper; LLM "concierge"
+**🧠 OTHER OPEN THREADS** — same-day `positions()` reading; crit-4 hardening (multi-lot/LTCG/loss
+case + LTCG loss set-off — the single-sell gross reconciliation is ✅ done); corporate-actions (crit 5);
+the tax-alpha whitepaper; LLM "concierge"
 routing NL → the deterministic engine; an equity-curve chart + dashboard screenshot in the README
 (the only "last-mile" polish for resume-readiness — repo is otherwise resume-ready: 100 tests green,
 CI green, honest README). Let the user steer.
@@ -345,8 +373,9 @@ regime's weights → top-N selection → sector allocator → portfolio optimize
 Status: **1 ✅ walk-forward validated (low-turnover 3-factor PIT beats TRI in 93% of 3y holds & beat
 TRI+1/N in all 3 independent sub-periods, best downside; the *thesis* holds OOS though not a magic
 frequency — see Phase A) |
-2 ✅ | 3 ✅ PIT universe built (Phase A) | 4 🟡 reconstruction built (tradebook replay → dated FIFO,
-`tradebook.py`); reconciliation vs real Zerodha **Tax P&L** still needs a real SELL + the Tax P&L parser |
+2 ✅ | 3 ✅ PIT universe built (Phase A) | 4 ✅ **reconciled to the paise (2026-06-18)** — real SELL +
+Tax P&L parser (`taxpnl.py`); gross == Zerodha STCG ₹25.25 (`reports/crit4_reconciliation.md`). Harden
+later with a multi-lot/LTCG/loss case + LTCG loss set-off |
 5 ❌ corp-actions (Phase 1) | 6 ⏳ paper clock STARTED 2026-06-12, accumulating (3–6 mo, unskippable) |
 7 ✅ | 8 ✅ (dynamic rule) | 9 🟡 pipeline built, needs the live run | 10 ✅ deterministic tax-smart
 advisor + live dashboard built (`advisor.py`, `dashboard_app.py`)**. Phase A cleared survivorship (3)
@@ -425,9 +454,11 @@ gated by a mandatory paper-trading run.
   (force_refresh short-circuits the gate); only non-force-refresh `tax_aware` runs (older Phase A
   monthly/quarterly tables, `calibrate_gate`) would shift slightly if re-run — qualitative conclusions
   hold. 106 tests green.
-- **Tax-engine validation (criterion 4).** Validate the FIFO engine against a real **Zerodha Console →
-  Reports → Tax P&L** export (user action). **Note:** LTCG *loss* set-off isn't implemented
-  (documented Phase-0 deferral) — it will surface in this reconciliation, so fix before reconciling.
+- **Tax-engine validation (criterion 4) — ✅ DONE (2026-06-18).** FIFO engine reconciled vs the real
+  **Zerodha Console → Tax P&L** export: gross == ₹25.25 STCG to the paise (`taxpnl.py`,
+  `scripts/reconcile_taxpnl.py`, `reports/crit4_reconciliation.md`). The first sell was a single
+  STCG gain (no loss), so **LTCG loss set-off** (still unimplemented, documented Phase-0 deferral)
+  wasn't exercised — fix it before a sell that realizes a loss, and re-reconcile a multi-lot/LTCG case.
 - **Risk-tolerance reckoning.** Backtest the full **50/25/25** pool structure (not 100% core) to see
   the blended drawdown, then confirm the real tolerance (long-only equity ≈ -30% in crashes; a hard
   ≤20% implies a hedging overlay = a v2 feature).
