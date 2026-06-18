@@ -1,5 +1,9 @@
 # Deploying the Q-Alpha dashboard (phone-accessible URL on AWS)
 
+> **Already on Lightning AI? Use [`DEPLOY_LIGHTNING.md`](DEPLOY_LIGHTNING.md) instead — it's a one-click
+> public URL, no AWS/Docker needed.** This AWS/Docker path is the portable alternative (any VPS), and
+> its only edge is a *free* 12-month always-on tier.
+
 Goal: a private URL you open on your phone that shows your real holdings, live prices, the tax-smart
 advisor, the deploy-in-weakness engine, and the paper-run status — so the **only** manual step is
 placing the order in Kite. This is a **read-only advisor/monitor**; it never trades.

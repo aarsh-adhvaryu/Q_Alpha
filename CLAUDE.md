@@ -94,6 +94,13 @@ live server here** (sandbox blocks ports; no AWS/Kite creds) → AppTest-smoke +
 verifies on the box. **▶ STAGE 2 (deferred, needs the box + live token): true tick-streaming via Kite
 `KiteTicker` WebSocket** — a background thread → latest-LTP store → fragment reads it; staged because it
 can only be built+verified against the live socket. Stage-1 auto-refresh is the near-realtime stand-in.
+**HOSTING = LIGHTNING AI (user's choice, `deploy/DEPLOY_LIGHTNING.md`)** — we're already in a Lightning
+Studio (repo+data present), so the Streamlit plugin gives a 1-click public URL; **auto-start** = always-
+on, pay-per-use (idle-sleep + cold-start). Caveat: auto-start's idle-off is fine for Stage-1 auto-refresh
+but **kills a Stage-2 always-on WebSocket** → true-ticks need a persistent Studio (continuous credits) or
+the AWS free-tier box. Lightning note: the GH-Actions paper cron commits to GitHub, so the Studio app
+needs a periodic `git pull` for the freshness panel to show fresh marks. The Docker/AWS scaffold
+(`deploy/DEPLOY.md`) stays as the portable any-VPS path.
 
 **⭐ USER MADE FIRST REAL TRADES (2026-06-13):** funded YHK037, **HDFCBANK BUY 5 @₹785.45 COMPLETE**
 (CNC/delivery), INFY BUY 5 still OPEN/pending; cash ₹445.75. **A same-day delivery buy sits in
