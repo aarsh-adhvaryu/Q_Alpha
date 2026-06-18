@@ -1,0 +1,6 @@
+# Dependencies for Streamlit Community Cloud (it runs `pip install -r requirements.txt`).
+# `-e .` installs the qalpha package (which pulls its own runtime deps from pyproject.toml:
+# numpy/pandas/scipy/pyarrow/yfinance/openpyxl/kiteconnect/python-dotenv), plus the dashboard UI.
+# The local dev/CI workflow still uses `uv sync --extra dashboard`; this file is only for Streamlit Cloud.
+-e .
+streamlit>=1.37
