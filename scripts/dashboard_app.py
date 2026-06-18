@@ -31,7 +31,7 @@ from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
-from qalpha.live.advisor import advise_deploy, advise_raise_cash, advise_sell
+from qalpha.live.advisor import advise_raise_cash, advise_sell
 from qalpha.live.dashboard import _benchmark_return_pct, paper_freshness
 from qalpha.live.holdings import LiveHoldings
 from qalpha.live.paper import PaperBook, _prices_on
@@ -157,15 +157,6 @@ def _load_live(cfg: Config, as_of: date) -> LiveHoldings | None:
         return None
 
 
-def _current_target(
-    book: PaperBook, prices: PriceData, universe: Universe, sector_of: dict[str, str], as_of: date
-) -> pd.Series | None:
-    plan = book.plan(prices, universe, sector_of, as_of)
-    if plan.decision.target is not None and not plan.decision.target.empty:
-        return plan.decision.target
-    return book.last_target
-
-
 def _paper_status_panel(book: PaperBook) -> None:
     """Show whether the weekday paper-run pipeline actually marked the book (seen, not trusted)."""
     fresh = paper_freshness(book, date.today())
@@ -188,7 +179,6 @@ def main() -> None:
     book, prices, universe, sector_of, benchmark = _load()
     cfg = Config()
     as_of = prices.dates[-1].date()
-    target = _current_target(book, prices, universe, sector_of, as_of)
 
     st.title("Q-Alpha — Tax-Smart Portfolio Advisor")
     _paper_status_panel(book)
@@ -202,7 +192,7 @@ def main() -> None:
         st.divider()
         st.subheader("Ask the advisor")
         st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
-        _advisor_tabs(book.portfolio, _prices_on(prices, as_of), target, as_of)
+        _advisor_tabs(book.portfolio, _prices_on(prices, as_of), as_of)
         return
 
     # Live source: gate on a fresh Kite session, then auto-refresh the whole live view (near-realtime).
@@ -222,7 +212,7 @@ def main() -> None:
         st.divider()
         st.subheader("Ask the advisor")
         st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
-        _advisor_tabs(portfolio, prices_dec, target, as_of)
+        _advisor_tabs(portfolio, prices_dec, as_of)
 
     _live_view()
 
@@ -323,9 +313,33 @@ def _live_overview(portfolio: Portfolio, prices: dict[str, Decimal], *, caveat: 
     st.dataframe(_holdings_frame(portfolio, prices), hide_index=True, width="stretch")
 
 
-def _advisor_tabs(
-    portfolio: Portfolio, prices_dec: dict[str, Decimal], target: pd.Series | None, as_of: date
-) -> None:
+@st.cache_resource(show_spinner=False)
+def _watchlist() -> tuple[list[str], dict[str, str], PriceData] | None:
+    """The Nifty-100 watchlist + its price panel (downloaded once) — the buy-suggestion universe."""
+    csv = Path("data/universes/nifty100_watchlist.csv")
+    panel = Path("data/historical/prices_watchlist.parquet")
+    if not csv.exists():
+        return None
+    if not panel.exists():
+        import subprocess
+
+        with st.spinner("Loading the Nifty-100 watchlist (one-time price download, ~1–2 min)…"):
+            subprocess.run(
+                [sys.executable, "scripts/build_nifty100_watchlist.py", "--prices"],
+                check=False,
+                cwd=Path.cwd(),
+            )
+    if not panel.exists():
+        return None
+    from qalpha.data.ingest import load_parquet
+
+    wl = pd.read_csv(csv)
+    tickers = [str(t) for t in wl["ticker"]]
+    sector_of = {str(t): str(s) for t, s in zip(wl["ticker"], wl["sector"], strict=True)}
+    return tickers, sector_of, load_parquet(str(panel))
+
+
+def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: date) -> None:
     sell_tab, raise_tab, add_tab = st.tabs(["Sell a holding", "Raise cash", "Add money"])
     positions = sorted(portfolio.positions())
 
@@ -356,15 +370,32 @@ def _advisor_tabs(
             st.markdown(advise_raise_cash(portfolio, Decimal(amount), prices_dec, as_of).render())
 
     with add_tab:
+        st.caption(
+            "Suggests **what to buy** with new money — a diversified, **tax-free (buys-only)** spread "
+            "across Nifty 100, tilted toward out-of-favour names + market weakness. Not stock tips."
+        )
         amount = st.number_input(
             "New money to invest (₹)", min_value=1000, value=50000, step=1000, key="add_amt"
         )
-        if st.button("Advise deploy"):
-            if target is None:
-                st.error("No target weights available — cannot route new money.")
+        if st.button("Suggest what to buy"):
+            wl = _watchlist()
+            if wl is None:
+                st.error("Watchlist prices not ready yet — try again in a minute.")
             else:
+                from qalpha.live.deploy import advise_deploy_into_weakness
+
+                tickers, sector_of, wl_prices = wl
+                index_close = wl_prices.adj_close.mean(axis=1)
                 st.markdown(
-                    advise_deploy(portfolio, Decimal(amount), target, prices_dec, as_of).render()
+                    advise_deploy_into_weakness(
+                        portfolio,
+                        Decimal(amount),
+                        tickers,
+                        sector_of,
+                        wl_prices,
+                        index_close,
+                        as_of,
+                    ).render()
                 )
 
 
