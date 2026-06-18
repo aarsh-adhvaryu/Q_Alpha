@@ -37,6 +37,30 @@ from qalpha.live.holdings import LiveHoldings
 from qalpha.live.paper import PaperBook, _prices_on
 
 
+def _bridge_secrets() -> None:
+    """Copy Streamlit Cloud secrets into the environment so the env-based credential/password code
+    works unchanged (Streamlit Cloud exposes secrets via ``st.secrets``, not ``os.environ``)."""
+    try:
+        for k in ("KITE_API_KEY", "KITE_API_SECRET", "APP_PASSWORD"):
+            if k in st.secrets:  # raises if no secrets configured → caught below
+                os.environ.setdefault(k, str(st.secrets[k]))
+    except Exception:
+        pass  # no secrets file (local dev) — env vars / .env already cover it
+
+
+@st.cache_resource(show_spinner=False)
+def _ensure_data() -> None:
+    """First run on a fresh host (e.g. Streamlit Cloud): the gitignored price panels are absent —
+    download them once (cached for the container's life). The paper view needs the strategy panel +
+    benchmark, which ``paper.py refresh`` fetches via yfinance."""
+    if Path("data/historical/prices_pit_2026.parquet").exists():
+        return
+    import subprocess
+
+    with st.spinner("First run — downloading market data (~1–2 min). This happens once."):
+        subprocess.run([sys.executable, "scripts/paper.py", "refresh"], check=False, cwd=Path.cwd())
+
+
 def _check_password() -> bool:
     """Gate the dashboard behind ``APP_PASSWORD`` (set when hosted). Empty env = open (local dev)."""
     pw = os.environ.get("APP_PASSWORD", "").strip()
@@ -147,8 +171,10 @@ def _paper_status_panel(book: PaperBook) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Q-Alpha", page_icon="📈", layout="wide")
+    _bridge_secrets()
     if not _check_password():
         st.stop()
+    _ensure_data()  # download the price panels on a fresh host (no-op once cached/present)
     if not BOOK_PATH.exists():
         st.error(f"No paper book at {BOOK_PATH}. Run `uv run python scripts/paper.py init` first.")
         return
