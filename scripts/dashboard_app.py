@@ -15,8 +15,9 @@ acts in his own broker. Live holdings carry no purchase dates, so live tax is ap
 
 from __future__ import annotations
 
+import os
 import sys
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -31,9 +32,69 @@ from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.live.advisor import advise_deploy, advise_raise_cash, advise_sell
-from qalpha.live.dashboard import _benchmark_return_pct
+from qalpha.live.dashboard import _benchmark_return_pct, paper_freshness
 from qalpha.live.holdings import LiveHoldings
 from qalpha.live.paper import PaperBook, _prices_on
+
+
+def _check_password() -> bool:
+    """Gate the dashboard behind ``APP_PASSWORD`` (set when hosted). Empty env = open (local dev)."""
+    pw = os.environ.get("APP_PASSWORD", "").strip()
+    if not pw or st.session_state.get("authed"):
+        return True
+    entered = st.text_input("🔒 Password", type="password")
+    if entered and entered == pw:
+        st.session_state["authed"] = True
+        st.rerun()
+    elif entered:
+        st.error("Wrong password.")
+    return bool(st.session_state.get("authed"))
+
+
+def _kite_login_gate() -> bool:
+    """Ensure a fresh Kite session for live data; render a phone-friendly login if not.
+
+    Captures the ``request_token`` Kite appends when it redirects back to this page (so logging in is
+    one tap), with a paste fallback. Returns True only when a usable token is in place.
+    """
+    from qalpha.live.auth import exchange, login_url, parse_request_token, persist_session
+    from qalpha.live.credentials import load_credentials
+
+    qp = st.query_params
+    if "request_token" in qp:
+        try:
+            sess = exchange(load_credentials(), parse_request_token(qp["request_token"]))
+            persist_session(sess)
+            st.query_params.clear()
+            st.success("✅ Logged in to Zerodha for today.")
+            return True
+        except Exception as exc:
+            st.error(f"Login failed: {exc}")
+
+    try:
+        from qalpha.live.auth import get_access_token
+
+        get_access_token()  # raises if missing/stale
+        return True
+    except Exception:
+        pass
+
+    st.warning("Kite session expired — log in to Zerodha to see live data (once a day).")
+    try:
+        api_key = load_credentials(require_secret=False).api_key
+        st.link_button("🔑 Login to Zerodha", login_url(api_key))
+    except Exception as exc:
+        st.error(f"Kite credentials not configured: {exc}")
+        return False
+    pasted = st.text_input("…or paste the redirect URL / request_token", key="rt_paste")
+    if pasted:
+        try:
+            persist_session(exchange(load_credentials(), parse_request_token(pasted)))
+            st.success("✅ Logged in.")
+            return True
+        except Exception as exc:
+            st.error(f"Could not log in: {exc}")
+    return False
 
 
 @st.cache_resource
@@ -78,8 +139,16 @@ def _current_target(
     return book.last_target
 
 
+def _paper_status_panel(book: PaperBook) -> None:
+    """Show whether the weekday paper-run pipeline actually marked the book (seen, not trusted)."""
+    fresh = paper_freshness(book, date.today())
+    (st.success if not fresh.is_stale else st.warning)(f"📊 Daily paper-run — {fresh.note}")
+
+
 def main() -> None:
     st.set_page_config(page_title="Q-Alpha", page_icon="📈", layout="wide")
+    if not _check_password():
+        st.stop()
     if not BOOK_PATH.exists():
         st.error(f"No paper book at {BOOK_PATH}. Run `uv run python scripts/paper.py init` first.")
         return
@@ -93,26 +162,40 @@ def main() -> None:
     target = _current_target(book, prices, universe, sector_of, as_of)
 
     st.title("Q-Alpha — Tax-Smart Portfolio Advisor")
+    _paper_status_panel(book)
 
     if source == "Paper book":
         st.caption(
             f"Notional paper book (no real money) · as of **{as_of}** · "
             "decisions from the validated engine — this page never trades."
         )
-        portfolio: Portfolio | None = book.portfolio
-        prices_dec = _prices_on(prices, as_of)
         _paper_overview(book, prices, benchmark, universe, sector_of, as_of)
-    else:
-        st.caption("Live Zerodha account · read-only — this page never trades.")
+        st.divider()
+        st.subheader("Ask the advisor")
+        st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
+        _advisor_tabs(book.portfolio, _prices_on(prices, as_of), target, as_of)
+        return
+
+    # Live source: gate on a fresh Kite session, then auto-refresh the whole live view (near-realtime).
+    auto = st.sidebar.toggle("⏱ Auto-refresh live (30s)", value=True)
+
+    @st.fragment(run_every=30 if auto else None)
+    def _live_view() -> None:
+        if not _kite_login_gate():
+            return
         live = _load_live(cfg, as_of)
         if live is None:
             return
+        st.caption(
+            f"Live Zerodha · refreshed {datetime.now():%H:%M:%S} · read-only — this page never trades."
+        )
         portfolio, prices_dec = _live_section(live, cfg)
+        st.divider()
+        st.subheader("Ask the advisor")
+        st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
+        _advisor_tabs(portfolio, prices_dec, target, as_of)
 
-    st.divider()
-    st.subheader("Ask the advisor")
-    st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
-    _advisor_tabs(portfolio, prices_dec, target, as_of)
+    _live_view()
 
 
 def _paper_overview(
