@@ -31,6 +31,7 @@ from paper import BOOK_PATH, _load_market
 
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
+from qalpha.data.ingest import load_parquet
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.live.advisor import advise_deploy, advise_raise_cash, advise_sell
@@ -38,6 +39,7 @@ from qalpha.live.deploy import advise_deploy_into_weakness
 from qalpha.live.paper import PaperBook, _prices_on
 
 _WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
+_WATCHLIST_PRICES = Path("data/historical/prices_watchlist.parquet")
 
 
 def _as_of(prices: PriceData, arg: str | None) -> date:
@@ -168,13 +170,26 @@ def main(argv: list[str] | None = None) -> int:
         wl = pd.read_csv(_WATCHLIST_CSV)
         watchlist = [str(t) for t in wl["ticker"]]
         wl_sector = {str(t): str(s) for t, s in zip(wl["ticker"], wl["sector"], strict=True)}
-        index_close = prices.adj_close.mean(axis=1)  # equal-weight market proxy (self-contained)
+        # Use the dedicated watchlist price panel so all ~95 names (esp. Next-50 midcaps) are
+        # visible; the strategy panel only carries the Nifty-50-ish set. Fall back with a warning.
+        if _WATCHLIST_PRICES.exists():
+            wl_prices = load_parquet(str(_WATCHLIST_PRICES))
+        else:
+            wl_prices = prices
+            print(
+                f"⚠️  no watchlist price panel at {_WATCHLIST_PRICES} — only the strategy panel's "
+                "names are visible. Run: uv run python scripts/build_nifty100_watchlist.py --prices",
+                file=sys.stderr,
+            )
+        priced = sum(1 for t in watchlist if t in wl_prices.adj_close.columns)
+        print(f"_(deploy-weakness sees {priced}/{len(watchlist)} watchlist names)_\n")
+        index_close = wl_prices.adj_close.mean(axis=1)  # equal-weight market proxy (self-contained)
         advice = advise_deploy_into_weakness(
             portfolio,
             Decimal(args.amount),
             watchlist,
             wl_sector,
-            prices,
+            wl_prices,
             index_close,
             as_of,
             tilt=args.tilt,

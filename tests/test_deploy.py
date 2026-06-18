@@ -82,6 +82,38 @@ def test_deploy_target_caps_sector_weight() -> None:
     assert abs(float(target.sum()) - 1.0) < 1e-9
 
 
+def _flat_prices(last: dict[str, float]) -> PriceData:
+    """A PriceData where each ticker sits flat at its given price for the whole window."""
+    rows = []
+    for t, p in last.items():
+        for d in _DATES:
+            rows.append({"date": d, "ticker": t, "close": p, "adj_close": p, "volume": 1000})
+    return PriceData.from_long(pd.DataFrame(rows))
+
+
+def test_anti_dominance_drops_names_too_pricey_for_a_small_deploy() -> None:
+    # 4 cheap names + 1 very pricey one; a small deploy must not blow on the pricey share.
+    prices = _flat_prices({"A.NS": 100, "B.NS": 100, "C.NS": 100, "D.NS": 100, "PRICEY.NS": 50_000})
+    as_of = _DATES[-1].date()
+    sector_of = {"A.NS": "IT", "B.NS": "FIN", "C.NS": "AUTO", "D.NS": "FMCG", "PRICEY.NS": "METAL"}
+    index_close = prices.adj_close.mean(axis=1)
+    pf = Portfolio(Config().cost, Config().tax, cash=Decimal("5000"))
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("5000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        index_close,
+        as_of,
+        max_name_fraction=0.20,  # cap = ₹1,000 → PRICEY (₹50k) excluded
+    )
+    bought = {o.ticker for o in advice.deploy.buy_orders}
+    assert "PRICEY.NS" not in bought  # one share would swallow the deploy → dropped
+    assert "PRICEY.NS" not in advice.target.index
+    assert bought  # the cheap names still get deployed
+
+
 def test_advise_deploy_into_weakness_is_buys_only() -> None:
     prices = _prices()
     as_of = _DATES[-1].date()

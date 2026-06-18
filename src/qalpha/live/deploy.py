@@ -182,6 +182,7 @@ def advise_deploy_into_weakness(
     *,
     tilt: float = 1.0,
     max_sector_weight: float = 0.30,
+    max_name_fraction: float = 0.20,
 ) -> WeaknessDeployAdvice:
     """Recommend deploying ``amount`` of new money across the Nifty-100 watchlist — diversified,
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
@@ -189,15 +190,28 @@ def advise_deploy_into_weakness(
     Composes the price-based weakness/cheapness layers with the validated ``advise_deploy`` (the
     ₹0-tax greedy buy engine). Names already richly held still count toward the target, so the buys
     fill the genuine underweights — diversifying the book rather than doubling down.
+
+    ``max_name_fraction`` keeps the deploy diversified at whole-share granularity: a name whose **one
+    share** costs more than this fraction of ``amount`` is dropped from the target, so a single pricey
+    share can't swallow a small deploy (it returns once the deploy is large enough to fit it). If that
+    would leave too few names (<3), the filter is relaxed — better some deploy than none.
     """
     adj = prices.adj_close
     cutoff = pd.Timestamp(as_of)
     priced = [t for t in watchlist if t in adj.columns and not adj[t].loc[:cutoff].dropna().empty]
-    cheap = cheapness_scores(prices, priced, as_of)
-    target = deploy_target(priced, sector_of, cheap, tilt=tilt, max_sector_weight=max_sector_weight)
+
+    last_price: dict[str, float] = {t: float(adj[t].loc[:cutoff].dropna().iloc[-1]) for t in priced}
+    cap = float(amount) * max_name_fraction
+    affordable = [t for t in priced if last_price[t] <= cap]
+    universe = affordable if len(affordable) >= 3 else priced  # don't over-restrict tiny deploys
+
+    cheap = cheapness_scores(prices, universe, as_of)
+    target = deploy_target(
+        universe, sector_of, cheap, tilt=tilt, max_sector_weight=max_sector_weight
+    )
 
     price_dec: dict[str, Decimal] = {}
-    for t in set(priced) | set(portfolio.positions()):
+    for t in set(universe) | set(portfolio.positions()):
         if t in adj.columns:
             series = adj[t].loc[:cutoff].dropna()
             if not series.empty:

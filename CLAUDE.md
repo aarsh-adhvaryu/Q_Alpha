@@ -69,8 +69,13 @@ to cheaper names) → `advise_deploy_into_weakness`. CLI: **`advisor.py deploy-w
 capital-gains tax. **Honest framing locked in:** the *validated backtested strategy* default stays
 Nifty 50 (no proven alpha from breadth — see the research breadth/QUBO findings); this widens only the
 *manual investor's* opportunity set, which the advisor/tax engine already serve on any holdings.
-**Data note:** the on-disk panel prices only ~24 names; the full 96-name watchlist needs a yfinance
-ingest for cheapness history (the engine already filters to priced names). **"Closed" = build-complete
+**Watchlist prices — INGESTED (verified working):** `build_nifty100_watchlist.py --prices` downloads
+the 96 names → `data/historical/prices_watchlist.parquet` (95/96 priced; only retired TATAMOTORS.NS
+fails); `deploy-weakness` loads that panel so it actually sees the full Nifty 100 incl. the Next-50
+midcaps (62/96 → **95/96**; the missing midcaps were the whole point). Also added an **anti-dominance
+guard** (`max_name_fraction=0.20`): drops a name whose single share exceeds that fraction of the deploy,
+so a pricey share (e.g. SHREECEM ₹24,825) can't swallow a small ₹50k deploy — it now spreads across
+~14 names. **"Closed" = build-complete
 v1; the real-money GO remains gated by the unskippable forward paper run** (criterion 6) — that calendar
 time cannot be compressed. QUBO/breadth stay in research; the fragility-gauge promotion (as a read-only
 "systemic risk" advisory) is the clean next integration if revisited.
