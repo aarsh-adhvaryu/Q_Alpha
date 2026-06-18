@@ -51,14 +51,17 @@ def _bridge_secrets() -> None:
 @st.cache_resource(show_spinner=False)
 def _ensure_data() -> None:
     """First run on a fresh host (e.g. Streamlit Cloud): the gitignored price panels are absent —
-    download them once (cached for the container's life). The paper view needs the strategy panel +
-    benchmark, which ``paper.py refresh`` fetches via yfinance."""
-    if Path("data/historical/prices_pit_2026.parquet").exists():
+    download them once (cached for the container's life). The paper view needs **both** the strategy
+    panel *and* the Nifty-50-TRI benchmark; ``paper.py daily`` fetches both (``refresh`` is prices
+    only). Guard on both files so a partial first run still self-heals."""
+    prices = Path("data/historical/prices_pit_2026.parquet")
+    benchmark = Path("data/historical/benchmark_NIFTYBEESNS_2026.parquet")
+    if prices.exists() and benchmark.exists():
         return
     import subprocess
 
     with st.spinner("First run — downloading market data (~1–2 min). This happens once."):
-        subprocess.run([sys.executable, "scripts/paper.py", "refresh"], check=False, cwd=Path.cwd())
+        subprocess.run([sys.executable, "scripts/paper.py", "daily"], check=False, cwd=Path.cwd())
 
 
 def _check_password() -> bool:
