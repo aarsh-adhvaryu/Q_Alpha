@@ -34,7 +34,10 @@ from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.live.advisor import advise_deploy, advise_raise_cash, advise_sell
+from qalpha.live.deploy import advise_deploy_into_weakness
 from qalpha.live.paper import PaperBook, _prices_on
+
+_WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
 
 
 def _as_of(prices: PriceData, arg: str | None) -> date:
@@ -114,6 +117,15 @@ def main(argv: list[str] | None = None) -> int:
     p_deploy.add_argument("amount", type=str)
     _add_common(p_deploy)
 
+    p_dw = sub.add_parser(
+        "deploy-weakness",
+        help="deploy new money across the Nifty-100 watchlist — diversified, tilted to out-of-favour "
+        "names, leaning into market weakness (₹0 tax)",
+    )
+    p_dw.add_argument("amount", type=str)
+    p_dw.add_argument("--tilt", type=float, default=1.0, help="cheapness tilt strength (0 = equal)")
+    _add_common(p_dw)
+
     args = parser.parse_args(argv)
     cfg = Config()
 
@@ -143,6 +155,31 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "raise-cash":
         print(advise_raise_cash(portfolio, Decimal(args.amount), prices_dec, as_of).render())
+        return 0
+
+    if args.cmd == "deploy-weakness":
+        if not _WATCHLIST_CSV.exists():
+            print(
+                f"no Nifty-100 watchlist at {_WATCHLIST_CSV} — run: "
+                "uv run python scripts/build_nifty100_watchlist.py",
+                file=sys.stderr,
+            )
+            return 1
+        wl = pd.read_csv(_WATCHLIST_CSV)
+        watchlist = [str(t) for t in wl["ticker"]]
+        wl_sector = {str(t): str(s) for t, s in zip(wl["ticker"], wl["sector"], strict=True)}
+        index_close = prices.adj_close.mean(axis=1)  # equal-weight market proxy (self-contained)
+        advice = advise_deploy_into_weakness(
+            portfolio,
+            Decimal(args.amount),
+            watchlist,
+            wl_sector,
+            prices,
+            index_close,
+            as_of,
+            tilt=args.tilt,
+        )
+        print(advice.render())
         return 0
 
     # deploy: the target weights come from the model funnel (source-independent).
