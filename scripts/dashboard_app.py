@@ -377,6 +377,14 @@ def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: d
         amount = st.number_input(
             "New money to invest (₹)", min_value=1000, value=50000, step=1000, key="add_amt"
         )
+        n_stocks = st.slider(
+            "Spread across how many stocks?",
+            min_value=5,
+            max_value=40,
+            value=15,
+            help="Fewer = bigger, more concentrated positions (more risk, fewer orders). "
+            "More = broader & thinner. ~12–25 is the usual sweet spot.",
+        )
         if st.button("Suggest what to buy"):
             wl = _watchlist()
             if wl is None:
@@ -395,6 +403,7 @@ def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: d
                         wl_prices,
                         index_close,
                         as_of,
+                        max_names=n_stocks,
                     ).render()
                 )
 

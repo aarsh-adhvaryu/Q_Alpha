@@ -71,6 +71,14 @@ def test_deploy_target_tilts_to_cheaper_and_sums_to_one() -> None:
     assert target["DEEP.NS"] > target["MILD.NS"] > target["ATHIGH.NS"]
 
 
+def test_deploy_target_max_names_concentrates() -> None:
+    cheap = {f"S{i}.NS": i / 100 for i in range(20)}  # 20 names, varying cheapness
+    sectors = {t: f"SEC{i % 5}" for i, t in enumerate(cheap)}
+    target = deploy_target(list(cheap), sectors, cheap, tilt=1.0, max_names=8)
+    assert len(target) == 8  # concentrated to the top 8
+    assert abs(float(target.sum()) - 1.0) < 1e-9  # still a full allocation
+
+
 def test_deploy_target_caps_sector_weight() -> None:
     # 4 FIN + one each of IT/AUTO/FMCG → 4 sectors, so a 30% cap is feasible (4·0.30 ≥ 1).
     fin = ["A.NS", "B.NS", "C.NS", "D.NS"]
