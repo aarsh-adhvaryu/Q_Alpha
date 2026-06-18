@@ -17,15 +17,21 @@ directly on a small Ubuntu server (EC2). ~20 minutes. Read-only advisor/monitor;
 5. **Instance type:** `t3.micro` (or `t2.micro`) — *Free tier eligible*.
 6. **Key pair:** click **Create new key pair** → name it `qalpha-key` → **Create** (a `.pem` file
    downloads; keep it, though we'll use browser login below).
-7. **Network settings** → **Edit** → under *Inbound security group rules*:
-   - Rule 1 (already there): **SSH**, port **22**, Source **My IP**.
-   - Click **Add security group rule** → Type **Custom TCP**, **Port range 8501**, Source **My IP**.
-     *(My IP = only your current network can reach the dashboard. The app also has a password.)*
+7. **Network settings** → **Edit** → under *Inbound security group rules* set **both** sources to
+   **Anywhere-IPv4** (`0.0.0.0/0`) — **not** "My IP":
+   - Rule 1 (already there): **SSH**, port **22**, Source **Anywhere-IPv4**.
+   - Click **Add security group rule** → Type **Custom TCP**, **Port range 8501**, Source
+     **Anywhere-IPv4**.
+   - *Why Anywhere, not My IP:* "My IP" locks access to one network and **breaks EC2 Instance Connect**
+     (it comes through AWS's servers) and your **phone** (which roams WiFi↔mobile data). The dashboard
+     is protected by `APP_PASSWORD`; SSH by a key. Add HTTPS later to harden (see `DEPLOY.md`).
 8. Click **Launch instance** → then **View all instances**. Wait until **Instance state = Running**.
 
 ## Phase 2 — Open a terminal on the server (no .pem needed)
 1. Select your instance → click **Connect** (top right).
 2. Choose the **EC2 Instance Connect** tab → **Connect**. A black terminal opens in your browser.
+   *(If it says "Failed to establish SSH connection": your security group's port-22 source is still
+   "My IP" — edit it to Anywhere-IPv4 as in Phase 1 step 7, then retry.)*
 
 ## Phase 3 — Install + start the app (paste into that terminal)
 Paste this whole block and press Enter:
@@ -90,7 +96,9 @@ cd /home/ubuntu/Q_Alpha && git pull && uv sync --extra dashboard && sudo systemc
 ```
 
 ### Security reminders
-- Security group ports **22** and **8501** restricted to **My IP** (not `0.0.0.0/0`).
-- Set a strong `APP_PASSWORD` before exposing the live view.
+- Ports **22** + **8501** are open to **Anywhere** so you can reach it from any device/network — so the
+  **`APP_PASSWORD`** is your real protection: set a **strong** one before using the live view.
+- SSH is key-only (no password SSH); EC2 Instance Connect uses ephemeral keys.
 - `.env` holds secrets and is never committed.
-- For public-Wi-Fi safety, add HTTPS later (a domain + Caddy — see `DEPLOY.md`).
+- Hardening later (optional): add **HTTPS** (domain + Caddy — see `DEPLOY.md`), or switch SSH to AWS
+  **Session Manager** (no open port 22 at all).
