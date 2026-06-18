@@ -40,6 +40,28 @@ tilt — not pure index-tracking after all. No DB / broker / dashboard yet. CI g
 
 ## ⏯️ NEXT SESSION — START HERE (a brainstorm; build is paused here)
 
+**⏸️ PAUSED 2026-06-18 — RESUME AT: AWS EC2 deploy, Phase 2.** The user is deploying the dashboard to
+**AWS** (their end goal — do NOT redirect to Lightning; they tried Lightning/Docker, want AWS, are a
+beginner). Full click-by-click guide: **`deploy/DEPLOY_AWS_BEGINNER.md`** (no Docker — run streamlit
+directly on Ubuntu EC2). Repo is **PUBLIC** so the box clones with no auth.
+- **State at pause:** user was doing **Phase 1** (launch a t3.micro Ubuntu free-tier instance, security
+  group ports 22 + 8501 to My-IP). **First action next session:** confirm the instance is *Running*,
+  then walk them through **Phase 2** (Connect → *EC2 Instance Connect* browser terminal, no .pem) →
+  **Phase 3** (paste the install+bootstrap block: apt git/curl, install uv, `git clone`, `uv sync
+  --extra dashboard`, `build_nifty_universe.py`, `paper.py refresh`, `build_nifty100_watchlist.py
+  --prices`, then `streamlit run ... --server.address 0.0.0.0 --server.port 8501`) → **Phase 4** open
+  `http://<public-ip>:8501` on the phone (Paper view works with no secrets) → **Phase 5** systemd
+  always-on → **Phase 6** `.env` (KITE_API_KEY/SECRET + APP_PASSWORD) + Kite redirect URL for the live
+  view. Go ONE phase at a time (beginner). If a price download is OOM-killed on 1 GB → add 2 GB swap
+  (in the guide). **Prereq reminder: merge PR #17 first** so the box clones the finished dashboard.
+- **⚠️ I cannot run the Streamlit server or click in AWS** (sandbox blocks ports; no AWS/Kite creds) →
+  the user executes; I guide + fix errors they paste. The Kite daily session is a **one-tap login** (no
+  compliant unattended token; auto-TOTP declined). **Stage-2 true tick-streaming (KiteTicker WebSocket)
+  is deferred** until the box is up + a live token exists, to build/verify against the real socket.
+- **All deploy work is in PR #17** (`nifty100-advisor-deploy`): Nifty-100 deploy-in-weakness advisor +
+  dashboard (password gate / paper-run freshness panel / phone one-tap login / auto-refresh) + deploy
+  scaffold (`deploy/`: AWS-beginner, AWS-Docker, Lightning). See the FINALIZATION + DEPLOY blocks below.
+
 **Next session = brainstorming, not a queued build.** Everything below is current. Two PRs are open
 and **awaiting the user's manual merge — order #10 then #11** (or merge #10 and retarget #11 to main):
 - **PR #10 `cleanups`→main:** deploy cash-utilization fix + CLAUDE.md refresh + **live Zerodha
