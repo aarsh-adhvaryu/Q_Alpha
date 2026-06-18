@@ -78,6 +78,31 @@ def _check_password() -> bool:
     return bool(st.session_state.get("authed"))
 
 
+def _ensure_kite_credentials() -> bool:
+    """Make the Kite app key+secret available — from secrets/env, or an **in-app form** so everything
+    can be done from the dashboard (no `.env` needed). Held for the session; returns True when set."""
+    # Restore from this session, then check env (Streamlit secrets bridged here, or .env, or entered).
+    for k in ("KITE_API_KEY", "KITE_API_SECRET"):
+        if not os.environ.get(k, "").strip() and st.session_state.get(k):
+            os.environ[k] = str(st.session_state[k])
+    if os.environ.get("KITE_API_KEY", "").strip() and os.environ.get("KITE_API_SECRET", "").strip():
+        return True
+
+    st.info(
+        "Enter your **Kite Connect** app key + secret once to enable the live view — from "
+        "https://developers.kite.trade → **My apps** → your app (regenerate the secret if forgotten). "
+        "Held only for this session; never written to the repo."
+    )
+    with st.form("kite_creds"):
+        api_key = st.text_input("Kite API key", type="password")
+        api_secret = st.text_input("Kite API secret", type="password")
+        if st.form_submit_button("Save credentials") and api_key and api_secret:
+            st.session_state["KITE_API_KEY"] = os.environ["KITE_API_KEY"] = api_key.strip()
+            st.session_state["KITE_API_SECRET"] = os.environ["KITE_API_SECRET"] = api_secret.strip()
+            st.rerun()
+    return False
+
+
 def _kite_login_gate() -> bool:
     """Ensure a fresh Kite session for live data; render a phone-friendly login if not.
 
@@ -205,13 +230,18 @@ def main() -> None:
         _advisor_tabs(book.portfolio, _prices_on(prices, as_of), target, as_of)
         return
 
-    # Live source: gate on a fresh Kite session, then auto-refresh the whole live view (near-realtime).
+    # Live source: enter Kite credentials in-app (if not set), then a one-tap login, then the live
+    # view auto-refreshes (near-realtime). Creds + login stay OUTSIDE the auto-refresh so typing
+    # isn't interrupted.
+    if not _ensure_kite_credentials():
+        return
+    if not _kite_login_gate():
+        return
+
     auto = st.sidebar.toggle("⏱ Auto-refresh live (30s)", value=True)
 
     @st.fragment(run_every=30 if auto else None)
     def _live_view() -> None:
-        if not _kite_login_gate():
-            return
         live = _load_live(cfg, as_of)
         if live is None:
             return
