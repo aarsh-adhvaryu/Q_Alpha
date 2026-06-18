@@ -21,6 +21,13 @@ data/bhavcopy/*
 # data/paper/ (the notional paper book + track record) is TRACKED on purpose — no secrets, and the
 # daily pipeline commits it as the durable record.
 
+# Broker exports — contain PAN / client-id / name PII; never commit (resume repo is public).
+data/tradebook-*.csv
+data/taxpnl-*
+data/*.jpeg
+data/*.jpg
+reports/crit4_reconciliation.md
+
 # Reports
 reports/*.html
 reports/*.png

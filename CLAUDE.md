@@ -53,6 +53,28 @@ notional ₹2L book started 2026-06-12, 5 holdings) + a **dashboard + autonomous
 pipeline** (`paper.yml`) + the **deterministic tax-smart advisor** + a **live Streamlit dashboard**.
 (The quantum research track was moved to the separate `Q_Alpha_Research` repo.) Four gates green.
 
+**🏁 FINALIZATION (2026-06-18) — Nifty-100 deploy-in-weakness, the manual-investor solution.** The
+user's real need: diversify + find better entries; Nifty-50 large-caps are rarely cheap outside a
+crash, so the *opportunity set* must widen to Nifty 100. Built (branch `nifty100-advisor-deploy`):
+**`scripts/build_nifty100_watchlist.py` → `data/universes/nifty100_watchlist.csv`** (96 current names
++ sectors — a *forward-looking* watchlist, so survivorship is irrelevant: it lists what's investable
+*today*, not a backtest universe); **`src/qalpha/live/deploy.py`** (tested) — three deterministic
+price-based layers on top of the validated `advise_deploy` (₹0-tax greedy buys): (1) `market_weakness`
+(index drawdown from 1y high → normal/elevated/deep "when to deploy more" advisory; a self-contained
+signal — the richer research **fragility gauge** is the upgrade path), (2) `cheapness_scores` (pullback
+below each name's 1y high — a **technical** out-of-favour proxy, *honestly NOT* fundamental P/E, which
+stays data-blocked), (3) `deploy_target` (diversified equal-weight + sector-capped water-filling, tilted
+to cheaper names) → `advise_deploy_into_weakness`. CLI: **`advisor.py deploy-weakness AMOUNT [--tilt]`**.
+`tests/test_deploy.py`. **This is the tax-free "buy cheap, diversify" lever** — new money only, ₹0
+capital-gains tax. **Honest framing locked in:** the *validated backtested strategy* default stays
+Nifty 50 (no proven alpha from breadth — see the research breadth/QUBO findings); this widens only the
+*manual investor's* opportunity set, which the advisor/tax engine already serve on any holdings.
+**Data note:** the on-disk panel prices only ~24 names; the full 96-name watchlist needs a yfinance
+ingest for cheapness history (the engine already filters to priced names). **"Closed" = build-complete
+v1; the real-money GO remains gated by the unskippable forward paper run** (criterion 6) — that calendar
+time cannot be compressed. QUBO/breadth stay in research; the fragility-gauge promotion (as a read-only
+"systemic risk" advisory) is the clean next integration if revisited.
+
 **⭐ USER MADE FIRST REAL TRADES (2026-06-13):** funded YHK037, **HDFCBANK BUY 5 @₹785.45 COMPLETE**
 (CNC/delivery), INFY BUY 5 still OPEN/pending; cash ₹445.75. **A same-day delivery buy sits in
 `positions()` day-book, NOT `holdings()`** (→ T+1 it lands in `holdings()` as `t1_quantity`), so
