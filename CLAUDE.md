@@ -40,27 +40,37 @@ tilt — not pure index-tracking after all. No DB / broker / dashboard yet. CI g
 
 ## ⏯️ NEXT SESSION — START HERE (a brainstorm; build is paused here)
 
-**⏸️ PAUSED 2026-06-18 — RESUME AT: AWS EC2 deploy, Phase 2.** The user is deploying the dashboard to
-**AWS** (their end goal — do NOT redirect to Lightning; they tried Lightning/Docker, want AWS, are a
-beginner). Full click-by-click guide: **`deploy/DEPLOY_AWS_BEGINNER.md`** (no Docker — run streamlit
-directly on Ubuntu EC2). Repo is **PUBLIC** so the box clones with no auth.
-- **State at pause:** user was doing **Phase 1** (launch a t3.micro Ubuntu free-tier instance, security
-  group ports 22 + 8501 to My-IP). **First action next session:** confirm the instance is *Running*,
-  then walk them through **Phase 2** (Connect → *EC2 Instance Connect* browser terminal, no .pem) →
-  **Phase 3** (paste the install+bootstrap block: apt git/curl, install uv, `git clone`, `uv sync
-  --extra dashboard`, `build_nifty_universe.py`, `paper.py refresh`, `build_nifty100_watchlist.py
-  --prices`, then `streamlit run ... --server.address 0.0.0.0 --server.port 8501`) → **Phase 4** open
-  `http://<public-ip>:8501` on the phone (Paper view works with no secrets) → **Phase 5** systemd
-  always-on → **Phase 6** `.env` (KITE_API_KEY/SECRET + APP_PASSWORD) + Kite redirect URL for the live
-  view. Go ONE phase at a time (beginner). If a price download is OOM-killed on 1 GB → add 2 GB swap
-  (in the guide). **Prereq reminder: merge PR #17 first** so the box clones the finished dashboard.
-- **⚠️ I cannot run the Streamlit server or click in AWS** (sandbox blocks ports; no AWS/Kite creds) →
-  the user executes; I guide + fix errors they paste. The Kite daily session is a **one-tap login** (no
-  compliant unattended token; auto-TOTP declined). **Stage-2 true tick-streaming (KiteTicker WebSocket)
-  is deferred** until the box is up + a live token exists, to build/verify against the real socket.
-- **All deploy work is in PR #17** (`nifty100-advisor-deploy`): Nifty-100 deploy-in-weakness advisor +
-  dashboard (password gate / paper-run freshness panel / phone one-tap login / auto-refresh) + deploy
-  scaffold (`deploy/`: AWS-beginner, AWS-Docker, Lightning). See the FINALIZATION + DEPLOY blocks below.
+**✅ DEPLOYED & LIVE (2026-06-18) — the dashboard runs on Streamlit Community Cloud, on the user's REAL
+Zerodha account, from his phone.** This is the headline state. AWS was abandoned mid-attempt (EC2
+security-group / SSH / IAM / status-checks = a beginner wall; `deploy/DEPLOY_AWS_BEGINNER.md` +
+`DEPLOY.md` Docker path kept as portable fallbacks, `DEPLOY_LIGHTNING.md` too). **Streamlit Cloud won**
+(deploy straight from the public GitHub repo, no server/SSH/Docker, free, `…streamlit.app` URL,
+auto-redeploys on every `main` push so the daily paper cron keeps it fresh): `deploy/DEPLOY_STREAMLIT.md`,
+root `requirements.txt` (`-e .` + streamlit). The user funded the account; the **Live Zerodha view shows
+his real holding (INFY ×5)** with live `ltp()`.
+- **What the deployed dashboard does (all from one screen, PRs #17–#22):** password gate (`APP_PASSWORD`);
+  paper-run **freshness panel** (`live/dashboard.py:paper_freshness`); **in-app Kite credentials form**
+  (`_ensure_kite_credentials` — enter api_key/secret in the UI, no `.env`) + **one-tap login**
+  (`request_token` captured from Kite's redirect via `st.query_params`); **auto-refresh** (`st.fragment
+  run_every=30`); **self-bootstraps** the gitignored price panels on a fresh host (`_ensure_data` →
+  `paper.py daily` for prices **and** benchmark; `_watchlist()` lazily downloads the Nifty-100 panel);
+  Streamlit-secrets→env **bridge** (`_bridge_secrets`). Advisor tabs: **Sell** (exact tax) · **Raise
+  cash** (least-tax order) · **Add money** = the **buy side** — wired to `advise_deploy_into_weakness`
+  (Nifty-100, diversified, cheapness-tilted, **₹0-tax buys**) with a **"spread across N stocks" slider**
+  (`max_names`, default 15) so the user dials concentration↔diversification (he flagged 43×1-share was
+  over-diversified). Tradebook-CSV upload → exact dated tax. **Only the order placement stays in Kite
+  (by design).**
+- **Honest gaps surfaced live (worth knowing next session):** (1) the tax advisor is *trivial* on a
+  1-tiny-holding-at-a-loss account — it earns its keep with a real multi-name book; (2) "cheap" = a
+  **technical** pullback proxy, not fundamental P/E (data-blocked); (3) the **deploy advisor on the live
+  account** uses the watchlist panel, not the model funnel target. **Kite reality (locked):** daily
+  one-tap login; **no** compliant unattended token (auto-TOTP declined). **Streamlit gotcha seen:** after
+  a code merge the app can hot-reload the page but keep an **old imported module** in memory → spurious
+  `TypeError` → fix is **Manage app → Reboot** (forces a clean re-import).
+- **▶ STILL DEFERRED — Stage-2 true tick-streaming (KiteTicker WebSocket):** needs a *persistent
+  always-on* host (Streamlit Cloud sleeps when idle, which kills a background socket) → a small paid host
+  (Render/Railway) or the AWS box. Stage-1 auto-refresh is the near-realtime stand-in. Also deferred:
+  fundamentals/value factor; promoting the research fragility gauge as a read-only advisory.
 
 **Next session = brainstorming, not a queued build.** Everything below is current. **All PRs are
 merged** — the earlier "#10 then #11 awaiting manual merge" note is resolved: #10 `cleanups` merged,
