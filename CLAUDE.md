@@ -40,6 +40,28 @@ tilt — not pure index-tracking after all. No DB / broker / dashboard yet. CI g
 
 ## ⏯️ NEXT SESSION — START HERE (a brainstorm; build is paused here)
 
+**⏸️ PAUSED 2026-06-18 — RESUME AT: AWS EC2 deploy, Phase 2.** The user is deploying the dashboard to
+**AWS** (their end goal — do NOT redirect to Lightning; they tried Lightning/Docker, want AWS, are a
+beginner). Full click-by-click guide: **`deploy/DEPLOY_AWS_BEGINNER.md`** (no Docker — run streamlit
+directly on Ubuntu EC2). Repo is **PUBLIC** so the box clones with no auth.
+- **State at pause:** user was doing **Phase 1** (launch a t3.micro Ubuntu free-tier instance, security
+  group ports 22 + 8501 to My-IP). **First action next session:** confirm the instance is *Running*,
+  then walk them through **Phase 2** (Connect → *EC2 Instance Connect* browser terminal, no .pem) →
+  **Phase 3** (paste the install+bootstrap block: apt git/curl, install uv, `git clone`, `uv sync
+  --extra dashboard`, `build_nifty_universe.py`, `paper.py refresh`, `build_nifty100_watchlist.py
+  --prices`, then `streamlit run ... --server.address 0.0.0.0 --server.port 8501`) → **Phase 4** open
+  `http://<public-ip>:8501` on the phone (Paper view works with no secrets) → **Phase 5** systemd
+  always-on → **Phase 6** `.env` (KITE_API_KEY/SECRET + APP_PASSWORD) + Kite redirect URL for the live
+  view. Go ONE phase at a time (beginner). If a price download is OOM-killed on 1 GB → add 2 GB swap
+  (in the guide). **Prereq reminder: merge PR #17 first** so the box clones the finished dashboard.
+- **⚠️ I cannot run the Streamlit server or click in AWS** (sandbox blocks ports; no AWS/Kite creds) →
+  the user executes; I guide + fix errors they paste. The Kite daily session is a **one-tap login** (no
+  compliant unattended token; auto-TOTP declined). **Stage-2 true tick-streaming (KiteTicker WebSocket)
+  is deferred** until the box is up + a live token exists, to build/verify against the real socket.
+- **All deploy work is in PR #17** (`nifty100-advisor-deploy`): Nifty-100 deploy-in-weakness advisor +
+  dashboard (password gate / paper-run freshness panel / phone one-tap login / auto-refresh) + deploy
+  scaffold (`deploy/`: AWS-beginner, AWS-Docker, Lightning). See the FINALIZATION + DEPLOY blocks below.
+
 **Next session = brainstorming, not a queued build.** Everything below is current. **All PRs are
 merged** — the earlier "#10 then #11 awaiting manual merge" note is resolved: #10 `cleanups` merged,
 #11 `tradebook-upload` re-landed as **#12** (merged), plus #13/#14/#15. Nothing is pending.
@@ -62,6 +84,55 @@ Kite auth, replay harness, shared `decide_rebalance`) + a **paper-trading runner
 notional ₹2L book started 2026-06-12, 5 holdings) + a **dashboard + autonomous daily GitHub Actions
 pipeline** (`paper.yml`) + the **deterministic tax-smart advisor** + a **live Streamlit dashboard**.
 (The quantum research track was moved to the separate `Q_Alpha_Research` repo.) Four gates green.
+
+**🏁 FINALIZATION (2026-06-18) — Nifty-100 deploy-in-weakness, the manual-investor solution.** The
+user's real need: diversify + find better entries; Nifty-50 large-caps are rarely cheap outside a
+crash, so the *opportunity set* must widen to Nifty 100. Built (branch `nifty100-advisor-deploy`):
+**`scripts/build_nifty100_watchlist.py` → `data/universes/nifty100_watchlist.csv`** (96 current names
++ sectors — a *forward-looking* watchlist, so survivorship is irrelevant: it lists what's investable
+*today*, not a backtest universe); **`src/qalpha/live/deploy.py`** (tested) — three deterministic
+price-based layers on top of the validated `advise_deploy` (₹0-tax greedy buys): (1) `market_weakness`
+(index drawdown from 1y high → normal/elevated/deep "when to deploy more" advisory; a self-contained
+signal — the richer research **fragility gauge** is the upgrade path), (2) `cheapness_scores` (pullback
+below each name's 1y high — a **technical** out-of-favour proxy, *honestly NOT* fundamental P/E, which
+stays data-blocked), (3) `deploy_target` (diversified equal-weight + sector-capped water-filling, tilted
+to cheaper names) → `advise_deploy_into_weakness`. CLI: **`advisor.py deploy-weakness AMOUNT [--tilt]`**.
+`tests/test_deploy.py`. **This is the tax-free "buy cheap, diversify" lever** — new money only, ₹0
+capital-gains tax. **Honest framing locked in:** the *validated backtested strategy* default stays
+Nifty 50 (no proven alpha from breadth — see the research breadth/QUBO findings); this widens only the
+*manual investor's* opportunity set, which the advisor/tax engine already serve on any holdings.
+**Watchlist prices — INGESTED (verified working):** `build_nifty100_watchlist.py --prices` downloads
+the 96 names → `data/historical/prices_watchlist.parquet` (95/96 priced; only retired TATAMOTORS.NS
+fails); `deploy-weakness` loads that panel so it actually sees the full Nifty 100 incl. the Next-50
+midcaps (62/96 → **95/96**; the missing midcaps were the whole point). Also added an **anti-dominance
+guard** (`max_name_fraction=0.20`): drops a name whose single share exceeds that fraction of the deploy,
+so a pricey share (e.g. SHREECEM ₹24,825) can't swallow a small ₹50k deploy — it now spreads across
+~14 names. **"Closed" = build-complete
+v1; the real-money GO remains gated by the unskippable forward paper run** (criterion 6) — that calendar
+time cannot be compressed. QUBO/breadth stay in research; the fragility-gauge promotion (as a read-only
+"systemic risk" advisory) is the clean next integration if revisited.
+
+**🚀 DEPLOY STAGE 1 (2026-06-18) — phone-accessible hosted dashboard.** User wants a URL on his phone,
+always-on, realtime, with the paper-run shown (not trusted). Built (`deploy/`: Dockerfile +
+entrypoint.sh [bootstraps the gitignored price panels on first boot] + docker-compose.yml + DEPLOY.md
+[AWS EC2-free-tier / Lightsail step-by-step, security-group-to-own-IP, Caddy HTTPS option]). Dashboard
+gains: **password gate** (`APP_PASSWORD` env, open if unset for local dev), **paper-run freshness panel**
+(`live/dashboard.py:paper_freshness` + test — weekday-aware stale flag, the "see it's alive" piece),
+**phone one-tap Kite login** (captures the `request_token` from Kite's redirect via `st.query_params`,
+paste fallback — no CLI), and **auto-refresh** (`st.fragment(run_every=30)` on the live view →
+near-realtime ltp). **Kite reality (locked):** the daily session needs a one-tap human login — there is
+NO compliant fully-unattended token (declined auto-TOTP as ToS-violating/insecure). **Can't verify a
+live server here** (sandbox blocks ports; no AWS/Kite creds) → AppTest-smoke + pure-fn tests only; user
+verifies on the box. **▶ STAGE 2 (deferred, needs the box + live token): true tick-streaming via Kite
+`KiteTicker` WebSocket** — a background thread → latest-LTP store → fragment reads it; staged because it
+can only be built+verified against the live socket. Stage-1 auto-refresh is the near-realtime stand-in.
+**HOSTING = LIGHTNING AI (user's choice, `deploy/DEPLOY_LIGHTNING.md`)** — we're already in a Lightning
+Studio (repo+data present), so the Streamlit plugin gives a 1-click public URL; **auto-start** = always-
+on, pay-per-use (idle-sleep + cold-start). Caveat: auto-start's idle-off is fine for Stage-1 auto-refresh
+but **kills a Stage-2 always-on WebSocket** → true-ticks need a persistent Studio (continuous credits) or
+the AWS free-tier box. Lightning note: the GH-Actions paper cron commits to GitHub, so the Studio app
+needs a periodic `git pull` for the freshness panel to show fresh marks. The Docker/AWS scaffold
+(`deploy/DEPLOY.md`) stays as the portable any-VPS path.
 
 **⭐ USER MADE FIRST REAL TRADES (2026-06-13):** funded YHK037, **HDFCBANK BUY 5 @₹785.45 COMPLETE**
 (CNC/delivery), INFY BUY 5 still OPEN/pending; cash ₹445.75. **A same-day delivery buy sits in
