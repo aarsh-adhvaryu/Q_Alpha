@@ -28,7 +28,7 @@ from decimal import ROUND_CEILING, ROUND_DOWN, Decimal
 
 import pandas as pd
 
-from qalpha.accounting.capital_gains import RealizedGain, financial_year
+from qalpha.accounting.capital_gains import RealizedGain, financial_year, net_tax_total
 from qalpha.backtest.portfolio import Portfolio, TradeRecord
 from qalpha.config import Config
 
@@ -78,6 +78,7 @@ class SellAdvice:
     stcg_gain: Decimal
     ltcg_gain: Decimal
     total_tax: Decimal
+    setoff_saving: Decimal  # tax saved because loss lots in this sell offset the gain lots (§70)
     ltcg_sheltered: Decimal
     exemption_remaining: Decimal
     net_proceeds: Decimal
@@ -104,6 +105,11 @@ class SellAdvice:
             )
         else:
             lines.append(f"- Remaining FY LTCG exemption: {_rupees(self.exemption_remaining)}.")
+        if self.setoff_saving > 0:
+            lines.append(
+                f"- {_rupees(self.setoff_saving)} of tax is saved here because loss lots in this "
+                f"sell set off against the gains (§70 loss set-off)."
+            )
         if self.tax_free_quantity <= 0:
             lines.append("- No part of this position can be sold tax-free right now.")
         elif self.tax_free_quantity < self.quantity:
@@ -194,7 +200,13 @@ def advise_sell(
     realized, cb = portfolio.preview_sell(as_of, ticker, qty, price)
     stcg = [g for g in realized if g.gain_type == "STCG"]
     ltcg = [g for g in realized if g.gain_type == "LTCG"]
-    total_tax = sum((g.tax for g in realized), _ZERO)
+    # Per-lot tax sums each lot in isolation (a loss → ₹0); the legally-correct figure nets the
+    # loss lots against the gain lots within the FY (§70 set-off) using the *remaining* exemption.
+    fy = financial_year(as_of)
+    gross_tax = sum((g.tax for g in realized), _ZERO)
+    total_tax = net_tax_total(
+        realized, cfg.tax, exemption_used_by_fy={fy: portfolio.gains.ltcg_realized(fy)}
+    )
     headroom = exemption_remaining(portfolio, cfg, as_of)
     return SellAdvice(
         ticker=ticker,
@@ -206,6 +218,7 @@ def advise_sell(
         stcg_gain=sum((g.gain for g in stcg), _ZERO),
         ltcg_gain=sum((g.gain for g in ltcg), _ZERO),
         total_tax=total_tax,
+        setoff_saving=max(_ZERO, gross_tax - total_tax),
         ltcg_sheltered=sum((g.gain - g.taxable_gain for g in ltcg if g.gain > 0), _ZERO),
         exemption_remaining=headroom,
         net_proceeds=qty * price - cb.total - total_tax,
