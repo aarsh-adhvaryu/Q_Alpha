@@ -21,6 +21,7 @@ from typing import IO
 import pandas as pd
 
 from qalpha.accounting.capital_gains import RealizedGain
+from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.accounting.costs import Side
 from qalpha.accounting.tax_lots import InsufficientSharesError
 from qalpha.backtest.portfolio import Portfolio, to_decimal_price
@@ -90,40 +91,60 @@ def parse_tradebook(source: str | IO[bytes] | IO[str]) -> list[TradebookTrade]:
 
 
 def replay_tradebook(
-    trades: list[TradebookTrade], cfg: Config, *, cash: Decimal = Decimal("0")
+    trades: list[TradebookTrade],
+    cfg: Config,
+    *,
+    cash: Decimal = Decimal("0"),
+    corporate_actions: list[CorporateAction] | None = None,
 ) -> ReplayResult:
     """Replay ``trades`` chronologically through the engine → a dated FIFO portfolio + realized tax.
 
     Buys add dated lots; sells consume FIFO and realize gains (so the LTCG/STCG tally and tax are
     exact). A sell that can't be matched (the export started mid-history) is skipped with a warning
     rather than aborting. ``cash`` sets the resulting account balance (the tradebook doesn't encode
-    it — pass the live available cash). Same-day trades are ordered buys-before-sells, then by
-    execution time.
+    it — pass the live available cash).
+
+    ``corporate_actions`` (§14 criterion 5) are interleaved by date: on each date the action applies
+    **first** (a split/bonus reshapes the lots held *into* the ex-date, which is what makes the replay
+    reproduce the broker's post-action share count), then that day's buys, then its sells. Without
+    this, a held name that split/bonused would fail :func:`reconcile_positions`.
     """
     pf = Portfolio(cfg.cost, cfg.tax, cash=_UNCONSTRAINED_CASH)
     warnings: list[str] = []
     realized_tax = Decimal("0")
     realized_gains: list[RealizedGain] = []
     matched = 0
-    ordered = sorted(
-        trades, key=lambda t: (t.trade_date, t.exec_time, 0 if t.side is Side.BUY else 1)
-    )
-    for t in ordered:
+
+    # Unified timeline. Phase orders same-date events: corporate action (0) → buy (1) → sell (2).
+    events: list[tuple[date, int, str, TradebookTrade | CorporateAction]] = [
+        (a.ex_date, 0, "", a) for a in (corporate_actions or [])
+    ]
+    events += [(t.trade_date, 1 if t.side is Side.BUY else 2, t.exec_time, t) for t in trades]
+    events.sort(key=lambda e: (e[0], e[1], e[2]))
+
+    for _d, _phase, _t, payload in events:
+        if isinstance(payload, CorporateAction):
+            pf.apply_corporate_action(payload)
+            continue
         try:
-            if t.side is Side.BUY:
-                pf.buy(t.trade_date, t.ticker, t.quantity, t.price)
+            if payload.side is Side.BUY:
+                pf.buy(payload.trade_date, payload.ticker, payload.quantity, payload.price)
             else:
                 # Capture the per-lot gains (preview is on the identical pre-sell state) before
                 # the sell mutates the ledger, so the crit-4 reconciliation can break down by
                 # STCG/LTCG and by symbol.
-                gains, _ = pf.preview_sell(t.trade_date, t.ticker, t.quantity, t.price)
+                gains, _ = pf.preview_sell(
+                    payload.trade_date, payload.ticker, payload.quantity, payload.price
+                )
                 realized_gains.extend(gains)
-                realized_tax += pf.sell(t.trade_date, t.ticker, t.quantity, t.price).tax
+                realized_tax += pf.sell(
+                    payload.trade_date, payload.ticker, payload.quantity, payload.price
+                ).tax
             matched += 1
         except InsufficientSharesError as exc:
             warnings.append(
-                f"{t.trade_date}: sell {t.quantity} {t.ticker} could not be matched ({exc}) — "
-                "tradebook history may be incomplete."
+                f"{payload.trade_date}: sell {payload.quantity} {payload.ticker} could not be "
+                f"matched ({exc}) — tradebook history may be incomplete."
             )
     pf.cash = cash
     return ReplayResult(
