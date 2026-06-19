@@ -41,6 +41,7 @@ from qalpha.live.dashboard import (
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
 from qalpha.live.paper import PaperBook, _prices_on
+from qalpha.live.position_health import position_health
 from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
 
 
@@ -210,7 +211,7 @@ def _systemic_risk_view(benchmark: pd.Series, as_of: date) -> None:
 def _go_readiness_view(book: PaperBook, benchmark: pd.Series, as_of: date) -> None:
     """The autonomous GO verdict — counts down on real criteria, flips to GO when the evidence clears."""
     sc = build_scorecard(book.equity_curve, benchmark, as_of)
-    badge = {"GO": "🟢", "NO-GO": "🔴", "NOT YET": "🟡"}[sc.verdict]
+    badge = {"GO": "🟢", "READY": "🟢", "NO-GO": "🔴", "NOT YET": "🟡"}[sc.verdict]
     st.header(f"{badge} Real-money readiness: {sc.verdict}")
     st.caption(
         "Deterministic — no AI, no human judgement. GO appears the moment every criterion clears "
@@ -220,6 +221,24 @@ def _go_readiness_view(book: PaperBook, benchmark: pd.Series, as_of: date) -> No
         st.markdown(f"{c.icon} **{c.name}** — {c.detail}")
     st.divider()
     st.markdown(go_readiness_markdown(book, benchmark, as_of))
+
+
+def _position_health_view(book: PaperBook, prices: PriceData, as_of: date) -> None:
+    """Mid-cycle watch — flags a holding breaking down between the slow rebalances. Advisory only."""
+    st.header("🩺 Position health (between rebalances)")
+    st.caption(
+        "The core rebalances slowly (annual) — this watches your holdings in between and flags any "
+        "name in a sustained, *idiosyncratic* breakdown (not a market-wide dip). It never sells."
+    )
+    held = list(book.portfolio.positions())
+    if not held:
+        st.info("No holdings yet — nothing to watch.")
+        return
+    rep = position_health(prices.adj_close, held, as_of)
+    for h in sorted(rep.holdings, key=lambda x: x.trailing_return):
+        st.markdown(f"{h.icon} {h.note}")
+    st.divider()
+    st.markdown(rep.render())
 
 
 def main() -> None:
@@ -235,7 +254,8 @@ def main() -> None:
     if st.sidebar.button("🔄 Reload data"):
         st.cache_resource.clear()
     source = st.sidebar.radio(
-        "View", ["Paper book", "Live Zerodha", "🎯 GO readiness", "🛡 Systemic risk"]
+        "View",
+        ["Paper book", "Live Zerodha", "🎯 GO readiness", "🩺 Position health", "🛡 Systemic risk"],
     )
     book, prices, universe, sector_of, benchmark = _load()
     cfg = Config()
@@ -250,6 +270,10 @@ def main() -> None:
 
     if source == "🎯 GO readiness":
         _go_readiness_view(book, benchmark, as_of)
+        return
+
+    if source == "🩺 Position health":
+        _position_health_view(book, prices, as_of)
         return
 
     if source == "Paper book":

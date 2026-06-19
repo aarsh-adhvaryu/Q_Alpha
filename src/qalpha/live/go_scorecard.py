@@ -43,12 +43,18 @@ MAX_MARK_GAP_DAYS = 7  # a >7-calendar-day gap between marks = missed runs / fee
 
 @dataclass(frozen=True)
 class Criterion:
-    """One GO criterion. ``status`` ∈ {green, yellow, red}; ``blocking`` ones must be green for GO."""
+    """One GO criterion. ``status`` ∈ {green, yellow, red}; ``blocking`` ones must be green for GO.
+
+    ``awaitable`` marks a criterion you can only *wait* on, never force or hurry — the volatility
+    event. When the only thing left is an awaitable criterion, the run is **READY**, not merely
+    NOT YET (you're done but for the market).
+    """
 
     name: str
     status: str
     detail: str
     blocking: bool = True
+    awaitable: bool = False
 
     @property
     def icon(self) -> str:
@@ -64,11 +70,16 @@ class GoScorecard:
 
     @property
     def verdict(self) -> str:
-        """``GO`` iff every criterion is green; ``NO-GO`` if a blocking one is red; else ``NOT YET``."""
+        """``GO`` (all green) · ``NO-GO`` (a blocking criterion red) · ``READY`` (only an *awaitable*
+        criterion — the volatility event — is left) · ``NOT YET`` (still accumulating other evidence).
+        """
         if any(c.status == "red" and c.blocking for c in self.criteria):
             return "NO-GO"
         if all(c.status == "green" for c in self.criteria):
             return "GO"
+        non_green = [c for c in self.criteria if c.status != "green"]
+        if non_green and all(c.awaitable for c in non_green):
+            return "READY"
         return "NOT YET"
 
     def render(self) -> str:
@@ -76,6 +87,9 @@ class GoScorecard:
             "GO": "🟢 **GO** — the forward paper run has cleared every criterion.",
             "NO-GO": "🔴 **NO-GO** — a blocking criterion is failing (see below); the strategy is not "
             "behaving as validated.",
+            "READY": "🟢 **READY — awaiting a stress event** — every criterion you can earn is green; "
+            "the only thing left is a real market event to prove the strategy through stress (it can't "
+            "be scheduled). You're done but for the market.",
             "NOT YET": "🟡 **NOT YET** — accumulating evidence; the run has not yet cleared every "
             "criterion (this is the expected state until it does).",
         }[self.verdict]
@@ -124,12 +138,14 @@ def _vol_event(benchmark: pd.Series, start: date, end: date) -> Criterion:
             "Volatility event withstood",
             "green",
             f"survived a {worst:.1%} Nifty pullback in-window — tested through real stress.",
+            awaitable=True,
         )
     return Criterion(
         "Volatility event withstood",
         "yellow",
         f"no market stress event yet (worst Nifty pullback in-window {worst:.1%}, needs "
         f"≤ {-VOL_EVENT_DRAWDOWN:.0%}). A calm run can't earn a GO — waiting on a real event.",
+        awaitable=True,
     )
 
 
