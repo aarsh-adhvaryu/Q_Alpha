@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import pandas as pd
 from run_phase0 import _load_universe_csv
 
+from qalpha.backtest.portfolio import TradeRecord
 from qalpha.config import Config
 from qalpha.data.ingest import download_prices, load_parquet, save_parquet
 from qalpha.data.prices import PriceData
@@ -71,15 +72,33 @@ def _load_benchmark_series() -> pd.Series:
 
 
 def _generate_dashboard(
-    book: PaperBook, prices: PriceData, universe: Universe, sector_of: dict[str, str], as_of: date
-) -> bool:
-    """Mark the book, render the dashboard + equity CSV. Returns True if orders await approval."""
+    book: PaperBook,
+    prices: PriceData,
+    universe: Universe,
+    sector_of: dict[str, str],
+    as_of: date,
+    *,
+    auto_apply: bool = False,
+) -> tuple[bool, list[TradeRecord]]:
+    """Mark the book, optionally auto-apply a scheduled rebalance, render the dashboard + equity CSV.
+
+    Returns ``(orders_pending, applied)``. With ``auto_apply`` (the cron path) a *scheduled,
+    actionable* plan is committed to the NOTIONAL book before rendering — so the forward run executes
+    its own decisions instead of freezing on the start basket (criterion-6 must test the live
+    strategy, not a stale June portfolio). Zero real money is at risk. The cadence gate in
+    :meth:`PaperBook.plan` guarantees this fires only on scheduled (annual) days, never daily churn.
+    """
     book.mark(prices, as_of)  # pure valuation, persisted — no trades
     plan = book.plan(prices, universe, sector_of, as_of)
+    applied: list[TradeRecord] = []
+    if auto_apply and plan.decision.actionable:
+        applied = book.apply(prices, plan)
+        book.mark(prices, as_of)  # re-mark post-trade so this date's point reflects the fills
+        plan = book.plan(prices, universe, sector_of, as_of)  # now a 'holding' plan
     DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_MD.write_text(render_markdown(book, prices, _load_benchmark_series(), plan, as_of))
     EQUITY_CSV.write_text(equity_csv(book))
-    return plan.has_orders
+    return plan.has_orders, applied
 
 
 def _as_of(prices: PriceData, arg: str | None) -> date:
@@ -162,8 +181,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd in ("dashboard", "daily"):
         as_of = prices.dates[-1].date()
-        action = _generate_dashboard(book, prices, universe, sector_of, as_of)
-        flag = "  ⚠️ ACTION NEEDED — orders await approval (run: paper.py apply)" if action else ""
+        # The cron (`daily`) auto-applies a scheduled rebalance to the notional book; `dashboard`
+        # (local preview) stays read-only and only flags that orders are due.
+        pending, applied = _generate_dashboard(
+            book, prices, universe, sector_of, as_of, auto_apply=(args.cmd == "daily")
+        )
+        if applied:
+            print(f"✓ Auto-applied {len(applied)} scheduled paper order(s) on {as_of}:")
+            for r in applied:
+                print(
+                    f"    {r.side.name:<4} {r.ticker:<14} {r.quantity} @ ₹{r.price}  (tax ₹{r.tax})"
+                )
+        flag = "  ⚠️ ACTION NEEDED — orders await approval (run: paper.py apply)" if pending else ""
         print(f"✓ Dashboard → {DASHBOARD_MD} · equity → {EQUITY_CSV} (as of {as_of}){flag}")
         return 0
 
