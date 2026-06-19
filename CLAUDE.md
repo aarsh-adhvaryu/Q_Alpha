@@ -429,7 +429,7 @@ All four gates (ruff, ruff-format, mypy strict, pytest) must pass before committ
 data/         price panel (yfinance→Parquet), point-in-time universe, Screener fundamentals
 factors/      momentum, volatility, liquidity (0a) + value, quality, dividend (0b); regime; scoring
 alloc/        Ledoit-Wolf+EWMA covariance conditioning → scipy sector allocator → scipy optimizer
-accounting/   FIFO tax lots + Zerodha costs + capital-gains tax   (reused live; Portfolio.to_state persists a book)
+accounting/   FIFO tax lots + Zerodha costs + capital-gains tax + corporate_actions (split/bonus/dividend, crit 5)   (reused live; Portfolio.to_state persists a book)
 backtest/     walk-forward engine, portfolio accountant, baselines, metrics, report; decision.py = shared decide_rebalance
 live/         Kite auth + replay harness + paper book (PaperBook) + dashboard renderer (+ systemic_risk_markdown, read-only hedge watch) + advisor.py (tax-smart layer, crit 10; now nets §70 loss set-off) + holdings.py (live reader) + tradebook.py (Console CSV → dated FIFO, crit 4) + taxpnl.py (Tax P&L reconcile) + safety.py (fail-loud staleness/data/session guards) + ticker.py (session-scoped KiteTicker realtime stream)
 scripts/      run_phase0, paper, advisor (CLI), dashboard_app (Streamlit, `dashboard` extra), build_nifty_universe, experiments
@@ -464,7 +464,12 @@ Tax P&L parser (`taxpnl.py`); gross == Zerodha STCG ₹25.25 (`reports/crit4_rec
 **§70 loss set-off now implemented (2026-06-19, `net_capital_gains_tax`, advisor/reconcile only — not
 the engine, headline preserved).** Remaining hardening needs a *real* multi-lot/LTCG/loss sell + Tax
 P&L to reconcile the new netting; 8-AY carry-forward still deferred |
-5 ❌ corp-actions (Phase 1) | 6 ⏳ paper clock STARTED 2026-06-12, accumulating (3–6 mo, unskippable) |
+5 🟡 corp-actions ENGINE done + tax-correct (2026-06-19, `accounting/corporate_actions.py` +
+`FIFOLedger.apply_split/apply_bonus`, `Portfolio.apply_corporate_action`, detector
+`live/corporate_actions_feed.py`): splits preserve cost+holding-period, bonus = ₹0-cost lots at the
+ex-date (→ STCG even when originals are LTCG), dividends = income cash (never CG). 8 tests. Remaining:
+auto-apply into the live tradebook-replay flow + reconcile ONE real corporate action on the account |
+6 ⏳ paper clock STARTED 2026-06-12, accumulating (3–6 mo, unskippable) |
 7 ✅ | 8 ✅ (dynamic rule) | 9 🟡 pipeline built, needs the live run | 10 ✅ deterministic tax-smart
 advisor + live dashboard built (`advisor.py`, `dashboard_app.py`)**. Phase A cleared survivorship (3)
 and — once rebalancing slowed to annual — re-cleared criterion 1 on the *fair* test. Remaining for a

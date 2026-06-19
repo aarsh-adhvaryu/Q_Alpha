@@ -26,6 +26,12 @@ from typing import cast
 import pandas as pd
 
 from qalpha.accounting.capital_gains import CapitalGainsCalculator, RealizedGain
+from qalpha.accounting.corporate_actions import (
+    CorporateAction,
+    CorporateActionResult,
+    CorporateActionType,
+    apply_to_ledger,
+)
 from qalpha.accounting.costs import CostBreakdown, Side, compute_costs
 from qalpha.accounting.slippage import SlippageModel
 from qalpha.accounting.tax_lots import FIFOLedger, TaxLot
@@ -256,6 +262,26 @@ class Portfolio:
         if qty <= 0:
             raise ValueError("buy quantity must be positive")
         return self._buy(on_date, ticker, qty, price)
+
+    def apply_corporate_action(self, action: CorporateAction) -> CorporateActionResult:
+        """Apply a split / bonus / dividend to the book (§14 criterion 5).
+
+        Splits and bonuses reshape the FIFO lots (cost-basis and holding-period rules per
+        :mod:`qalpha.accounting.corporate_actions`); a dividend credits cash as **income** — it never
+        touches the tax lots, so it can't pollute the capital-gains computation. Returns an audit
+        record of what changed.
+        """
+        before = self.ledger.quantity_held(action.ticker)
+        cash = apply_to_ledger(self.ledger, action)
+        self.cash += cash
+        after = self.ledger.quantity_held(action.ticker)
+        if action.action_type is CorporateActionType.SPLIT:
+            note = f"Split ×{action.ratio} on {action.ticker}: {before} → {after} shares (cost + holding period preserved)."
+        elif action.action_type is CorporateActionType.BONUS:
+            note = f"Bonus ×{action.ratio} on {action.ticker}: +{after - before} shares at ₹0 cost, dated {action.ex_date}."
+        else:
+            note = f"Dividend ₹{action.amount_per_share}/sh on {before} {action.ticker}: ₹{cash} cash (income, not capital gains)."
+        return CorporateActionResult(action, before, after, cash, note)
 
     def preview_sell(
         self, on_date: date, ticker: str, qty: Decimal, price: Decimal
