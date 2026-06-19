@@ -2,6 +2,37 @@
 
 Guidance for Claude Code (and humans) working in this repo.
 
+## 🧭 CURRENT STATE — read this first (2026-06-19)
+
+**For the full, interviewer-level overview read [README.md](README.md) — it now carries the complete
+story (plain-language + the math + an explicit "biases & decisions" section).** This CLAUDE.md is the
+detailed *working log* below; the README is the front door.
+
+**Where we are:** Phase 0 (backtest validation) is **complete and defensible** — 18.2% CAGR / Sharpe
+1.13, beats Nifty 50 TRI *and* 1/N net of cost+tax, in-sample + on the 2025–26 holdout + every rolling
+3y window. The **live system is built and deployed** on the user's real Zerodha account via Streamlit
+Cloud: deterministic tax-smart advisor (sell / raise-cash / deploy), §70 loss set-off, corporate
+actions, live holdings + tradebook reconciliation (crit-4 reconciled to the paise), a notional paper
+book that **auto-runs and self-certifies**, and four watch tabs (🎯 GO readiness · 🩺 position health ·
+🛡 systemic risk · realtime ticks). **Both repos green** (qalpha 169 tests, research 28; ruff/format/
+mypy/pytest all pass).
+
+**§14 scorecard: `1✅ 2✅ 3✅ 4✅ 5🟡 6⏳ 7✅ 8✅ 9🟡 10✅`.** No unbuilt engineering on the critical
+path. What remains is **calendar + real-world events**: crit-6 (the ~6-month forward paper run + ≥1
+volatility event, unskippable) · crit-4/5 (reconcile one real multi-lot/loss sell + one real corporate
+action — engines done & tested) · crit-9 (observe one *scheduled* cron firing; dispatch already proven
+green). The system **never auto-trades** — it advises; the human places the order.
+
+**Iron rules still hold:** no tuning to manufacture a GO · all four gates green before commit · money is
+`Decimal` · no look-ahead · keep the validated headline provably unchanged (new tax features are wired
+into the advisor/live layer, never the backtest engine). The research track lives in the separate
+`Q_Alpha_Research` repo and the product **never imports from it**.
+
+The dated working log below is the full history (every decision, fix, and dead-end) — skim it for *why*
+something is the way it is; trust this block + the README for *what is true now*.
+
+---
+
 ## What this is
 
 Q-Alpha — a quantitative wealth-management system for Indian (NSE/BSE) equities. The full system
