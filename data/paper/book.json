@@ -5,7 +5,8 @@
     "band": 0.1,
     "weighting": "shrink",
     "tax_aware": true,
-    "force_refresh": true
+    "force_refresh": true,
+    "rebalance_freq": "Y"
   },
   "portfolio": {
     "cash": "7335.38",
@@ -162,6 +163,11 @@
     {
       "date": "2026-06-18",
       "equity": "202600.13",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-19",
+      "equity": "203168.18",
       "cash": "7335.38"
     }
   ]
