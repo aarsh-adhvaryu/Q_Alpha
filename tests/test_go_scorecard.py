@@ -50,12 +50,12 @@ def test_full_pass_is_go() -> None:
     assert all(c.status == "green" for c in sc.criteria)
 
 
-def test_calm_market_blocks_go_on_vol_event() -> None:
-    # Everything else green, but no market stress event yet → cannot GO (hard gate).
-    sc = build_scorecard(_curve(_ramp(200_000, 212_000)), _benchmark_calm(), date(2026, 4, 10))
-    assert sc.verdict == "NOT YET"
+def test_calm_market_is_ready_pending_event() -> None:
+    # Everything else green (beats the calm +8% benchmark), only the awaitable vol-event missing → READY.
+    sc = build_scorecard(_curve(_ramp(200_000, 220_000)), _benchmark_calm(), date(2026, 4, 10))
+    assert sc.verdict == "READY"
     vol = next(c for c in sc.criteria if c.name == "Volatility event withstood")
-    assert vol.status == "yellow"
+    assert vol.status == "yellow" and vol.awaitable
 
 
 def test_trailing_benchmark_is_no_go() -> None:
