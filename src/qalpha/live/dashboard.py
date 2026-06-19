@@ -15,6 +15,7 @@ from decimal import Decimal
 import pandas as pd
 
 from qalpha.data.prices import PriceData
+from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.paper import DailyPlan, PaperBook, _prices_on
 
 
@@ -119,6 +120,16 @@ def _sparkline(values: list[float]) -> str:
     return "".join(blocks[min(7, int((v - lo) / span * 7))] for v in values)
 
 
+def go_readiness_markdown(book: PaperBook, benchmark: pd.Series, as_of: date) -> str:
+    """The deterministic GO scorecard for the forward paper run, as dashboard markdown.
+
+    A real multi-criterion verdict (not a countdown): it flips to GO the moment the evidence clears —
+    earlier than the 6-month target if it does, NO-GO if the strategy misbehaves live. See
+    :mod:`qalpha.live.go_scorecard`.
+    """
+    return build_scorecard(book.equity_curve, benchmark, as_of).render()
+
+
 def render_markdown(
     book: PaperBook,
     prices: PriceData,
@@ -200,6 +211,11 @@ def render_markdown(
             lines.append(f"| {p['date']} | ₹{eq:,.0f} | {r:+.2f}% |")
     else:
         lines.append("_Track record begins — one daily mark recorded so far._")
+    lines.append("")
+
+    lines.append("## GO readiness (criterion 6)")
+    lines.append("")
+    lines.append(go_readiness_markdown(book, benchmark, as_of))
     lines.append("")
     lines.append("---")
     lines.append(
