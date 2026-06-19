@@ -200,3 +200,54 @@ class FIFOLedger:
         if not open_lots:
             return None
         return (as_of - open_lots[0].acquisition_date).days
+
+    # ---- corporate actions (§14 criterion 5) -----------------------------
+
+    def apply_split(self, ticker: str, ratio: Decimal) -> Decimal:
+        """Stock split / consolidation: scale every lot's shares by ``ratio`` and its per-share price
+        by ``1/ratio``, so **total cost of acquisition is preserved** and the **acquisition date is
+        unchanged** (the split shares inherit the original holding period — the Indian tax treatment).
+
+        ``ratio`` = post-split shares per pre-split share (5.0 for a 5:1 split; 0.5 for a 1:2
+        consolidation). Returns the net change in shares held. Both ``quantity_original`` and
+        ``quantity_remaining`` scale, so partially-sold lots stay consistent; the fixed buy-side
+        expenses are untouched (they were ₹, not per-share), keeping ``total_buy_cost`` invariant.
+        """
+        if ratio <= 0:
+            raise ValueError("split ratio must be positive")
+        before = self.quantity_held(ticker)
+        for lot in self._lots.get(ticker, []):
+            lot.quantity_original *= ratio
+            lot.quantity_remaining *= ratio
+            lot.buy_price = lot.buy_price / ratio
+        return self.quantity_held(ticker) - before
+
+    def apply_bonus(self, ticker: str, ratio: Decimal, ex_date: date) -> Decimal:
+        """Bonus issue: add new lots of ``held × ratio`` shares at **₹0 cost**, dated ``ex_date``.
+
+        Indian tax treats bonus shares as acquired at **nil cost** with the **allotment date** as the
+        acquisition date (so their holding period starts fresh — they can be STCG even when the
+        originals are long-term). Originals are left untouched. One bonus lot per source lot, so each
+        keeps its sleeve (``pool``). ``ratio`` = bonus shares per held share (1.0 for 1:1). Returns the
+        bonus shares added.
+        """
+        if ratio <= 0:
+            raise ValueError("bonus ratio must be positive")
+        added = Decimal("0")
+        bonus_lots: list[TaxLot] = []
+        for lot in self.open_lots(ticker):
+            bonus_qty = lot.quantity_remaining * ratio
+            if bonus_qty > 0:
+                bonus_lots.append(
+                    TaxLot(
+                        ticker=ticker,
+                        acquisition_date=ex_date,
+                        quantity_original=bonus_qty,
+                        buy_price=Decimal("0"),
+                        pool=lot.pool,
+                    )
+                )
+                added += bonus_qty
+        for nl in bonus_lots:
+            self.add_lot(nl)
+        return added
