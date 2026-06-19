@@ -34,9 +34,11 @@ from qalpha.data.universe import Universe
 from qalpha.live.advisor import advise_raise_cash, advise_sell
 from qalpha.live.dashboard import (
     _benchmark_return_pct,
+    go_readiness_markdown,
     paper_freshness,
     systemic_risk_markdown,
 )
+from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
 from qalpha.live.paper import PaperBook, _prices_on
 from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
@@ -205,6 +207,21 @@ def _systemic_risk_view(benchmark: pd.Series, as_of: date) -> None:
     st.markdown(systemic_risk_markdown(benchmark, as_of))
 
 
+def _go_readiness_view(book: PaperBook, benchmark: pd.Series, as_of: date) -> None:
+    """The autonomous GO verdict — counts down on real criteria, flips to GO when the evidence clears."""
+    sc = build_scorecard(book.equity_curve, benchmark, as_of)
+    badge = {"GO": "🟢", "NO-GO": "🔴", "NOT YET": "🟡"}[sc.verdict]
+    st.header(f"{badge} Real-money readiness: {sc.verdict}")
+    st.caption(
+        "Deterministic — no AI, no human judgement. GO appears the moment every criterion clears "
+        "(earlier than 6 months if it does); a blocking failure shows NO-GO."
+    )
+    for c in sc.criteria:
+        st.markdown(f"{c.icon} **{c.name}** — {c.detail}")
+    st.divider()
+    st.markdown(go_readiness_markdown(book, benchmark, as_of))
+
+
 def main() -> None:
     st.set_page_config(page_title="Q-Alpha", page_icon="📈", layout="wide")
     _bridge_secrets()
@@ -217,7 +234,9 @@ def main() -> None:
 
     if st.sidebar.button("🔄 Reload data"):
         st.cache_resource.clear()
-    source = st.sidebar.radio("View", ["Paper book", "Live Zerodha", "🛡 Systemic risk"])
+    source = st.sidebar.radio(
+        "View", ["Paper book", "Live Zerodha", "🎯 GO readiness", "🛡 Systemic risk"]
+    )
     book, prices, universe, sector_of, benchmark = _load()
     cfg = Config()
     as_of = prices.dates[-1].date()
@@ -227,6 +246,10 @@ def main() -> None:
 
     if source == "🛡 Systemic risk":
         _systemic_risk_view(benchmark, as_of)
+        return
+
+    if source == "🎯 GO readiness":
+        _go_readiness_view(book, benchmark, as_of)
         return
 
     if source == "Paper book":
