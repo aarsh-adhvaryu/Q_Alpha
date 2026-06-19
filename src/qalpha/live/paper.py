@@ -41,6 +41,9 @@ class StrategyParams:
     weighting: str = "shrink"
     tax_aware: bool = True
     force_refresh: bool = True
+    rebalance_freq: str = (
+        "Y"  # pandas period alias; "Y" = annual (the validated low-turnover cadence)
+    )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -48,6 +51,7 @@ class StrategyParams:
             "weighting": self.weighting,
             "tax_aware": self.tax_aware,
             "force_refresh": self.force_refresh,
+            "rebalance_freq": self.rebalance_freq,
         }
 
     @classmethod
@@ -57,6 +61,9 @@ class StrategyParams:
             weighting=str(d["weighting"]),
             tax_aware=bool(d["tax_aware"]),
             force_refresh=bool(d["force_refresh"]),
+            # Default to annual for books written before the cadence gate existed (their force_refresh
+            # was firing daily — the bug this field fixes).
+            rebalance_freq=str(d.get("rebalance_freq", "Y")),
         )
 
 
@@ -189,6 +196,39 @@ class PaperBook:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(payload, indent=2) + "\n")
 
+    # ---- rebalance cadence (the live mirror of engine._rebalance_dates) ---
+
+    def _last_rebalance_date(self) -> date | None:
+        """The ``as_of`` of the most recent applied rebalance (incl. the first deployment), or None."""
+        for entry in reversed(self.history):
+            return date.fromisoformat(str(entry["as_of"]))
+        return None
+
+    def scheduled_rebalance_due(self, as_of: date) -> bool:
+        """True iff ``as_of`` falls in a later rebalance *period* than the last applied rebalance.
+
+        The backtest only evaluates a rebalance on the last trading day of each period
+        (:func:`engine._rebalance_dates`); ``force_refresh`` then always fires there. The paper cron
+        instead runs *every* day, so without this gate ``force_refresh`` would rebalance daily and
+        annihilate the validated low-turnover tax edge. This reproduces that cadence in an online,
+        forward form — a scheduled rebalance is due the first trading day we observe in a new period
+        (calendar-locked like the backtest; the month differs from Dec but the once-a-year frequency,
+        the property that was validated, is identical). No prior rebalance → first deployment is due.
+        """
+        last = self._last_rebalance_date()
+        if last is None:
+            return True
+        freq = self.params.rebalance_freq
+        return pd.Period(as_of, freq=freq) > pd.Period(last, freq=freq)
+
+    def next_rebalance_label(self) -> str:
+        """Human-readable date the next scheduled rebalance becomes due (for the 'holding' message)."""
+        last = self._last_rebalance_date()
+        if last is None:
+            return "now (first deployment)"
+        nxt = (pd.Period(last, freq=self.params.rebalance_freq) + 1).start_time.date()
+        return f"on/after {nxt.isoformat()}"
+
     # ---- the daily loop --------------------------------------------------
 
     def plan(
@@ -198,7 +238,25 @@ class PaperBook:
         sector_of: dict[str, str],
         as_of: date,
     ) -> DailyPlan:
-        """Compute the decision + proposed orders for ``as_of`` without touching the book."""
+        """Compute the decision + proposed orders for ``as_of`` without touching the book.
+
+        Between scheduled rebalance dates the core book is *held* (mirrors the backtest, which only
+        evaluates on its cadence) — so the daily mark never proposes churn. On a scheduled day it runs
+        the full funnel + §4.6 gate exactly as the backtest does.
+        """
+        if not self.scheduled_rebalance_due(as_of):
+            return DailyPlan(
+                as_of=as_of,
+                decision=RebalanceDecision(
+                    as_of,
+                    None,
+                    False,
+                    f"holding — next scheduled rebalance {self.next_rebalance_label()}",
+                    0,
+                ),
+                proposed_orders=[],
+                equity_before=self.portfolio.market_value(_prices_on(prices, as_of)),
+            )
         prices_dec = _prices_on(prices, as_of)
         lookback = self.cfg.factor.momentum_lookback_days + 90
         decision = decide_rebalance(

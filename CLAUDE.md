@@ -40,6 +40,78 @@ tilt — not pure index-tracking after all. No DB / broker / dashboard yet. CI g
 
 ## ⏯️ NEXT SESSION — START HERE (a brainstorm; build is paused here)
 
+**✅ HARDENING SPRINT (2026-06-19) — every *code-fixable* GO blocker closed; what remains is calendar
+time + a couple of real trades, not engineering.** The user's brief: "solve every problem so the only
+thing left is waiting 3–6 months." Five things shipped (both repos' four gates green — qalpha 144
+tests, research 23):
+- **Realtime tick-streaming — Stage-2 SOLVED, session-scoped** (`src/qalpha/live/ticker.py`,
+  `tests/test_ticker.py`). *Why:* Stage-2 looked impossible on Streamlit Cloud because a 24/7 socket
+  dies on idle-sleep — but realtime is only needed **while the user is watching**. So the `KiteTicker`
+  socket's lifetime is tied to the **browser session** (parked in `st.session_state`): on login a
+  background thread opens the socket, subscribes to the held instruments, and pushes ticks into a
+  thread-safe `TickStore` the fragment reads; when the session ends the thread stops. Wired into the
+  live view as a **best-effort overlay** — any failure (no creds/socket) silently falls back to the
+  30s `ltp()` polling, so it can never break the working page. `KiteTicker` is lazy-imported so the
+  pure `TickStore`/`resolve_tokens` are unit-tested. **Cannot be verified in the agent sandbox (no
+  socket/creds) → user verifies on the box** (established pattern). `🔴 streaming` vs `⏱ polling` badge.
+- **Hedge promoted to product as a READ-ONLY watch tab** ("🛡 Systemic risk" sidebar view;
+  `live/dashboard.py:systemic_risk_markdown` + tests). *Why:* the user reversed the earlier "keep the
+  hedge in research" decision and asked for "just a tab where I watch, no action, like the paper
+  money." Shows the systemic-risk level (🟢/🟠/🔴 from Nifty drawdown vs 1y high) and, when elevated,
+  notes the research-proven tax-free futures hedge "would suggest *considering* a hedge" — **purely
+  informational, never trades, no derivatives placed.** *How (iron rule intact):* uses the
+  **product-side** `deploy.py:market_weakness` signal, **does NOT import research** (`The product never
+  imports from here`). The richer cross-asset fragility gauge stays in research as the upgrade path.
+- **Fail-loud system-safety guards** (`live/safety.py`, `tests/test_safety.py`). *Why:* the user asked
+  to "remove all problems that can cause a loss from a system failure." Key insight: **the system never
+  auto-trades**, so a system failure can only lose money by **showing wrong data the user acts on**.
+  So the fix is fail-loud guards — `price_freshness_guard` (stale feed), `price_completeness_guard`
+  (a held name with no/zero quote that would be silently dropped from the tax/cash math),
+  `broker_session_guard` (dead/expired token) → `assess_advice_inputs`/`SafetyReport`. The dashboard
+  advisor is now **gated** (`dashboard_app.py:_advisor_with_safety`): bad inputs **withhold the
+  recommendation behind a banner** instead of computing on them.
+- **STCG/LTCG loss set-off** (`accounting/capital_gains.py:net_capital_gains_tax`/`net_tax_total`,
+  tests in `test_capital_gains.py`) — the real **criterion-4 correctness gap**. Full §70 rules: STCL
+  sets off against STCG first (20%) then LTCG (12.5%); LTCL against LTCG only; ₹1.25L exemption on the
+  net LTCG; carry-forward reported (8-AY carry not applied — Phase-0 deferral). *Why additive:* it is a
+  **pure FY-aggregation function wired ONLY into the advisor** (`advise_sell` now nets loss lots
+  against gain lots and shows the `setoff_saving`) **+ reconciliation — deliberately NOT into
+  `compute_sell`/the backtest engine**, so the validated 18.2% headline is **provably unchanged**.
+  Residual: cross-event FY netting + carry-forward still deferred.
+- **hedge.py open-episode tax bug FIXED** (research repo — see its CLAUDE.md). Optimistic edge case,
+  no published number affected, fixed for correctness + test.
+
+**✅ AUTONOMY SPRINT (2026-06-19, branch `hardening-sprint` then continued) — the paper run now executes
+itself and self-certifies.** User's brief: "I can't code every time / no AI / all from the dashboard /
+if it works in ~5 months it should provide a GO."
+- **Paper rebalance-cadence gate + auto-apply — a real bug fixed** (`live/paper.py`,
+  `scripts/paper.py`, `tests/test_paper.py`). The live path had **no rebalance schedule**:
+  `decide_rebalance` returns `execute=True` every call when `force_refresh` is on, and the daily cron
+  called it daily → the dashboard proposed a full ~40% rebalance EVERY day ("drift 41%" nag), and
+  auto-applying it would have churned the book daily and destroyed the validated low-turnover tax edge.
+  (The backtest avoids this only because its loop calls `decide_rebalance` *solely* on annual
+  `_rebalance_dates`.) Fix: `PaperBook.scheduled_rebalance_due(as_of)` = the online mirror of
+  `_rebalance_dates` — a rebalance is due only when `as_of` enters a new annual period; `plan()` HOLDS
+  between scheduled dates. `paper.py daily` now **auto-applies** a scheduled, actionable plan to the
+  NOTIONAL book (zero real money; the gate guarantees ~once a year, never daily) so criterion-6 tests
+  the live strategy, not a frozen June basket. **Engine untouched → headline unchanged.**
+- **Deterministic GO scorecard + "🎯 GO readiness" dashboard tab** (`live/go_scorecard.py`,
+  `tests/test_go_scorecard.py`, wired into `live/dashboard.py:go_readiness_markdown` + `dashboard_app`).
+  A real multi-criterion verdict (NOT a countdown), pure arithmetic, **no LLM/no judgement**: flips to
+  GO the moment the evidence clears (earlier than 6mo if it does), NO-GO if the strategy misbehaves.
+  Criteria, all must be 🟢: **track-length power floor** (~3mo, a floor not a date) · **volatility-event
+  withstood** (HARD gate — must survive a ≥10% Nifty pullback in-window; a calm curve can't earn a GO) ·
+  **forward vs benchmark net** (red = NO-GO) · **drawdown behaviour** within the backtest envelope ·
+  **data integrity** (dense marks). On the real book today: **NOT YET** (4/63 days, no vol event yet).
+
+**What's left after this sprint (NOT code — this is the honest GO picture):** (a) **calendar,
+irreducible** — criterion 6, the ~6-month forward paper run surviving ≥1 volatility event; (b) **one
+real-world event each (days, user-triggered)** — criterion 4 final hardening needs *one* real
+multi-lot/loss/LTCG sell + its Tax P&L to reconcile against the new set-off code; criterion 9 needs
+*one* observed scheduled-cron firing (dispatch ≠ cron); (c) **still open** — criterion 5 corporate
+actions (not started); (d) **data-blocked, off the critical path** — fundamentals/value factor + PIT
+Nifty-100/200 membership. **Nothing here is committed yet** (offer the user a branch per repo).
+
 **✅ DEPLOYED & LIVE (2026-06-18) — the dashboard runs on Streamlit Community Cloud, on the user's REAL
 Zerodha account, from his phone.** This is the headline state. AWS was abandoned mid-attempt (EC2
 security-group / SSH / IAM / status-checks = a beginner wall; `deploy/DEPLOY_AWS_BEGINNER.md` +
@@ -67,10 +139,12 @@ his real holding (INFY ×5)** with live `ltp()`.
   one-tap login; **no** compliant unattended token (auto-TOTP declined). **Streamlit gotcha seen:** after
   a code merge the app can hot-reload the page but keep an **old imported module** in memory → spurious
   `TypeError` → fix is **Manage app → Reboot** (forces a clean re-import).
-- **▶ STILL DEFERRED — Stage-2 true tick-streaming (KiteTicker WebSocket):** needs a *persistent
-  always-on* host (Streamlit Cloud sleeps when idle, which kills a background socket) → a small paid host
-  (Render/Railway) or the AWS box. Stage-1 auto-refresh is the near-realtime stand-in. Also deferred:
-  fundamentals/value factor; promoting the research fragility gauge as a read-only advisory.
+- **✅ SUPERSEDED (2026-06-19) — Stage-2 true tick-streaming BUILT, session-scoped** (`live/ticker.py`).
+  The old blocker ("Streamlit Cloud sleeps → kills a 24/7 socket") was dissolved by tying the
+  `KiteTicker` socket to the **browser session** (lives only while the tab is open — exactly when
+  realtime is needed), not to a 24/7 server. No paid always-on host required. **User verifies the live
+  socket on the box.** Also now done: the research fragility gauge promoted as a **read-only "🛡 Systemic
+  risk" advisory tab** (product-side signal, no research import). Still deferred: fundamentals/value factor.
 
 **Next session = brainstorming, not a queued build.** Everything below is current. **All PRs are
 merged** — the earlier "#10 then #11 awaiting manual merge" note is resolved: #10 `cleanups` merged,
@@ -133,9 +207,11 @@ paste fallback — no CLI), and **auto-refresh** (`st.fragment(run_every=30)` on
 near-realtime ltp). **Kite reality (locked):** the daily session needs a one-tap human login — there is
 NO compliant fully-unattended token (declined auto-TOTP as ToS-violating/insecure). **Can't verify a
 live server here** (sandbox blocks ports; no AWS/Kite creds) → AppTest-smoke + pure-fn tests only; user
-verifies on the box. **▶ STAGE 2 (deferred, needs the box + live token): true tick-streaming via Kite
-`KiteTicker` WebSocket** — a background thread → latest-LTP store → fragment reads it; staged because it
-can only be built+verified against the live socket. Stage-1 auto-refresh is the near-realtime stand-in.
+verifies on the box. **✅ STAGE 2 NOW BUILT (2026-06-19, `live/ticker.py`): true tick-streaming via Kite
+`KiteTicker`** — a background thread → thread-safe `TickStore` → fragment reads it, exactly as planned,
+but **session-scoped** (socket lives with the browser session, not a 24/7 host) so it needs no always-on
+server; best-effort overlay over the 30s polling. Built here, **verified on the box** (no live socket in
+the sandbox). Stage-1 auto-refresh is the pre-connect fallback.
 **HOSTING = LIGHTNING AI (user's choice, `deploy/DEPLOY_LIGHTNING.md`)** — we're already in a Lightning
 Studio (repo+data present), so the Streamlit plugin gives a 1-click public URL; **auto-start** = always-
 on, pay-per-use (idle-sleep + cold-start). Caveat: auto-start's idle-off is fine for Stage-1 auto-refresh
@@ -355,7 +431,7 @@ factors/      momentum, volatility, liquidity (0a) + value, quality, dividend (0
 alloc/        Ledoit-Wolf+EWMA covariance conditioning → scipy sector allocator → scipy optimizer
 accounting/   FIFO tax lots + Zerodha costs + capital-gains tax   (reused live; Portfolio.to_state persists a book)
 backtest/     walk-forward engine, portfolio accountant, baselines, metrics, report; decision.py = shared decide_rebalance
-live/         Kite auth + replay harness + paper book (PaperBook) + dashboard renderer + advisor.py (tax-smart layer, crit 10) + holdings.py (live reader) + tradebook.py (Console CSV → dated FIFO, crit 4)
+live/         Kite auth + replay harness + paper book (PaperBook) + dashboard renderer (+ systemic_risk_markdown, read-only hedge watch) + advisor.py (tax-smart layer, crit 10; now nets §70 loss set-off) + holdings.py (live reader) + tradebook.py (Console CSV → dated FIFO, crit 4) + taxpnl.py (Tax P&L reconcile) + safety.py (fail-loud staleness/data/session guards) + ticker.py (session-scoped KiteTicker realtime stream)
 scripts/      run_phase0, paper, advisor (CLI), dashboard_app (Streamlit, `dashboard` extra), build_nifty_universe, experiments
 config.py     every tunable parameter (Q_alpha.md §16) in one place
               (the research track — QUBO/QAOA §15 + planned regime/agentic — lives in the separate Q_Alpha_Research repo)
@@ -384,8 +460,10 @@ Status: **1 ✅ walk-forward validated (low-turnover 3-factor PIT beats TRI in 9
 TRI+1/N in all 3 independent sub-periods, best downside; the *thesis* holds OOS though not a magic
 frequency — see Phase A) |
 2 ✅ | 3 ✅ PIT universe built (Phase A) | 4 ✅ **reconciled to the paise (2026-06-18)** — real SELL +
-Tax P&L parser (`taxpnl.py`); gross == Zerodha STCG ₹25.25 (`reports/crit4_reconciliation.md`). Harden
-later with a multi-lot/LTCG/loss case + LTCG loss set-off |
+Tax P&L parser (`taxpnl.py`); gross == Zerodha STCG ₹25.25 (`reports/crit4_reconciliation.md`).
+**§70 loss set-off now implemented (2026-06-19, `net_capital_gains_tax`, advisor/reconcile only — not
+the engine, headline preserved).** Remaining hardening needs a *real* multi-lot/LTCG/loss sell + Tax
+P&L to reconcile the new netting; 8-AY carry-forward still deferred |
 5 ❌ corp-actions (Phase 1) | 6 ⏳ paper clock STARTED 2026-06-12, accumulating (3–6 mo, unskippable) |
 7 ✅ | 8 ✅ (dynamic rule) | 9 🟡 pipeline built, needs the live run | 10 ✅ deterministic tax-smart
 advisor + live dashboard built (`advisor.py`, `dashboard_app.py`)**. Phase A cleared survivorship (3)
@@ -467,8 +545,11 @@ gated by a mandatory paper-trading run.
 - **Tax-engine validation (criterion 4) — ✅ DONE (2026-06-18).** FIFO engine reconciled vs the real
   **Zerodha Console → Tax P&L** export: gross == ₹25.25 STCG to the paise (`taxpnl.py`,
   `scripts/reconcile_taxpnl.py`, `reports/crit4_reconciliation.md`). The first sell was a single
-  STCG gain (no loss), so **LTCG loss set-off** (still unimplemented, documented Phase-0 deferral)
-  wasn't exercised — fix it before a sell that realizes a loss, and re-reconcile a multi-lot/LTCG case.
+  STCG gain (no loss), so loss set-off wasn't exercised. **✅ §70 loss set-off now IMPLEMENTED
+  (2026-06-19, `net_capital_gains_tax`/`net_tax_total`):** STCL→STCG then LTCG, LTCL→LTCG only,
+  exemption on net, carry-forward reported (8-AY carry not applied). Additive — wired into the advisor
+  (`advise_sell` nets losses + shows `setoff_saving`) + reconcile only, NOT the backtest engine, so the
+  headline is unchanged. **Still needs a *real* multi-lot/LTCG/loss sell + Tax P&L to reconcile the netting.**
 - **Risk-tolerance reckoning.** Backtest the full **50/25/25** pool structure (not 100% core) to see
   the blended drawdown, then confirm the real tolerance (long-only equity ≈ -30% in crashes; a hard
   ≤20% implies a hedging overlay = a v2 feature).

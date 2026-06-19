@@ -32,9 +32,16 @@ from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.live.advisor import advise_raise_cash, advise_sell
-from qalpha.live.dashboard import _benchmark_return_pct, paper_freshness
+from qalpha.live.dashboard import (
+    _benchmark_return_pct,
+    go_readiness_markdown,
+    paper_freshness,
+    systemic_risk_markdown,
+)
+from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
 from qalpha.live.paper import PaperBook, _prices_on
+from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
 
 
 def _bridge_secrets() -> None:
@@ -163,6 +170,58 @@ def _paper_status_panel(book: PaperBook) -> None:
     (st.success if not fresh.is_stale else st.warning)(f"📊 Daily paper-run — {fresh.note}")
 
 
+def _advisor_with_safety(
+    portfolio: Portfolio,
+    prices: PriceData,
+    prices_dec: dict[str, Decimal],
+    as_of: date,
+    *,
+    live_session: bool | None = None,
+) -> None:
+    """Run the input-integrity guards, then either withhold advice (loud banner) or show the tabs.
+
+    The system never auto-trades, so the only loss vector is acting on wrong displayed data — so the
+    advisor is **gated** on the safety report: a stale feed / missing quote / dead session blocks the
+    recommendation rather than quietly computing it on bad inputs. ``live_session`` is None for the
+    paper book (no broker) and the live session's validity for the Zerodha view.
+    """
+    session = broker_session_guard(live_session) if live_session is not None else None
+    report: SafetyReport = assess_advice_inputs(
+        prices, prices_dec, sorted(portfolio.positions()), as_of, session=session
+    )
+    st.subheader("Ask the advisor")
+    if report.warnings:
+        st.warning(report.render())
+    if not report.safe_to_advise:
+        st.error(report.render())
+        st.caption(
+            "Advice is withheld until the inputs are trustworthy — fix the above, then reload."
+        )
+        return
+    st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
+    _advisor_tabs(portfolio, prices_dec, as_of)
+
+
+def _systemic_risk_view(benchmark: pd.Series, as_of: date) -> None:
+    """Read-only systemic-risk watch — like the paper book, a record you watch; it never acts."""
+    st.markdown(systemic_risk_markdown(benchmark, as_of))
+
+
+def _go_readiness_view(book: PaperBook, benchmark: pd.Series, as_of: date) -> None:
+    """The autonomous GO verdict — counts down on real criteria, flips to GO when the evidence clears."""
+    sc = build_scorecard(book.equity_curve, benchmark, as_of)
+    badge = {"GO": "🟢", "NO-GO": "🔴", "NOT YET": "🟡"}[sc.verdict]
+    st.header(f"{badge} Real-money readiness: {sc.verdict}")
+    st.caption(
+        "Deterministic — no AI, no human judgement. GO appears the moment every criterion clears "
+        "(earlier than 6 months if it does); a blocking failure shows NO-GO."
+    )
+    for c in sc.criteria:
+        st.markdown(f"{c.icon} **{c.name}** — {c.detail}")
+    st.divider()
+    st.markdown(go_readiness_markdown(book, benchmark, as_of))
+
+
 def main() -> None:
     st.set_page_config(page_title="Q-Alpha", page_icon="📈", layout="wide")
     _bridge_secrets()
@@ -175,13 +234,23 @@ def main() -> None:
 
     if st.sidebar.button("🔄 Reload data"):
         st.cache_resource.clear()
-    source = st.sidebar.radio("Data source", ["Paper book", "Live Zerodha"])
+    source = st.sidebar.radio(
+        "View", ["Paper book", "Live Zerodha", "🎯 GO readiness", "🛡 Systemic risk"]
+    )
     book, prices, universe, sector_of, benchmark = _load()
     cfg = Config()
     as_of = prices.dates[-1].date()
 
     st.title("Q-Alpha — Tax-Smart Portfolio Advisor")
     _paper_status_panel(book)
+
+    if source == "🛡 Systemic risk":
+        _systemic_risk_view(benchmark, as_of)
+        return
+
+    if source == "🎯 GO readiness":
+        _go_readiness_view(book, benchmark, as_of)
+        return
 
     if source == "Paper book":
         st.caption(
@@ -190,9 +259,7 @@ def main() -> None:
         )
         _paper_overview(book, prices, benchmark, universe, sector_of, as_of)
         st.divider()
-        st.subheader("Ask the advisor")
-        st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
-        _advisor_tabs(book.portfolio, _prices_on(prices, as_of), as_of)
+        _advisor_with_safety(book.portfolio, prices, _prices_on(prices, as_of), as_of)
         return
 
     # Live source: gate on a fresh Kite session, then auto-refresh the whole live view (near-realtime).
@@ -205,16 +272,54 @@ def main() -> None:
         live = _load_live(cfg, as_of)
         if live is None:
             return
-        st.caption(
-            f"Live Zerodha · refreshed {datetime.now():%H:%M:%S} · read-only — this page never trades."
-        )
         portfolio, prices_dec = _live_section(live, cfg)
+        # Session-scoped realtime ticks (true KiteTicker push while this tab is open); the 30s
+        # polling above is the fallback. Fully best-effort — any failure degrades to polled prices.
+        prices_dec, stream_status = _streamed_prices(prices_dec, sorted(portfolio.positions()))
+        st.caption(
+            f"Live Zerodha · {stream_status} · refreshed {datetime.now():%H:%M:%S} · "
+            "read-only — this page never trades."
+        )
         st.divider()
-        st.subheader("Ask the advisor")
-        st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
-        _advisor_tabs(portfolio, prices_dec, as_of)
+        _advisor_with_safety(portfolio, prices, prices_dec, as_of, live_session=True)
 
     _live_view()
+
+
+def _streamed_prices(
+    prices_dec: dict[str, Decimal], symbols_ns: list[str]
+) -> tuple[dict[str, Decimal], str]:
+    """Overlay session-scoped realtime LTPs onto the polled prices; fall back silently if the socket
+    isn't up. The ``RealtimeTicker`` is parked in ``st.session_state`` so it lives exactly as long as
+    the browser session (started once, torn down when the session ends)."""
+    from qalpha.backtest.portfolio import to_decimal_price
+    from qalpha.live.ticker import RealtimeTicker, resolve_tokens
+
+    try:
+        if "rt_ticker" not in st.session_state:
+            from qalpha.live.auth import get_access_token
+            from qalpha.live.client import authenticated_kite
+            from qalpha.live.credentials import load_credentials
+
+            bare_to_ns = {s.split(".")[0]: s for s in symbols_ns}
+            tokens = resolve_tokens(authenticated_kite(), list(bare_to_ns))
+            api_key = load_credentials(require_secret=False).api_key
+            rt = RealtimeTicker(api_key, get_access_token(), list(tokens.values()))
+            rt.start()
+            st.session_state["rt_ticker"] = rt
+            st.session_state["rt_token_to_ns"] = {t: bare_to_ns[b] for b, t in tokens.items()}
+
+        rt = st.session_state["rt_ticker"]
+        token_to_ns = st.session_state["rt_token_to_ns"]
+        merged = dict(prices_dec)
+        for token, px in rt.store.snapshot().items():
+            ns = token_to_ns.get(token)
+            if ns and px > 0:
+                merged[ns] = to_decimal_price(px)
+        status = "🔴 streaming ticks" if rt.store.connected else "⏱ connecting (polling)"
+        return merged, status
+    except Exception:
+        return prices_dec, "⏱ polling"
 
 
 def _paper_overview(
