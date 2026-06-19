@@ -82,3 +82,47 @@ def test_unmatched_sell_warns_not_crashes() -> None:
     assert result.portfolio.positions() == {}
     assert len(result.warnings) == 1
     assert "ZZZ.NS" in result.warnings[0]
+
+
+def test_replay_applies_corporate_actions_in_timeline() -> None:
+    """Crit-5 wiring: a held name that splits is reshaped at the ex-date, so the later sell matches."""
+    from qalpha.accounting.corporate_actions import CorporateAction
+    from qalpha.live.tradebook import TradebookTrade
+
+    cfg = Config()
+    trades = [
+        TradebookTrade(date(2020, 1, 1), "X.NS", Side.BUY, Decimal("10"), Decimal("1000")),
+        TradebookTrade(date(2023, 7, 1), "X.NS", Side.SELL, Decimal("20"), Decimal("600")),
+    ]
+    # Without the split, selling 20 when only 10 were bought can't match → a warning.
+    assert replay_tradebook(trades, cfg).warnings
+
+    # With a 2:1 split interleaved at its ex-date, 10 → 20 shares, so the sell matches cleanly.
+    actions = [CorporateAction.split("X.NS", date(2023, 1, 1), Decimal("2"))]
+    res = replay_tradebook(trades, cfg, corporate_actions=actions)
+    assert res.warnings == []
+    assert res.portfolio.positions() == {}  # all 20 (post-split) shares sold
+    assert res.realized_gains and all(g.gain_type == "LTCG" for g in res.realized_gains)
+
+
+def test_setoff_reconciliation_through_replay() -> None:
+    """Crit-4 hardening: a multi-lot LTCG-gain + STCL-loss case nets correctly through the pipeline."""
+    from qalpha.accounting.capital_gains import net_tax_total
+    from qalpha.live.tradebook import TradebookTrade
+
+    cfg = Config()
+    trades = [
+        TradebookTrade(date(2020, 1, 1), "A.NS", Side.BUY, Decimal("100"), Decimal("1000")),
+        TradebookTrade(date(2024, 6, 1), "B.NS", Side.BUY, Decimal("100"), Decimal("1000")),
+        TradebookTrade(
+            date(2024, 7, 1), "A.NS", Side.SELL, Decimal("100"), Decimal("3000")
+        ),  # LTCG
+        TradebookTrade(date(2024, 7, 1), "B.NS", Side.SELL, Decimal("100"), Decimal("500")),  # STCL
+    ]
+    res = replay_tradebook(trades, cfg)
+    gross = res.realized_tax  # per-lot, no set-off (a loss simply pays ₹0)
+    net = net_tax_total(res.realized_gains, cfg.tax)  # §70: STCL offsets the LTCG first
+    assert any(g.gain > 0 for g in res.realized_gains)  # the LTCG gain
+    assert any(g.gain < 0 for g in res.realized_gains)  # the STCL loss
+    assert net < gross  # the loss set-off saved tax
+    assert net > 0  # LTCG above the ₹1.25L exemption is still taxed
