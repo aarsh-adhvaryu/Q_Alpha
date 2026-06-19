@@ -81,6 +81,29 @@ tests, research 23):
 - **hedge.py open-episode tax bug FIXED** (research repo — see its CLAUDE.md). Optimistic edge case,
   no published number affected, fixed for correctness + test.
 
+**✅ AUTONOMY SPRINT (2026-06-19, branch `hardening-sprint` then continued) — the paper run now executes
+itself and self-certifies.** User's brief: "I can't code every time / no AI / all from the dashboard /
+if it works in ~5 months it should provide a GO."
+- **Paper rebalance-cadence gate + auto-apply — a real bug fixed** (`live/paper.py`,
+  `scripts/paper.py`, `tests/test_paper.py`). The live path had **no rebalance schedule**:
+  `decide_rebalance` returns `execute=True` every call when `force_refresh` is on, and the daily cron
+  called it daily → the dashboard proposed a full ~40% rebalance EVERY day ("drift 41%" nag), and
+  auto-applying it would have churned the book daily and destroyed the validated low-turnover tax edge.
+  (The backtest avoids this only because its loop calls `decide_rebalance` *solely* on annual
+  `_rebalance_dates`.) Fix: `PaperBook.scheduled_rebalance_due(as_of)` = the online mirror of
+  `_rebalance_dates` — a rebalance is due only when `as_of` enters a new annual period; `plan()` HOLDS
+  between scheduled dates. `paper.py daily` now **auto-applies** a scheduled, actionable plan to the
+  NOTIONAL book (zero real money; the gate guarantees ~once a year, never daily) so criterion-6 tests
+  the live strategy, not a frozen June basket. **Engine untouched → headline unchanged.**
+- **Deterministic GO scorecard + "🎯 GO readiness" dashboard tab** (`live/go_scorecard.py`,
+  `tests/test_go_scorecard.py`, wired into `live/dashboard.py:go_readiness_markdown` + `dashboard_app`).
+  A real multi-criterion verdict (NOT a countdown), pure arithmetic, **no LLM/no judgement**: flips to
+  GO the moment the evidence clears (earlier than 6mo if it does), NO-GO if the strategy misbehaves.
+  Criteria, all must be 🟢: **track-length power floor** (~3mo, a floor not a date) · **volatility-event
+  withstood** (HARD gate — must survive a ≥10% Nifty pullback in-window; a calm curve can't earn a GO) ·
+  **forward vs benchmark net** (red = NO-GO) · **drawdown behaviour** within the backtest envelope ·
+  **data integrity** (dense marks). On the real book today: **NOT YET** (4/63 days, no vol event yet).
+
 **What's left after this sprint (NOT code — this is the honest GO picture):** (a) **calendar,
 irreducible** — criterion 6, the ~6-month forward paper run surviving ≥1 volatility event; (b) **one
 real-world event each (days, user-triggered)** — criterion 4 final hardening needs *one* real
