@@ -6,6 +6,7 @@ must commit exactly the planned orders.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -96,6 +97,38 @@ def test_second_plan_is_not_first_deployment(tmp_path: Path) -> None:
     assert reloaded.last_target is not None
     next_plan = reloaded.plan(prices, universe, sector_of, as_of)
     assert "first deployment" not in next_plan.decision.reason
+
+
+def test_scheduled_rebalance_due_gates_by_period(tmp_path: Path) -> None:
+    """The cadence gate: force_refresh must fire only when a new annual period begins, not daily."""
+    book, prices, universe, sector_of, as_of = _setup(tmp_path)
+    assert book.scheduled_rebalance_due(as_of) is True  # no history → first deployment is due
+    book.apply(prices, book.plan(prices, universe, sector_of, as_of))
+    # Same annual period as the deployment → NOT due (the bug fix: no daily churn).
+    assert book.scheduled_rebalance_due(as_of) is False
+    # A date in the next calendar year → a scheduled rebalance is due again.
+    assert book.scheduled_rebalance_due(date(as_of.year + 1, 1, 2)) is True
+
+
+def test_off_cadence_plan_holds_without_churn(tmp_path: Path) -> None:
+    """Between scheduled dates the plan must HOLD — no proposed orders, no '41% drift' nag."""
+    book, prices, universe, sector_of, as_of = _setup(tmp_path)
+    book.apply(prices, book.plan(prices, universe, sector_of, as_of))
+    held = book.plan(prices, universe, sector_of, as_of)  # same period → must hold
+    assert not held.has_orders
+    assert not held.decision.actionable
+    assert "holding" in held.decision.reason
+
+
+def test_rebalance_freq_persists_and_old_books_default_to_annual(tmp_path: Path) -> None:
+    book, *_ = _setup(tmp_path)
+    assert book.params.rebalance_freq == "Y"
+    assert PaperBook.load(book.path, Config()).params.rebalance_freq == "Y"
+    # A book.json written before the cadence gate (no rebalance_freq key) must load as annual.
+    raw = json.loads(book.path.read_text())
+    del raw["params"]["rebalance_freq"]
+    book.path.write_text(json.dumps(raw))
+    assert PaperBook.load(book.path, Config()).params.rebalance_freq == "Y"
 
 
 def test_mark_records_equity_and_persists(tmp_path: Path) -> None:

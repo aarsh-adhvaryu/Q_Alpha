@@ -13,15 +13,17 @@ encoded here:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from itertools import groupby
 
 from qalpha.accounting.tax_lots import LotConsumption
 from qalpha.config import TaxConfig
 
 _PAISE = Decimal("0.01")
+_ZERO = Decimal("0.00")
 
 
 def _paise(value: Decimal) -> Decimal:
@@ -163,3 +165,119 @@ class CapitalGainsCalculator:
             return Decimal("1.0")
         days_remaining = Decimal(365 - oldest_lot_age_days)
         return Decimal("1.0") + (Decimal("2.0") * days_remaining / Decimal("35"))
+
+
+# ---- FY loss set-off (Indian §70/§74) -----------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class NetCapitalGains:
+    """A financial year's capital-gains tax *after* intra-year loss set-off + the LTCG exemption.
+
+    Gross :class:`RealizedGain` records tax each lot in isolation (a loss → ₹0, never offsetting a
+    gain). The legally-correct figure nets losses against gains within the FY, so this is the truth
+    a real Tax P&L reconciles to and the number the advisor should quote.
+    """
+
+    fy: int
+    stcg: Decimal  # gross short-term gains (positive lots)
+    stcl: Decimal  # short-term losses, as a positive magnitude
+    ltcg: Decimal  # gross long-term gains
+    ltcl: Decimal  # long-term losses, as a positive magnitude
+    taxable_stcg: Decimal  # net STCG after STCL set-off
+    taxable_ltcg: Decimal  # net LTCG after loss set-off AND exemption
+    ltcg_exempted: Decimal  # LTCG sheltered by the ₹1.25L FY exemption
+    stcg_tax: Decimal
+    ltcg_tax: Decimal
+    total_tax: Decimal
+    carryforward_stcl: Decimal  # STCL left unused this FY (carry forward up to 8 AYs — not applied)
+    carryforward_ltcl: Decimal  # LTCL left unused this FY (sets off only future LTCG)
+
+
+def net_capital_gains_tax(
+    gains: Iterable[RealizedGain],
+    cfg: TaxConfig,
+    *,
+    exemption_used_by_fy: Mapping[int, Decimal] | None = None,
+) -> list[NetCapitalGains]:
+    """Legally-correct per-FY capital-gains tax with intra-year loss set-off (one row per FY).
+
+    Indian set-off rules (Income-tax Act §70/§71, intra-year):
+
+    * **Short-term capital loss (STCL)** sets off against STCG **and** LTCG.
+    * **Long-term capital loss (LTCL)** sets off against **only** LTCG.
+
+    To minimise tax, STCL is applied to STCG first (taxed 20%) before spilling to LTCG (12.5%); LTCL
+    then offsets any remaining LTCG; the ₹1.25L FY exemption shelters the net LTCG. ``exemption_used_
+    by_fy`` is the LTCG already sheltered earlier in the same FY (so an incremental advisor sell uses
+    only the *remaining* shelter). Losses unused this FY are reported as carry-forward but **not**
+    carried across years here (that 8-AY mechanism is a Phase-0 deferral, like tax-loss harvesting).
+    """
+    used_by_fy = exemption_used_by_fy or {}
+    rows: list[NetCapitalGains] = []
+    keyed = sorted(gains, key=lambda g: financial_year(g.sell_date))
+    for fy, group in groupby(keyed, key=lambda g: financial_year(g.sell_date)):
+        items = list(group)
+        stcg = sum((g.gain for g in items if not _is_ltcg(g) and g.gain > 0), _ZERO)
+        stcl = -sum((g.gain for g in items if not _is_ltcg(g) and g.gain < 0), _ZERO)
+        ltcg = sum((g.gain for g in items if _is_ltcg(g) and g.gain > 0), _ZERO)
+        ltcl = -sum((g.gain for g in items if _is_ltcg(g) and g.gain < 0), _ZERO)
+
+        # STCL → STCG first (higher rate), then the remainder → LTCG.
+        s_used = min(stcl, stcg)
+        net_stcg = stcg - s_used
+        stcl_left = stcl - s_used
+        s_to_ltcg = min(stcl_left, ltcg)
+        ltcg_after_stcl = ltcg - s_to_ltcg
+        stcl_left -= s_to_ltcg
+
+        # LTCL → only LTCG.
+        l_used = min(ltcl, ltcg_after_stcl)
+        net_ltcg = ltcg_after_stcl - l_used
+        ltcl_left = ltcl - l_used
+
+        # ₹1.25L exemption shelters the net LTCG (after any shelter already used this FY).
+        remaining_exemption = max(_ZERO, cfg.ltcg_annual_exemption - used_by_fy.get(fy, _ZERO))
+        exempted = min(net_ltcg, remaining_exemption)
+        taxable_ltcg = net_ltcg - exempted
+
+        stcg_tax = _paise(net_stcg * cfg.stcg_rate)
+        ltcg_tax = _paise(taxable_ltcg * cfg.ltcg_rate)
+        rows.append(
+            NetCapitalGains(
+                fy=fy,
+                stcg=stcg,
+                stcl=stcl,
+                ltcg=ltcg,
+                ltcl=ltcl,
+                taxable_stcg=net_stcg,
+                taxable_ltcg=taxable_ltcg,
+                ltcg_exempted=exempted,
+                stcg_tax=stcg_tax,
+                ltcg_tax=ltcg_tax,
+                total_tax=stcg_tax + ltcg_tax,
+                carryforward_stcl=stcl_left,
+                carryforward_ltcl=ltcl_left,
+            )
+        )
+    return rows
+
+
+def net_tax_total(
+    gains: Iterable[RealizedGain],
+    cfg: TaxConfig,
+    *,
+    exemption_used_by_fy: Mapping[int, Decimal] | None = None,
+) -> Decimal:
+    """Total capital-gains tax across all FYs after loss set-off (sum of :func:`net_capital_gains_tax`)."""
+    return sum(
+        (
+            r.total_tax
+            for r in net_capital_gains_tax(gains, cfg, exemption_used_by_fy=exemption_used_by_fy)
+        ),
+        _ZERO,
+    )
+
+
+def _is_ltcg(g: RealizedGain) -> bool:
+    return g.gain_type == "LTCG"
