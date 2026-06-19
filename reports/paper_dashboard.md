@@ -1,6 +1,6 @@
 # Q-Alpha — Paper-Trading Dashboard
 
-_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-06-19** · generated 2026-06-19 10:30 UTC._
+_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-06-19** · generated 2026-06-19 15:46 UTC._
 
 ## At a glance
 
