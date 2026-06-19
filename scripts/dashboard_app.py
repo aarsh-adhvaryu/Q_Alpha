@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -299,11 +299,17 @@ def main() -> None:
         portfolio, prices_dec = _live_section(live, cfg)
         # Session-scoped realtime ticks (true KiteTicker push while this tab is open); the 30s
         # polling above is the fallback. Fully best-effort — any failure degrades to polled prices.
-        prices_dec, stream_status = _streamed_prices(prices_dec, sorted(portfolio.positions()))
+        prices_dec, stream_label = _streamed_prices(prices_dec, sorted(portfolio.positions()))
         st.caption(
-            f"Live Zerodha · {stream_status} · refreshed {datetime.now():%H:%M:%S} · "
+            f"Live Zerodha · {stream_label} · page rendered {datetime.now():%H:%M:%S} · "
             "read-only — this page never trades."
         )
+        if auto:
+            st.caption(
+                "↻ Auto-refreshes every 30 s **while this tab is open and focused**. If the rendered "
+                "time above stops advancing, the tab paused (Streamlit idle/backgrounded) — tap the "
+                "page or reload to resume live updates."
+            )
         st.divider()
         _advisor_with_safety(portfolio, prices, prices_dec, as_of, live_session=True)
 
@@ -317,7 +323,7 @@ def _streamed_prices(
     isn't up. The ``RealtimeTicker`` is parked in ``st.session_state`` so it lives exactly as long as
     the browser session (started once, torn down when the session ends)."""
     from qalpha.backtest.portfolio import to_decimal_price
-    from qalpha.live.ticker import RealtimeTicker, resolve_tokens
+    from qalpha.live.ticker import RealtimeTicker, resolve_tokens, stream_status
 
     try:
         if "rt_ticker" not in st.session_state:
@@ -340,8 +346,8 @@ def _streamed_prices(
             ns = token_to_ns.get(token)
             if ns and px > 0:
                 merged[ns] = to_decimal_price(px)
-        status = "🔴 streaming ticks" if rt.store.connected else "⏱ connecting (polling)"
-        return merged, status
+        label, _live = stream_status(rt.store.connected, rt.store.last_update(), datetime.now(UTC))
+        return merged, label
     except Exception:
         return prices_dec, "⏱ polling"
 

@@ -58,6 +58,36 @@ class TickStore:
             return max(self._updated.values()) if self._updated else None
 
 
+def _ago(seconds: float) -> str:
+    if seconds < 60:
+        return f"{int(seconds)}s ago"
+    if seconds < 3600:
+        return f"{int(seconds / 60)}m ago"
+    return f"{seconds / 3600:.1f}h ago"
+
+
+def stream_status(
+    connected: bool,
+    last_update: datetime | None,
+    now: datetime,
+    *,
+    max_age_s: float = 60.0,
+) -> tuple[str, bool]:
+    """Honest badge for the realtime stream — only claims 'streaming' when ticks are genuinely fresh.
+
+    A connected socket whose newest tick is older than ``max_age_s`` is reported as **stalled** (the
+    page is then served off the 30 s polling fallback), so the badge can never show '🔴 streaming' on
+    stale data — the exact failure where the page froze mid-session and the timestamp stopped moving.
+    Returns ``(label, is_live)``. Pure → unit-tested without a socket.
+    """
+    if not connected or last_update is None:
+        return "⏱ polling (no live tick stream)", False
+    age = (now - last_update).total_seconds()
+    if age <= max_age_s:
+        return f"🔴 streaming · last tick {_ago(age)}", True
+    return f"⚠️ stream stalled · last tick {_ago(age)} → using 30 s polling", False
+
+
 class RealtimeTicker:
     """Manages one ``KiteTicker`` socket + background thread, pushing ticks into a :class:`TickStore`.
 
