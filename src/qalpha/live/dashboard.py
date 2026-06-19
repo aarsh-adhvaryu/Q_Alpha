@@ -58,6 +58,49 @@ def paper_freshness(book: PaperBook, today: date) -> PaperFreshness:
     return PaperFreshness(last, stale_days, is_stale, note)
 
 
+def systemic_risk_markdown(index_close: pd.Series, as_of: date) -> str:
+    """Read-only 'systemic risk' watch panel — informational only, the system takes no action.
+
+    Reports the product-side :func:`~qalpha.live.deploy.market_weakness` reading (Nifty drawdown from
+    its rolling 1-year high) as a normal/elevated/deep risk gauge, and — when elevated — notes that
+    the research-validated **tax-free short-futures hedge overlay** would suggest *considering* a
+    hedge. This is the lightweight product signal; the richer cross-asset fragility gauge lives in
+    the research repo. Nothing here trades, sells, or hedges — it is a dashboard advisory, like the
+    paper book is a notional record.
+    """
+    from qalpha.live.deploy import market_weakness  # local import: avoids a package import cycle
+
+    w = market_weakness(index_close, as_of)
+    badge = {"normal": "🟢 NORMAL", "elevated": "🟠 ELEVATED", "deep": "🔴 DEEP STRESS"}[w.level]
+    lines = [
+        "## 🛡 Systemic-risk watch (read-only)",
+        "",
+        f"**{badge}** — Nifty is **{w.drawdown * 100:+.1f}%** from its 1-year high (as of {as_of}).",
+        "",
+    ]
+    if w.level == "normal":
+        lines.append(
+            "- No elevated systemic stress on this signal. No hedge indicated. Keep investing "
+            "steadily; route fresh capital tax-free as usual."
+        )
+    else:
+        lines.append(
+            "- **Stress elevated.** The research-validated tax-free **short index-futures hedge** "
+            "(keep the shares, nullify the exposure — proven to cut COVID drawdown −25→−10% on the "
+            "book) would suggest *considering* a hedge here."
+        )
+        lines.append(
+            "- This is **informational only** — the product places no derivatives trade. Executing a "
+            "futures hedge is a separate, manually-operated decision (F&O account + real-cost review)."
+        )
+    lines += [
+        "",
+        "_Lightweight product signal (index drawdown). The richer cross-asset fragility gauge "
+        "(vol·credit·FX·correlation) lives in the research repo. This panel never trades._",
+    ]
+    return "\n".join(lines)
+
+
 def _benchmark_return_pct(benchmark: pd.Series, start: date, as_of: date) -> float | None:
     idx = pd.DatetimeIndex(benchmark.index)
     window = benchmark[(idx >= pd.Timestamp(start)) & (idx <= pd.Timestamp(as_of))]
