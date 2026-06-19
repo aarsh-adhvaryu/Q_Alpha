@@ -1,16 +1,16 @@
 # Q-Alpha — Paper-Trading Dashboard
 
-_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-06-18** · generated 2026-06-18 15:57 UTC._
+_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-06-19** · generated 2026-06-19 10:30 UTC._
 
 ## At a glance
 
 | | |
 |---|---|
-| Started | 2026-06-12 (6 days) |
+| Started | 2026-06-12 (7 days) |
 | Notional capital | ₹200,000 |
-| Equity (marked) | ₹202,600 |
-| Return since start | **+1.30%** |
-| Nifty 50 TRI (same window) | +2.28% |
+| Equity (marked) | ₹203,168 |
+| Return since start | **+1.58%** |
+| Nifty 50 TRI (same window) | +1.90% |
 | Cash | ₹7,335 |
 | Realized tax to date | ₹0.00 |
 | Rebalances | 1 |
@@ -18,30 +18,21 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 
 ## Today's recommendation
 
-⚠️ **ACTION NEEDED — scheduled refresh (force_refresh); drift 41.6%**
-
-| Side | Ticker | Qty | Price |
-|---|---|---|---|
-| SELL | ASIANPAINT.NS | 14 | ₹2755.00 |
-| SELL | BEL.NS | 98 | ₹428.60 |
-| BUY | LT.NS | 9 | ₹4190.00 |
-| BUY | NESTLEIND.NS | 29 | ₹1400.40 |
-
-_Approve with:_ `uv run python scripts/paper.py apply`
+✅ **HOLD** — holding — next scheduled rebalance on/after 2027-01-01. No orders today.
 
 ## Holdings
 
 | Ticker | Qty | Price | Value | Weight |
 |---|---|---|---|---|
-| APOLLOHOSP.NS | 4 | ₹8411.50 | ₹33,646 | 16.6% |
-| ASIANPAINT.NS | 14 | ₹2755.00 | ₹38,570 | 19.0% |
-| BEL.NS | 98 | ₹428.60 | ₹42,003 | 20.7% |
-| NTPC.NS | 113 | ₹361.95 | ₹40,900 | 20.2% |
-| SUNPHARMA.NS | 22 | ₹1824.80 | ₹40,146 | 19.8% |
+| APOLLOHOSP.NS | 4 | ₹8489.50 | ₹33,958 | 16.7% |
+| ASIANPAINT.NS | 14 | ₹2732.90 | ₹38,261 | 18.8% |
+| BEL.NS | 98 | ₹426.90 | ₹41,836 | 20.6% |
+| NTPC.NS | 113 | ₹365.80 | ₹41,335 | 20.3% |
+| SUNPHARMA.NS | 22 | ₹1838.30 | ₹40,443 | 19.9% |
 
 ## Equity track record
 
-`▂▁▁▄█`  (5 daily marks; full series in `paper_equity.csv`)
+`▁▁▁▄▇█`  (6 daily marks; full series in `paper_equity.csv`)
 
 | Date | Equity | Return |
 |---|---|---|
@@ -50,6 +41,17 @@ _Approve with:_ `uv run python scripts/paper.py apply`
 | 2026-06-16 | ₹199,103 | -0.45% |
 | 2026-06-17 | ₹200,749 | +0.37% |
 | 2026-06-18 | ₹202,600 | +1.30% |
+| 2026-06-19 | ₹203,168 | +1.58% |
+
+## GO readiness (criterion 6)
+
+🟡 **NOT YET** — accumulating evidence; the run has not yet cleared every criterion (this is the expected state until it does).
+
+- 🟡 **Track length** — 6/63 trading days — building the minimum sample for a meaningful estimate.
+- 🟡 **Volatility event withstood** — no market stress event yet (worst Nifty pullback in-window -0.4%, needs ≤ -10%). A calm run can't earn a GO — waiting on a real event.
+- 🟡 **Forward vs benchmark** — within noise of the benchmark (≤ 3% behind) — strategy +1.9% vs Nifty +1.9% (Δ -0.0%).
+- 🟢 **Drawdown behaviour** — worst live drawdown -0.3% (within the backtest envelope).
+- 🟢 **Data integrity** — dense track record (largest gap 3 days).
 
 ---
 _The decision engine is the same code validated in the backtest ([reports/PHASE0_VERDICT.md](PHASE0_VERDICT.md)); this page is regenerated daily by the pipeline, not by hand._
