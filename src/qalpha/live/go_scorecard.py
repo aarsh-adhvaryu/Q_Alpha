@@ -14,10 +14,14 @@ Criteria (all must be 🟢 for GO):
    stress event (a Nifty pullback ≥ :data:`VOL_EVENT_DRAWDOWN`). A calm-market curve, however pretty,
    cannot earn a GO — this is the spec's intent and the main reason "before 6 months" is possible only
    if a real event happens early. Absence is *pending* (🟡), never failure.
-3. **Forward vs benchmark (net)** — the strategy's forward return must not trail the benchmark over the
-   same window. Genuinely lagging (🔴) is a NO-GO, not a "wait".
-4. **Drawdown behaviour** — the live drawdown must stay within the backtest's envelope; a far deeper
-   drawdown means the live behaviour broke (🔴 → NO-GO).
+3. **Forward vs benchmark (net)** — the strategy's forward return must not materially trail the
+   benchmark over the same window. A material lag is a NO-GO (🔴) — but **only once the track is long
+   enough to mean anything**; below the power floor a lag is "keep waiting" (🟡), never a noise-driven
+   NO-GO (a defensive book can briefly lag a sharp rally over a short window).
+4. **Drawdown behaviour (market-relative)** — judged against the benchmark over the same window, NOT a
+   flat absolute floor (mirrors the engine's §0 dynamic rule, drawdown.py): a deep drawdown that merely
+   tracks a market crash is beta (🟢); only an *idiosyncratic* drawdown materially worse than the index
+   means behaviour diverged from the validated profile (🔴 → NO-GO).
 5. **Data integrity** — the track record must be dense and ordered (no missed marks / feed gaps).
 """
 
@@ -37,7 +41,12 @@ VOL_EVENT_DRAWDOWN = 0.10  # a ≥10% Nifty pullback in-window = a genuine volat
 LAG_TOLERANCE = (
     0.03  # forward return may trail the benchmark by ≤3 pts (short-sample noise) before 🔴
 )
-MAX_DRAWDOWN_FLOOR = -0.35  # live drawdown worse than this = behaviour broke vs the ~-25% backtest
+# "Behaviour broke" is judged MARKET-RELATIVE, not by a flat absolute floor — mirroring the engine's
+# §0 dynamic drawdown rule (drawdown.py). A deep drawdown that merely tracks a market crash is beta,
+# not failure; only an *idiosyncratic* drawdown materially worse than the index means behaviour
+# diverged. (A flat floor would both false-pass a -34% book in a -10% market and false-fail a -36%
+# book in a -45% market — the exact mistake §0 was rewritten to avoid.)
+EXCESS_DD_TOLERANCE = 0.10  # the book may draw down up to 10pt MORE than Nifty before 🔴
 MAX_MARK_GAP_DAYS = 7  # a >7-calendar-day gap between marks = missed runs / feed outage
 
 
@@ -149,8 +158,13 @@ def _vol_event(benchmark: pd.Series, start: date, end: date) -> Criterion:
     )
 
 
-def _forward_vs_benchmark(strat: pd.Series, benchmark: pd.Series) -> Criterion:
-    """Strategy forward return vs the benchmark over the *same* window (total return, no annualising)."""
+def _forward_vs_benchmark(strat: pd.Series, benchmark: pd.Series, *, mature: bool) -> Criterion:
+    """Strategy forward return vs the benchmark over the *same* window (total return, no annualising).
+
+    A material lag only becomes a blocking 🔴 once the track is ``mature`` (≥ the power floor) — over a
+    short window the comparison is statistical noise (a defensive book can briefly lag a sharp rally),
+    so a lag there is 🟡 "keep waiting", never a NO-GO. This stops a transient short-sample NO-GO.
+    """
     start, end = strat.index[0].date(), strat.index[-1].date()
     bench_win = benchmark.loc[pd.Timestamp(start) : pd.Timestamp(end)].dropna()
     strat_ret = float(strat.iloc[-1] / strat.iloc[0] - 1.0)
@@ -169,22 +183,35 @@ def _forward_vs_benchmark(strat: pd.Series, benchmark: pd.Series) -> Criterion:
             "yellow",
             f"within noise of the benchmark (≤ {LAG_TOLERANCE:.0%} behind) — " + detail,
         )
+    if not mature:
+        return Criterion(
+            "Forward vs benchmark",
+            "yellow",
+            f"trailing, but the {MIN_TRADING_DAYS}-day power floor isn't met yet — too short to be a "
+            "NO-GO (short-sample noise) — " + detail,
+        )
     return Criterion("Forward vs benchmark", "red", "trailing the benchmark materially — " + detail)
 
 
-def _drawdown_behaviour(strat: pd.Series) -> Criterion:
+def _drawdown_behaviour(strat: pd.Series, benchmark: pd.Series) -> Criterion:
+    """Market-relative drawdown check (mirrors the engine's §0 rule): a deep drawdown is only 🔴 when it
+    is *idiosyncratic* — materially worse than the benchmark's over the same window. A drawdown that
+    tracks (or beats) a market crash is beta, not a behaviour break."""
     dd = _max_drawdown(strat)
-    if dd >= MAX_DRAWDOWN_FLOOR:
+    start, end = strat.index[0].date(), strat.index[-1].date()
+    bench_win = benchmark.loc[pd.Timestamp(start) : pd.Timestamp(end)].dropna()
+    bench_dd = _max_drawdown(bench_win) if not bench_win.empty else 0.0
+    excess = dd - bench_dd  # < 0 ⇒ the book fell MORE than the market (idiosyncratic)
+    detail = f"worst live drawdown {dd:.1%} vs Nifty {bench_dd:.1%} (excess {excess:+.1%})."
+    if excess >= -EXCESS_DD_TOLERANCE:
         return Criterion(
-            "Drawdown behaviour",
-            "green",
-            f"worst live drawdown {dd:.1%} (within the backtest envelope).",
+            "Drawdown behaviour", "green", "market-driven, within tolerance — " + detail
         )
     return Criterion(
         "Drawdown behaviour",
         "red",
-        f"worst live drawdown {dd:.1%} is deeper than {MAX_DRAWDOWN_FLOOR:.0%} — live behaviour has "
-        "diverged from the validated profile.",
+        f"fell {-excess:.1%} more than the market — idiosyncratic, behaviour diverged from the "
+        "validated profile. " + detail,
     )
 
 
@@ -221,8 +248,8 @@ def build_scorecard(
     criteria = [
         _track_length(s),
         _vol_event(benchmark, start, end),
-        _forward_vs_benchmark(s, benchmark),
-        _drawdown_behaviour(s),
+        _forward_vs_benchmark(s, benchmark, mature=len(s) >= MIN_TRADING_DAYS),
+        _drawdown_behaviour(s, benchmark),
         _integrity(s),
     ]
     return GoScorecard(as_of, criteria)
