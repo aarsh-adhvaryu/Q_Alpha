@@ -128,6 +128,7 @@ def decide_rebalance(
     weighting: str = "minvar",
     n_stocks_override: int | None = None,
     fundamentals: FundamentalsStore | None = None,
+    sector_bounds_override: Mapping[str, tuple[float, float]] | None = None,
 ) -> RebalanceDecision:
     """Run the funnel and the §4.6 execution gate for ``as_of``; return a :class:`RebalanceDecision`.
 
@@ -155,6 +156,7 @@ def decide_rebalance(
         n_stocks=n_stocks,
         fundamentals=fundamentals,
         as_of=as_of,
+        sector_bounds_override=sector_bounds_override,
     )
     if target.empty:
         return RebalanceDecision(

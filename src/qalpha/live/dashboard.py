@@ -17,6 +17,7 @@ import pandas as pd
 from qalpha.data.prices import PriceData
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.paper import DailyPlan, PaperBook, _prices_on
+from qalpha.live.runlog import RunLogEntry, health_markdown
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,7 @@ def render_markdown(
     benchmark: pd.Series,
     plan: DailyPlan,
     as_of: date,
+    run_log: list[RunLogEntry] | None = None,
 ) -> str:
     prices_dec = _prices_on(prices, as_of)
     equity = book.portfolio.market_value(prices_dec)
@@ -217,6 +219,9 @@ def render_markdown(
     lines.append("")
     lines.append(go_readiness_markdown(book, benchmark, as_of))
     lines.append("")
+    if run_log is not None:
+        lines.append(health_markdown(run_log))
+        lines.append("")
     lines.append("---")
     lines.append(
         "_The decision engine is the same code validated in the backtest "

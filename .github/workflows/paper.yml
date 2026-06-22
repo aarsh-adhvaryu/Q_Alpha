@@ -34,6 +34,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/paper/book.json reports/paper_dashboard.md reports/paper_equity.csv
+          git add data/paper/book.json data/paper/run_log.jsonl reports/paper_dashboard.md reports/paper_equity.csv
           git diff --staged --quiet || git commit -m "paper: daily mark $(date -u +%F) [skip ci]"
           git push

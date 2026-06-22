@@ -91,6 +91,16 @@ class FactorConfig:
     momentum_skip_days: int = 21  # skip most-recent 1m (short-term reversal)
     volatility_window_days: int = 30
     trading_days_per_year: int = 252
+    # Trading days the funnel pulls for the covariance window = momentum lookback + this buffer. The
+    # SINGLE source of truth for the rebalance lookback (engine + live paper) AND the satellite
+    # graduation gate, so they can never drift. ``dropna(how="any")`` in alloc/conditioning.py drops
+    # any name short of the FULL window from Σ, so this — not the lookback alone — is the binding
+    # "enough history before the optimizer can size it" line (Q_alpha.md §3.2/§3.8).
+    funnel_buffer_days: int = 90
+
+    def funnel_window(self) -> int:
+        """Clean-history trading days a name needs before every optimizer input (momentum + Σ) is real."""
+        return self.momentum_lookback_days + self.funnel_buffer_days
 
 
 # Regime -> [momentum, value, quality, volatility, liquidity, dividend] (Q_alpha.md §3.2).
