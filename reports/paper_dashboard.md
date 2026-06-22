@@ -1,6 +1,6 @@
 # Q-Alpha — Paper-Trading Dashboard
 
-_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-06-22** · generated 2026-06-22 12:53 UTC._
+_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-06-22** · generated 2026-06-22 17:14 UTC._
 
 ## At a glance
 
@@ -51,22 +51,23 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 - 🟡 **Track length** — 7/63 trading days — building the minimum sample for a meaningful estimate.
 - 🟡 **Volatility event withstood** — no market stress event yet (worst Nifty pullback in-window -0.4%, needs ≤ -10%). A calm run can't earn a GO — waiting on a real event.
 - 🟡 **Forward vs benchmark** — within noise of the benchmark (≤ 3% behind) — strategy +2.0% vs Nifty +2.2% (Δ -0.2%).
-- 🟢 **Drawdown behaviour** — worst live drawdown -0.3% (within the backtest envelope).
+- 🟢 **Drawdown behaviour** — market-driven, within tolerance — worst live drawdown -0.3% vs Nifty -0.4% (excess +0.1%).
 - 🟢 **Data integrity** — dense track record (largest gap 3 days).
 
 ## 🩺 System health & run log
 
-**🟢 healthy** — last autonomous run **2026-06-22T12:53:00Z** (market date 2026-06-22, `daily`).
+**🟢 healthy** — last autonomous run **2026-06-22T17:14:26Z** (market date 2026-06-22, `daily`).
 
 - Action: held — no action
 - Decision: holding — next scheduled rebalance on/after 2027-01-01
 - Equity: ₹203,395 (+1.70%) · GO: **NOT YET**
 - Freshness: ✓ Up to date — last marked 2026-06-22.
 
-_Recent runs (last 1 of 1):_
+_Recent runs (last 2 of 2):_
 
 | Ran (UTC) | As of | Cmd | Action | GO | Warnings |
 |---|---|---|---|---|---|
+| 2026-06-22T17:14:26Z | 2026-06-22 | daily | held — no action | NOT YET | — |
 | 2026-06-22T12:53:00Z | 2026-06-22 | daily | held — no action | NOT YET | — |
 
 ---
