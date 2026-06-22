@@ -61,6 +61,38 @@ def test_sector_allocator_infeasible_bounds() -> None:
         allocate_sectors(rets, CFG)
 
 
+def test_sector_allocator_bounds_override_tightens_one_sector() -> None:
+    # Tighten IT's box to [0, 0.10]; its weight must respect the override cap, others absorb the rest.
+    rets = _returns(300, {"FIN": 0.012, "IT": 0.01, "PHARMA": 0.013, "ENERGY": 0.014})
+    weights = allocate_sectors(rets, CFG, bounds_override={"IT": (0.0, 0.10)})
+    assert abs(weights.sum() - 1.0) < 1e-6
+    assert weights["IT"] <= 0.10 + 1e-6
+    # un-overridden sectors keep the uniform cap.
+    assert (weights[["FIN", "PHARMA", "ENERGY"]] <= CFG.sector_weight_max + 1e-6).all()
+
+
+def test_sector_allocator_bounds_override_zero_caps_a_sector() -> None:
+    # An over-cap satellite collapses the core box to (0, 0): that sector gets ~0, others sum to 1.
+    # Needs enough OTHER sectors to still reach 1.0 under their cap (5 here; the live book has ~12) —
+    # with too few sectors the zeroed box is infeasible and the live path falls back to equal weight.
+    rets = _returns(
+        300, {"FIN": 0.012, "IT": 0.01, "PHARMA": 0.013, "ENERGY": 0.014, "AUTO": 0.011}
+    )
+    weights = allocate_sectors(rets, CFG, bounds_override={"IT": (0.0, 0.0)})
+    assert weights["IT"] == pytest.approx(0.0, abs=1e-6)
+    assert abs(weights.sum() - 1.0) < 1e-6
+
+
+def test_sector_allocator_bounds_override_default_matches_uniform() -> None:
+    # Supplying the *default* box for every sector must reproduce the no-override result exactly.
+    rets = _returns(300, {"FIN": 0.01, "IT": 0.011, "PHARMA": 0.012, "ENERGY": 0.04})
+    lo, hi = CFG.sector_weight_min, CFG.sector_weight_max
+    override = dict.fromkeys(["FIN", "IT", "PHARMA", "ENERGY"], (lo, hi))
+    base = allocate_sectors(rets, CFG)
+    same = allocate_sectors(rets, CFG, bounds_override=override)
+    assert np.allclose(base.to_numpy(), same.reindex(base.index).to_numpy())
+
+
 def test_sector_returns_aggregation() -> None:
     rets = _returns(50, {"A": 0.01, "B": 0.01, "C": 0.01})
     sector_of = {"A": "IT", "B": "IT", "C": "FIN"}
