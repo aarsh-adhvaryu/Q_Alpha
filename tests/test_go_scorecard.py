@@ -94,3 +94,37 @@ def test_short_track_is_not_yet_and_counts_down() -> None:
     sc = build_scorecard(curve, _benchmark_with_dip(), date(2026, 2, 1))
     assert sc.verdict == "NOT YET"
     assert trading_days_remaining(curve) == MIN_TRADING_DAYS - 20
+
+
+def test_short_track_trailing_is_not_yet_not_no_go() -> None:
+    # Fix 1: badly trailing the benchmark BUT over a 20-day window → short-sample noise, not a NO-GO.
+    short = _DATES[:20]
+    curve = _curve(_ramp(200_000, 190_000, 20), short)  # -5% while the benchmark climbs ~+10%
+    sc = build_scorecard(curve, _benchmark_with_dip(), date(2026, 2, 1))
+    fwd = next(c for c in sc.criteria if c.name == "Forward vs benchmark")
+    assert fwd.status == "yellow"  # NOT red — the sample is too short to judge
+    assert sc.verdict == "NOT YET"  # NOT NO-GO
+
+
+def test_deep_drawdown_tracking_a_market_crash_is_green() -> None:
+    # Fix 2: the book falls -36% but the market fell -45% — it BEAT the index, so this is beta, not a
+    # behaviour break. A flat -35% floor would have wrongly flagged it red; market-relative passes it.
+    bench = pd.Series(
+        _ramp(100, 55, 35) + _ramp(55, 70, 35), index=_DATES, name="nifty_tri"
+    )  # -45%
+    book = _curve(_ramp(200_000, 128_000, 35) + _ramp(128_000, 150_000, 35))  # -36% trough
+    sc = build_scorecard(book, bench, date(2026, 4, 10))
+    dd = next(c for c in sc.criteria if c.name == "Drawdown behaviour")
+    assert dd.status == "green"  # fell LESS than the market → not idiosyncratic
+
+
+def test_idiosyncratic_drawdown_in_calm_market_is_no_go() -> None:
+    # Fix 2: the book craters -30% while the market is flat → idiosyncratic → red → NO-GO.
+    bench = _benchmark_calm()  # ~+8%, no crash
+    book = _curve(
+        _ramp(200_000, 205_000, 30) + _ramp(205_000, 143_000, 10) + _ramp(143_000, 150_000, 30)
+    )
+    sc = build_scorecard(book, bench, date(2026, 4, 10))
+    dd = next(c for c in sc.criteria if c.name == "Drawdown behaviour")
+    assert dd.status == "red"
+    assert sc.verdict == "NO-GO"
