@@ -148,7 +148,7 @@ def run_backtest(
         raise ValueError("no trading days in the requested window")
 
     min_history = cfg.factor.momentum_lookback_days + 1
-    lookback = cfg.factor.momentum_lookback_days + 90
+    lookback = cfg.factor.funnel_window()
     rebalance_set = set(_rebalance_dates(trading_days, min_history, rebalance_freq))
     # Defensive scan runs on month-ends that are NOT core rebalance days (between rebalances).
     defensive_on = defensive or governance_events is not None

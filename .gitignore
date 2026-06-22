@@ -20,6 +20,8 @@ data/bhavcopy/*
 !data/**/README.md
 # data/paper/ (the notional paper book + track record) is TRACKED on purpose — no secrets, and the
 # daily pipeline commits it as the durable record.
+# Personal discretionary IPO/satellite positions — account-specific, keep out of the public repo.
+data/satellite.json
 
 # Broker exports — contain PAN / client-id / name PII; never commit (resume repo is public).
 # The crit-4 reconciliation reads these locally; tests use a hermetic synthetic fixture instead.

@@ -28,8 +28,10 @@ from qalpha.config import Config
 from qalpha.data.ingest import download_prices, load_parquet, save_parquet
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
-from qalpha.live.dashboard import equity_csv, render_markdown
+from qalpha.live.dashboard import equity_csv, paper_freshness, render_markdown
+from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.paper import PaperBook
+from qalpha.live.runlog import RunLogEntry, append_run, load_runs, now_utc_iso
 
 BOOK_PATH = Path("data/paper/book.json")
 DASHBOARD_MD = Path("reports/paper_dashboard.md")
@@ -95,8 +97,39 @@ def _generate_dashboard(
         applied = book.apply(prices, plan)
         book.mark(prices, as_of)  # re-mark post-trade so this date's point reflects the fills
         plan = book.plan(prices, universe, sector_of, as_of)  # now a 'holding' plan
+
+    # Autonomous audit trail: record what this run did (the cron path persists it; a local `dashboard`
+    # preview only renders the existing log so it never pollutes the headless history).
+    benchmark = _load_benchmark_series()
+    fresh = paper_freshness(book, as_of)
+    warnings: list[str] = []
+    if fresh.is_stale:
+        warnings.append(fresh.note)
+    if applied:
+        action = f"auto-applied {len(applied)} scheduled order(s)"
+    elif plan.has_orders:
+        action = "orders pending approval"
+        warnings.append("orders await human approval (run: paper.py apply)")
+    else:
+        action = "held — no action"
+    entry = RunLogEntry(
+        ran_at=now_utc_iso(),
+        as_of=as_of.isoformat(),
+        command="daily" if auto_apply else "dashboard",
+        action=action,
+        decision_reason=plan.decision.reason,
+        equity=str(book.equity(prices, as_of)),
+        return_pct=book.total_return_pct(prices, as_of),
+        go_verdict=build_scorecard(book.equity_curve, benchmark, as_of).verdict,
+        freshness=fresh.note,
+        warnings=warnings,
+    )
+    if auto_apply:
+        append_run(entry)
+    run_log = load_runs(limit=50)
+
     DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
-    DASHBOARD_MD.write_text(render_markdown(book, prices, _load_benchmark_series(), plan, as_of))
+    DASHBOARD_MD.write_text(render_markdown(book, prices, benchmark, plan, as_of, run_log))
     EQUITY_CSV.write_text(equity_csv(book))
     return plan.has_orders, applied
 

@@ -7,6 +7,7 @@ the three price/volume factors; Phase 0b will pass more factor columns and the s
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 
 import pandas as pd
@@ -71,6 +72,7 @@ def select_and_weight(
     fundamentals: FundamentalsStore | None = None,
     as_of: date | None = None,
     weighting: str = "minvar",
+    sector_bounds_override: Mapping[str, tuple[float, float]] | None = None,
 ) -> pd.Series:
     """Return target stock weights (sums to ~1), or an empty Series if nothing qualifies.
 
@@ -125,7 +127,9 @@ def select_and_weight(
     else:
         sector_rets = sector_returns_from_stocks(returns, sector_of)
         try:
-            sector_targets = allocate_sectors(sector_rets, cfg.optimizer)
+            sector_targets = allocate_sectors(
+                sector_rets, cfg.optimizer, bounds_override=sector_bounds_override
+            )
         except ValueError:
             # Bounds infeasible for the number of present sectors -> equal-weight the sectors.
             sector_targets = pd.Series({s: 1.0 / len(sectors_present) for s in sectors_present})
