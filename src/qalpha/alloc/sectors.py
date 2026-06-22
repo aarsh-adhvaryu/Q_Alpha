@@ -8,6 +8,8 @@ covariance is conditioned (Ledoit-Wolf + EWMA) before optimisation.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
@@ -30,18 +32,45 @@ def allocate_sectors(
     sector_returns: pd.DataFrame,
     cfg: OptimizerConfig,
     halflife: int = 60,
+    *,
+    bounds_override: Mapping[str, tuple[float, float]] | None = None,
 ) -> pd.Series:
     """Min-variance sector weights within [sector_weight_min, sector_weight_max], summing to 1.
 
     If the bounds cannot sum to 1 for the given number of sectors, the bounds are infeasible and a
     ValueError is raised (e.g. 2 sectors each capped at 0.30 can never reach 1.0).
+
+    ``bounds_override`` optionally tightens *specific* sectors' ``(lo, hi)`` box — the label-only
+    injection point for the satellite sector footprint (``live/satellite.tighten_sector_bounds``):
+    holding a telecom IPO shrinks the core's telecom box so the book diversifies around it. It is a
+    pure **constraint** change; the satellite is **never** folded into the ``w'Σw`` objective/Σ (that
+    would need an index proxy and would oversize the unmodellable IPO). Sectors absent from the
+    override keep the uniform ``[min, max]`` box, so ``bounds_override=None`` is identical to before.
     """
     cov = conditioned_covariance(sector_returns, halflife=halflife)
     sectors = cov.tickers
     n = len(sectors)
     lo, hi = cfg.sector_weight_min, cfg.sector_weight_max
-    if n * hi < 1.0 - 1e-9 or n * lo > 1.0 + 1e-9:
-        raise ValueError(f"sector bounds [{lo},{hi}] infeasible for {n} sectors")
+
+    bounds: list[tuple[float, float]]
+    x0: FloatArray
+    if bounds_override:
+        los = [bounds_override.get(s, (lo, hi))[0] for s in sectors]
+        his = [bounds_override.get(s, (lo, hi))[1] for s in sectors]
+        if sum(his) < 1.0 - 1e-9 or sum(los) > 1.0 + 1e-9:
+            raise ValueError(
+                f"per-sector bounds infeasible for {n} sectors "
+                f"(Σhi={sum(his):.3f}, Σlo={sum(los):.3f})"
+            )
+        bounds = list(zip(los, his, strict=True))
+        x0 = np.clip(np.full(n, 1.0 / n), np.array(los), np.array(his))
+    else:
+        # Unchanged original path (uniform box) — kept byte-identical so the validated headline is
+        # provably untouched when no override is supplied (the backtest never supplies one).
+        if n * hi < 1.0 - 1e-9 or n * lo > 1.0 + 1e-9:
+            raise ValueError(f"sector bounds [{lo},{hi}] infeasible for {n} sectors")
+        bounds = [(lo, hi)] * n
+        x0 = np.full(n, 1.0 / n)
 
     sigma = cov.matrix
     # Daily-variance magnitudes (~1e-4) sit below SLSQP's default ftol, which makes it "converge"
@@ -55,8 +84,6 @@ def allocate_sectors(
         return 2.0 * sigma @ w * scale
 
     constraints = [{"type": "eq", "fun": lambda w: float(np.sum(w) - 1.0)}]
-    bounds = [(lo, hi)] * n
-    x0 = np.full(n, 1.0 / n)
 
     result = minimize(
         objective,

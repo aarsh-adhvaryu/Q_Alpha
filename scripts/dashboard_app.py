@@ -201,11 +201,53 @@ def _advisor_with_safety(
         return
     st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
     _advisor_tabs(portfolio, prices_dec, as_of)
+    _satellite_section(portfolio, prices_dec, as_of)
+
+
+def _satellite_section(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: date) -> None:
+    """Show the discretionary (satellite / IPO) sleeve — flagged, non-optimized — if any is registered.
+
+    No-op unless ``data/satellite.json`` lists a holding the book actually holds, so the paper view and
+    a satellite-free account are unaffected. The optimizer already excludes these (registry gate); this
+    panel surfaces their exact exit tax, graduation countdown, and concentration alerts.
+    """
+    from qalpha.live.satellite import SatelliteRegistry, satellite_report
+
+    registry = SatelliteRegistry.load()
+    if not registry.tickers:
+        return
+    report = satellite_report(portfolio, registry, prices_dec, as_of, Config())
+    if report.holdings or report.alerts:
+        st.divider()
+        st.markdown(report.render())
 
 
 def _systemic_risk_view(benchmark: pd.Series, as_of: date) -> None:
     """Read-only systemic-risk watch — like the paper book, a record you watch; it never acts."""
     st.markdown(systemic_risk_markdown(benchmark, as_of))
+
+
+def _logs_view(book: PaperBook, as_of: date) -> None:
+    """Autonomous run log + freshness — proof the headless pipeline works when nobody's watching.
+
+    The daily weekday cron marks the book and commits the track record with no human or Streamlit
+    open; this view just reads the audit trail it leaves behind (``data/paper/run_log.jsonl``).
+    """
+    from qalpha.live.runlog import health_markdown, load_runs
+
+    st.header("🧾 System health & autonomous run log")
+    st.caption(
+        "The strategy pipeline runs headless on a weekday cron — it does the work and persists it "
+        "whether or not this page is open. This is its audit trail; the live Zerodha view is the only "
+        "on-demand part (Kite needs your daily login)."
+    )
+    fresh = paper_freshness(book, as_of)
+    (st.success if not fresh.is_stale else st.warning)(fresh.note)
+    runs = load_runs()
+    if not runs:
+        st.info("No autonomous runs logged yet — the cron hasn't recorded one (or fresh checkout).")
+        return
+    st.markdown(health_markdown(runs, tail=30))
 
 
 def _go_readiness_view(book: PaperBook, benchmark: pd.Series, as_of: date) -> None:
@@ -255,7 +297,14 @@ def main() -> None:
         st.cache_resource.clear()
     source = st.sidebar.radio(
         "View",
-        ["Paper book", "Live Zerodha", "🎯 GO readiness", "🩺 Position health", "🛡 Systemic risk"],
+        [
+            "Paper book",
+            "Live Zerodha",
+            "🎯 GO readiness",
+            "🩺 Position health",
+            "🛡 Systemic risk",
+            "🧾 Logs & health",
+        ],
     )
     book, prices, universe, sector_of, benchmark = _load()
     cfg = Config()
@@ -274,6 +323,10 @@ def main() -> None:
 
     if source == "🩺 Position health":
         _position_health_view(book, prices, as_of)
+        return
+
+    if source == "🧾 Logs & health":
+        _logs_view(book, as_of)
         return
 
     if source == "Paper book":

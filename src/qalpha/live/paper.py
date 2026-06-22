@@ -258,7 +258,7 @@ class PaperBook:
                 equity_before=self.portfolio.market_value(_prices_on(prices, as_of)),
             )
         prices_dec = _prices_on(prices, as_of)
-        lookback = self.cfg.factor.momentum_lookback_days + 90
+        lookback = self.cfg.factor.funnel_window()
         decision = decide_rebalance(
             prices=prices,
             universe=universe,
