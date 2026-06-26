@@ -1,6 +1,6 @@
 # Q-Alpha — Paper-Trading Dashboard
 
-_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-06-25** · generated 2026-06-25 15:21 UTC._
+_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-06-25** · generated 2026-06-26 15:06 UTC._
 
 ## At a glance
 
@@ -59,17 +59,18 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 
 ## 🩺 System health & run log
 
-**🟢 healthy** — last autonomous run **2026-06-25T15:21:21Z** (market date 2026-06-25, `daily`).
+**🟢 healthy** — last autonomous run **2026-06-26T15:06:40Z** (market date 2026-06-25, `daily`).
 
 - Action: held — no action
 - Decision: holding — next scheduled rebalance on/after 2027-01-01
 - Equity: ₹199,405 (-0.30%) · GO: **NOT YET**
 - Freshness: ✓ Up to date — last marked 2026-06-25.
 
-_Recent runs (last 5 of 5):_
+_Recent runs (last 6 of 6):_
 
 | Ran (UTC) | As of | Cmd | Action | GO | Warnings |
 |---|---|---|---|---|---|
+| 2026-06-26T15:06:40Z | 2026-06-25 | daily | held — no action | NOT YET | — |
 | 2026-06-25T15:21:21Z | 2026-06-25 | daily | held — no action | NOT YET | — |
 | 2026-06-24T15:14:34Z | 2026-06-24 | daily | held — no action | NOT YET | — |
 | 2026-06-23T15:28:53Z | 2026-06-23 | daily | held — no action | NOT YET | — |
