@@ -31,7 +31,12 @@ def test_dashboard_renders_and_advises() -> None:
     assert not at.exception
     assert any("Q-Alpha" in t.value for t in at.title)
     assert len(at.metric) >= 4
-    assert len(at.tabs) == 3
+    # Two top-level tabs now: Paper book + Live (Zerodha).
+    labels = [t.label for t in at.tabs]
+    assert any("Paper" in lbl for lbl in labels)
+    assert any(("Live" in lbl) or ("Zerodha" in lbl) for lbl in labels)
+    # The one-screen "Today" brief renders on the paper tab.
+    assert any("Today — what to do" in m.value for m in at.markdown)
 
     # Clicking the "Add money" advisor (button: "Suggest what to buy") must render without error.
     at.number_input(key="add_amt").set_value(50000).run()

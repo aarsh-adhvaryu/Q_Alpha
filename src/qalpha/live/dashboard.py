@@ -121,6 +121,53 @@ def _sparkline(values: list[float]) -> str:
     return "".join(blocks[min(7, int((v - lo) / span * 7))] for v in values)
 
 
+def today_brief_markdown(
+    as_of: date,
+    *,
+    core_action: str,
+    market_level: str,
+    market_drawdown: float,
+    market_note: str,
+    hedge_note: str,
+    health_note: str,
+    go_verdict: str | None = None,
+    deploy_candidates: list[tuple[str, float]] | None = None,
+) -> str:
+    """The one-screen "what do I do today" brief — assembles the engines into a single ordered list.
+
+    Pure formatter (no data access, no trading) so it unit-tests cleanly: the dashboard computes the
+    pieces (core decision, market weakness, hedge signal, position health, GO verdict) and hands them
+    here. Mirrors a desk's morning note: hold/act on the core, where to put new money, whether to
+    hedge, which holdings to watch.
+    """
+    level_badge = {"normal": "🟢", "elevated": "🟠", "deep": "🔴"}.get(market_level, "🟢")
+    lines = [
+        f"## 📋 Today — what to do  ·  {as_of}",
+        "",
+        f"**Core** — {core_action}",
+    ]
+    if go_verdict:
+        lines.append(f"**Readiness** — real-money GO verdict: **{go_verdict}**.")
+    lines.append("")
+    lines.append(
+        f"**💰 New money** — market {level_badge} **{market_level}** "
+        f"({market_drawdown * 100:+.1f}% from 1y high). {market_note}"
+    )
+    if deploy_candidates:
+        names = " · ".join(f"{t} ({p * 100:.0f}% off high)" for t, p in deploy_candidates)
+        lines.append(f"  - Most out-of-favour now: {names}")
+    lines.append("  - Open **Add money** for the exact, diversified, ₹0-tax buy list.")
+    lines += [
+        "",
+        f"**🛡 Hedge** — {hedge_note}",
+        "",
+        f"**🩺 Holdings** — {health_note}",
+        "",
+        "_Read the sentiment, then execute what's above — the system advises, you place the order._",
+    ]
+    return "\n".join(lines)
+
+
 def go_readiness_markdown(book: PaperBook, benchmark: pd.Series, as_of: date) -> str:
     """The deterministic GO scorecard for the forward paper run, as dashboard markdown.
 
