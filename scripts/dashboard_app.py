@@ -37,6 +37,7 @@ from qalpha.live.dashboard import (
     go_readiness_markdown,
     paper_freshness,
     systemic_risk_markdown,
+    today_brief_markdown,
 )
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
@@ -283,6 +284,52 @@ def _position_health_view(book: PaperBook, prices: PriceData, as_of: date) -> No
     st.markdown(rep.render())
 
 
+def _today_brief(
+    book: PaperBook,
+    prices: PriceData,
+    benchmark: pd.Series,
+    universe: Universe,
+    sector_of: dict[str, str],
+    as_of: date,
+) -> str:
+    """Assemble the one-screen 'what to do today' brief from the engines (no Kite, never trades)."""
+    from qalpha.live.deploy import market_weakness
+
+    plan = book.plan(prices, universe, sector_of, as_of)
+    if plan.has_orders:
+        core_action = f"⚠️ Rebalance due — {len(plan.proposed_orders)} order(s) to approve below."
+    else:
+        core_action = plan.decision.reason
+    w = market_weakness(benchmark, as_of)
+    hedge_note = (
+        "no systemic stress — no hedge indicated."
+        if w.level == "normal"
+        else "stress elevated — consider the research-proven tax-free futures hedge (informational)."
+    )
+    held = list(book.portfolio.positions())
+    if held:
+        rep = position_health(prices.adj_close, held, as_of)
+        flagged = [h for h in rep.holdings if h.level != "healthy"]
+        health_note = (
+            "all holdings healthy — nothing to sell."
+            if not flagged
+            else f"{len(flagged)} holding(s) flagged — see 🩺 Position health below."
+        )
+    else:
+        health_note = "no holdings yet."
+    go = build_scorecard(book.equity_curve, benchmark, as_of).verdict
+    return today_brief_markdown(
+        as_of,
+        core_action=core_action,
+        market_level=w.level,
+        market_drawdown=w.drawdown,
+        market_note=w.note,
+        hedge_note=hedge_note,
+        health_note=health_note,
+        go_verdict=go,
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title="Q-Alpha", page_icon="📈", layout="wide")
     _bridge_secrets()
@@ -295,17 +342,6 @@ def main() -> None:
 
     if st.sidebar.button("🔄 Reload data"):
         st.cache_resource.clear()
-    source = st.sidebar.radio(
-        "View",
-        [
-            "Paper book",
-            "Live Zerodha",
-            "🎯 GO readiness",
-            "🩺 Position health",
-            "🛡 Systemic risk",
-            "🧾 Logs & health",
-        ],
-    )
     book, prices, universe, sector_of, benchmark = _load()
     cfg = Config()
     as_of = prices.dates[-1].date()
@@ -313,60 +349,55 @@ def main() -> None:
     st.title("Q-Alpha — Tax-Smart Portfolio Advisor")
     _paper_status_panel(book)
 
-    if source == "🛡 Systemic risk":
-        _systemic_risk_view(benchmark, as_of)
-        return
+    paper_tab, live_tab = st.tabs(["📄 Paper book", "🔴 Live (Zerodha)"])
 
-    if source == "🎯 GO readiness":
-        _go_readiness_view(book, benchmark, as_of)
-        return
-
-    if source == "🩺 Position health":
-        _position_health_view(book, prices, as_of)
-        return
-
-    if source == "🧾 Logs & health":
-        _logs_view(book, as_of)
-        return
-
-    if source == "Paper book":
+    with paper_tab:
+        # The one-screen daily brief — what to do, assembled from every engine (no Kite needed).
+        st.markdown(_today_brief(book, prices, benchmark, universe, sector_of, as_of))
+        st.divider()
         st.caption(
-            f"Notional paper book (no real money) · as of **{as_of}** · "
-            "decisions from the validated engine — this page never trades."
+            f"Notional paper book (no real money) · as of **{as_of}** · decisions from the validated "
+            "engine — this page never trades."
         )
         _paper_overview(book, prices, benchmark, universe, sector_of, as_of)
+        with st.expander("🎯 GO readiness — the real-money verdict"):
+            _go_readiness_view(book, benchmark, as_of)
+        with st.expander("🩺 Position health — between-rebalance watch"):
+            _position_health_view(book, prices, as_of)
+        with st.expander("🛡 Systemic risk — hedge watch"):
+            _systemic_risk_view(benchmark, as_of)
+        with st.expander("🧾 Logs & system health — autonomous run trail"):
+            _logs_view(book, as_of)
         st.divider()
         _advisor_with_safety(book.portfolio, prices, _prices_on(prices, as_of), as_of)
-        return
 
-    # Live source: gate on a fresh Kite session, then auto-refresh the whole live view (near-realtime).
-    auto = st.sidebar.toggle("⏱ Auto-refresh live (30s)", value=True)
+    with live_tab:
+        # Act on the REAL Zerodha account: login → live holdings + advisor (sell / raise / add money).
+        auto = st.sidebar.toggle("⏱ Auto-refresh live (30s)", value=True)
 
-    @st.fragment(run_every=30 if auto else None)
-    def _live_view() -> None:
-        if not _kite_login_gate():
-            return
-        live = _load_live(cfg, as_of)
-        if live is None:
-            return
-        portfolio, prices_dec = _live_section(live, cfg)
-        # Session-scoped realtime ticks (true KiteTicker push while this tab is open); the 30s
-        # polling above is the fallback. Fully best-effort — any failure degrades to polled prices.
-        prices_dec, stream_label = _streamed_prices(prices_dec, sorted(portfolio.positions()))
-        st.caption(
-            f"Live Zerodha · {stream_label} · page rendered {datetime.now():%H:%M:%S} · "
-            "read-only — this page never trades."
-        )
-        if auto:
+        @st.fragment(run_every=30 if auto else None)
+        def _live_view() -> None:
+            if not _kite_login_gate():
+                return
+            live = _load_live(cfg, as_of)
+            if live is None:
+                return
+            portfolio, prices_dec = _live_section(live, cfg)
+            # Session-scoped realtime ticks (true KiteTicker push while open); 30s polling is fallback.
+            prices_dec, stream_label = _streamed_prices(prices_dec, sorted(portfolio.positions()))
             st.caption(
-                "↻ Auto-refreshes every 30 s **while this tab is open and focused**. If the rendered "
-                "time above stops advancing, the tab paused (Streamlit idle/backgrounded) — tap the "
-                "page or reload to resume live updates."
+                f"Live Zerodha · {stream_label} · page rendered {datetime.now():%H:%M:%S} · "
+                "read-only — this page never trades."
             )
-        st.divider()
-        _advisor_with_safety(portfolio, prices, prices_dec, as_of, live_session=True)
+            if auto:
+                st.caption(
+                    "↻ Auto-refreshes every 30 s **while this tab is open and focused**. If the "
+                    "rendered time stops advancing, the tab paused — tap the page or reload."
+                )
+            st.divider()
+            _advisor_with_safety(portfolio, prices, prices_dec, as_of, live_session=True)
 
-    _live_view()
+        _live_view()
 
 
 def _streamed_prices(
