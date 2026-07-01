@@ -1,16 +1,16 @@
 # Q-Alpha — Paper-Trading Dashboard
 
-_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-06-30** · generated 2026-06-30 15:05 UTC._
+_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-07-01** · generated 2026-07-01 15:16 UTC._
 
 ## At a glance
 
 | | |
 |---|---|
-| Started | 2026-06-12 (18 days) |
+| Started | 2026-06-12 (19 days) |
 | Notional capital | ₹200,000 |
-| Equity (marked) | ₹200,596 |
-| Return since start | **+0.30%** |
-| Nifty 50 TRI (same window) | +1.48% |
+| Equity (marked) | ₹202,131 |
+| Return since start | **+1.07%** |
+| Nifty 50 TRI (same window) | +1.87% |
 | Cash | ₹7,335 |
 | Realized tax to date | ₹0.00 |
 | Rebalances | 1 |
@@ -24,19 +24,18 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 
 | Ticker | Qty | Price | Value | Weight |
 |---|---|---|---|---|
-| APOLLOHOSP.NS | 4 | ₹8682.00 | ₹34,728 | 17.3% |
-| ASIANPAINT.NS | 14 | ₹2635.70 | ₹36,900 | 18.4% |
-| BEL.NS | 98 | ₹411.80 | ₹40,356 | 20.1% |
-| NTPC.NS | 113 | ₹356.65 | ₹40,301 | 20.1% |
-| SUNPHARMA.NS | 22 | ₹1862.50 | ₹40,975 | 20.4% |
+| APOLLOHOSP.NS | 4 | ₹8618.50 | ₹34,474 | 17.1% |
+| ASIANPAINT.NS | 14 | ₹2716.40 | ₹38,030 | 18.8% |
+| BEL.NS | 98 | ₹416.25 | ₹40,792 | 20.2% |
+| NTPC.NS | 113 | ₹357.90 | ₹40,443 | 20.0% |
+| SUNPHARMA.NS | 22 | ₹1866.20 | ₹41,056 | 20.3% |
 
 ## Equity track record
 
-`▁▁▁▄▆▇█▅▄▁▄▃`  (12 daily marks; full series in `paper_equity.csv`)
+`▁▁▁▄▆▇█▅▄▁▄▃▆`  (13 daily marks; full series in `paper_equity.csv`)
 
 | Date | Equity | Return |
 |---|---|---|
-| 2026-06-16 | ₹199,103 | -0.45% |
 | 2026-06-17 | ₹200,749 | +0.37% |
 | 2026-06-18 | ₹202,600 | +1.30% |
 | 2026-06-19 | ₹203,168 | +1.58% |
@@ -46,30 +45,32 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 | 2026-06-25 | ₹199,405 | -0.30% |
 | 2026-06-29 | ₹200,974 | +0.49% |
 | 2026-06-30 | ₹200,596 | +0.30% |
+| 2026-07-01 | ₹202,131 | +1.07% |
 
 ## GO readiness (criterion 6)
 
 🟡 **NOT YET** — accumulating evidence; the run has not yet cleared every criterion (this is the expected state until it does).
 
-- 🟡 **Track length** — 12/63 trading days — building the minimum sample for a meaningful estimate.
+- 🟡 **Track length** — 13/63 trading days — building the minimum sample for a meaningful estimate.
 - 🟡 **Volatility event withstood** — no market stress event yet (worst Nifty pullback in-window -1.2%, needs ≤ -10%). A calm run can't earn a GO — waiting on a real event.
-- 🟡 **Forward vs benchmark** — within noise of the benchmark (≤ 3% behind) — strategy +0.6% vs Nifty +1.5% (Δ -0.9%).
+- 🟡 **Forward vs benchmark** — within noise of the benchmark (≤ 3% behind) — strategy +1.4% vs Nifty +1.9% (Δ -0.5%).
 - 🟢 **Drawdown behaviour** — market-driven, within tolerance — worst live drawdown -2.0% vs Nifty -1.2% (excess -0.8%).
 - 🟢 **Data integrity** — dense track record (largest gap 4 days).
 
 ## 🩺 System health & run log
 
-**🟢 healthy** — last autonomous run **2026-06-30T15:05:17Z** (market date 2026-06-30, `daily`).
+**🟢 healthy** — last autonomous run **2026-07-01T15:16:57Z** (market date 2026-07-01, `daily`).
 
 - Action: held — no action
 - Decision: holding — next scheduled rebalance on/after 2027-01-01
-- Equity: ₹200,596 (+0.30%) · GO: **NOT YET**
-- Freshness: ✓ Up to date — last marked 2026-06-30.
+- Equity: ₹202,131 (+1.07%) · GO: **NOT YET**
+- Freshness: ✓ Up to date — last marked 2026-07-01.
 
-_Recent runs (last 8 of 8):_
+_Recent runs (last 9 of 9):_
 
 | Ran (UTC) | As of | Cmd | Action | GO | Warnings |
 |---|---|---|---|---|---|
+| 2026-07-01T15:16:57Z | 2026-07-01 | daily | held — no action | NOT YET | — |
 | 2026-06-30T15:05:17Z | 2026-06-30 | daily | held — no action | NOT YET | — |
 | 2026-06-29T16:15:21Z | 2026-06-29 | daily | held — no action | NOT YET | — |
 | 2026-06-26T15:06:40Z | 2026-06-25 | daily | held — no action | NOT YET | — |
