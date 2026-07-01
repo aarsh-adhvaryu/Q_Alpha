@@ -56,3 +56,46 @@ def test_systemic_risk_elevated_suggests_hedge_but_no_action() -> None:
     assert "DEEP STRESS" in md or "ELEVATED" in md
     assert "consider" in md.lower()
     assert "places no derivatives trade" in md  # informational only, never executes
+
+
+def test_today_brief_markdown_assembles_all_sections() -> None:
+    from datetime import date
+
+    from qalpha.live.dashboard import today_brief_markdown
+
+    md = today_brief_markdown(
+        date(2026, 6, 30),
+        core_action="holding — next scheduled rebalance on/after 2027-01-01",
+        market_level="elevated",
+        market_drawdown=-0.087,
+        market_note="market has pulled back — lean into it.",
+        hedge_note="stress elevated — consider the hedge.",
+        health_note="all holdings healthy — nothing to sell.",
+        go_verdict="NOT YET",
+        deploy_candidates=[("VEDL.NS", 0.61), ("TRENT.NS", 0.49)],
+    )
+    assert "📋 Today" in md
+    assert "holding — next scheduled rebalance" in md
+    assert "elevated" in md and "-8.7%" in md
+    assert "VEDL.NS (61% off high)" in md
+    assert "NOT YET" in md
+    assert "all holdings healthy" in md
+    assert "Add money" in md
+
+
+def test_today_brief_markdown_minimal_normal_market() -> None:
+    from datetime import date
+
+    from qalpha.live.dashboard import today_brief_markdown
+
+    md = today_brief_markdown(
+        date(2026, 6, 30),
+        core_action="Hold",
+        market_level="normal",
+        market_drawdown=-0.01,
+        market_note="near highs — deploy steadily.",
+        hedge_note="no hedge indicated.",
+        health_note="no holdings yet.",
+    )
+    assert "🟢" in md  # normal-market badge
+    assert "Add money" in md
