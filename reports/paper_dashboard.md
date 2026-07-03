@@ -1,16 +1,16 @@
 # Q-Alpha — Paper-Trading Dashboard
 
-_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-07-02** · generated 2026-07-02 14:33 UTC._
+_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-07-03** · generated 2026-07-03 14:36 UTC._
 
 ## At a glance
 
 | | |
 |---|---|
-| Started | 2026-06-12 (20 days) |
+| Started | 2026-06-12 (21 days) |
 | Notional capital | ₹200,000 |
-| Equity (marked) | ₹202,862 |
-| Return since start | **+1.43%** |
-| Nifty 50 TRI (same window) | +2.39% |
+| Equity (marked) | ₹204,392 |
+| Return since start | **+2.20%** |
+| Nifty 50 TRI (same window) | +3.01% |
 | Cash | ₹7,335 |
 | Realized tax to date | ₹0.00 |
 | Rebalances | 1 |
@@ -24,19 +24,18 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 
 | Ticker | Qty | Price | Value | Weight |
 |---|---|---|---|---|
-| APOLLOHOSP.NS | 4 | ₹8696.00 | ₹34,784 | 17.1% |
-| ASIANPAINT.NS | 14 | ₹2744.50 | ₹38,423 | 18.9% |
-| BEL.NS | 98 | ₹415.05 | ₹40,675 | 20.1% |
-| NTPC.NS | 113 | ₹358.25 | ₹40,482 | 20.0% |
-| SUNPHARMA.NS | 22 | ₹1871.00 | ₹41,162 | 20.3% |
+| APOLLOHOSP.NS | 4 | ₹8893.50 | ₹35,574 | 17.4% |
+| ASIANPAINT.NS | 14 | ₹2737.80 | ₹38,329 | 18.8% |
+| BEL.NS | 98 | ₹418.05 | ₹40,969 | 20.0% |
+| NTPC.NS | 113 | ₹356.45 | ₹40,279 | 19.7% |
+| SUNPHARMA.NS | 22 | ₹1904.80 | ₹41,906 | 20.5% |
 
 ## Equity track record
 
-`▁▁▁▄▆▇█▅▄▁▄▃▆▇`  (14 daily marks; full series in `paper_equity.csv`)
+`▁▁▁▃▅▆▆▅▃▁▃▃▅▆█`  (15 daily marks; full series in `paper_equity.csv`)
 
 | Date | Equity | Return |
 |---|---|---|
-| 2026-06-18 | ₹202,600 | +1.30% |
 | 2026-06-19 | ₹203,168 | +1.58% |
 | 2026-06-22 | ₹203,395 | +1.70% |
 | 2026-06-23 | ₹201,998 | +1.00% |
@@ -46,30 +45,32 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 | 2026-06-30 | ₹200,596 | +0.30% |
 | 2026-07-01 | ₹202,131 | +1.07% |
 | 2026-07-02 | ₹202,862 | +1.43% |
+| 2026-07-03 | ₹204,392 | +2.20% |
 
 ## GO readiness (criterion 6)
 
 🟡 **NOT YET** — accumulating evidence; the run has not yet cleared every criterion (this is the expected state until it does).
 
-- 🟡 **Track length** — 14/63 trading days — building the minimum sample for a meaningful estimate.
+- 🟡 **Track length** — 15/63 trading days — building the minimum sample for a meaningful estimate.
 - 🟡 **Volatility event withstood** — no market stress event yet (worst Nifty pullback in-window -1.2%, needs ≤ -10%). A calm run can't earn a GO — waiting on a real event.
-- 🟡 **Forward vs benchmark** — within noise of the benchmark (≤ 3% behind) — strategy +1.7% vs Nifty +2.4% (Δ -0.7%).
+- 🟡 **Forward vs benchmark** — within noise of the benchmark (≤ 3% behind) — strategy +2.5% vs Nifty +3.0% (Δ -0.5%).
 - 🟢 **Drawdown behaviour** — market-driven, within tolerance — worst live drawdown -2.0% vs Nifty -1.2% (excess -0.8%).
 - 🟢 **Data integrity** — dense track record (largest gap 4 days).
 
 ## 🩺 System health & run log
 
-**🟢 healthy** — last autonomous run **2026-07-02T14:33:22Z** (market date 2026-07-02, `daily`).
+**🟢 healthy** — last autonomous run **2026-07-03T14:36:27Z** (market date 2026-07-03, `daily`).
 
 - Action: held — no action
 - Decision: holding — next scheduled rebalance on/after 2027-01-01
-- Equity: ₹202,862 (+1.43%) · GO: **NOT YET**
-- Freshness: ✓ Up to date — last marked 2026-07-02.
+- Equity: ₹204,392 (+2.20%) · GO: **NOT YET**
+- Freshness: ✓ Up to date — last marked 2026-07-03.
 
-_Recent runs (last 10 of 10):_
+_Recent runs (last 10 of 11):_
 
 | Ran (UTC) | As of | Cmd | Action | GO | Warnings |
 |---|---|---|---|---|---|
+| 2026-07-03T14:36:27Z | 2026-07-03 | daily | held — no action | NOT YET | — |
 | 2026-07-02T14:33:22Z | 2026-07-02 | daily | held — no action | NOT YET | — |
 | 2026-07-01T15:16:57Z | 2026-07-01 | daily | held — no action | NOT YET | — |
 | 2026-06-30T15:05:17Z | 2026-06-30 | daily | held — no action | NOT YET | — |
@@ -79,7 +80,6 @@ _Recent runs (last 10 of 10):_
 | 2026-06-24T15:14:34Z | 2026-06-24 | daily | held — no action | NOT YET | — |
 | 2026-06-23T15:28:53Z | 2026-06-23 | daily | held — no action | NOT YET | — |
 | 2026-06-22T17:14:26Z | 2026-06-22 | daily | held — no action | NOT YET | — |
-| 2026-06-22T12:53:00Z | 2026-06-22 | daily | held — no action | NOT YET | — |
 
 ---
 _The decision engine is the same code validated in the backtest ([reports/PHASE0_VERDICT.md](PHASE0_VERDICT.md)); this page is regenerated daily by the pipeline, not by hand._
