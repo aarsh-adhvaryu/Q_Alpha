@@ -99,3 +99,86 @@ def test_today_brief_markdown_minimal_normal_market() -> None:
     )
     assert "🟢" in md  # normal-market badge
     assert "Add money" in md
+
+
+# --- watchlist staleness (Ops Layer PR-2) -------------------------------------------------------
+
+
+def test_watchlist_fresh_across_a_weekend() -> None:
+    from qalpha.live.dashboard import watchlist_is_stale
+
+    # Panel last dated Friday, read Monday → one weekday elapsed (grace) → fresh.
+    assert not watchlist_is_stale(date(2026, 6, 12), date(2026, 6, 15))
+
+
+def test_watchlist_stale_after_several_weekdays() -> None:
+    from qalpha.live.dashboard import watchlist_is_stale
+
+    # Panel a full week old → past the 3-weekday tolerance → stale, re-download.
+    assert watchlist_is_stale(date(2026, 6, 8), date(2026, 6, 15))
+
+
+# --- live PM brief formatter (Ops Layer PR-2) ---------------------------------------------------
+
+
+def _advice(level: str, buys: list[tuple[str, int]], leftover: str):  # type: ignore[no-untyped-def]
+    from decimal import Decimal
+
+    from qalpha.backtest.portfolio import Side, TradeRecord
+    from qalpha.live.advisor import DeployAdvice
+    from qalpha.live.deploy import MarketWeakness, WeaknessDeployAdvice
+
+    orders = [
+        TradeRecord(
+            date(2026, 6, 30), t, Side.BUY, Decimal(q), Decimal("100"), Decimal("1"), Decimal("0")
+        )
+        for t, q in buys
+    ]
+    deploy = DeployAdvice(
+        as_of=date(2026, 6, 30),
+        amount=Decimal("12430"),
+        buy_orders=orders,
+        buy_cost=Decimal("10"),
+        leftover_cash=Decimal(leftover),
+        naive_tax=Decimal("0"),
+        naive_cost=Decimal("0"),
+        tax_saved=Decimal("0"),
+    )
+    weakness = MarketWeakness(-0.02, level, "note")
+    return WeaknessDeployAdvice(
+        weakness=weakness, deploy=deploy, target=pd.Series(dtype=float), cheapest=[]
+    )
+
+
+def test_live_pm_brief_aggregates_buys_and_shows_tax_free() -> None:
+    from decimal import Decimal
+
+    from qalpha.live.dashboard import live_pm_brief_markdown
+
+    advice = _advice("normal", [("ITC.NS", 2), ("NTPC.NS", 1)], "514")
+    md = live_pm_brief_markdown(Decimal("12430"), advice, floor=Decimal("5000"))
+    assert "Idle cash ₹12,430" in md
+    assert "🟢 normal" in md
+    assert "2×ITC" in md and "1×NTPC" in md
+    assert "₹0 capital-gains tax" in md
+    assert "leftover ₹514" in md
+
+
+def test_live_pm_brief_suppressed_below_floor() -> None:
+    from decimal import Decimal
+
+    from qalpha.live.dashboard import live_pm_brief_markdown
+
+    advice = _advice("normal", [("ITC.NS", 1)], "0")
+    assert live_pm_brief_markdown(Decimal("4999"), advice, floor=Decimal("5000")) == ""
+
+
+def test_live_pm_brief_handles_no_affordable_buys() -> None:
+    from decimal import Decimal
+
+    from qalpha.live.dashboard import live_pm_brief_markdown
+
+    advice = _advice("deep", [], "6000")
+    md = live_pm_brief_markdown(Decimal("6000"), advice, floor=Decimal("5000"))
+    assert "🔴 deep" in md
+    assert "nothing fits cleanly" in md
