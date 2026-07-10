@@ -12,7 +12,12 @@ on:
     # schedules under load and silently drops them (why "0 12" never fired). An
     # odd minute lands in an uncongested slot. Holidays just re-mark last close (harmless).
     - cron: "23 12 * * 1-5"
-  workflow_dispatch: {} # allow a manual run from the Actions tab
+  workflow_dispatch: # allow a manual run from the Actions tab
+    inputs:
+      force_digest:
+        description: "Also send the weekly digest now (verification)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write # to commit the updated book + dashboard
@@ -30,10 +35,25 @@ jobs:
         run: uv sync --extra dev --frozen
       - name: Daily mark + dashboard (refreshes data; never trades)
         run: uv run python scripts/paper.py daily
+      - name: Opportunity scan → Telegram alerts (edge-triggered; fail-soft, never blocks)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: >-
+          uv run python scripts/scan_alerts.py
+          ${{ github.event.inputs.force_digest == 'true' && '--force-digest' || '' }}
       - name: Commit the track record
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/paper/book.json data/paper/run_log.jsonl reports/paper_dashboard.md reports/paper_equity.csv
+          git add data/paper/book.json data/paper/run_log.jsonl data/paper/alert_state.json reports/paper_dashboard.md reports/paper_equity.csv
           git diff --staged --quiet || git commit -m "paper: daily mark $(date -u +%F) [skip ci]"
           git push
+      - name: Alert on pipeline failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: >-
+          uv run python scripts/scan_alerts.py --pipeline-failed
+          "Paper daily job failed — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

@@ -4,6 +4,25 @@ Guidance for Claude Code (and humans) working in this repo.
 
 ## 🧭 CURRENT STATE — read this first (2026-06-19)
 
+**⏭️ QUEUED NEXT BUILD (2026-07-08, planned + user-approved scope, NOT yet implemented):** the
+**"Daily-Driver Ops Layer"** — full plan in [PLAN_OPS_LAYER.md](PLAN_OPS_LAYER.md) (execute it
+PR-by-PR next session). Why: the user's audit verdict — everything analytical exists but the system
+is 100% pull-based (zero outbound notification in either repo; idle cash shown but never acted on;
+buy advisor needs typed amount + button; weakness/hedge/GO signals computed only when the dashboard
+is opened). Four PRs, all in `live/`+`scripts/`+workflows (engine/headline provably untouched, never
+auto-trades): **PR-1** Telegram spine + edge-triggered daily opportunity scan in the paper cron
+(weakness escalation w/ tranche policy, rebalance due, GO flip, guard/pipeline failure + Monday
+digest; hysteresis on de-escalation); **PR-2** capital-aware auto buy-brief on Live-tab login
+(`fetch_available_cash` → `advise_deploy_into_weakness`, zero typing) + `DeployPolicyConfig`
+(pre-committed tranches: 50% idle on elevated, 100% on deep) + two real bug fixes (live advisor fed
+watchlist-mean instead of the real index @ dashboard_app.py:615; `_watchlist` cached forever →
+stale); **PR-3** (research repo) hedge-flip Telegram alert; **PR-4** (research repo) daily AI market
+brief — Opus 4.8 + web-search tool, min-token config (effort=low, max_tokens=1500, max 4 searches,
+~₹4–8/day), **context-only/never a signal**, satellite-sleeve framing for discretionary ideas.
+Deferred by user decision: private cash-snapshot repo (PR-5). User decisions locked 2026-07-08:
+Telegram · events+Monday digest · dashboard-only cash sizing · AI brief daily on Opus 4.8. Both
+crons verified alive (daily marks through 2026-07-07 on both repos' origin/main).
+
 **For the full, interviewer-level overview read [README.md](README.md) — it now carries the complete
 story (plain-language + the math + an explicit "biases & decisions" section).** This CLAUDE.md is the
 detailed *working log* below; the README is the front door.
