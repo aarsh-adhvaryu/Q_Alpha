@@ -34,9 +34,12 @@ from qalpha.data.universe import Universe
 from qalpha.live.advisor import advise_raise_cash, advise_sell
 from qalpha.live.dashboard import (
     _benchmark_return_pct,
+    glossary_markdown,
     go_readiness_markdown,
     live_pm_brief_markdown,
     paper_freshness,
+    performance_read,
+    plain_summary_markdown,
     systemic_risk_markdown,
     today_brief_markdown,
     watchlist_is_stale,
@@ -336,6 +339,30 @@ def _position_health_view(book: PaperBook, prices: PriceData, as_of: date) -> No
     st.markdown(rep.render())
 
 
+def _plain_summary(
+    book: PaperBook,
+    prices: PriceData,
+    benchmark: pd.Series,
+    universe: Universe,
+    sector_of: dict[str, str],
+    as_of: date,
+) -> str:
+    """Compute the plain-English summary inputs from the engines and render the everyday-words panel."""
+    from qalpha.live.deploy import market_weakness
+
+    ret = book.total_return_pct(prices, as_of)
+    bench = _benchmark_return_pct(benchmark, book.start_date, as_of)
+    plan = book.plan(prices, universe, sector_of, as_of)
+    verdict = build_scorecard(book.equity_curve, benchmark, as_of).verdict
+    return plain_summary_markdown(
+        book_return_pct=ret,
+        benchmark_return_pct=bench,
+        market_level=market_weakness(benchmark, as_of).level,
+        go_verdict=verdict,
+        action_needed=plan.has_orders,
+    )
+
+
 def _today_brief(
     book: PaperBook,
     prices: PriceData,
@@ -404,7 +431,9 @@ def main() -> None:
     paper_tab, live_tab = st.tabs(["📄 Paper book", "🔴 Live (Zerodha)"])
 
     with paper_tab:
-        # The one-screen daily brief — what to do, assembled from every engine (no Kite needed).
+        # Plain-English summary first — how you're doing / market / readiness / to-dos, in everyday
+        # words — then the detailed "what to do" brief and the numbers.
+        st.info(_plain_summary(book, prices, benchmark, universe, sector_of, as_of))
         st.markdown(_today_brief(book, prices, benchmark, universe, sector_of, as_of))
         st.divider()
         st.caption(
@@ -420,6 +449,8 @@ def main() -> None:
             _systemic_risk_view(benchmark, as_of)
         with st.expander("🧾 Logs & system health — autonomous run trail"):
             _logs_view(book, as_of)
+        with st.expander("📖 Jargon, in plain English — look anything up"):
+            st.markdown(glossary_markdown())
         st.divider()
         _advisor_with_safety(book.portfolio, prices, _prices_on(prices, as_of), benchmark, as_of)
 
@@ -513,6 +544,7 @@ def _paper_overview(
     c2.metric("Nifty 50 TRI", f"{bench:+.2f}%" if bench is not None else "—")
     c3.metric("Cash", f"₹{book.portfolio.cash:,.0f}")
     c4.metric("Realized tax to date", f"₹{book.realized_tax():,.0f}")
+    st.caption(performance_read(ret, bench))  # plain good/bad read so the numbers aren't bare
 
     plan = book.plan(prices, universe, sector_of, as_of)
     if plan.has_orders:
