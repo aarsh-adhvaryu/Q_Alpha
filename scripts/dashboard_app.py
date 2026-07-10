@@ -35,9 +35,11 @@ from qalpha.live.advisor import advise_raise_cash, advise_sell
 from qalpha.live.dashboard import (
     _benchmark_return_pct,
     go_readiness_markdown,
+    live_pm_brief_markdown,
     paper_freshness,
     systemic_risk_markdown,
     today_brief_markdown,
+    watchlist_is_stale,
 )
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
@@ -176,21 +178,25 @@ def _advisor_with_safety(
     portfolio: Portfolio,
     prices: PriceData,
     prices_dec: dict[str, Decimal],
+    benchmark: pd.Series,
     as_of: date,
     *,
     live_session: bool | None = None,
+    available_cash: Decimal | None = None,
 ) -> None:
     """Run the input-integrity guards, then either withhold advice (loud banner) or show the tabs.
 
     The system never auto-trades, so the only loss vector is acting on wrong displayed data — so the
     advisor is **gated** on the safety report: a stale feed / missing quote / dead session blocks the
     recommendation rather than quietly computing it on bad inputs. ``live_session`` is None for the
-    paper book (no broker) and the live session's validity for the Zerodha view.
+    paper book (no broker) and the live session's validity for the Zerodha view. ``available_cash``
+    (live only) drives the zero-typing PM brief + prefills the Add-money field.
     """
     session = broker_session_guard(live_session) if live_session is not None else None
     report: SafetyReport = assess_advice_inputs(
         prices, prices_dec, sorted(portfolio.positions()), as_of, session=session
     )
+    namespace = "live" if live_session is not None else "paper"
     st.subheader("Ask the advisor")
     if report.warnings:
         st.warning(report.render())
@@ -200,9 +206,55 @@ def _advisor_with_safety(
             "Advice is withheld until the inputs are trustworthy — fix the above, then reload."
         )
         return
+    # Auto "PM brief": on the live account, if there is meaningful idle cash, show the concrete
+    # buy plan with zero typing (gated behind the same guards above — never bypassed). The
+    # Add-money field is then prefilled with the available cash for a one-tap deeper dive.
+    cfg = Config()
+    floor = cfg.deploy_policy.idle_cash_floor
+    default_add = 50000
+    if available_cash is not None and available_cash >= floor:
+        _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg)
+        default_add = int(available_cash)
     st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
-    _advisor_tabs(portfolio, prices_dec, as_of)
+    _advisor_tabs(
+        portfolio, prices_dec, benchmark, as_of, default_add_amount=default_add, namespace=namespace
+    )
     _satellite_section(portfolio, prices_dec, as_of)
+
+
+def _auto_pm_brief(
+    portfolio: Portfolio,
+    benchmark: pd.Series,
+    available_cash: Decimal,
+    as_of: date,
+    cfg: Config,
+) -> None:
+    """Render the zero-typing idle-cash buy brief on the Live tab (cached per (cash, as_of))."""
+    cache_key = f"pm_brief::{available_cash}::{as_of}"
+    brief = st.session_state.get(cache_key)
+    if brief is None:
+        wl = _watchlist()
+        if wl is None:
+            return  # watchlist not ready — silently skip the auto-brief (tabs still work)
+        from qalpha.live.deploy import advise_deploy_into_weakness
+
+        tickers, sector_of, wl_prices = wl
+        advice = advise_deploy_into_weakness(
+            portfolio,
+            available_cash,
+            tickers,
+            sector_of,
+            wl_prices,
+            benchmark,
+            as_of,
+            max_names=cfg.deploy_policy.max_names_default,
+        )
+        brief = live_pm_brief_markdown(
+            available_cash, advice, floor=cfg.deploy_policy.idle_cash_floor
+        )
+        st.session_state[cache_key] = brief
+    if brief:
+        st.success(brief)
 
 
 def _satellite_section(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: date) -> None:
@@ -369,7 +421,7 @@ def main() -> None:
         with st.expander("🧾 Logs & system health — autonomous run trail"):
             _logs_view(book, as_of)
         st.divider()
-        _advisor_with_safety(book.portfolio, prices, _prices_on(prices, as_of), as_of)
+        _advisor_with_safety(book.portfolio, prices, _prices_on(prices, as_of), benchmark, as_of)
 
     with live_tab:
         # Act on the REAL Zerodha account: login → live holdings + advisor (sell / raise / add money).
@@ -395,7 +447,15 @@ def main() -> None:
                     "rendered time stops advancing, the tab paused — tap the page or reload."
                 )
             st.divider()
-            _advisor_with_safety(portfolio, prices, prices_dec, as_of, live_session=True)
+            _advisor_with_safety(
+                portfolio,
+                prices,
+                prices_dec,
+                benchmark,
+                as_of,
+                live_session=True,
+                available_cash=portfolio.cash,
+            )
 
         _live_view()
 
@@ -532,25 +592,37 @@ def _live_overview(portfolio: Portfolio, prices: dict[str, Decimal], *, caveat: 
     st.dataframe(_holdings_frame(portfolio, prices), hide_index=True, width="stretch")
 
 
-@st.cache_resource(show_spinner=False)
+def _download_watchlist_panel() -> None:
+    import subprocess
+
+    with st.spinner("Loading the Nifty-100 watchlist (one-time price download, ~1–2 min)…"):
+        subprocess.run(
+            [sys.executable, "scripts/build_nifty100_watchlist.py", "--prices"],
+            check=False,
+            cwd=Path.cwd(),
+        )
+
+
+@st.cache_resource(ttl=6 * 3600, show_spinner=False)
 def _watchlist() -> tuple[list[str], dict[str, str], PriceData] | None:
-    """The Nifty-100 watchlist + its price panel (downloaded once) — the buy-suggestion universe."""
+    """The Nifty-100 watchlist + its price panel — the buy-suggestion universe.
+
+    The panel is downloaded once and persists on disk, so a bare forever-cache would serve week-old
+    prices to the deploy advisor. Two guards: a 6-hour ``ttl`` on the cache, and a
+    :func:`watchlist_is_stale` check that re-downloads the panel when its last price date has aged out.
+    """
+    from qalpha.data.ingest import load_parquet
+
     csv = Path("data/universes/nifty100_watchlist.csv")
     panel = Path("data/historical/prices_watchlist.parquet")
     if not csv.exists():
         return None
     if not panel.exists():
-        import subprocess
-
-        with st.spinner("Loading the Nifty-100 watchlist (one-time price download, ~1–2 min)…"):
-            subprocess.run(
-                [sys.executable, "scripts/build_nifty100_watchlist.py", "--prices"],
-                check=False,
-                cwd=Path.cwd(),
-            )
+        _download_watchlist_panel()
+    elif watchlist_is_stale(load_parquet(str(panel)).dates[-1].date(), date.today()):
+        _download_watchlist_panel()  # refresh a stale on-disk panel
     if not panel.exists():
         return None
-    from qalpha.data.ingest import load_parquet
 
     wl = pd.read_csv(csv)
     tickers = [str(t) for t in wl["ticker"]]
@@ -558,7 +630,22 @@ def _watchlist() -> tuple[list[str], dict[str, str], PriceData] | None:
     return tickers, sector_of, load_parquet(str(panel))
 
 
-def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: date) -> None:
+def _advisor_tabs(
+    portfolio: Portfolio,
+    prices_dec: dict[str, Decimal],
+    benchmark: pd.Series,
+    as_of: date,
+    *,
+    default_add_amount: int = 50000,
+    namespace: str = "paper",
+) -> None:
+    """Interactive sell / raise-cash / add-money tabs.
+
+    ``benchmark`` is the **real Nifty 50 TRI** series — the deploy-into-weakness advisor's market
+    signal must come from the index, not the watchlist mean (a prior bug). ``namespace`` keeps widget
+    keys unique so the paper and live advisors can both render in one run without a key collision;
+    ``default_add_amount`` prefills the Add-money field (live view seeds it with available cash).
+    """
     sell_tab, raise_tab, add_tab = st.tabs(["Sell a holding", "Raise cash", "Add money"])
     positions = sorted(portfolio.positions())
 
@@ -566,10 +653,17 @@ def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: d
         if not positions:
             st.info("No holdings to sell yet.")
         else:
-            ticker = st.selectbox("Holding", positions)
+            ticker = st.selectbox("Holding", positions, key=f"sell_pick_{namespace}")
             held = int(portfolio.ledger.quantity_held(ticker))
-            qty = st.number_input("Shares to sell", min_value=1, max_value=held, value=held, step=1)
-            if st.button("Advise sell") and ticker in prices_dec:
+            qty = st.number_input(
+                "Shares to sell",
+                min_value=1,
+                max_value=held,
+                value=held,
+                step=1,
+                key=f"sell_qty_{namespace}",
+            )
+            if st.button("Advise sell", key=f"sell_btn_{namespace}") and ticker in prices_dec:
                 st.markdown(
                     advise_sell(
                         portfolio,
@@ -583,9 +677,9 @@ def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: d
 
     with raise_tab:
         amount = st.number_input(
-            "Cash needed (₹)", min_value=1000, value=50000, step=1000, key="raise_amt"
+            "Cash needed (₹)", min_value=1000, value=50000, step=1000, key=f"raise_amt_{namespace}"
         )
-        if st.button("Advise raise-cash"):
+        if st.button("Advise raise-cash", key=f"raise_btn_{namespace}"):
             st.markdown(advise_raise_cash(portfolio, Decimal(amount), prices_dec, as_of).render())
 
     with add_tab:
@@ -594,7 +688,11 @@ def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: d
             "across Nifty 100, tilted toward out-of-favour names + market weakness. Not stock tips."
         )
         amount = st.number_input(
-            "New money to invest (₹)", min_value=1000, value=50000, step=1000, key="add_amt"
+            "New money to invest (₹)",
+            min_value=1000,
+            value=max(1000, default_add_amount),
+            step=1000,
+            key=f"add_amt_{namespace}",
         )
         n_stocks = st.slider(
             "Spread across how many stocks?",
@@ -603,8 +701,9 @@ def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: d
             value=15,
             help="Fewer = bigger, more concentrated positions (more risk, fewer orders). "
             "More = broader & thinner. ~12–25 is the usual sweet spot.",
+            key=f"add_names_{namespace}",
         )
-        if st.button("Suggest what to buy"):
+        if st.button("Suggest what to buy", key=f"add_btn_{namespace}"):
             wl = _watchlist()
             if wl is None:
                 st.error("Watchlist prices not ready yet — try again in a minute.")
@@ -612,7 +711,6 @@ def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: d
                 from qalpha.live.deploy import advise_deploy_into_weakness
 
                 tickers, sector_of, wl_prices = wl
-                index_close = wl_prices.adj_close.mean(axis=1)
                 st.markdown(
                     advise_deploy_into_weakness(
                         portfolio,
@@ -620,7 +718,7 @@ def _advisor_tabs(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: d
                         tickers,
                         sector_of,
                         wl_prices,
-                        index_close,
+                        benchmark,  # the REAL Nifty TRI, not the watchlist mean
                         as_of,
                         max_names=n_stocks,
                     ).render()

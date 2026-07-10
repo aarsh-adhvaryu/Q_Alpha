@@ -39,7 +39,7 @@ def test_dashboard_renders_and_advises() -> None:
     assert any("Today — what to do" in m.value for m in at.markdown)
 
     # Clicking the "Add money" advisor (button: "Suggest what to buy") must render without error.
-    at.number_input(key="add_amt").set_value(50000).run()
+    at.number_input(key="add_amt_paper").set_value(50000).run()
     next(b for b in at.button if "buy" in b.label.lower()).click().run()
     assert not at.exception
     # It renders the deploy advice ("Tax saved …") when the watchlist panel is on disk, or a graceful

@@ -8,9 +8,11 @@ curve vs Nifty 50 TRI, realized tax, and any orders awaiting human approval. Thi
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -18,6 +20,9 @@ from qalpha.data.prices import PriceData
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.paper import DailyPlan, PaperBook, _prices_on
 from qalpha.live.runlog import RunLogEntry, health_markdown
+
+if TYPE_CHECKING:
+    from qalpha.live.deploy import WeaknessDeployAdvice
 
 
 @dataclass(frozen=True)
@@ -58,6 +63,43 @@ def paper_freshness(book: PaperBook, today: date) -> PaperFreshness:
     else:
         note = f"✓ Up to date — last marked {last}."
     return PaperFreshness(last, stale_days, is_stale, note)
+
+
+def watchlist_is_stale(last_date: date, today: date, *, max_weekdays: int = 3) -> bool:
+    """Is the cached Nifty-100 watchlist price panel too old to trust for a live buy brief?
+
+    The panel is downloaded once and persists on disk, so without a staleness check the live deploy
+    advisor could size buys off week-old prices. Weekday-aware (a Friday panel read on Monday is one
+    weekday stale, not three), with one weekday of grace like :func:`paper_freshness`.
+    """
+    return _weekdays_after(last_date, today) - 1 >= max_weekdays
+
+
+def live_pm_brief_markdown(
+    available_cash: Decimal, advice: WeaknessDeployAdvice, *, floor: Decimal
+) -> str:
+    """One-line "PM brief" for the Live tab — idle cash → concrete buy plan (Ops Layer PR-2).
+
+    Pure/Streamlit-free so it is unit-testable. Renders the auto deploy-into-weakness suggestion as a
+    compact single line ("💰 Idle cash ₹12,430 → market 🟢 normal: buy 2×ITC, 1×NTPC … ₹0 tax, buys
+    only · leftover ₹514"). Below ``floor`` it returns ``""`` so the dashboard suppresses the nudge on
+    trivial balances rather than pestering the user.
+    """
+    if available_cash < floor:
+        return ""
+    icon = {"normal": "🟢", "elevated": "🟠", "deep": "🔴"}.get(advice.weakness.level, "🟢")
+    counts: Counter[str] = Counter()
+    for o in advice.deploy.buy_orders:
+        counts[o.ticker.removesuffix(".NS")] += int(o.quantity)
+    action = (
+        "buy " + ", ".join(f"{q}×{t}" for t, q in counts.most_common())
+        if counts
+        else "nothing fits cleanly right now"
+    )
+    return (
+        f"💰 **Idle cash ₹{available_cash:,.0f}** → market {icon} {advice.weakness.level}: "
+        f"{action} (₹0 capital-gains tax, buys only) · leftover ₹{advice.deploy.leftover_cash:,.0f}"
+    )
 
 
 def systemic_risk_markdown(index_close: pd.Series, as_of: date) -> str:
