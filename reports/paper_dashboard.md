@@ -1,6 +1,6 @@
 # Q-Alpha — Paper-Trading Dashboard
 
-_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-07-10** · generated 2026-07-10 08:48 UTC._
+_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-07-10** · generated 2026-07-10 15:07 UTC._
 
 ## At a glance
 
@@ -8,9 +8,9 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 |---|---|
 | Started | 2026-06-12 (28 days) |
 | Notional capital | ₹200,000 |
-| Equity (marked) | ₹201,944 |
-| Return since start | **+0.97%** |
-| Nifty 50 TRI (same window) | +2.59% |
+| Equity (marked) | ₹202,359 |
+| Return since start | **+1.18%** |
+| Nifty 50 TRI (same window) | +2.69% |
 | Cash | ₹7,335 |
 | Realized tax to date | ₹0.00 |
 | Rebalances | 1 |
@@ -24,11 +24,11 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 
 | Ticker | Qty | Price | Value | Weight |
 |---|---|---|---|---|
-| APOLLOHOSP.NS | 4 | ₹8810.00 | ₹35,240 | 17.5% |
-| ASIANPAINT.NS | 14 | ₹2675.10 | ₹37,451 | 18.5% |
-| BEL.NS | 98 | ₹414.75 | ₹40,646 | 20.1% |
-| NTPC.NS | 113 | ₹343.70 | ₹38,838 | 19.2% |
-| SUNPHARMA.NS | 22 | ₹1928.80 | ₹42,434 | 21.0% |
+| APOLLOHOSP.NS | 4 | ₹8841.00 | ₹35,364 | 17.5% |
+| ASIANPAINT.NS | 14 | ₹2677.80 | ₹37,489 | 18.5% |
+| BEL.NS | 98 | ₹414.85 | ₹40,655 | 20.1% |
+| NTPC.NS | 113 | ₹344.55 | ₹38,934 | 19.2% |
+| SUNPHARMA.NS | 22 | ₹1935.50 | ₹42,581 | 21.0% |
 
 ## Equity track record
 
@@ -45,7 +45,7 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 | 2026-07-07 | ₹203,899 | +1.95% |
 | 2026-07-08 | ₹200,560 | +0.28% |
 | 2026-07-09 | ₹201,448 | +0.72% |
-| 2026-07-10 | ₹201,944 | +0.97% |
+| 2026-07-10 | ₹202,359 | +1.18% |
 
 ## GO readiness (criterion 6)
 
@@ -53,23 +53,24 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 
 - 🟡 **Track length** — 20/63 trading days — building the minimum sample for a meaningful estimate.
 - 🟡 **Volatility event withstood** — no market stress event yet (worst Nifty pullback in-window -2.1%, needs ≤ -10%). A calm run can't earn a GO — waiting on a real event.
-- 🟡 **Forward vs benchmark** — within noise of the benchmark (≤ 3% behind) — strategy +1.3% vs Nifty +2.6% (Δ -1.3%).
+- 🟡 **Forward vs benchmark** — within noise of the benchmark (≤ 3% behind) — strategy +1.5% vs Nifty +2.7% (Δ -1.2%).
 - 🟢 **Drawdown behaviour** — market-driven, within tolerance — worst live drawdown -2.4% vs Nifty -2.1% (excess -0.3%).
 - 🟢 **Data integrity** — dense track record (largest gap 4 days).
 
 ## 🩺 System health & run log
 
-**🟢 healthy** — last autonomous run **2026-07-10T08:48:25Z** (market date 2026-07-10, `daily`).
+**🟢 healthy** — last autonomous run **2026-07-10T15:07:00Z** (market date 2026-07-10, `daily`).
 
 - Action: held — no action
 - Decision: holding — next scheduled rebalance on/after 2027-01-01
-- Equity: ₹201,944 (+0.97%) · GO: **NOT YET**
+- Equity: ₹202,359 (+1.18%) · GO: **NOT YET**
 - Freshness: ✓ Up to date — last marked 2026-07-10.
 
-_Recent runs (last 10 of 16):_
+_Recent runs (last 10 of 17):_
 
 | Ran (UTC) | As of | Cmd | Action | GO | Warnings |
 |---|---|---|---|---|---|
+| 2026-07-10T15:07:00Z | 2026-07-10 | daily | held — no action | NOT YET | — |
 | 2026-07-10T08:48:25Z | 2026-07-10 | daily | held — no action | NOT YET | — |
 | 2026-07-09T15:39:07Z | 2026-07-09 | daily | held — no action | NOT YET | — |
 | 2026-07-08T14:44:59Z | 2026-07-08 | daily | held — no action | NOT YET | — |
@@ -79,7 +80,6 @@ _Recent runs (last 10 of 16):_
 | 2026-07-02T14:33:22Z | 2026-07-02 | daily | held — no action | NOT YET | — |
 | 2026-07-01T15:16:57Z | 2026-07-01 | daily | held — no action | NOT YET | — |
 | 2026-06-30T15:05:17Z | 2026-06-30 | daily | held — no action | NOT YET | — |
-| 2026-06-29T16:15:21Z | 2026-06-29 | daily | held — no action | NOT YET | — |
 
 ---
 _The decision engine is the same code validated in the backtest ([reports/PHASE0_VERDICT.md](PHASE0_VERDICT.md)); this page is regenerated daily by the pipeline, not by hand._
