@@ -190,6 +190,25 @@ class BacktestConfig:
 
 
 @dataclass(frozen=True)
+class DeployPolicyConfig:
+    """Fresh-capital deploy-into-weakness policy (Q_alpha.md §2.9; Ops Layer PR-2).
+
+    Two distinct uses of these knobs, deliberately separated:
+
+    * The **dashboard** always shows the *full* deploy plan for all idle cash (a DCA framing) — the
+      floor only suppresses nagging on trivial balances.
+    * The **event-driven alert** (scan.py) sizes a *tranche* of idle cash by how weak the market is —
+      the pre-committed "calculated risk" on the already-validated deploy-into-weakness lever: half on
+      elevated weakness, all-in on deep. No new alpha claim — just a written policy on when to lean in.
+    """
+
+    idle_cash_floor: Decimal = Decimal("5000")  # below this, never nag / auto-brief
+    alert_tranche_elevated: float = 0.50  # deploy 50% of idle on elevated weakness
+    alert_tranche_deep: float = 1.00  # deploy 100% on deep — the pre-committed calculated risk
+    max_names_default: int = 15  # default diversification spread for the buy plan
+
+
+@dataclass(frozen=True)
 class Config:
     """Top-level config aggregating every sub-config."""
 
@@ -202,6 +221,7 @@ class Config:
     defensive: DefensiveConfig = field(default_factory=DefensiveConfig)
     capital: CapitalConfig = field(default_factory=CapitalConfig)
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
+    deploy_policy: DeployPolicyConfig = field(default_factory=DeployPolicyConfig)
 
 
 DEFAULT_CONFIG = Config()
