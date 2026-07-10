@@ -210,6 +210,100 @@ def today_brief_markdown(
     return "\n".join(lines)
 
 
+# --- Plain-English clarity layer (Ops Layer follow-up) -------------------------------------------
+# Pure helpers that translate the dashboard's numbers/jargon into everyday language + a good/bad read,
+# so a non-quant can tell at a glance how things are going and whether anything needs doing.
+
+_GO_PLAIN = {
+    "GO": "✅ **Cleared** — the evidence says the strategy is ready for real money.",
+    "READY": "✅ **Ready, bar a shock** — every test it can pass is green; the only thing left is to "
+    "live through a real market drop (that can't be scheduled).",
+    "NO-GO": "🔴 **Not safe** — the strategy is misbehaving vs how it was validated. Do NOT go live.",
+    "NOT YET": "⏳ **Still proving itself** — gathering evidence; this is the normal, expected state "
+    "until the track record is long enough and it has survived a volatility event.",
+}
+_MARKET_PLAIN = {
+    "normal": "🟢 calm — near its highs; add steadily / dollar-cost average",
+    "elevated": "🟠 pulled back a bit — a better-than-usual time to add new money",
+    "deep": "🔴 down a lot — historically one of the *better* times to add (tax-free buys)",
+}
+
+
+def performance_read(book_return_pct: float, benchmark_return_pct: float | None) -> str:
+    """One plain sentence on whether the book is beating the market (the whole goal, after tax)."""
+    if benchmark_return_pct is None:
+        return f"Your book is **{book_return_pct:+.1f}%** since it started."
+    gap = book_return_pct - benchmark_return_pct
+    if gap >= 0.5:
+        verdict = f"🟢 **Ahead of the market** by {gap:.1f} points"
+    elif gap <= -0.5:
+        verdict = f"🔴 **Behind the market** by {-gap:.1f} points"
+    else:
+        verdict = "🟢 **Roughly tracking the market**"
+    return (
+        f"{verdict} — **{book_return_pct:+.1f}%** vs Nifty's **{benchmark_return_pct:+.1f}%** since "
+        "the book started. (Beating the index *after tax* is the whole point.)"
+    )
+
+
+def plain_summary_markdown(
+    *,
+    book_return_pct: float,
+    benchmark_return_pct: float | None,
+    market_level: str,
+    go_verdict: str,
+    action_needed: bool,
+) -> str:
+    """The one-screen 'in plain English' summary — how you're doing, the market, readiness, to-dos."""
+    todo = (
+        "⚠️ **Yes** — there's a suggested action below. (You always place the order yourself.)"
+        if action_needed
+        else "**No** — nothing needs your attention right now. Investing here is mostly waiting."
+    )
+    return "\n".join(
+        [
+            "### 🧭 In plain English",
+            "",
+            f"- **How you're doing:** {performance_read(book_return_pct, benchmark_return_pct)}",
+            f"- **The market today:** {_MARKET_PLAIN.get(market_level, market_level)}.",
+            f"- **Ready for real money?** {_GO_PLAIN.get(go_verdict, go_verdict)}",
+            f"- **Anything to do?** {todo}",
+        ]
+    )
+
+
+def glossary_markdown() -> str:
+    """Every term on the dashboard, defined in plain words — the 'look anything up' panel."""
+    return "\n".join(
+        [
+            "**The terms on this page, in plain words:**",
+            "",
+            "- **Nifty 50 TRI** — the index *including dividends*; the fair yardstick. Beating it "
+            "**after tax** is the goal.",
+            "- **Drawdown** — how far you are below your highest-ever point (−10% = 10% below the "
+            "peak). Everyone has them; what matters is whether yours are worse than the market's.",
+            "- **Sharpe** — return per unit of bumpiness. Higher = a smoother ride for the same gain "
+            "(~1.0+ is good).",
+            "- **GO / READY / NOT YET / NO-GO** — the real-money verdict. NOT YET = still proving "
+            "itself (normal). READY = done bar a market shock. GO = cleared. NO-GO = misbehaving, "
+            "stay out.",
+            "- **Systemic risk / hedge** — how stressed the *whole* market is. When high, the "
+            "research suggests *considering* a tax-free futures hedge — informational, it never "
+            "trades.",
+            "- **Market weakness (normal / elevated / deep)** — how far the index is below its "
+            "1-year high. Deeper = historically a better time to put in **new** money.",
+            "- **Rebalance** — periodically resetting the portfolio to its target weights. This "
+            "system does it *rarely* (about yearly) on purpose — trading less means less tax.",
+            "- **Realized tax** — capital-gains tax actually triggered by sells so far. The engine "
+            "keeps this low; buying new names is ₹0 tax.",
+            "- **Position health / idiosyncratic** — is *one* holding breaking down on its own (not "
+            "just a market-wide dip)? It flags it to watch; it never auto-sells.",
+            "- **Satellite sleeve** — a small pocket (≤8%) for discretionary/judgement picks, kept "
+            "separate from the validated core.",
+        ]
+    )
+
+
 def go_readiness_markdown(book: PaperBook, benchmark: pd.Series, as_of: date) -> str:
     """The deterministic GO scorecard for the forward paper run, as dashboard markdown.
 
