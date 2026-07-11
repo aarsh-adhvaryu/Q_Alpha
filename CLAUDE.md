@@ -2,7 +2,50 @@
 
 Guidance for Claude Code (and humans) working in this repo.
 
-## 🧭 CURRENT STATE — read this first (2026-06-19)
+## 🧭 CURRENT STATE — read this FIRST (2026-07-11)
+
+**Everything below this block is the older working log; this block is what's true now.** The
+**"Daily-Driver Ops Layer"** in [PLAN_OPS_LAYER.md](PLAN_OPS_LAYER.md) is **built and its product half
+is merged + live.** Four gates green; the paper cron pushes daily.
+
+**MERGED to `main` (product side of the Ops Layer):**
+- **PR-1 (#33) — Telegram notification spine + daily opportunity scan.** `src/qalpha/live/notify.py`
+  (stdlib `urllib` Telegram sender, **fail-soft**: missing config/error → `False`, never raises),
+  `src/qalpha/live/scan.py` (pure edge-triggered `evaluate` — weakness escalation w/ tranche policy,
+  easing w/ 3-scan hysteresis, rebalance-due, GO flip, guard-failure, Monday digest; `AlertState`
+  JSON), `scripts/scan_alerts.py` (runs in the paper cron after the daily mark; `--test` /
+  `--force-digest` / `--pipeline-failed`). `paper.yml` wired + `if: failure()` alert +
+  `data/paper/alert_state.json` committed. Verified live to the user's phone.
+- **PR-2 (#34) — capital-aware auto buy-brief + two real bug fixes.** `DeployPolicyConfig` in
+  `config.py` (idle_cash_floor ₹5000, tranches 50%/100%, max_names 15); `live/dashboard.py`
+  `live_pm_brief_markdown` + `watchlist_is_stale`; `dashboard_app.py` auto PM brief on the Live tab
+  (zero typing, gated by `assess_advice_inputs`). **Bug fixes:** the live advisor was fed the watchlist
+  `adj_close.mean()` as the "index" instead of the real Nifty TRI (now threaded through); `_watchlist`
+  was cached forever → added 6h ttl + stale re-download. Namespaced advisor widget keys (paper/live).
+- **Dashboard plain-English clarity (#35).** `live/dashboard.py` `plain_summary_markdown` /
+  `performance_read` (ahead/behind/tracking vs Nifty) / `glossary_markdown`; wired into
+  `dashboard_app.py` (In-plain-English banner atop the Paper tab + good/bad caption under the metrics +
+  a "Jargon" expander). **Presentation only — engine/headline untouched. Merging it auto-deployed to
+  the user's Streamlit Cloud dashboard (live on his phone).**
+
+**Telegram bot @qalphastocks_bot** (chat_id 8936117519); repo Actions secrets `TELEGRAM_BOT_TOKEN` /
+`TELEGRAM_CHAT_ID` set. The weekday paper cron now marks the book AND pushes edge-triggered alerts.
+
+**The research repo carries the rest of the Ops Layer + new work (see its CLAUDE.md):** PR-3 hedge-flip
+alert + PR-4 daily AI market brief (Haiku 4.5, context-only) merged & live on the hedge cron; a
+whole-system integration layer (`system_check` + `mission_control_app`) + a Streamlit deploy fix; and a
+**pre-registered A/B/C "did it work?" forward study** (WIP on branch `forward-study`). **The product
+never imports research** — integration is via committed data (the research mission-control *fetches*
+this repo's public `reports/paper_dashboard.md`; it does not import). **This repo's clean ₹2L paper GO
+run is deliberately UNTOUCHED by any of the ops/AI/study work** — so a real-money GO stays credible.
+
+**Iron rules reaffirmed with the user (2026-07-11):** Zerodha = **execution + funding only**, he places
+every real order; **real money NEVER auto-trades** (auto-invest is fake-money/paper only, to build
+trust); the LLM is **context-only, never the calculator or the validator of the math**; keep the
+validated 18.2% headline provably unchanged. §14 scorecard unchanged (crit-6 forward paper run + a
+volatility event remain the calendar blockers).
+
+## 🧭 CURRENT STATE — (2026-06-19)
 
 **⏭️ QUEUED NEXT BUILD (2026-07-08, planned + user-approved scope, NOT yet implemented):** the
 **"Daily-Driver Ops Layer"** — full plan in [PLAN_OPS_LAYER.md](PLAN_OPS_LAYER.md) (execute it
