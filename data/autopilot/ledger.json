@@ -1,0 +1,60 @@
+[
+  {
+    "as_of": "2026-07-10",
+    "book": "A",
+    "amount": "50000.00",
+    "basket": {
+      "TRENT.NS": 2,
+      "TCS.NS": 2,
+      "HYUNDAI.NS": 2,
+      "VEDL.NS": 14,
+      "HCLTECH.NS": 3,
+      "INFY.NS": 3,
+      "AMBUJACEM.NS": 7,
+      "WIPRO.NS": 17,
+      "JIOFIN.NS": 12,
+      "IRFC.NS": 32,
+      "HDFCLIFE.NS": 5,
+      "ITC.NS": 10,
+      "IOC.NS": 20,
+      "HINDZINC.NS": 5,
+      "MAZDOCK.NS": 1
+    },
+    "model_rationale": "weakness=elevated; deployed \u20b949784 into: VEDL.NS (\u221265%), TRENT.NS (\u221247%), TCS.NS (\u221237%)",
+    "ai_insight": "n/a (no AI)",
+    "resolve_on": "2026-08-07",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-07-10",
+    "book": "B",
+    "amount": "62500.00",
+    "basket": {
+      "BAJAJHLDNG.NS": 1,
+      "TRENT.NS": 2,
+      "MAZDOCK.NS": 2,
+      "TCS.NS": 2,
+      "VEDL.NS": 15,
+      "HYUNDAI.NS": 2,
+      "HCLTECH.NS": 3,
+      "HDFCLIFE.NS": 6,
+      "IRFC.NS": 36,
+      "INFY.NS": 3,
+      "WIPRO.NS": 18,
+      "JIOFIN.NS": 13,
+      "ITC.NS": 11,
+      "AMBUJACEM.NS": 7,
+      "IOC.NS": 21
+    },
+    "model_rationale": "weakness=elevated; deployed \u20b962211 into: VEDL.NS (\u221265%), TRENT.NS (\u221247%), TCS.NS (\u221237%)",
+    "ai_insight": "lean=up confidence=medium (tilt 1.25\u00d7)",
+    "resolve_on": "2026-08-07",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  }
+]

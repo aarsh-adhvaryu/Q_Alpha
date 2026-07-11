@@ -1,0 +1,54 @@
+{
+  "A": {
+    "name": "A",
+    "cash": "50216.26",
+    "holdings": {
+      "TRENT.NS": 2,
+      "TCS.NS": 2,
+      "HYUNDAI.NS": 2,
+      "VEDL.NS": 14,
+      "HCLTECH.NS": 3,
+      "INFY.NS": 3,
+      "AMBUJACEM.NS": 7,
+      "WIPRO.NS": 17,
+      "JIOFIN.NS": 12,
+      "IRFC.NS": 32,
+      "HDFCLIFE.NS": 5,
+      "ITC.NS": 10,
+      "IOC.NS": 20,
+      "HINDZINC.NS": 5,
+      "MAZDOCK.NS": 1
+    },
+    "net_contributions": "100000"
+  },
+  "B": {
+    "name": "B",
+    "cash": "37788.93",
+    "holdings": {
+      "BAJAJHLDNG.NS": 1,
+      "TRENT.NS": 2,
+      "MAZDOCK.NS": 2,
+      "TCS.NS": 2,
+      "VEDL.NS": 15,
+      "HYUNDAI.NS": 2,
+      "HCLTECH.NS": 3,
+      "HDFCLIFE.NS": 6,
+      "IRFC.NS": 36,
+      "INFY.NS": 3,
+      "WIPRO.NS": 18,
+      "JIOFIN.NS": 13,
+      "ITC.NS": 11,
+      "AMBUJACEM.NS": 7,
+      "IOC.NS": 21
+    },
+    "net_contributions": "100000"
+  },
+  "C": {
+    "name": "C",
+    "cash": "149.58734130859375",
+    "holdings": {
+      "NIFTYBEES.NS": 363
+    },
+    "net_contributions": "100000"
+  }
+}
