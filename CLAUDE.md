@@ -34,6 +34,24 @@ manufacture a GO → SACRED, kept.** **(b) two repos / product-never-imports-res
   research over HTTP. Gates green (product 234 tests; ruff/format/mypy). Nothing here trades — fake
   money only; real Zerodha stays 100% manual.
 
+**Auto-pilot follow-ups (2026-07-11, branch `autopilot-trades-rebalance`):** three user-requested
+additions, all fake-money, rule (a) intact.
+- **Add-money persistence.** The dashboard (Streamlit Cloud) and the cron (GitHub Actions) are
+  different machines, so the button used to write only the session. Now it queues the deposit to the
+  repo's `data/autopilot/pending_injections.json` via the **GitHub Contents API**; the runner
+  (`autopilot.apply_pending`) applies + clears it, staying the sole writer of `books.json`. **⚠️ needs a
+  `GITHUB_TOKEN`** (fine-grained, contents:write on Q_Alpha) in the app's **Streamlit secrets** (+
+  optional `GITHUB_REPO`, defaults to `aarsh-adhvaryu/Q_Alpha`). No token → the button falls back to a
+  session-only add with a loud warning.
+- **Show the trades.** The Auto-pilot tab now has a per-book holdings + last-buy panel.
+- **Smart-rebalance experiment book.** A 4th fake book (`data/paper/adaptive_book.json`, ₹2L,
+  `StrategyParams.rebalance_freq="ADAPTIVE"`): runs the validated core strategy but **evaluates every
+  run and rebalances only when the §4.6 tax-benefit gate clears** — self-timed, not annual, not
+  forced-frequent (the user's ask: "a smart one that doesn't lose money"). Run by the auto-pilot runner
+  (`_run_adaptive_book`, fail-soft), tracked in `adaptive_track.csv`, shown in a "🏁 All engines,
+  side-by-side" table (validated ₹2L annual core + smart-rebalance + A/B/C wallet books, each vs Nifty).
+  **NEVER the validated GO book** (`data/paper/book.json`) — a separate book, headline untouched.
+
 ## 🧭 CURRENT STATE — (2026-07-11, Ops Layer)
 
 **Everything below this block is the older working log; this block is what's true now.** The
