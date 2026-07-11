@@ -11,6 +11,12 @@ Read-only: the page never places or commits a trade — it shows what the system
 acts in his own broker. Live holdings carry no purchase dates, so live tax is approximate until you
 **upload a Zerodha Console tradebook CSV** in the Live view — that replays exact dated FIFO lots
 (criterion 4) and switches the page to exact-tax mode; otherwise it shows the short-term caveat.
+
+Three tabs = the whole final system on one screen: **📄 Paper book** (the validated optimizer +
+advisor), **🔴 Live (Zerodha)** (the real account, read-only), and **🔬 Research** — the tax-free
+hedge, the A/B/C forward study, and the daily AI brief, fetched read-only from the research repo's
+committed reports (a data seam; the product never imports research). Only the product engine is ever
+the calculator.
 """
 
 from __future__ import annotations
@@ -49,6 +55,20 @@ from qalpha.live.holdings import LiveHoldings
 from qalpha.live.paper import PaperBook, _prices_on
 from qalpha.live.position_health import position_health
 from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
+
+# The research repo's committed reports (public), fetched read-only over HTTP so the whole final
+# system shows on one screen. This is a **data seam, not a code import** — the product NEVER imports
+# research (iron rule); it just renders research's own committed markdown, exactly as research's
+# mission-control fetches the product's paper_dashboard.md in reverse.
+_RESEARCH_RAW = "https://raw.githubusercontent.com/aarsh-adhvaryu/Q_Alpha_Research/main/"
+_RESEARCH_REPORTS = {
+    "hedge": ("🛡 Tax-free hedge (paper overlay)", "reports/hedge_paper_dashboard.md"),
+    "forward_study": (
+        "🧪 Forward study — did it work, did the AI help?",
+        "reports/forward_study_dashboard.md",
+    ),
+    "ai_brief": ("🧠 Daily AI market brief (context only, never a signal)", "reports/ai_brief.md"),
+}
 
 
 def _bridge_secrets() -> None:
@@ -409,6 +429,42 @@ def _today_brief(
     )
 
 
+@st.cache_data(ttl=1800)
+def _fetch_research(path: str) -> str | None:
+    """Fetch one of the research repo's committed reports (data seam, not a code import). Fail-soft:
+    any error (offline, 404 before a branch is merged) → ``None`` so the tab degrades gracefully."""
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(_RESEARCH_RAW + path, timeout=10) as resp:
+            return resp.read().decode("utf-8")  # type: ignore[no-any-return]
+    except Exception:
+        return None
+
+
+def _research_tab() -> None:
+    """The research side of the final system, read-only: the tax-free hedge overlay, the A/B/C forward
+    study, and the daily AI brief — each fetched from the research repo's own committed report. Nothing
+    here trades or feeds the product engine; it is the 'watch the whole system before the GO' pane."""
+    st.caption(
+        "The **research half** of the final system — fetched read-only from the public research repo "
+        "(the product never imports research). **All paper / fake-money · nothing here ever trades.**"
+    )
+    if st.button("🔄 Refresh research feeds"):
+        _fetch_research.clear()
+    for _key, (title, path) in _RESEARCH_REPORTS.items():
+        st.divider()
+        st.subheader(title)
+        text = _fetch_research(path)
+        if text and "No brief generated yet" not in text:
+            st.markdown(text)
+        else:
+            st.info(
+                f"Not published yet — the research cron writes `{path}` (the forward study lands once "
+                "its branch merges to research `main`). This pane fills in automatically once it does."
+            )
+
+
 def main() -> None:
     st.set_page_config(page_title="Q-Alpha", page_icon="📈", layout="wide")
     _bridge_secrets()
@@ -428,7 +484,9 @@ def main() -> None:
     st.title("Q-Alpha — Tax-Smart Portfolio Advisor")
     _paper_status_panel(book)
 
-    paper_tab, live_tab = st.tabs(["📄 Paper book", "🔴 Live (Zerodha)"])
+    paper_tab, live_tab, research_tab = st.tabs(
+        ["📄 Paper book", "🔴 Live (Zerodha)", "🔬 Research (hedge · forward study · AI)"]
+    )
 
     with paper_tab:
         # Plain-English summary first — how you're doing / market / readiness / to-dos, in everyday
@@ -489,6 +547,9 @@ def main() -> None:
             )
 
         _live_view()
+
+    with research_tab:
+        _research_tab()
 
 
 def _streamed_prices(
