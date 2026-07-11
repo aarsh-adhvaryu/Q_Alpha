@@ -219,6 +219,12 @@ class PaperBook:
         if last is None:
             return True
         freq = self.params.rebalance_freq
+        # ADAPTIVE (the "smart-rebalance" experiment book): evaluate the funnel EVERY run and let the
+        # §4.6 tax-benefit gate decide whether to actually trade — i.e. self-timed, not calendar-locked
+        # (rebalances only when the risk reduction beats 2× cost+tax, so realized turnover stays low).
+        # Requires force_refresh=False + tax_aware=True so the gate, not force-refresh, is the decider.
+        if freq == "ADAPTIVE":
+            return True
         return pd.Period(as_of, freq=freq) > pd.Period(last, freq=freq)
 
     def next_rebalance_label(self) -> str:
@@ -226,6 +232,8 @@ class PaperBook:
         last = self._last_rebalance_date()
         if last is None:
             return "now (first deployment)"
+        if self.params.rebalance_freq == "ADAPTIVE":
+            return "whenever the tax-benefit gate clears (self-timed)"
         nxt = (pd.Period(last, freq=self.params.rebalance_freq) + 1).start_time.date()
         return f"on/after {nxt.isoformat()}"
 

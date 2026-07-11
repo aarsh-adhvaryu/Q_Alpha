@@ -61,11 +61,64 @@ AUTOPILOT_DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
 AI_BRIEF_MD = Path("reports/ai_brief.md")
 
 
+def _queue_injection_to_repo(amount: int, reason: str) -> tuple[bool, str]:
+    """Queue an Add-money deposit into the repo's ``pending_injections.json`` via the GitHub API, so
+    the daily cron (a different machine than this Streamlit app) actually picks it up. Needs a
+    ``GITHUB_TOKEN`` (contents:write) in the app's secrets. Returns ``(ok, message)`` — fail-soft."""
+    import base64
+    import json
+    import urllib.error
+    import urllib.request
+
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if not token:
+        return False, "no GITHUB_TOKEN configured"
+    repo = os.environ.get("GITHUB_REPO", "aarsh-adhvaryu/Q_Alpha")
+    path = "data/autopilot/pending_injections.json"
+    api = f"https://api.github.com/repos/{repo}/contents/{path}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "qalpha-dashboard",
+    }
+    try:
+        sha: str | None = None
+        items: list[dict[str, str]] = []
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(api, headers=headers), timeout=10
+            ) as r:
+                data = json.load(r)
+                sha = str(data["sha"])
+                raw = base64.b64decode(data["content"]).decode("utf-8").strip()
+                items = json.loads(raw) if raw else []
+        except urllib.error.HTTPError as e:
+            if e.code != 404:  # 404 = file doesn't exist yet → create it
+                raise
+        items.append({"amount": str(amount), "reason": reason, "at": datetime.now(UTC).isoformat()})
+        body: dict[str, object] = {
+            "message": f"autopilot: queue Add-money ₹{amount} [skip ci]",
+            "content": base64.b64encode((json.dumps(items, indent=2) + "\n").encode()).decode(),
+        }
+        if sha is not None:
+            body["sha"] = sha
+        put = urllib.request.Request(
+            api,
+            data=json.dumps(body).encode(),
+            headers={**headers, "Content-Type": "application/json"},
+            method="PUT",
+        )
+        with urllib.request.urlopen(put, timeout=10):
+            return True, "queued to the repo"
+    except Exception as exc:
+        return False, str(exc)
+
+
 def _bridge_secrets() -> None:
     """Copy Streamlit Cloud secrets into the environment so the env-based credential/password code
     works unchanged (Streamlit Cloud exposes secrets via ``st.secrets``, not ``os.environ``)."""
     try:
-        for k in ("KITE_API_KEY", "KITE_API_SECRET", "APP_PASSWORD"):
+        for k in ("KITE_API_KEY", "KITE_API_SECRET", "APP_PASSWORD", "GITHUB_TOKEN", "GITHUB_REPO"):
             if k in st.secrets:  # raises if no secrets configured → caught below
                 os.environ.setdefault(k, str(st.secrets[k]))
     except Exception:
@@ -419,7 +472,50 @@ def _today_brief(
     )
 
 
-def _autopilot_tab() -> None:
+def _all_engines_summary(core_return: float, nifty_return: float | None) -> None:
+    """One table with every book's return, side by side — the validated ₹2L core (annual), the
+    smart-rebalance engine (self-timed ₹2L), and the 3 wallet books (A/B/C) — each independent."""
+    rows: list[dict[str, str]] = []
+    nifty = f"{nifty_return:+.2f}%" if nifty_return is not None else "—"
+    rows.append(
+        {
+            "Engine": "₹2L core — validated (annual)",
+            "Return": f"{core_return:+.2f}%",
+            "vs Nifty": nifty,
+        }
+    )
+    adaptive_csv = Path("data/autopilot/adaptive_track.csv")
+    if adaptive_csv.exists():
+        r = pd.read_csv(adaptive_csv).iloc[-1]
+        rows.append(
+            {
+                "Engine": "Smart-rebalance — self-timed (₹2L)",
+                "Return": f"{float(r['return_pct']):+.2f}%",
+                "vs Nifty": f"{float(r['bench_pct']):+.2f}%",
+            }
+        )
+    track_csv = Path("data/autopilot/track.csv")
+    if track_csv.exists():
+        r = pd.read_csv(track_csv).iloc[-1]
+        names = {"A": "A · strategy (wallet)", "B": "B · strategy + AI", "C": "C · buy & hold"}
+        for n, label in names.items():
+            rows.append(
+                {
+                    "Engine": label,
+                    "Return": f"{float(r[f'{n}_return_pct']):+.2f}%",
+                    "vs Nifty": nifty,
+                }
+            )
+    st.subheader("🏁 All engines, side by side")
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    st.caption(
+        "Each runs **independently** on fake money — the validated core rebalances ~once a year, the "
+        "smart-rebalance engine trades only when the tax-gate clears, the wallet books deploy fresh "
+        "money into dips. Comparing them, live, is the whole point. Early numbers are low-power."
+    )
+
+
+def _autopilot_tab(core_return: float, nifty_return: float | None) -> None:
     """Auto-pilot — the fake-money "watch the system invest & see if it works" view. The advisor
     recommends; three books follow it (A strategy · B strategy+AI · C buy-and-hold) so you can watch
     whether it makes money and whether the AI helps. You fund a **wallet** here; the daily cron
@@ -440,6 +536,10 @@ def _autopilot_tab() -> None:
         "(₹0-tax buys). **Nothing here ever places a real trade.**"
     )
 
+    # --- All engines, side by side: the validated ₹2L core + smart-rebalance + the 3 wallet books,
+    #     each running independently, each vs Nifty. This is the "watch them all together" view. ---
+    _all_engines_summary(core_return, nifty_return)
+
     # --- Wallet & controls: fund the books (deployed on the next daily run) + the monthly toggle ---
     st.subheader("💰 Wallet")
     books = load_books()
@@ -454,14 +554,24 @@ def _autopilot_tab() -> None:
         reason = st.text_input("Why (optional — an IPO, a tip, a dip)", value="")
         submitted = st.form_submit_button("➕ Add money")
     if submitted and amount > 0:
-        dec = Decimal(str(int(amount)))
-        inject_all(books, dec)
-        save_books(books)
-        log_manual_injection(dec, reason or "(unspecified)")
-        st.success(
-            f"Added ₹{int(amount):,} to all three books (kept equal so the comparison stays fair). "
-            "It deploys on the next daily run."
-        )
+        why = reason or "(unspecified)"
+        ok, msg = _queue_injection_to_repo(int(amount), why)
+        if ok:
+            st.success(
+                f"Queued ₹{int(amount):,} into all three books (kept equal so the comparison stays "
+                "fair). The daily cron applies it and deploys on its next run."
+            )
+        else:
+            # No token (or the write failed): fall back to a session-only add so the button still does
+            # *something*, but warn loudly that it won't reach the cron / will be overwritten.
+            inject_all(books, Decimal(str(int(amount))))
+            save_books(books)
+            log_manual_injection(Decimal(str(int(amount))), why)
+            st.warning(
+                f"Added ₹{int(amount):,} **to this session only** — it won't reach the daily cron "
+                f"(and will be overwritten) because repo persistence isn't set up ({msg}). "
+                "Add a `GITHUB_TOKEN` to the app's Streamlit secrets to make Add-money stick."
+            )
 
     auto_on = bool(state.get("monthly_autodeposit", True))
     new_auto = st.toggle("Auto-add ₹50,000 on the 1st of each month (simulated SIP)", value=auto_on)
@@ -480,6 +590,29 @@ def _autopilot_tab() -> None:
             "No marks yet — the daily cron seeds the books and writes this on its first run "
             "(`scripts/autopilot.py daily`)."
         )
+
+    # --- The trades: what each book actually holds + bought most recently ---
+    from qalpha.live.autopilot import load_ledger
+
+    st.divider()
+    st.subheader("📦 What each book holds")
+    ledger = load_ledger()
+    last_by_book: dict[str, object] = {}
+    for d in ledger:
+        last_by_book[d.book] = d  # ledger is chronological → keeps the latest per book
+    tabs = st.tabs([labels[n] for n in BOOK_NAMES])
+    for tab, n in zip(tabs, BOOK_NAMES, strict=True):
+        with tab:
+            holds = books[n].holdings
+            if holds:
+                rows = [{"Ticker": t, "Shares": q} for t, q in sorted(holds.items())]
+                st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            else:
+                st.caption("No holdings yet — all idle cash.")
+            last = last_by_book.get(n)
+            if last is not None and getattr(last, "basket", None):
+                bought = ", ".join(f"{t}×{q}" for t, q in sorted(last.basket.items()))
+                st.caption(f"🛒 Last buy ({last.as_of}): {bought}  ·  _{last.model_rationale}_")
 
     # --- Today's AI market brief (context only; Book B acts on its SIGNAL via a fixed rule) ---
     st.divider()
@@ -579,7 +712,10 @@ def main() -> None:
         _live_view()
 
     with autopilot_tab:
-        _autopilot_tab()
+        _autopilot_tab(
+            core_return=book.total_return_pct(prices, as_of),
+            nifty_return=_benchmark_return_pct(benchmark, book.start_date, as_of),
+        )
 
 
 def _streamed_prices(

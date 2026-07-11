@@ -384,6 +384,45 @@ def inject_all(books: dict[str, Book], amount: Decimal) -> None:
         books[n].inject(amount)
 
 
+# Pending manual injections queued by the dashboard's Add-money button. Because the dashboard (Streamlit
+# Cloud) and the daily runner (GitHub Actions) are different machines, the button writes here IN THE REPO
+# (via the GitHub API); the runner applies + clears them, staying the sole writer of ``books.json``.
+PENDING_PATH = Path("data/autopilot/pending_injections.json")
+
+
+def load_pending(path: Path = PENDING_PATH) -> list[dict[str, object]]:
+    """Queued deposits the runner hasn't applied yet (empty if none)."""
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return []
+    data = json.loads(text)
+    return data if isinstance(data, list) else []
+
+
+def clear_pending(path: Path = PENDING_PATH) -> None:
+    """Empty the queue after the runner has applied it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("[]\n", encoding="utf-8")
+
+
+def apply_pending(books: dict[str, Book], path: Path = PENDING_PATH) -> Decimal:
+    """Deposit every queued injection into all three books, log each, and clear the queue. Returns the
+    total applied (₹0 if the queue was empty)."""
+    pending = load_pending(path)
+    total = Decimal("0")
+    for item in pending:
+        amt = Decimal(str(item.get("amount", "0")))
+        if amt > 0:
+            inject_all(books, amt)
+            log_manual_injection(amt, str(item.get("reason", "(from dashboard)")))
+            total += amt
+    if pending:
+        clear_pending(path)
+    return total
+
+
 def log_manual_injection(amount: Decimal, reason: str, path: Path = MANUAL_LOG_PATH) -> None:
     """Append a discretionary top-up (amount + the user's stated reason) for honesty/audit."""
     from datetime import datetime
