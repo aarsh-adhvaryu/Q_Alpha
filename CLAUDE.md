@@ -2,7 +2,39 @@
 
 Guidance for Claude Code (and humans) working in this repo.
 
-## 🧭 CURRENT STATE — read this FIRST (2026-07-11)
+## 🧭 CURRENT STATE — read this FIRST (2026-07-11, unification)
+
+**The live system is now ONE system in this product repo.** The user's audit verdict: the pieces felt
+fragmented (two repos, an invisible wallet, a fetched "Research" tab). Decision (his call): **unify the
+live system into the product, break the *organizational* separation, keep the *validation* one.** Two
+iron rules were untangled — **(a) the validated 18.2% headline stays provably unchanged; never tune to
+manufacture a GO → SACRED, kept.** **(b) two repos / product-never-imports-research → relaxed.**
+
+**Built on branch `unify-live-system` (not yet merged):**
+- **Auto-pilot moved in, native.** `src/qalpha/live/autopilot.py` (the fake-money A/B/C core — was the
+  research forward study) + `scripts/autopilot.py` (daily runner: fund wallet → deploy via
+  `advise_deploy_into_weakness` **imported directly**, A no-AI · B AI-tilted · C buy-and-hold → resolve
+  vs Nifty → write `data/autopilot/*` + `reports/autopilot_dashboard.md`). Idempotent per day. Pre-reg
+  at `docs/PREREGISTRATION_autopilot.md`.
+- **AI brief moved in, quarantined.** `src/qalpha/live/ai_brief.py` + `scripts/ai_brief.py` (Haiku +
+  web-search, context-only). It is the **optional `ai` extra** — the engine/factors/backtest/CI never
+  import it; its only machine consumer is Book B, which acts on the `SIGNAL` line via a fixed rule. So
+  the product stays deterministic where it must be; **rule (a) intact** (AI never computes a number for
+  the validated engine).
+- **Dashboard = one screen, three tabs:** 📄 Paper book · 🔴 Live (Zerodha) · **🤖 Auto-pilot** (native;
+  replaced the fetched Research tab). The Auto-pilot tab has a **wallet with an Add-money button** + a
+  **toggleable ₹50k monthly auto-top-up** (the user's confusion — "where do I add money" — is fixed;
+  every deposit hits all three books equally so the A/B/C verdict stays fair), the "did it work / did
+  the AI help" scoreboard, and today's AI brief.
+- **Cron:** `paper.yml` now runs the AI brief + auto-pilot (fail-soft) after the daily mark and commits
+  their data. **⚠️ ACTION NEEDED (user):** add **`ANTHROPIC_API_KEY`** to THIS repo's Actions secrets
+  (only the research repo had it) — else the brief silently skips and Book B just runs neutral.
+- **Research is now the archive:** the hedge forward run + the finished dead-ends (quantum/LPPLS/HMM).
+  Its cron no longer runs the AI brief or the study (they live here now). The product no longer fetches
+  research over HTTP. Gates green (product 234 tests; ruff/format/mypy). Nothing here trades — fake
+  money only; real Zerodha stays 100% manual.
+
+## 🧭 CURRENT STATE — (2026-07-11, Ops Layer)
 
 **Everything below this block is the older working log; this block is what's true now.** The
 **"Daily-Driver Ops Layer"** in [PLAN_OPS_LAYER.md](PLAN_OPS_LAYER.md) is **built and its product half
