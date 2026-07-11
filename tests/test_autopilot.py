@@ -235,3 +235,18 @@ def test_books_state_round_trip_and_inject(tmp_path: Path) -> None:
     st["seeded"] = True
     save_state(st, tmp_path / "s.json")
     assert load_state(tmp_path / "s.json")["seeded"] is True
+
+
+def test_apply_pending_injects_all_books_and_clears(tmp_path: Path) -> None:
+    import json
+
+    from qalpha.live.autopilot import BOOK_NAMES, Book, apply_pending, load_pending
+
+    p = tmp_path / "pending.json"
+    p.write_text(json.dumps([{"amount": "50000", "reason": "IPO"}, {"amount": "10000"}]))
+    books = {n: Book(name=n) for n in BOOK_NAMES}
+    total = apply_pending(books, p)
+    assert total == Decimal("60000")
+    assert all(books[n].cash == Decimal("60000") for n in BOOK_NAMES)  # equal into all three
+    assert load_pending(p) == []  # queue cleared
+    assert apply_pending(books, p) == Decimal("0")  # nothing left to apply

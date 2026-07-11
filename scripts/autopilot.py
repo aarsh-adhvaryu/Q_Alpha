@@ -29,7 +29,7 @@ from pathlib import Path
 import pandas as pd
 
 from qalpha.backtest.portfolio import Portfolio
-from qalpha.config import CostConfig, TaxConfig
+from qalpha.config import Config, CostConfig, TaxConfig
 from qalpha.data.ingest import load_parquet
 from qalpha.data.prices import PriceData
 from qalpha.live.autopilot import (
@@ -37,6 +37,7 @@ from qalpha.live.autopilot import (
     Book,
     Decision,
     ai_hit_rate,
+    apply_pending,
     basket_value,
     book_deploy_amount,
     inject_all,
@@ -55,9 +56,10 @@ from qalpha.live.autopilot import (
 )
 from qalpha.live.dashboard import watchlist_is_stale
 from qalpha.live.deploy import advise_deploy_into_weakness, market_weakness
+from qalpha.live.paper import PaperBook, StrategyParams
 
 sys.path.insert(0, str(Path(__file__).parent))
-from paper import BENCHMARK_PARQUET, _load_benchmark_series, _refresh_benchmark
+from paper import BENCHMARK_PARQUET, _load_benchmark_series, _load_market, _refresh_benchmark
 
 FORWARD_START = (
     "2026-07-06"  # fixed study start (first trading session on/after this seeds the books)
@@ -70,6 +72,13 @@ WATCHLIST_PARQUET = Path("data/historical/prices_watchlist.parquet")
 BRIEF_MD = Path("reports/ai_brief.md")
 TRACK_CSV = Path("data/autopilot/track.csv")
 DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
+# The "smart-rebalance" experiment book: the validated core strategy, but self-timed — it evaluates
+# every run and rebalances ONLY when the §4.6 tax-benefit gate clears (not annual, not forced-frequent).
+# A separate ₹2L notional book; NEVER the validated ₹2L GO book (data/paper/book.json), so the headline
+# is untouched. Fake money.
+ADAPTIVE_BOOK_PATH = Path("data/paper/adaptive_book.json")
+ADAPTIVE_TRACK_CSV = Path("data/autopilot/adaptive_track.csv")
+ADAPTIVE_CAPITAL = Decimal("200000")
 
 
 # ---- watchlist + prices (reuse the product's panels — no yfinance-from-scratch) -------------------
@@ -235,7 +244,12 @@ def _append_track(as_of: str, standings: dict[str, dict[str, float]]) -> None:
 
 
 def _render_dashboard(
-    as_of: str, standings: dict[str, dict[str, float]], ledger: list[Decision], level: str, sig: str
+    as_of: str,
+    standings: dict[str, dict[str, float]],
+    ledger: list[Decision],
+    level: str,
+    sig: str,
+    adaptive: dict[str, object] | None = None,
 ) -> str:
     worked, total = ai_hit_rate(ledger)
     n_days = len(pd.read_csv(TRACK_CSV)) if TRACK_CSV.exists() else 0
@@ -270,6 +284,22 @@ def _render_dashboard(
         "",
         "> **Low power early — this is not a verdict.** The claims need ≥3 months and a real "
         "volatility event before they mean anything; until then these are just the accruing numbers.",
+    ]
+    if adaptive is not None:
+        state = "🔁 REBALANCED today" if adaptive["rebalanced"] else "— holding (gate not cleared)"
+        lines += [
+            "",
+            "## 🔁 Smart-rebalance engine (self-timed core strategy, ₹2L fake)",
+            "",
+            "Runs the validated core strategy but **evaluates every day and trades only when the §4.6 "
+            "tax-benefit gate clears** — self-timed, not annual, not forced-frequent. Tests whether the "
+            "rebalance engine makes money without churning to tax.",
+            "",
+            f"- Value **₹{float(adaptive['value']):,.0f}** · return **{float(adaptive['return_pct']):+.2f}%** "
+            f"vs Nifty **{float(adaptive['bench_pct']):+.2f}%** · rebalances so far: "
+            f"**{int(adaptive['rebalances'])}** · today: {state}",
+        ]
+    lines += [
         "",
         "## Recent resolved decisions",
         "",
@@ -282,6 +312,68 @@ def _render_dashboard(
             f"{d.benchmark_return_pct:+.1f}% | {d.verdict} | {d.ai_insight} |"
         )
     return "\n".join(lines) + "\n"
+
+
+# ---- the smart-rebalance experiment book (self-timed core strategy) -------------------------------
+
+
+def _run_adaptive_book(as_of: date, nifbees: pd.Series) -> dict[str, object] | None:
+    """Mark the self-timed core-strategy book: evaluate the funnel EVERY run, but rebalance only when
+    the §4.6 tax-benefit gate clears (so it trades rarely, on its own timing). A separate ₹2L notional
+    book — never the validated GO book. Fail-soft: returns ``None`` if the strategy panel isn't loadable
+    so the auto-pilot's A/B/C books still run."""
+    try:
+        cfg = Config()
+        if not ADAPTIVE_BOOK_PATH.exists():
+            PaperBook.init(
+                ADAPTIVE_BOOK_PATH,
+                cfg,
+                starting_capital=ADAPTIVE_CAPITAL,
+                start_date=date.fromisoformat(FORWARD_START),
+                params=StrategyParams(
+                    tax_aware=True, force_refresh=False, rebalance_freq="ADAPTIVE"
+                ),
+            )
+        book = PaperBook.load(ADAPTIVE_BOOK_PATH, cfg)
+        prices, universe, sector_of = _load_market()
+        plan = book.plan(prices, universe, sector_of, as_of)
+        rebalanced = bool(plan.decision.actionable)
+        if rebalanced:
+            book.apply(prices, plan)
+        book.mark(prices, as_of)  # record equity every run (persists)
+        value = float(book.equity(prices, as_of))
+        ret = book.total_return_pct(prices, as_of)
+        start_idx = _price_on(nifbees, book.start_date.isoformat())
+        now_idx = _price_on(nifbees, as_of.isoformat())
+        bench = pct_return(start_idx, now_idx) if start_idx and now_idx else 0.0
+        row = {
+            "date": as_of.isoformat(),
+            "value": round(value, 2),
+            "return_pct": round(ret, 3),
+            "bench_pct": round(bench, 3),
+            "rebalances": len(book.history),
+        }
+        if ADAPTIVE_TRACK_CSV.exists():
+            df = pd.read_csv(ADAPTIVE_TRACK_CSV)
+            df = df[df["date"] != row["date"]]
+            df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+        else:
+            df = pd.DataFrame([row])
+        ADAPTIVE_TRACK_CSV.parent.mkdir(parents=True, exist_ok=True)
+        df.sort_values("date").reset_index(drop=True).to_csv(ADAPTIVE_TRACK_CSV, index=False)
+        if rebalanced:
+            print(f"[autopilot] smart-rebalance book REBALANCED ({plan.decision.reason}).")
+        return {
+            "value": value,
+            "return_pct": ret,
+            "bench_pct": bench,
+            "rebalanced": rebalanced,
+            "rebalances": len(book.history),
+            "reason": plan.decision.reason,
+        }
+    except Exception as exc:  # fail-soft — a missing strategy panel must not break the A/B/C books
+        print(f"[autopilot] smart-rebalance book skipped (non-fatal): {exc}")
+        return None
 
 
 # ---- commands ------------------------------------------------------------------------------------
@@ -302,10 +394,20 @@ def cmd_daily() -> int:
 
     books, ledger, state = load_books(), load_ledger(), load_state()
 
+    # Apply any deposits the dashboard's Add-money button queued to the repo (always — even on an
+    # already-marked day — so a top-up is never lost; it just deploys on the next run).
+    pending_total = apply_pending(books)
+    if pending_total > 0:
+        print(
+            f"[autopilot] applied ₹{pending_total:,.0f} of queued Add-money into all three books."
+        )
+
     if (
         state.get("last_marked") == as_of_str
     ):  # idempotent: a same-day re-run must not double-deploy
-        print(f"[autopilot] already marked {as_of_str} — skipping.")
+        if pending_total > 0:
+            save_books(books)  # persist the top-up even though today's deploy is already done
+        print(f"[autopilot] already marked {as_of_str} — skipping deploy.")
         return 0
 
     # Scheduled top-up — the ₹1L seed always; the ₹50k monthly only if the toggle is on.
@@ -357,12 +459,14 @@ def cmd_daily() -> int:
     if n_resolved:
         print(f"[autopilot] resolved {n_resolved} decision(s).")
 
+    adaptive = _run_adaptive_book(as_of, nifbees)  # the self-timed core-strategy experiment book
+
     last_prices = _last_prices(prices, watchlist, as_of_str)
     standings = _standings(books, last_prices)
     _append_track(as_of_str, standings)
     DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_MD.write_text(
-        _render_dashboard(as_of_str, standings, ledger, level, sig_desc), encoding="utf-8"
+        _render_dashboard(as_of_str, standings, ledger, level, sig_desc, adaptive), encoding="utf-8"
     )
     save_books(books)
     save_ledger(ledger)
