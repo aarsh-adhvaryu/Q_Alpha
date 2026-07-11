@@ -173,6 +173,57 @@ def test_live_pm_brief_suppressed_below_floor() -> None:
     assert live_pm_brief_markdown(Decimal("4999"), advice, floor=Decimal("5000")) == ""
 
 
+# --- plain-English clarity layer (dashboard follow-up) ------------------------------------------
+
+
+def test_performance_read_ahead_behind_tracking() -> None:
+    from qalpha.live.dashboard import performance_read
+
+    assert "Ahead of the market" in performance_read(5.0, 2.0)
+    assert "Behind the market" in performance_read(1.0, 4.0)
+    assert "tracking" in performance_read(2.0, 2.1)
+    assert "since it started" in performance_read(3.0, None)  # no benchmark → graceful
+
+
+def test_plain_summary_covers_all_four_lines() -> None:
+    from qalpha.live.dashboard import plain_summary_markdown
+
+    md = plain_summary_markdown(
+        book_return_pct=2.5,
+        benchmark_return_pct=1.0,
+        market_level="elevated",
+        go_verdict="NOT YET",
+        action_needed=True,
+    )
+    assert "In plain English" in md
+    assert "How you're doing" in md and "Ahead of the market" in md
+    assert "better-than-usual time to add" in md  # elevated market, plain words
+    assert "Still proving itself" in md  # NOT YET, plain words
+    assert "there's a suggested action below" in md  # action_needed
+
+
+def test_plain_summary_no_action_and_go() -> None:
+    from qalpha.live.dashboard import plain_summary_markdown
+
+    md = plain_summary_markdown(
+        book_return_pct=1.0,
+        benchmark_return_pct=1.0,
+        market_level="normal",
+        go_verdict="GO",
+        action_needed=False,
+    )
+    assert "nothing needs your attention" in md
+    assert "Cleared" in md  # GO → plain
+
+
+def test_glossary_defines_key_terms() -> None:
+    from qalpha.live.dashboard import glossary_markdown
+
+    md = glossary_markdown()
+    for term in ("Nifty 50 TRI", "Drawdown", "Sharpe", "Systemic risk", "Realized tax"):
+        assert term in md
+
+
 def test_live_pm_brief_handles_no_affordable_buys() -> None:
     from decimal import Decimal
 
