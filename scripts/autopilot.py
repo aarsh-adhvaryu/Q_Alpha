@@ -402,31 +402,7 @@ def cmd_daily() -> int:
             f"[autopilot] applied ₹{pending_total:,.0f} of queued Add-money into all three books."
         )
 
-    if (
-        state.get("last_marked") == as_of_str
-    ):  # idempotent: a same-day re-run must not double-deploy
-        if pending_total > 0:
-            save_books(books)  # persist the top-up even though today's deploy is already done
-        print(f"[autopilot] already marked {as_of_str} — skipping deploy.")
-        return 0
-
-    # Scheduled top-up — the ₹1L seed always; the ₹50k monthly only if the toggle is on.
-    seeded_before = bool(state.get("seeded"))
-    last_month = state.get("last_deposit_month")
-    amount, new_month = scheduled_injection(
-        as_of_str,
-        seeded=seeded_before,
-        last_deposit_month=str(last_month) if last_month else None,
-    )
-    if seeded_before and not state.get("monthly_autodeposit", True):
-        amount = Decimal("0")  # monthly auto-top-up off → skip it (manual Add-money still works)
-    if amount > 0:
-        inject_all(books, amount)
-        print(f"[autopilot] scheduled top-up ₹{amount:,.0f} into all three books.")
-    state["seeded"] = True
-    state["last_deposit_month"] = new_month
-    state["last_marked"] = as_of_str
-
+    # Market context — needed both to display the books and to size the A/B/C deploy.
     level = market_weakness(nifbees, as_of).level
     signal = (
         parse_ai_signal(BRIEF_MD.read_text(encoding="utf-8"), as_of_str)
@@ -439,31 +415,67 @@ def cmd_daily() -> int:
         if signal is not None
         else "none (neutral 1.00× tilt)"
     )
-    resolve_on = (as_of + timedelta(days=RESOLVE_CALENDAR_DAYS)).isoformat()
 
-    amt_a = book_deploy_amount(books["A"].cash, level, None, ai=False)
-    basket_a, rat_a = _deploy(books["A"], amt_a, watchlist, sector_of, prices, nifbees, as_of)
-    if basket_a:
-        ledger.append(
-            Decision(as_of_str, "A", str(amt_a), basket_a, rat_a, "n/a (no AI)", resolve_on)
+    # The smart-rebalance experiment book — its OWN idempotency, so it seeds / catches up independently
+    # of the A/B/C deploy (which is guarded separately below). Lets it start on the next run even when
+    # the A/B/C books were already marked this session.
+    adaptive: dict[str, object] | None = None
+    if state.get("adaptive_last_marked") != as_of_str:
+        adaptive = _run_adaptive_book(as_of, nifbees)
+        if adaptive is not None:
+            state["adaptive_last_marked"] = as_of_str
+
+    # A/B/C deploy — guarded so a same-day re-run never double-deploys the wallet books.
+    already_marked = state.get("last_marked") == as_of_str
+    if already_marked:
+        print(
+            f"[autopilot] A/B/C already marked {as_of_str} — deploy skipped (adaptive/pending refreshed)."
         )
-    amt_b = book_deploy_amount(books["B"].cash, level, signal, ai=True)
-    basket_b, rat_b = _deploy(books["B"], amt_b, watchlist, sector_of, prices, nifbees, as_of)
-    if basket_b:
-        ledger.append(Decision(as_of_str, "B", str(amt_b), basket_b, rat_b, sig_desc, resolve_on))
-    nif_px = _price_on(nifbees, as_of_str)
-    if nif_px is not None:
-        _buy_and_hold(books["C"], nif_px)
+    else:
+        seeded_before = bool(state.get("seeded"))
+        last_month = state.get("last_deposit_month")
+        amount, new_month = scheduled_injection(
+            as_of_str,
+            seeded=seeded_before,
+            last_deposit_month=str(last_month) if last_month else None,
+        )
+        if seeded_before and not state.get("monthly_autodeposit", True):
+            amount = Decimal(
+                "0"
+            )  # monthly auto-top-up off → skip it (manual Add-money still works)
+        if amount > 0:
+            inject_all(books, amount)
+            print(f"[autopilot] scheduled top-up ₹{amount:,.0f} into all three books.")
+        state["seeded"] = True
+        state["last_deposit_month"] = new_month
+        state["last_marked"] = as_of_str
 
-    n_resolved = _resolve_due(ledger, prices, nifbees, as_of_str)
-    if n_resolved:
-        print(f"[autopilot] resolved {n_resolved} decision(s).")
+        resolve_on = (as_of + timedelta(days=RESOLVE_CALENDAR_DAYS)).isoformat()
+        amt_a = book_deploy_amount(books["A"].cash, level, None, ai=False)
+        basket_a, rat_a = _deploy(books["A"], amt_a, watchlist, sector_of, prices, nifbees, as_of)
+        if basket_a:
+            ledger.append(
+                Decision(as_of_str, "A", str(amt_a), basket_a, rat_a, "n/a (no AI)", resolve_on)
+            )
+        amt_b = book_deploy_amount(books["B"].cash, level, signal, ai=True)
+        basket_b, rat_b = _deploy(books["B"], amt_b, watchlist, sector_of, prices, nifbees, as_of)
+        if basket_b:
+            ledger.append(
+                Decision(as_of_str, "B", str(amt_b), basket_b, rat_b, sig_desc, resolve_on)
+            )
+        nif_px = _price_on(nifbees, as_of_str)
+        if nif_px is not None:
+            _buy_and_hold(books["C"], nif_px)
+        n_resolved = _resolve_due(ledger, prices, nifbees, as_of_str)
+        if n_resolved:
+            print(f"[autopilot] resolved {n_resolved} decision(s).")
 
-    adaptive = _run_adaptive_book(as_of, nifbees)  # the self-timed core-strategy experiment book
-
+    # Always render + persist — so a queued Add-money or a fresh adaptive-book mark shows even on a
+    # day the A/B/C books were already marked.
     last_prices = _last_prices(prices, watchlist, as_of_str)
     standings = _standings(books, last_prices)
-    _append_track(as_of_str, standings)
+    if not already_marked:
+        _append_track(as_of_str, standings)
     DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_MD.write_text(
         _render_dashboard(as_of_str, standings, ledger, level, sig_desc, adaptive), encoding="utf-8"
