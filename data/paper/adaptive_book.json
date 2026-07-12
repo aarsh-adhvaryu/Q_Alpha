@@ -1,0 +1,149 @@
+{
+  "start_date": "2026-07-06",
+  "starting_capital": "200000",
+  "params": {
+    "band": 0.1,
+    "weighting": "shrink",
+    "tax_aware": true,
+    "force_refresh": false,
+    "rebalance_freq": "ADAPTIVE"
+  },
+  "portfolio": {
+    "cash": "9901.81",
+    "lots": [
+      {
+        "ticker": "APOLLOHOSP.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "4",
+        "buy_price": "8841.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.30",
+        "other_costs": "1.29",
+        "lot_id": "48a20cb4-9890-4998-9a67-6cf28dbc7926",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "ASIANPAINT.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "14",
+        "buy_price": "2677.80",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.62",
+        "other_costs": "1.36",
+        "lot_id": "e7716168-9587-4416-a623-7af9d74f924e",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "GRASIM.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "12",
+        "buy_price": "3213.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.78",
+        "other_costs": "1.40",
+        "lot_id": "ccb01d53-3c11-4147-929a-4004486e08c0",
+        "broker_trade_id": null,
+        "quantity_remaining": "12"
+      },
+      {
+        "ticker": "SBIN.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "38",
+        "buy_price": "1036.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.91",
+        "other_costs": "1.43",
+        "lot_id": "4684bf89-9698-4b5d-bff2-5e3fdf07c8b6",
+        "broker_trade_id": null,
+        "quantity_remaining": "38"
+      },
+      {
+        "ticker": "SUNPHARMA.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "20",
+        "buy_price": "1935.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.81",
+        "other_costs": "1.40",
+        "lot_id": "cc41cfb5-1424-45a8-a190-e425e39e9bf5",
+        "broker_trade_id": null,
+        "quantity_remaining": "20"
+      }
+    ],
+    "ltcg_by_fy": {}
+  },
+  "history": [
+    {
+      "as_of": "2026-07-10",
+      "reason": "first deployment of capital",
+      "orders": [
+        {
+          "date": "2026-07-10",
+          "ticker": "APOLLOHOSP.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "8841.00",
+          "cost": "112.68",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "ASIANPAINT.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "2677.80",
+          "cost": "119.45",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "GRASIM.NS",
+          "side": "BUY",
+          "quantity": "12",
+          "price": "3213.60",
+          "cost": "122.87",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "SBIN.NS",
+          "side": "BUY",
+          "quantity": "38",
+          "price": "1036.00",
+          "cost": "125.45",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "SUNPHARMA.NS",
+          "side": "BUY",
+          "quantity": "20",
+          "price": "1935.50",
+          "cost": "123.34",
+          "tax": "0.00"
+        }
+      ]
+    }
+  ],
+  "last_target": {
+    "SBIN.NS": 0.2,
+    "GRASIM.NS": 0.2,
+    "SUNPHARMA.NS": 0.19999999999999998,
+    "APOLLOHOSP.NS": 0.19999999999999998,
+    "ASIANPAINT.NS": 0.2
+  },
+  "equity_curve": [
+    {
+      "date": "2026-07-10",
+      "equity": "199396.21",
+      "cash": "9901.81"
+    }
+  ]
+}
