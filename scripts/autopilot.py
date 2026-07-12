@@ -1,25 +1,32 @@
-"""autopilot.py — the daily runner for the fake-money "watch it invest & see if it works" auto-pilot.
+"""autopilot.py — the daily runner for the SYSTEM BOOK: the whole system acting on its own advice.
 
-The advisor recommends buys; the auto-pilot follows its own advice forward on fake money in three
-books — **A** strategy only · **B** strategy + the AI's daily nudge · **C** buy-and-hold NIFTYBEES —
-so you can watch whether the system makes money and whether the AI helps (see
-``docs/PREREGISTRATION_autopilot.md``).
+ONE fake-money book runs everything the system can do, every day, against the real world (not a
+calendar): it receives cash (monthly top-up + the dashboard's Add-money), **deploys idle cash into
+out-of-favour names exactly as the Add-money advisor suggests** (AI-paced sizing via the fixed
+``signal_tilt``), **rebalances only when the §4.6 tax-benefit gate says it's worth the tax**
+(evaluated every run — self-timed, never forced), and carries the tax-free hedge readout in stress.
+Its track record IS the advice's track record — the closed loop that earns trust.
 
-    python scripts/autopilot.py daily              # scheduled top-up + deploy + resolve + write (cron)
-    python scripts/autopilot.py status             # print the current standings
-    python scripts/autopilot.py inject 50000 --reason "XYZ IPO"   # manual top-up into all three books
-    python scripts/autopilot.py autodeposit off    # toggle the ₹50k monthly auto-top-up
+Two comparators with **identical cash flows**, so the comparison is fair:
+- **Shadow** — the same system with the AI tilt OFF → System − Shadow = what the AI added.
+- **Baseline** — every rupee straight into NIFTYBEES → System − Baseline = what the system added
+  over doing nothing.
 
-This is the product's own code — it imports the validated advisor (``advise_deploy_into_weakness``)
-**directly** (no cross-repo fetch), reuses the product's price panels, and writes a committable track
-record. **Rule (a) intact:** it drives the advisor, never the backtest engine; the AI only nudges
-Book B's deploy size via a fixed rule; the validated headline is provably unchanged. **Fake money,
-no real orders — ever.**
+    python scripts/autopilot.py daily              # the cron entry point
+    python scripts/autopilot.py status             # recent track record
+    python scripts/autopilot.py inject 50000 --reason "XYZ IPO"   # manual top-up (all three, equally)
+    python scripts/autopilot.py autodeposit off    # toggle the ₹50k monthly top-up
+
+**Fake money, never a real order.** Rule (a) intact: the validated engine computes every number; the
+AI only paces deploy size. The clean ₹2L GO book (``data/paper/book.json``) is untouched — it remains
+the criterion-6 evidence. The earlier A/B/C wallet books are FROZEN (superseded by System-vs-Shadow,
+which answers the same "does the AI help?" question inside the full system).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from datetime import date, timedelta
@@ -28,30 +35,26 @@ from pathlib import Path
 
 import pandas as pd
 
-from qalpha.backtest.portfolio import Portfolio
-from qalpha.config import Config, CostConfig, TaxConfig
+from qalpha.backtest.portfolio import TradeRecord
+from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
 from qalpha.data.prices import PriceData
 from qalpha.live.autopilot import (
-    BOOK_NAMES,
     Book,
     Decision,
     ai_hit_rate,
-    apply_pending,
     basket_value,
     book_deploy_amount,
-    inject_all,
-    load_books,
+    clear_pending,
     load_ledger,
+    load_pending,
     load_state,
     log_manual_injection,
     parse_ai_signal,
     pct_return,
     resolve_decision,
-    save_books,
     save_ledger,
     save_state,
-    scheduled_injection,
     signal_tilt,
 )
 from qalpha.live.dashboard import watchlist_is_stale
@@ -62,27 +65,36 @@ from qalpha.live.paper import PaperBook, StrategyParams
 sys.path.insert(0, str(Path(__file__).parent))
 from paper import BENCHMARK_PARQUET, _load_benchmark_series, _load_market, _refresh_benchmark
 
-FORWARD_START = (
-    "2026-07-06"  # fixed study start (first trading session on/after this seeds the books)
-)
-RESOLVE_CALENDAR_DAYS = 28  # ≈20 trading days — the window each decision is scored over vs Nifty
+FORWARD_START = "2026-07-06"  # the system book's fixed start (continuity with the adaptive book)
+RESOLVE_CALENDAR_DAYS = 28  # ≈20 trading days — each deploy is scored vs Nifty over this window
 NIFBEES = "NIFTYBEES.NS"
 
 WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
 WATCHLIST_PARQUET = Path("data/historical/prices_watchlist.parquet")
 BRIEF_MD = Path("reports/ai_brief.md")
-TRACK_CSV = Path("data/autopilot/track.csv")
 DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
-# The "smart-rebalance" experiment book: the validated core strategy, but self-timed — it evaluates
-# every run and rebalances ONLY when the §4.6 tax-benefit gate clears (not annual, not forced-frequent).
-# A separate ₹2L notional book; NEVER the validated ₹2L GO book (data/paper/book.json), so the headline
-# is untouched. Fake money.
-ADAPTIVE_BOOK_PATH = Path("data/paper/adaptive_book.json")
-ADAPTIVE_TRACK_CSV = Path("data/autopilot/adaptive_track.csv")
-ADAPTIVE_CAPITAL = Decimal("200000")
+
+# The System book = the former smart-rebalance book, upgraded (same file → its ₹2L history carries
+# over). ADAPTIVE cadence: the funnel is evaluated every run; the §4.6 gate decides if a trade is
+# worth the tax. NEVER the validated GO book (data/paper/book.json).
+SYSTEM_BOOK_PATH = Path("data/paper/adaptive_book.json")
+SHADOW_BOOK_PATH = Path("data/paper/shadow_book.json")  # cloned from the system book on first run
+BASELINE_PATH = Path("data/autopilot/baseline_book.json")  # NIFTYBEES buy-and-hold, same cash flows
+FLOWS_PATH = Path(
+    "data/autopilot/system_flows.json"
+)  # wallet→book transfers (for flow-adjusted math)
+SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
+
+SYSTEM_CAPITAL = Decimal("200000")  # the core each book started with
+MONTHLY_DEPOSIT = Decimal("50000")
+DEPLOY_FLOOR = Decimal("5000")  # don't bother deploying dust (mirrors the idle-cash floor)
+
+HEDGE_TAU = 0.7  # operate at τ≥0.7 (robustness battery: τ=0.6 hedges too eagerly)
+HEDGE_PERSIST = 5
+HEDGE_RATIO = 0.5
 
 
-# ---- watchlist + prices (reuse the product's panels — no yfinance-from-scratch) -------------------
+# ---- data (product panels; the system book needs core + watchlist merged) -------------------------
 
 
 def _load_watchlist() -> tuple[list[str], dict[str, str]]:
@@ -93,9 +105,7 @@ def _load_watchlist() -> tuple[list[str], dict[str, str]]:
 
 
 def _ensure_panels() -> None:
-    """Make sure the watchlist panel + NIFTYBEES benchmark are present and reasonably fresh. The paper
-    cron refreshes the benchmark; the watchlist panel is refreshed here (via the build script) when
-    absent or stale, so the auto-pilot never deploys on week-old prices."""
+    """Watchlist panel + NIFTYBEES benchmark present and fresh (the core panel is the paper cron's)."""
     stale = not WATCHLIST_PARQUET.exists() or watchlist_is_stale(
         load_parquet(str(WATCHLIST_PARQUET)).dates[-1].date(), date.today()
     )
@@ -107,9 +117,8 @@ def _ensure_panels() -> None:
         _refresh_benchmark()
 
 
-def _load_prices() -> tuple[PriceData, pd.Series]:
-    """The Nifty-100 watchlist panel with NIFTYBEES merged in (the deploy universe + the index/Book-C
-    price in one ``PriceData``), plus the NIFTYBEES series (the study's Nifty benchmark)."""
+def _load_wl_prices() -> tuple[PriceData, pd.Series]:
+    """The Nifty-100 watchlist panel with NIFTYBEES merged in, + the NIFTYBEES series (the benchmark)."""
     panel = load_parquet(str(WATCHLIST_PARQUET))
     nifbees = _load_benchmark_series()
     nb = nifbees.reindex(panel.adj_close.index).ffill()
@@ -121,6 +130,23 @@ def _load_prices() -> tuple[PriceData, pd.Series]:
     vol[NIFBEES] = 0.0
     prices = PriceData(adj_close=adj, close_raw=close_raw, volume=vol)
     return prices, prices.adj_close[NIFBEES].dropna()
+
+
+def _merge_panels(core: PriceData, wl: PriceData) -> PriceData:
+    """One panel = the core (Nifty-50 PIT, feeds the funnel) ∪ the watchlist (prices the deployed
+    names). **Everything is ffilled** (causal — carries only past values forward): if one panel has a
+    session the other lacks (e.g. the core panel a day behind the watchlist), a holding must never
+    silently lose its mark and vanish from the valuation — that would crater the book's equity on
+    paper. Live-layer valuation only — the backtest engine never sees this."""
+    idx = core.adj_close.index.union(wl.adj_close.index)
+    extra = [c for c in wl.adj_close.columns if c not in core.adj_close.columns]
+    adj = core.adj_close.reindex(idx).ffill()
+    adj[extra] = wl.adj_close[extra].reindex(idx).ffill()
+    raw = core.close_raw.reindex(idx).ffill()
+    raw[extra] = wl.close_raw[extra].reindex(idx).ffill()
+    vol = core.volume.reindex(idx).ffill()
+    vol[extra] = wl.volume[extra].reindex(idx).fillna(0.0)
+    return PriceData(adj_close=adj, close_raw=raw, volume=vol)
 
 
 def _price_on(series: pd.Series, as_of: str) -> Decimal | None:
@@ -138,66 +164,154 @@ def _last_prices(prices: PriceData, tickers: list[str], as_of: str) -> dict[str,
     return out
 
 
-# ---- deploy via the validated advisor ------------------------------------------------------------
+# ---- persisted trio state --------------------------------------------------------------------------
 
 
-def _portfolio_reflecting(book: Book, last_prices: dict[str, Decimal], as_of: date) -> Portfolio:
-    """A qalpha ``Portfolio`` mirroring the book's holdings so the advisor fills genuine underweights."""
-    held_value = basket_value(book.holdings, last_prices)
-    p = Portfolio(CostConfig(), TaxConfig(), cash=held_value + Decimal("1"))
-    for t, q in sorted(book.holdings.items()):
-        px = last_prices.get(t)
-        if px is not None and q > 0:
-            p.buy(as_of, t, Decimal(q), px)
-    return p
+def _load_system_books(cfg: Config) -> tuple[PaperBook, PaperBook]:
+    """The system book (init if absent) and its no-AI shadow (cloned from the system on first run so
+    both start identical; they diverge only through the AI tilt from then on)."""
+    if not SYSTEM_BOOK_PATH.exists():
+        PaperBook.init(
+            SYSTEM_BOOK_PATH,
+            cfg,
+            starting_capital=SYSTEM_CAPITAL,
+            start_date=date.fromisoformat(FORWARD_START),
+            params=StrategyParams(tax_aware=True, force_refresh=False, rebalance_freq="ADAPTIVE"),
+        )
+    if not SHADOW_BOOK_PATH.exists():
+        SHADOW_BOOK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        SHADOW_BOOK_PATH.write_text(SYSTEM_BOOK_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    return PaperBook.load(SYSTEM_BOOK_PATH, cfg), PaperBook.load(SHADOW_BOOK_PATH, cfg)
 
 
-def _deploy(
-    book: Book,
+def _load_baseline() -> Book:
+    if BASELINE_PATH.exists():
+        return Book.from_dict(json.loads(BASELINE_PATH.read_text(encoding="utf-8")))
+    return Book(name="BASE")
+
+
+def _save_baseline(b: Book) -> None:
+    BASELINE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BASELINE_PATH.write_text(json.dumps(b.to_dict(), indent=2) + "\n", encoding="utf-8")
+
+
+def _load_flows() -> dict[str, dict[str, str]]:
+    if FLOWS_PATH.exists():
+        data: dict[str, dict[str, str]] = json.loads(FLOWS_PATH.read_text(encoding="utf-8"))
+        return data
+    return {"system": {}, "shadow": {}}
+
+
+def _save_flows(flows: dict[str, dict[str, str]]) -> None:
+    FLOWS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    FLOWS_PATH.write_text(json.dumps(flows, indent=2) + "\n", encoding="utf-8")
+
+
+def _wallets(state: dict[str, object]) -> dict[str, Decimal]:
+    raw = state.get("wallets")
+    if isinstance(raw, dict):
+        return {k: Decimal(str(v)) for k, v in raw.items()}
+    return {"system": Decimal("0"), "shadow": Decimal("0")}
+
+
+def _contributed(state: dict[str, object]) -> dict[str, Decimal]:
+    raw = state.get("contributed")
+    if isinstance(raw, dict):
+        return {k: Decimal(str(v)) for k, v in raw.items()}
+    return {"system": SYSTEM_CAPITAL, "shadow": SYSTEM_CAPITAL}
+
+
+def _persist_trio_state(
+    state: dict[str, object], wallets: dict[str, Decimal], contributed: dict[str, Decimal]
+) -> None:
+    state["wallets"] = {k: str(v) for k, v in wallets.items()}
+    state["contributed"] = {k: str(v) for k, v in contributed.items()}
+
+
+def _inject_trio(
+    amount: Decimal,
+    wallets: dict[str, Decimal],
+    contributed: dict[str, Decimal],
+    baseline: Book,
+) -> None:
+    """Deposit the SAME fake cash into all three (system/shadow wallets + baseline) so no top-up can
+    ever bias the relative verdict."""
+    wallets["system"] += amount
+    wallets["shadow"] += amount
+    contributed["system"] += amount
+    contributed["shadow"] += amount
+    baseline.inject(amount)
+
+
+# ---- acting on the system's own advice --------------------------------------------------------------
+
+
+def _record_dict(r: TradeRecord) -> dict[str, str]:
+    return {
+        "date": r.date.isoformat(),
+        "ticker": r.ticker,
+        "side": r.side.name,
+        "quantity": str(r.quantity),
+        "price": str(r.price),
+        "cost": str(r.cost),
+        "tax": str(r.tax),
+    }
+
+
+def _deploy_from_wallet(
+    bk: PaperBook,
     amount: Decimal,
     watchlist: list[str],
-    sector_of: dict[str, str],
-    prices: PriceData,
+    wl_sectors: dict[str, str],
+    merged: PriceData,
     nifbees: pd.Series,
     as_of: date,
 ) -> tuple[dict[str, int], str]:
-    """Run the advisor for ``amount`` and *execute* the recommended buys on ``book``; return
-    ``(basket, rationale)`` — the shares actually bought and a one-line model rationale."""
-    if amount <= 0:
-        return {}, "no deploy (calm / no idle wallet tranche due)"
-    port = _portfolio_reflecting(book, _last_prices(prices, watchlist, as_of.isoformat()), as_of)
+    """Move ``amount`` from the wallet into the book and execute the Add-money advisor's buy list on
+    it — the system acting on its own advice. Whole shares; ``Portfolio.buy`` is cash-capped, so an
+    unaffordable order simply shrinks/skips. Leftover stays as book cash (the §4.6 gate's §2.9
+    idle-cash routing consolidates it at the next worthwhile rebalance)."""
+    bk.portfolio.cash += amount
     advice = advise_deploy_into_weakness(
-        port, amount, watchlist, sector_of, prices, nifbees, as_of, max_names=15
+        bk.portfolio, amount, watchlist, wl_sectors, merged, nifbees, as_of, max_names=15
     )
     basket: dict[str, int] = {}
-    spent = Decimal("0")
+    records: list[TradeRecord] = []
     for order in advice.deploy.buy_orders:
-        qty = int(order.quantity)
-        price = Decimal(str(order.price))
-        if qty > 0 and price * qty <= book.cash:
-            book.buy(order.ticker, qty, price)
-            basket[order.ticker] = basket.get(order.ticker, 0) + qty
-            spent += price * qty
+        qty = Decimal(int(order.quantity))
+        if qty <= 0:
+            continue
+        rec = bk.portfolio.buy(as_of, order.ticker, qty, Decimal(str(order.price)))
+        if rec is not None:
+            records.append(rec)
+            basket[rec.ticker] = basket.get(rec.ticker, 0) + int(rec.quantity)
     top = ", ".join(f"{t} (−{p * 100:.0f}%)" for t, p in advice.cheapest[:3])
-    return basket, f"weakness={advice.weakness.level}; deployed ₹{spent:.0f} into: {top}"
+    rationale = f"weakness={advice.weakness.level}; deploy ₹{amount:,.0f} into: {top}"
+    bk.history.append(
+        {
+            "as_of": as_of.isoformat(),
+            "reason": f"deploy: {rationale}",
+            "orders": [_record_dict(r) for r in records],
+        }
+    )
+    return basket, rationale
 
 
 def _buy_and_hold(book: Book, price: Decimal) -> None:
-    """Book C: sink all idle cash into NIFTYBEES immediately (the dumb baseline)."""
     qty = int(book.cash / price)
     if qty > 0:
         book.buy(NIFBEES, qty, price)
 
 
-# ---- decision resolution -------------------------------------------------------------------------
+# ---- outcome resolution -----------------------------------------------------------------------------
 
 
-def _resolve_due(ledger: list[Decision], prices: PriceData, nifbees: pd.Series, as_of: str) -> int:
+def _resolve_due(ledger: list[Decision], merged: PriceData, nifbees: pd.Series, as_of: str) -> int:
     resolved = 0
     for i, d in enumerate(ledger):
         if d.resolved or d.resolve_on > as_of:
             continue
-        exit_val = basket_value(d.basket, _last_prices(prices, list(d.basket), as_of))
+        exit_val = basket_value(d.basket, _last_prices(merged, list(d.basket), as_of))
         basket_ret = pct_return(Decimal(d.amount), exit_val)
         entry_idx, exit_idx = _price_on(nifbees, d.as_of), _price_on(nifbees, as_of)
         bench_ret = (
@@ -210,221 +324,29 @@ def _resolve_due(ledger: list[Decision], prices: PriceData, nifbees: pd.Series, 
     return resolved
 
 
-# ---- standings + dashboard -----------------------------------------------------------------------
-
-
-def _standings(
-    books: dict[str, Book], last_prices: dict[str, Decimal]
-) -> dict[str, dict[str, float]]:
-    out: dict[str, dict[str, float]] = {}
-    for n in BOOK_NAMES:
-        b = books[n]
-        out[n] = {
-            "value": float(b.value(last_prices)),
-            "contributed": float(b.net_contributions),
-            "profit": float(b.profit(last_prices)),
-            "return_pct": b.return_pct(last_prices),
-        }
-    return out
-
-
-def _append_track(as_of: str, standings: dict[str, dict[str, float]]) -> None:
-    row: dict[str, object] = {"date": as_of}
-    for n in BOOK_NAMES:
-        row[f"{n}_value"] = round(standings[n]["value"], 2)
-        row[f"{n}_profit"] = round(standings[n]["profit"], 2)
-        row[f"{n}_return_pct"] = round(standings[n]["return_pct"], 3)
-    if TRACK_CSV.exists():
-        df = pd.read_csv(TRACK_CSV)
-        df = df[df["date"] != as_of]
-        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-    else:
-        df = pd.DataFrame([row])
-    TRACK_CSV.parent.mkdir(parents=True, exist_ok=True)
-    df.sort_values("date").reset_index(drop=True).to_csv(TRACK_CSV, index=False)
-
-
-def _render_dashboard(
-    as_of: str,
-    standings: dict[str, dict[str, float]],
-    ledger: list[Decision],
-    level: str,
-    sig: str,
-    adaptive: dict[str, object] | None = None,
-    hedge: dict[str, object] | None = None,
-) -> str:
-    worked, total = ai_hit_rate(ledger)
-    n_days = len(pd.read_csv(TRACK_CSV)) if TRACK_CSV.exists() else 0
-    labels = {
-        "A": "Strategy only (deploy into weakness)",
-        "B": "Strategy + AI nudge",
-        "C": "Buy-and-hold NIFTYBEES",
-    }
-    lines = [
-        "# Auto-pilot — did the system make money, and did the AI help?",
-        "",
-        f"_As of **{as_of}** · {n_days} marks · market weakness: **{level}** · "
-        "**fake money, no real orders**._",
-        "",
-        "| Book | What it does | Value | Contributed | Profit | Return |",
-        "|---|---|---:|---:|---:|---:|",
-    ]
-    for n in BOOK_NAMES:
-        s = standings[n]
-        lines.append(
-            f"| **{n}** | {labels[n]} | ₹{s['value']:,.0f} | ₹{s['contributed']:,.0f} | "
-            f"₹{s['profit']:,.0f} | {s['return_pct']:+.2f}% |"
-        )
-    a_vs_c = standings["A"]["profit"] - standings["C"]["profit"]
-    b_vs_a = standings["B"]["profit"] - standings["A"]["profit"]
-    lines += [
-        "",
-        f"- **A − C** (does the strategy beat buy-and-hold?): **₹{a_vs_c:,.0f}**",
-        f"- **B − A** (does the AI insight add value?): **₹{b_vs_a:,.0f}**",
-        f"- **AI decision hit-rate** (Book-B deploys that beat Nifty): **{worked}/{total}**",
-        f"- Today's AI signal: {sig}",
-        "",
-        "> **Low power early — this is not a verdict.** The claims need ≥3 months and a real "
-        "volatility event before they mean anything; until then these are just the accruing numbers.",
-    ]
-    if adaptive is not None:
-        state = "🔁 REBALANCED today" if adaptive["rebalanced"] else "— holding (gate not cleared)"
-        lines += [
-            "",
-            "## 🔁 Smart-rebalance engine (self-timed core strategy, ₹2L fake)",
-            "",
-            "Runs the validated core strategy but **evaluates every day and trades only when the §4.6 "
-            "tax-benefit gate clears** — self-timed, not annual, not forced-frequent. Tests whether the "
-            "rebalance engine makes money without churning to tax.",
-            "",
-            f"- Value **₹{float(adaptive['value']):,.0f}** · return **{float(adaptive['return_pct']):+.2f}%** "
-            f"vs Nifty **{float(adaptive['bench_pct']):+.2f}%** · rebalances so far: "
-            f"**{int(adaptive['rebalances'])}** · today: {state}",
-        ]
-    if hedge is not None:
-        hstate = "🛡️ HEDGE ON" if hedge["hedge_on"] else "— hedge off (calm)"
-        lines += [
-            "",
-            "## 🛡 Downside protection — the tax-free hedge (on the smart-rebalance book)",
-            "",
-            "The validated way to **minimise loss in a crash without selling**: keep every share, "
-            "overlay a short index-futures hedge while systemic stress is elevated (₹0 capital-gains "
-            "tax; F&O cost + 30% tax modelled). **Fake money — never a real F&O trade.**",
-            "",
-            f"- Return **{float(hedge['hedged_return']):+.2f}%** hedged vs "
-            f"**{float(hedge['unhedged_return']):+.2f}%** unhedged · worst drawdown "
-            f"**−{float(hedge['hedged_dd']):.1f}%** hedged vs **−{float(hedge['unhedged_dd']):.1f}%** "
-            f"unhedged · episodes: **{int(hedge['episodes'])}** · now: {hstate}",
-            "",
-            "> The gauge is **coincident** (fires *with* a drawdown, can't forecast) — so in a calm "
-            "window the hedge stays off and the two curves are identical. Its value shows up only in a "
-            "real stress event; that's exactly what it waits for.",
-        ]
-    lines += [
-        "",
-        "## Recent resolved decisions",
-        "",
-        "| Date | Book | Basket return | Nifty | Verdict | AI insight |",
-        "|---|---|---:|---:|---|---|",
-    ]
-    for d in [d for d in ledger if d.resolved][-10:][::-1]:
-        lines.append(
-            f"| {d.as_of} | {d.book} | {d.outcome_return_pct:+.1f}% | "
-            f"{d.benchmark_return_pct:+.1f}% | {d.verdict} | {d.ai_insight} |"
-        )
-    return "\n".join(lines) + "\n"
-
-
-# ---- the smart-rebalance experiment book (self-timed core strategy) -------------------------------
-
-
-def _run_adaptive_book(as_of: date, nifbees: pd.Series) -> dict[str, object] | None:
-    """Mark the self-timed core-strategy book: evaluate the funnel EVERY run, but rebalance only when
-    the §4.6 tax-benefit gate clears (so it trades rarely, on its own timing). A separate ₹2L notional
-    book — never the validated GO book. Fail-soft: returns ``None`` if the strategy panel isn't loadable
-    so the auto-pilot's A/B/C books still run."""
-    try:
-        cfg = Config()
-        if not ADAPTIVE_BOOK_PATH.exists():
-            PaperBook.init(
-                ADAPTIVE_BOOK_PATH,
-                cfg,
-                starting_capital=ADAPTIVE_CAPITAL,
-                start_date=date.fromisoformat(FORWARD_START),
-                params=StrategyParams(
-                    tax_aware=True, force_refresh=False, rebalance_freq="ADAPTIVE"
-                ),
-            )
-        book = PaperBook.load(ADAPTIVE_BOOK_PATH, cfg)
-        prices, universe, sector_of = _load_market()
-        plan = book.plan(prices, universe, sector_of, as_of)
-        rebalanced = bool(plan.decision.actionable)
-        if rebalanced:
-            book.apply(prices, plan)
-        book.mark(prices, as_of)  # record equity every run (persists)
-        value = float(book.equity(prices, as_of))
-        ret = book.total_return_pct(prices, as_of)
-        start_idx = _price_on(nifbees, book.start_date.isoformat())
-        now_idx = _price_on(nifbees, as_of.isoformat())
-        bench = pct_return(start_idx, now_idx) if start_idx and now_idx else 0.0
-        row = {
-            "date": as_of.isoformat(),
-            "value": round(value, 2),
-            "return_pct": round(ret, 3),
-            "bench_pct": round(bench, 3),
-            "rebalances": len(book.history),
-        }
-        if ADAPTIVE_TRACK_CSV.exists():
-            df = pd.read_csv(ADAPTIVE_TRACK_CSV)
-            df = df[df["date"] != row["date"]]
-            df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-        else:
-            df = pd.DataFrame([row])
-        ADAPTIVE_TRACK_CSV.parent.mkdir(parents=True, exist_ok=True)
-        df.sort_values("date").reset_index(drop=True).to_csv(ADAPTIVE_TRACK_CSV, index=False)
-        if rebalanced:
-            print(f"[autopilot] smart-rebalance book REBALANCED ({plan.decision.reason}).")
-        return {
-            "value": value,
-            "return_pct": ret,
-            "bench_pct": bench,
-            "rebalanced": rebalanced,
-            "rebalances": len(book.history),
-            "reason": plan.decision.reason,
-        }
-    except Exception as exc:  # fail-soft — a missing strategy panel must not break the A/B/C books
-        print(f"[autopilot] smart-rebalance book skipped (non-fatal): {exc}")
-        return None
-
-
-# ---- downside protection: the tax-free hedge overlay (promoted from research) --------------------
-
-HEDGE_TAU = 0.7  # operate at τ≥0.7 (the robustness battery: τ=0.6 hedges too eagerly)
-HEDGE_PERSIST = 5
-HEDGE_RATIO = 0.5
+# ---- downside protection: the tax-free hedge overlay (flow-adjusted) --------------------------------
 
 
 def _max_drawdown(equity: pd.Series) -> float:
-    """Worst peak-to-trough fall of an equity curve, as a positive fraction."""
     peak = equity.cummax()
     return float(((peak - equity) / peak).max() or 0.0)
 
 
-def _run_hedge_overlay(nifbees: pd.Series) -> dict[str, object] | None:
-    """Overlay the validated tax-free short-futures hedge on the smart-rebalance book's curve — the
-    'minimise loss in a crash without selling' layer. Stateless (recomputed from the curve each run);
-    fake money, never a real F&O trade. ``None`` if the book has too little history yet."""
+def _run_hedge_overlay(nifbees: pd.Series, flows: dict[str, str]) -> dict[str, float] | None:
+    """Overlay the validated tax-free short-futures hedge on the SYSTEM book's curve. Returns are
+    **flow-adjusted** — a wallet→book deploy is a transfer, not a gain, so it's stripped before the
+    daily return is computed. Stateless; fake money; never a real F&O trade."""
     try:
-        import json
-
-        if not ADAPTIVE_BOOK_PATH.exists():
+        if not SYSTEM_BOOK_PATH.exists():
             return None
-        curve = json.loads(ADAPTIVE_BOOK_PATH.read_text(encoding="utf-8")).get("equity_curve", [])
+        curve = json.loads(SYSTEM_BOOK_PATH.read_text(encoding="utf-8")).get("equity_curve", [])
         if len(curve) < 3:
-            return None  # need a few marks before a hedge overlay means anything
-        s = pd.Series({p["date"]: float(p["equity"]) for p in curve}).sort_index()
-        s.index = pd.to_datetime(s.index)
-        book_ret = s.pct_change().dropna()
+            return None
+        eq = pd.Series({p["date"]: float(p["equity"]) for p in curve}).sort_index()
+        eq.index = pd.to_datetime(eq.index)
+        flow = pd.Series({pd.Timestamp(d): float(a) for d, a in flows.items()}, dtype=float)
+        flow = flow.reindex(eq.index).fillna(0.0)
+        book_ret = ((eq - flow) / eq.shift(1) - 1.0).dropna()
         if book_ret.empty:
             return None
         gauge = stress_gauge(nifbees)
@@ -437,47 +359,174 @@ def _run_hedge_overlay(nifbees: pd.Series) -> dict[str, object] | None:
             h=HEDGE_RATIO,
         )
         unhedged = (1 + book_ret).cumprod()
-        hedge_on_now = bool(active.reindex(book_ret.index).fillna(False).iloc[-1])
         return {
             "hedged_return": (float(res.equity.iloc[-1]) - 1.0) * 100,
             "unhedged_return": (float(unhedged.iloc[-1]) - 1.0) * 100,
             "hedged_dd": _max_drawdown(res.equity) * 100,
             "unhedged_dd": _max_drawdown(unhedged) * 100,
-            "hedge_on": hedge_on_now,
+            "hedge_on": bool(active.reindex(book_ret.index).fillna(False).iloc[-1]),
             "episodes": res.episodes,
         }
-    except Exception as exc:  # fail-soft — the hedge readout must never break the run
-        print(f"[autopilot] hedge overlay skipped (non-fatal): {exc}")
+    except Exception as exc:  # fail-soft — the readout must never break the run
+        print(f"[system] hedge overlay skipped (non-fatal): {exc}")
         return None
 
 
-# ---- commands ------------------------------------------------------------------------------------
+# ---- track + report ---------------------------------------------------------------------------------
+
+
+def _append_system_track(row: dict[str, object]) -> None:
+    if SYSTEM_TRACK_CSV.exists():
+        df = pd.read_csv(SYSTEM_TRACK_CSV)
+        df = df[df["date"] != row["date"]]
+        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+    else:
+        df = pd.DataFrame([row])
+    SYSTEM_TRACK_CSV.parent.mkdir(parents=True, exist_ok=True)
+    df.sort_values("date").reset_index(drop=True).to_csv(SYSTEM_TRACK_CSV, index=False)
+
+
+def _render_report(
+    as_of: str,
+    rows: dict[str, dict[str, float]],
+    ledger: list[Decision],
+    level: str,
+    sig: str,
+    today_notes: list[str],
+    hedge: dict[str, float] | None,
+) -> str:
+    n_days = len(pd.read_csv(SYSTEM_TRACK_CSV)) if SYSTEM_TRACK_CSV.exists() else 0
+    worked, total = ai_hit_rate(ledger, book="SYS")
+    labels = {
+        "system": "🧠 **System** — deploys on its own advice (AI-paced) + tax-gated rebalance",
+        "shadow": "System, AI off (the attribution twin)",
+        "baseline": "Everything into NIFTYBEES (do-nothing baseline)",
+    }
+    lines = [
+        "# The System book — the whole system acting on its own advice",
+        "",
+        f"_As of **{as_of}** · {n_days} marks · market weakness: **{level}** · AI: {sig} · "
+        "**fake money, no real orders**._",
+        "",
+        "| Book | What it is | Value | Contributed | Profit | Return |",
+        "|---|---|---:|---:|---:|---:|",
+    ]
+    for key in ("system", "shadow", "baseline"):
+        s = rows[key]
+        lines.append(
+            f"| **{key}** | {labels[key]} | ₹{s['value']:,.0f} | ₹{s['contributed']:,.0f} | "
+            f"₹{s['profit']:,.0f} | {s['return_pct']:+.2f}% |"
+        )
+    sys_vs_base = rows["system"]["profit"] - rows["baseline"]["profit"]
+    sys_vs_shd = rows["system"]["profit"] - rows["shadow"]["profit"]
+    lines += [
+        "",
+        f"- **System − Baseline** (does the whole system beat doing nothing?): **₹{sys_vs_base:,.0f}**",
+        f"- **System − Shadow** (does the AI add value?): **₹{sys_vs_shd:,.0f}**",
+        f"- **AI deploy hit-rate** (system deploys that beat Nifty over ~20d): **{worked}/{total}**",
+        "",
+        "## Today's decisions",
+        "",
+    ]
+    lines += [f"- {n}" for n in (today_notes or ["- held — no action worth its cost today."])]
+    if hedge is not None:
+        hstate = "🛡️ HEDGE ON" if hedge["hedge_on"] else "hedge off (calm)"
+        lines += [
+            "",
+            "## 🛡 Downside protection — the tax-free hedge overlay",
+            "",
+            f"- Return **{float(hedge['hedged_return']):+.2f}%** hedged vs "
+            f"**{float(hedge['unhedged_return']):+.2f}%** unhedged · worst drawdown "
+            f"**−{float(hedge['hedged_dd']):.1f}%** vs **−{float(hedge['unhedged_dd']):.1f}%** · "
+            f"episodes **{int(hedge['episodes'])}** · now: {hstate}",
+            "",
+            "> Keep the shares (₹0 capital-gains tax), short Nifty futures while systemic stress is "
+            "elevated. The gauge is **coincident** — in calm the hedge is off and curves match; its "
+            "value shows only in a real stress event. (Selling defensively was tested and LOST to tax.)",
+        ]
+    lines += [
+        "",
+        "## Recent resolved deploys",
+        "",
+        "| Date | Book | Basket return | Nifty | Verdict | AI at the time |",
+        "|---|---|---:|---:|---|---|",
+    ]
+    for d in [d for d in ledger if d.resolved][-10:][::-1]:
+        lines.append(
+            f"| {d.as_of} | {d.book} | {d.outcome_return_pct:+.1f}% | "
+            f"{d.benchmark_return_pct:+.1f}% | {d.verdict} | {d.ai_insight} |"
+        )
+    lines += [
+        "",
+        "> **Low power early — not a verdict.** Needs months + a real volatility event. The baseline "
+        "seeded at its own first run (a few sessions after the system's 2026-07-06 start) — flows are "
+        "identical from then on. The earlier A/B/C wallet books are frozen (superseded by "
+        "System-vs-Shadow inside the full system).",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+# ---- commands ---------------------------------------------------------------------------------------
 
 
 def cmd_daily() -> int:
     _ensure_panels()
-    watchlist, sector_of = _load_watchlist()
-    prices, nifbees = _load_prices()
+    watchlist, wl_sectors = _load_watchlist()
+    wl_prices, nifbees = _load_wl_prices()
     if nifbees.empty:
-        print("[autopilot] no NIFTYBEES prices — nothing to mark.")
+        print("[system] no NIFTYBEES prices — nothing to mark.")
         return 0
-    as_of_str = str(prices.dates[-1].date())
+    as_of_str = str(wl_prices.dates[-1].date())
     if as_of_str < FORWARD_START:
-        print(f"[autopilot] latest session {as_of_str} precedes the study start — waiting.")
+        print(f"[system] latest session {as_of_str} precedes the start — waiting.")
         return 0
     as_of = date.fromisoformat(as_of_str)
 
-    books, ledger, state = load_books(), load_ledger(), load_state()
+    cfg = Config()
+    core_prices, universe, core_sectors = _load_market()
+    merged = _merge_panels(core_prices, wl_prices)
+    state, ledger, flows = load_state(), load_ledger(), _load_flows()
+    baseline = _load_baseline()
+    system, shadow = _load_system_books(cfg)
+    wallets, contributed = _wallets(state), _contributed(state)
 
-    # Apply any deposits the dashboard's Add-money button queued to the repo (always — even on an
-    # already-marked day — so a top-up is never lost; it just deploys on the next run).
-    pending_total = apply_pending(books)
+    # Baseline seeds its ₹2L at its first run (start-offset caveat is disclosed in the report).
+    if not state.get("baseline_seeded"):
+        baseline.inject(SYSTEM_CAPITAL)
+        state["baseline_seeded"] = True
+
+    # Add-money queued from the dashboard — ALWAYS applied (even on an already-marked day) so a
+    # top-up is never lost; it deploys on the next session.
+    pending_total = Decimal("0")
+    for item in load_pending():
+        amt = Decimal(str(item.get("amount", "0")))
+        if amt > 0:
+            _inject_trio(amt, wallets, contributed, baseline)
+            log_manual_injection(amt, str(item.get("reason", "(from dashboard)")))
+            pending_total += amt
     if pending_total > 0:
-        print(
-            f"[autopilot] applied ₹{pending_total:,.0f} of queued Add-money into all three books."
-        )
+        clear_pending()
+        print(f"[system] applied ₹{pending_total:,.0f} of queued Add-money to all three books.")
 
-    # Market context — needed both to display the books and to size the A/B/C deploy.
+    if state.get("system_last_marked") == as_of_str:  # idempotent per session
+        _persist_trio_state(state, wallets, contributed)
+        _save_baseline(baseline)
+        save_state(state)
+        print(f"[system] already marked {as_of_str} — deposits saved, deploy skipped.")
+        return 0
+
+    # Monthly top-up (first observed session of a new month; the ₹2L core counts as the start month).
+    month = as_of_str[:7]
+    last_month = state.get("trio_last_deposit_month")
+    if last_month is None:
+        state["trio_last_deposit_month"] = month
+    elif month != last_month:
+        if state.get("monthly_autodeposit", True):
+            _inject_trio(MONTHLY_DEPOSIT, wallets, contributed, baseline)
+            print(f"[system] monthly top-up ₹{MONTHLY_DEPOSIT:,.0f} to all three books.")
+        state["trio_last_deposit_month"] = month
+
+    # Market + AI context.
     level = market_weakness(nifbees, as_of).level
     signal = (
         parse_ai_signal(BRIEF_MD.read_text(encoding="utf-8"), as_of_str)
@@ -488,107 +537,120 @@ def cmd_daily() -> int:
     sig_desc = (
         f"lean={signal.lean} confidence={signal.confidence} (tilt {tilt:.2f}×)"
         if signal is not None
-        else "none (neutral 1.00× tilt)"
+        else "none (neutral 1.00×)"
     )
+    resolve_on = (as_of + timedelta(days=RESOLVE_CALENDAR_DAYS)).isoformat()
+    today_notes: list[str] = []
 
-    # The smart-rebalance experiment book — its OWN idempotency, so it seeds / catches up independently
-    # of the A/B/C deploy (which is guarded separately below). Lets it start on the next run even when
-    # the A/B/C books were already marked this session.
-    adaptive: dict[str, object] | None = None
-    if state.get("adaptive_last_marked") != as_of_str:
-        adaptive = _run_adaptive_book(as_of, nifbees)
-        if adaptive is not None:
-            state["adaptive_last_marked"] = as_of_str
-
-    hedge = _run_hedge_overlay(
-        nifbees
-    )  # downside protection on the smart-rebalance book (stateless)
-
-    # A/B/C deploy — guarded so a same-day re-run never double-deploys the wallet books.
-    already_marked = state.get("last_marked") == as_of_str
-    if already_marked:
-        print(
-            f"[autopilot] A/B/C already marked {as_of_str} — deploy skipped (adaptive/pending refreshed)."
+    # 1) Deploy idle wallet cash — the system acting on its own Add-money advice (AI-paced for the
+    #    system, neutral for the shadow).
+    for key, bk, use_ai in (("system", system, True), ("shadow", shadow, False)):
+        amt = book_deploy_amount(wallets[key], level, signal, ai=use_ai)
+        if amt < DEPLOY_FLOOR:
+            continue
+        wallets[key] -= amt
+        flows.setdefault(key, {})
+        flows[key][as_of_str] = str(Decimal(flows[key].get(as_of_str, "0")) + amt)
+        basket, rationale = _deploy_from_wallet(
+            bk, amt, watchlist, wl_sectors, merged, nifbees, as_of
         )
-    else:
-        seeded_before = bool(state.get("seeded"))
-        last_month = state.get("last_deposit_month")
-        amount, new_month = scheduled_injection(
-            as_of_str,
-            seeded=seeded_before,
-            last_deposit_month=str(last_month) if last_month else None,
-        )
-        if seeded_before and not state.get("monthly_autodeposit", True):
-            amount = Decimal(
-                "0"
-            )  # monthly auto-top-up off → skip it (manual Add-money still works)
-        if amount > 0:
-            inject_all(books, amount)
-            print(f"[autopilot] scheduled top-up ₹{amount:,.0f} into all three books.")
-        state["seeded"] = True
-        state["last_deposit_month"] = new_month
-        state["last_marked"] = as_of_str
-
-        resolve_on = (as_of + timedelta(days=RESOLVE_CALENDAR_DAYS)).isoformat()
-        amt_a = book_deploy_amount(books["A"].cash, level, None, ai=False)
-        basket_a, rat_a = _deploy(books["A"], amt_a, watchlist, sector_of, prices, nifbees, as_of)
-        if basket_a:
+        if basket:
+            book_tag = "SYS" if key == "system" else "SHD"
+            ai_note = sig_desc if use_ai else "n/a (AI off)"
             ledger.append(
-                Decision(as_of_str, "A", str(amt_a), basket_a, rat_a, "n/a (no AI)", resolve_on)
+                Decision(as_of_str, book_tag, str(amt), basket, rationale, ai_note, resolve_on)
             )
-        amt_b = book_deploy_amount(books["B"].cash, level, signal, ai=True)
-        basket_b, rat_b = _deploy(books["B"], amt_b, watchlist, sector_of, prices, nifbees, as_of)
-        if basket_b:
-            ledger.append(
-                Decision(as_of_str, "B", str(amt_b), basket_b, rat_b, sig_desc, resolve_on)
-            )
-        nif_px = _price_on(nifbees, as_of_str)
-        if nif_px is not None:
-            _buy_and_hold(books["C"], nif_px)
-        n_resolved = _resolve_due(ledger, prices, nifbees, as_of_str)
-        if n_resolved:
-            print(f"[autopilot] resolved {n_resolved} decision(s).")
+            today_notes.append(f"**{key}** deployed ₹{amt:,.0f} — {rationale}")
 
-    # Always render + persist — so a queued Add-money or a fresh adaptive-book mark shows even on a
-    # day the A/B/C books were already marked.
-    last_prices = _last_prices(prices, watchlist, as_of_str)
-    standings = _standings(books, last_prices)
-    if not already_marked:
-        _append_track(as_of_str, standings)
+    # 2) Adaptive rebalance — evaluated EVERY run; the §4.6 tax-benefit gate decides. Real-world
+    #    responsive, never calendar-forced. May consolidate earlier opportunistic buys into the core
+    #    target when (and only when) that's worth the tax.
+    for key, bk in (("system", system), ("shadow", shadow)):
+        plan = bk.plan(merged, universe, core_sectors, as_of)
+        if plan.decision.actionable:
+            bk.apply(merged, plan)
+            today_notes.append(f"**{key}** 🔁 rebalanced — {plan.decision.reason}")
+        elif key == "system":
+            today_notes.append(f"gate: {plan.decision.reason}")
+
+    # 3) Baseline: every idle rupee straight into NIFTYBEES.
+    nif_px = _price_on(nifbees, as_of_str)
+    if nif_px is not None:
+        _buy_and_hold(baseline, nif_px)
+
+    # 4) Mark, resolve, hedge, report, persist.
+    system.mark(merged, as_of)
+    shadow.mark(merged, as_of)
+    n_res = _resolve_due(ledger, merged, nifbees, as_of_str)
+    if n_res:
+        print(f"[system] resolved {n_res} deploy decision(s).")
+    hedge = _run_hedge_overlay(nifbees, flows.get("system", {}))
+
+    rows: dict[str, dict[str, float]] = {}
+    for key, bk in (("system", system), ("shadow", shadow)):
+        value = float(bk.equity(merged, as_of)) + float(wallets[key])
+        contrib = float(contributed[key])
+        rows[key] = {
+            "value": value,
+            "contributed": contrib,
+            "profit": value - contrib,
+            "return_pct": (value - contrib) / contrib * 100.0,
+        }
+    base_prices = {NIFBEES: nif_px} if nif_px is not None else {}
+    rows["baseline"] = {
+        "value": float(baseline.value(base_prices)),
+        "contributed": float(baseline.net_contributions),
+        "profit": float(baseline.profit(base_prices)),
+        "return_pct": baseline.return_pct(base_prices),
+    }
+    _append_system_track(
+        {
+            "date": as_of_str,
+            **{
+                f"{k}_{f}": round(rows[k][f], 3 if f == "return_pct" else 2)
+                for k in ("system", "shadow", "baseline")
+                for f in ("value", "profit", "return_pct")
+            },
+            "hedge_on": bool(hedge["hedge_on"]) if hedge else False,
+        }
+    )
     DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_MD.write_text(
-        _render_dashboard(as_of_str, standings, ledger, level, sig_desc, adaptive, hedge),
+        _render_report(as_of_str, rows, ledger, level, sig_desc, today_notes, hedge),
         encoding="utf-8",
     )
-    save_books(books)
+
+    state["system_last_marked"] = as_of_str
+    _persist_trio_state(state, wallets, contributed)
+    _save_baseline(baseline)
+    _save_flows(flows)
     save_ledger(ledger)
     save_state(state)
     print(
-        f"[autopilot] marked {as_of_str}: "
-        + " · ".join(
-            f"{n} ₹{standings[n]['value']:,.0f} ({standings[n]['return_pct']:+.2f}%)"
-            for n in BOOK_NAMES
-        )
+        f"[system] marked {as_of_str}: "
+        + " · ".join(f"{k} ₹{rows[k]['value']:,.0f} ({rows[k]['return_pct']:+.2f}%)" for k in rows)
     )
     return 0
 
 
 def cmd_status() -> int:
-    if not TRACK_CSV.exists():
-        print("[autopilot] no track record yet — run `daily` first.")
+    if not SYSTEM_TRACK_CSV.exists():
+        print("[system] no track record yet — run `daily` first.")
         return 0
-    print(pd.read_csv(TRACK_CSV).tail(10).to_string(index=False))
+    print(pd.read_csv(SYSTEM_TRACK_CSV).tail(10).to_string(index=False))
     return 0
 
 
 def cmd_inject(amount: Decimal, reason: str) -> int:
-    """A manual top-up — deposits the SAME amount into all three books (so it can't bias the relative
-    A/B/C verdict) and logs the reason. Deployed on the next `daily` run."""
-    books = load_books()
-    inject_all(books, amount)
-    save_books(books)
+    state = load_state()
+    baseline = _load_baseline()
+    wallets, contributed = _wallets(state), _contributed(state)
+    _inject_trio(amount, wallets, contributed, baseline)
     log_manual_injection(amount, reason)
-    print(f"[autopilot] manually injected ₹{amount:,.0f} into all three books — reason: {reason}")
+    _persist_trio_state(state, wallets, contributed)
+    _save_baseline(baseline)
+    save_state(state)
+    print(f"[system] injected ₹{amount:,.0f} into all three books — reason: {reason}")
     return 0
 
 
@@ -596,21 +658,21 @@ def cmd_autodeposit(on: bool) -> int:
     state = load_state()
     state["monthly_autodeposit"] = on
     save_state(state)
-    print(f"[autopilot] monthly ₹50k auto-top-up is now {'ON' if on else 'OFF'}.")
+    print(f"[system] monthly ₹50k auto-top-up is now {'ON' if on else 'OFF'}.")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("daily", help="scheduled top-up + deploy the three books + resolve + write")
+    sub.add_parser(
+        "daily", help="the cron entry point: fund + deploy + gate-rebalance + mark + report"
+    )
     sub.add_parser("status", help="print the recent track record")
     p_inj = sub.add_parser("inject", help="manual top-up into all three books")
     p_inj.add_argument("amount", type=Decimal)
-    p_inj.add_argument(
-        "--reason", default="(unspecified)", help="why (an IPO, a tip, a news catalyst)"
-    )
-    p_auto = sub.add_parser("autodeposit", help="toggle the ₹50k monthly auto-top-up")
+    p_inj.add_argument("--reason", default="(unspecified)")
+    p_auto = sub.add_parser("autodeposit", help="toggle the ₹50k monthly top-up")
     p_auto.add_argument("state", choices=["on", "off"])
     args = parser.parse_args(argv)
 

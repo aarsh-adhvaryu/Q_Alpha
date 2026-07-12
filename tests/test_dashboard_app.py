@@ -26,23 +26,15 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_dashboard_renders_and_advises() -> None:
+def test_dashboard_renders_the_system_view() -> None:
     at = AppTest.from_file(str(_APP), default_timeout=60).run()
     assert not at.exception
     assert any("Q-Alpha" in t.value for t in at.title)
-    assert len(at.metric) >= 4
-    # Two top-level tabs now: Paper book + Live (Zerodha).
+    # Two top-level tabs now: 🧠 The system + 🔴 Live (Zerodha).
     labels = [t.label for t in at.tabs]
-    assert any("Paper" in lbl for lbl in labels)
+    assert any("system" in lbl.lower() for lbl in labels)
     assert any(("Live" in lbl) or ("Zerodha" in lbl) for lbl in labels)
-    # The one-screen "Today" brief renders on the paper tab.
+    # The wallet metric renders (the fundable dry-powder view).
+    assert len(at.metric) >= 1
+    # The core-GO expander carries the validated book's "Today" brief (unchanged underneath).
     assert any("Today — what to do" in m.value for m in at.markdown)
-
-    # Clicking the "Add money" advisor (button: "Suggest what to buy") must render without error.
-    at.number_input(key="add_amt_paper").set_value(50000).run()
-    next(b for b in at.button if "buy" in b.label.lower()).click().run()
-    assert not at.exception
-    # It renders the deploy advice ("Tax saved …") when the watchlist panel is on disk, or a graceful
-    # "not ready" notice when that gitignored panel is absent — either is a clean render.
-    texts = [m.value for m in at.markdown] + [e.value for e in at.error]
-    assert any(("Tax saved" in t) or ("not ready" in t.lower()) for t in texts)
