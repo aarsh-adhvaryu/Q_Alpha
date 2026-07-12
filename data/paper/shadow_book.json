@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "6.85",
+    "cash": "113.98",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -79,104 +79,104 @@
       {
         "ticker": "VEDL.NS",
         "acquisition_date": "2026-07-10",
-        "quantity_original": "69",
+        "quantity_original": "57",
         "buy_price": "272.55",
         "pool": "core",
         "brokerage": "0.00",
-        "stamp_duty": "2.82",
-        "other_costs": "0.68",
-        "lot_id": "c2fd9988-4fd6-4e77-9a94-8fa08ba58f7b",
+        "stamp_duty": "2.33",
+        "other_costs": "0.57",
+        "lot_id": "16f8aafd-e604-45a1-89f4-1ff913748cfe",
         "broker_trade_id": null,
-        "quantity_remaining": "69"
+        "quantity_remaining": "57"
       },
       {
         "ticker": "TRENT.NS",
         "acquisition_date": "2026-07-10",
-        "quantity_original": "6",
+        "quantity_original": "5",
         "buy_price": "2902.80",
         "pool": "core",
         "brokerage": "0.00",
-        "stamp_duty": "2.61",
-        "other_costs": "0.64",
-        "lot_id": "1948f80c-baf8-4bd2-8e37-e33bcf5cd3ea",
+        "stamp_duty": "2.18",
+        "other_costs": "0.52",
+        "lot_id": "3506ce3b-e6ea-4242-86e6-4594c6b437d6",
         "broker_trade_id": null,
-        "quantity_remaining": "6"
+        "quantity_remaining": "5"
       },
       {
         "ticker": "TCS.NS",
         "acquisition_date": "2026-07-10",
-        "quantity_original": "7",
+        "quantity_original": "6",
         "buy_price": "2069.00",
         "pool": "core",
         "brokerage": "0.00",
-        "stamp_duty": "2.17",
-        "other_costs": "0.52",
-        "lot_id": "8cfd87ef-0a6a-4ad3-b16b-19815a2ad50a",
+        "stamp_duty": "1.86",
+        "other_costs": "0.45",
+        "lot_id": "2011f971-d7d9-4b1a-a5fa-cab6777d062c",
         "broker_trade_id": null,
-        "quantity_remaining": "7"
+        "quantity_remaining": "6"
       },
       {
         "ticker": "INFY.NS",
         "acquisition_date": "2026-07-10",
-        "quantity_original": "13",
+        "quantity_original": "10",
         "buy_price": "1068.00",
         "pool": "core",
         "brokerage": "0.00",
-        "stamp_duty": "2.08",
-        "other_costs": "0.50",
-        "lot_id": "b2ac5ab9-75c3-40d2-9b4c-5aafceef9e03",
+        "stamp_duty": "1.60",
+        "other_costs": "0.39",
+        "lot_id": "aacf49ac-8ace-4db6-8348-1df4cd827ef8",
         "broker_trade_id": null,
-        "quantity_remaining": "13"
+        "quantity_remaining": "10"
       },
       {
-        "ticker": "WIPRO.NS",
+        "ticker": "BAJAJHLDNG.NS",
         "acquisition_date": "2026-07-10",
-        "quantity_original": "73",
-        "buy_price": "175.46",
+        "quantity_original": "1",
+        "buy_price": "10654.00",
         "pool": "core",
         "brokerage": "0.00",
-        "stamp_duty": "1.92",
-        "other_costs": "0.46",
-        "lot_id": "ef0cf5b0-d5d9-4509-9ccf-9419e3d0c866",
+        "stamp_duty": "1.60",
+        "other_costs": "0.39",
+        "lot_id": "12093c17-e5bf-45e4-aed8-760f863322e5",
         "broker_trade_id": null,
-        "quantity_remaining": "73"
+        "quantity_remaining": "1"
       },
       {
         "ticker": "HCLTECH.NS",
         "acquisition_date": "2026-07-10",
-        "quantity_original": "11",
+        "quantity_original": "9",
         "buy_price": "1164.10",
         "pool": "core",
         "brokerage": "0.00",
-        "stamp_duty": "1.92",
-        "other_costs": "0.46",
-        "lot_id": "61615ff6-c2d6-4927-9416-638ede85ce66",
+        "stamp_duty": "1.57",
+        "other_costs": "0.38",
+        "lot_id": "70553a38-e265-49ef-a711-07c33ffa117f",
         "broker_trade_id": null,
-        "quantity_remaining": "11"
+        "quantity_remaining": "9"
       },
       {
         "ticker": "IRFC.NS",
         "acquisition_date": "2026-07-10",
-        "quantity_original": "141",
+        "quantity_original": "112",
         "buy_price": "89.90",
         "pool": "core",
         "brokerage": "0.00",
-        "stamp_duty": "1.90",
-        "other_costs": "0.46",
-        "lot_id": "32a605a8-7eca-49b6-88a1-f83652af0cb7",
+        "stamp_duty": "1.51",
+        "other_costs": "0.37",
+        "lot_id": "13f679aa-136a-40cf-bbb7-a3c9d9a0e51c",
         "broker_trade_id": null,
-        "quantity_remaining": "141"
+        "quantity_remaining": "112"
       },
       {
-        "ticker": "AMBUJACEM.NS",
+        "ticker": "WIPRO.NS",
         "acquisition_date": "2026-07-10",
         "quantity_original": "1",
-        "buy_price": "436.45",
+        "buy_price": "175.46",
         "pool": "core",
         "brokerage": "0.00",
-        "stamp_duty": "0.07",
+        "stamp_duty": "0.03",
         "other_costs": "0.01",
-        "lot_id": "7c551fe7-19b2-418a-8ff6-7a322165e962",
+        "lot_id": "8eae14fe-f19c-4f01-aca9-3abd0a66377f",
         "broker_trade_id": null,
         "quantity_remaining": "1"
       }
@@ -237,85 +237,85 @@
     },
     {
       "as_of": "2026-07-10",
-      "reason": "deploy: weakness=elevated; deploy \u20b993,750 into: VEDL.NS (\u221265%), TRENT.NS (\u221247%), TCS.NS (\u221237%)",
+      "reason": "deploy: weakness=elevated; deploy \u20b975,000 into: VEDL.NS (\u221265%), TRENT.NS (\u221247%), TCS.NS (\u221237%)",
       "orders": [
         {
           "date": "2026-07-10",
           "ticker": "VEDL.NS",
           "side": "BUY",
-          "quantity": "69",
+          "quantity": "57",
           "price": "272.55",
-          "cost": "59.92",
+          "cost": "49.51",
           "tax": "0.00"
         },
         {
           "date": "2026-07-10",
           "ticker": "TRENT.NS",
           "side": "BUY",
-          "quantity": "6",
+          "quantity": "5",
           "price": "2902.80",
-          "cost": "55.50",
+          "cost": "46.24",
           "tax": "0.00"
         },
         {
           "date": "2026-07-10",
           "ticker": "TCS.NS",
           "side": "BUY",
-          "quantity": "7",
+          "quantity": "6",
           "price": "2069.00",
-          "cost": "46.14",
+          "cost": "39.55",
           "tax": "0.00"
         },
         {
           "date": "2026-07-10",
           "ticker": "INFY.NS",
           "side": "BUY",
-          "quantity": "13",
+          "quantity": "10",
           "price": "1068.00",
-          "cost": "44.23",
+          "cost": "34.03",
           "tax": "0.00"
         },
         {
           "date": "2026-07-10",
-          "ticker": "WIPRO.NS",
+          "ticker": "BAJAJHLDNG.NS",
           "side": "BUY",
-          "quantity": "73",
-          "price": "175.46",
-          "cost": "40.81",
+          "quantity": "1",
+          "price": "10654.00",
+          "cost": "33.95",
           "tax": "0.00"
         },
         {
           "date": "2026-07-10",
           "ticker": "HCLTECH.NS",
           "side": "BUY",
-          "quantity": "11",
+          "quantity": "9",
           "price": "1164.10",
-          "cost": "40.80",
+          "cost": "33.38",
           "tax": "0.00"
         },
         {
           "date": "2026-07-10",
           "ticker": "IRFC.NS",
           "side": "BUY",
-          "quantity": "141",
+          "quantity": "112",
           "price": "89.90",
-          "cost": "40.39",
+          "cost": "32.09",
           "tax": "0.00"
         },
         {
           "date": "2026-07-10",
-          "ticker": "AMBUJACEM.NS",
+          "ticker": "WIPRO.NS",
           "side": "BUY",
           "quantity": "1",
-          "price": "436.45",
-          "cost": "1.39",
+          "price": "175.46",
+          "cost": "0.57",
           "tax": "0.00"
         }
       ]
     },
     {
       "as_of": "2026-07-10",
-      "reason": "drift 35.3% > threshold and \u00a74.6 net-benefit gate cleared",
+      "reason": "drift 30.9% > threshold and \u00a74.6 net-benefit gate cleared",
       "orders": []
     }
   ],
@@ -329,8 +329,8 @@
   "equity_curve": [
     {
       "date": "2026-07-10",
-      "equity": "292817.03",
-      "cash": "6.85"
+      "equity": "274126.89",
+      "cash": "113.98"
     }
   ]
 }
