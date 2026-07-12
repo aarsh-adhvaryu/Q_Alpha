@@ -513,6 +513,30 @@ def _all_engines_summary(core_return: float, nifty_return: float | None) -> None
         "smart-rebalance engine trades only when the tax-gate clears, the wallet books deploy fresh "
         "money into dips. Comparing them, live, is the whole point. Early numbers are low-power."
     )
+    _engines_return_chart()
+
+
+def _engines_return_chart() -> None:
+    """A line chart of every book's return-% over time — the wallet books (A/B/C) and the
+    smart-rebalance engine, so you watch them race. Needs ≥2 marks to draw."""
+    track_csv = Path("data/autopilot/track.csv")
+    if not track_csv.exists():
+        return
+    df = pd.read_csv(track_csv)
+    if len(df) < 2:
+        st.caption("📈 The return chart appears once there are a few daily marks.")
+        return
+    series = pd.DataFrame({"date": pd.to_datetime(df["date"])}).set_index("date")
+    series["A · strategy"] = df["A_return_pct"].to_numpy()
+    series["B · strategy + AI"] = df["B_return_pct"].to_numpy()
+    series["C · buy & hold"] = df["C_return_pct"].to_numpy()
+    adaptive_csv = Path("data/autopilot/adaptive_track.csv")
+    if adaptive_csv.exists():
+        adf = pd.read_csv(adaptive_csv)
+        a = adf.set_index(pd.to_datetime(adf["date"]))["return_pct"]
+        series["Smart-rebalance"] = a.reindex(series.index).to_numpy()
+    st.line_chart(series, height=260)
+    st.caption("Return % since start, per engine. Fake money · low-power until months accrue.")
 
 
 def _autopilot_tab(core_return: float, nifty_return: float | None) -> None:
@@ -943,11 +967,12 @@ def _advisor_tabs(
 
     with add_tab:
         st.caption(
-            "Suggests **what to buy** with new money — a diversified, **tax-free (buys-only)** spread "
-            "across Nifty 100, tilted toward out-of-favour names + market weakness. Not stock tips."
+            "**Idle cash → what to buy.** The **math** picks a diversified, **tax-free (buys-only)** "
+            "spread across Nifty 100 tilted to out-of-favour names; the **AI's market read** nudges "
+            "*how much* to deploy now vs hold as dry powder. The AI never picks the names or the tax."
         )
         amount = st.number_input(
-            "New money to invest (₹)",
+            "Idle cash to invest (₹)",
             min_value=1000,
             value=max(1000, default_add_amount),
             step=1000,
@@ -962,10 +987,49 @@ def _advisor_tabs(
             "More = broader & thinner. ~12–25 is the usual sweet spot.",
             key=f"add_names_{namespace}",
         )
+
+        # The AI read + AI-nudged sizing (math picks names; AI nudges the tranche) — same rule the
+        # auto-pilot's Book B is forward-testing, so a suggestion here is one the harness validates.
+        from qalpha.live.autopilot import book_deploy_amount, parse_ai_signal, signal_tilt
+        from qalpha.live.deploy import market_weakness
+
+        wk = market_weakness(benchmark, as_of)
+        signal = (
+            parse_ai_signal(AI_BRIEF_MD.read_text(encoding="utf-8"), as_of.isoformat())
+            if AI_BRIEF_MD.exists()
+            else None
+        )
+        tilt = signal_tilt(signal)
+        paced = book_deploy_amount(Decimal(amount), wk.level, signal, ai=True)
+        ai_read = (
+            f"AI leans **{signal.lean}** ({signal.confidence}, ×{tilt:.2f})"
+            if signal is not None
+            else "no AI read today (neutral)"
+        )
+        st.info(
+            f"Market **{wk.level}** ({wk.drawdown * 100:.0f}% off 1y high) · {ai_read}. "
+            f"Opportunistic sizing would deploy **₹{paced:,.0f}** now and hold "
+            f"**₹{Decimal(amount) - paced:,.0f}** as dry powder for deeper dips."
+        )
+        choice = st.radio(
+            "How much to deploy now?",
+            [
+                f"Deploy all ₹{int(amount):,} (time-in-market — the safe default)",
+                f"AI-paced: ₹{paced:,.0f} now, hold the rest",
+            ],
+            key=f"add_choice_{namespace}",
+            help="Deploying it all is the evidence-safe choice (time-in-market beats timing). The "
+            "AI-paced option holds dry powder for dips — more opportunistic, but that's a timing bet "
+            "the auto-pilot is testing forward.",
+        )
+        deploy_amt = Decimal(amount) if choice.startswith("Deploy all") else paced
+
         if st.button("Suggest what to buy", key=f"add_btn_{namespace}"):
             wl = _watchlist()
             if wl is None:
                 st.error("Watchlist prices not ready yet — try again in a minute.")
+            elif deploy_amt < 1000:
+                st.warning("AI-paced amount is tiny — hold the cash, or choose 'Deploy all'.")
             else:
                 from qalpha.live.deploy import advise_deploy_into_weakness
 
@@ -973,7 +1037,7 @@ def _advisor_tabs(
                 st.markdown(
                     advise_deploy_into_weakness(
                         portfolio,
-                        Decimal(amount),
+                        deploy_amt,
                         tickers,
                         sector_of,
                         wl_prices,
@@ -982,6 +1046,9 @@ def _advisor_tabs(
                         max_names=n_stocks,
                     ).render()
                 )
+                if AI_BRIEF_MD.exists():
+                    with st.expander("🧠 The AI's market read behind this sizing (context only)"):
+                        st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
 
 
 def _holdings_frame(portfolio: Portfolio, prices_dec: dict[str, Decimal]) -> pd.DataFrame:
