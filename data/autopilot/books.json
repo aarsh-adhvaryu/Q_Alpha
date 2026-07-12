@@ -1,7 +1,7 @@
 {
   "A": {
     "name": "A",
-    "cash": "50216.26",
+    "cash": "50716.26",
     "holdings": {
       "TRENT.NS": 2,
       "TCS.NS": 2,
@@ -19,11 +19,11 @@
       "HINDZINC.NS": 5,
       "MAZDOCK.NS": 1
     },
-    "net_contributions": "100000"
+    "net_contributions": "100500"
   },
   "B": {
     "name": "B",
-    "cash": "37788.93",
+    "cash": "38288.93",
     "holdings": {
       "BAJAJHLDNG.NS": 1,
       "TRENT.NS": 2,
@@ -41,14 +41,14 @@
       "AMBUJACEM.NS": 7,
       "IOC.NS": 21
     },
-    "net_contributions": "100000"
+    "net_contributions": "100500"
   },
   "C": {
     "name": "C",
-    "cash": "149.58734130859375",
+    "cash": "649.58734130859375",
     "holdings": {
       "NIFTYBEES.NS": 363
     },
-    "net_contributions": "100000"
+    "net_contributions": "100500"
   }
 }
