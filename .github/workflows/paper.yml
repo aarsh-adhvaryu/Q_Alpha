@@ -56,10 +56,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/paper/book.json data/paper/run_log.jsonl data/paper/alert_state.json reports/paper_dashboard.md reports/paper_equity.csv
-          git add reports/ai_brief.md data/autopilot/books.json data/autopilot/state.json data/autopilot/ledger.json data/autopilot/track.csv reports/autopilot_dashboard.md 2>/dev/null || true
-          git add data/autopilot/adaptive_track.csv data/paper/adaptive_book.json 2>/dev/null || true  # the smart-rebalance experiment book
-          git add data/autopilot/pending_injections.json data/autopilot/manual_injections.json 2>/dev/null || true  # Add-money queue (cleared) + its log
-          git add data/autopilot/manual_injections.json 2>/dev/null || true  # only after a manual Add-money; keep out of the required add (git add is all-or-nothing)
+          git add reports/ai_brief.md data/autopilot/state.json data/autopilot/ledger.json reports/autopilot_dashboard.md 2>/dev/null || true
+          # The System book trio (system = the former adaptive book; shadow = no-AI twin; baseline = NIFTYBEES)
+          git add data/paper/adaptive_book.json 2>/dev/null || true
+          git add data/paper/shadow_book.json 2>/dev/null || true
+          git add data/autopilot/baseline_book.json 2>/dev/null || true
+          git add data/autopilot/system_flows.json 2>/dev/null || true
+          git add data/autopilot/system_track.csv 2>/dev/null || true
+          git add data/autopilot/pending_injections.json 2>/dev/null || true  # Add-money queue (cleared after apply)
+          git add data/autopilot/manual_injections.json 2>/dev/null || true  # only after a manual Add-money (git add is all-or-nothing → own line)
           git diff --staged --quiet || git commit -m "paper: daily mark $(date -u +%F) [skip ci]"
           git push
       - name: Alert on pipeline failure

@@ -295,10 +295,11 @@ def resolve_decision(
     )
 
 
-def ai_hit_rate(decisions: list[Decision]) -> tuple[int, int]:
-    """Over resolved Book-B decisions, (times the deploy beat Nifty, total resolved) — the running
-    'did acting on the AI work' tally. Returns (0, 0) when nothing has resolved yet."""
-    resolved = [d for d in decisions if d.resolved and d.book == "B"]
+def ai_hit_rate(decisions: list[Decision], book: str = "B") -> tuple[int, int]:
+    """Over resolved decisions of the AI-tilted ``book`` ("B" in the wallet study; "SYS" in the
+    System book), (times the deploy beat Nifty, total resolved) — the running 'did acting on the AI
+    work' tally. Returns (0, 0) when nothing has resolved yet."""
+    resolved = [d for d in decisions if d.resolved and d.book == book]
     worked = sum(1 for d in resolved if d.verdict == "worked")
     return worked, len(resolved)
 
