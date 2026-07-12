@@ -98,7 +98,35 @@ separate, all in one; the optimizer must handle the real world, not just a sched
 - The clean ₹2L GO book (`data/paper/book.json`) is **untouched** — still the criterion-6 evidence.
   Rule (a) intact: AI paces size only; the engine computes everything. Gates green;
   cmd_daily smoke-tested end-to-end locally (deploys executed, gate refused a same-day rebalance with
-  its reason logged, idempotent re-run).
+  its reason logged, idempotent re-run). Follow-up (#42): the hedge overlay is also **measured
+  read-only on the GO book's committed curve** — protection evidence accrues on both books without
+  touching the criterion-6 gate.
+
+## 🏁 THE ENDGAME CONTRACT (locked with the user 2026-07-12 — read before any "GO" work)
+
+**The user is walking away for ~6 months; the system runs itself** (weekday cron: mark GO book → AI
+brief → System book deploy/gate/hedge → commit; ₹50k monthly auto-top-up; Telegram pings him on
+weakness escalation, GO flip, guard/pipeline failure — silence means healthy). His words: *"if the
+system does go green, it should be ALL — the AI, the paperbook, the hedge, all working — then after
+that we integrate to the final usable system."*
+
+**"Green" therefore means ALL FOUR, not just criterion-6:**
+1. **Core GO** — the validated ₹2L book clears the deterministic §14 scorecard (track length,
+   volatility event withstood, vs benchmark, drawdown behaviour, data integrity).
+2. **System > Baseline** — the System book beats the same-cash-flow NIFTYBEES baseline over the run
+   (the whole system adds value over doing nothing).
+3. **AI verdict** — System vs Shadow answers "did the AI help?" **Either answer is a valid result**:
+   keep the AI nudge in the final system only if it added value net; drop it without ceremony if it
+   didn't.
+4. **Hedge witnessed** — ≥1 real stress event where the measured overlay cut the drawdown on both
+   books (the gauge firing + protection visible, not just theory).
+
+**Then — and only then — the integration step:** promote the proven pieces into the final usable
+system for his REAL account: the advisor (Sell/Raise = math, Add-money = math + whichever AI verdict
+survived) sizing against his actual demat cash, the hedge as a dashboard-prompted **manual** F&O
+decision, and auto-invest remaining fake-only unless he explicitly decides otherwise then. **Real
+money never auto-trades; he places every order — that rule outlives the GO.** If any pillar fails
+(NO-GO, System < Baseline, hedge never tested), report it honestly and do NOT integrate around it.
 
 ## 🧭 CURRENT STATE — (2026-07-11, Ops Layer)
 
