@@ -56,6 +56,7 @@ from qalpha.live.autopilot import (
 )
 from qalpha.live.dashboard import watchlist_is_stale
 from qalpha.live.deploy import advise_deploy_into_weakness, market_weakness
+from qalpha.live.hedge import apply_futures_hedge, hedge_active, stress_gauge
 from qalpha.live.paper import PaperBook, StrategyParams
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -250,6 +251,7 @@ def _render_dashboard(
     level: str,
     sig: str,
     adaptive: dict[str, object] | None = None,
+    hedge: dict[str, object] | None = None,
 ) -> str:
     worked, total = ai_hit_rate(ledger)
     n_days = len(pd.read_csv(TRACK_CSV)) if TRACK_CSV.exists() else 0
@@ -298,6 +300,25 @@ def _render_dashboard(
             f"- Value **₹{float(adaptive['value']):,.0f}** · return **{float(adaptive['return_pct']):+.2f}%** "
             f"vs Nifty **{float(adaptive['bench_pct']):+.2f}%** · rebalances so far: "
             f"**{int(adaptive['rebalances'])}** · today: {state}",
+        ]
+    if hedge is not None:
+        hstate = "🛡️ HEDGE ON" if hedge["hedge_on"] else "— hedge off (calm)"
+        lines += [
+            "",
+            "## 🛡 Downside protection — the tax-free hedge (on the smart-rebalance book)",
+            "",
+            "The validated way to **minimise loss in a crash without selling**: keep every share, "
+            "overlay a short index-futures hedge while systemic stress is elevated (₹0 capital-gains "
+            "tax; F&O cost + 30% tax modelled). **Fake money — never a real F&O trade.**",
+            "",
+            f"- Return **{float(hedge['hedged_return']):+.2f}%** hedged vs "
+            f"**{float(hedge['unhedged_return']):+.2f}%** unhedged · worst drawdown "
+            f"**−{float(hedge['hedged_dd']):.1f}%** hedged vs **−{float(hedge['unhedged_dd']):.1f}%** "
+            f"unhedged · episodes: **{int(hedge['episodes'])}** · now: {hstate}",
+            "",
+            "> The gauge is **coincident** (fires *with* a drawdown, can't forecast) — so in a calm "
+            "window the hedge stays off and the two curves are identical. Its value shows up only in a "
+            "real stress event; that's exactly what it waits for.",
         ]
     lines += [
         "",
@@ -376,6 +397,60 @@ def _run_adaptive_book(as_of: date, nifbees: pd.Series) -> dict[str, object] | N
         return None
 
 
+# ---- downside protection: the tax-free hedge overlay (promoted from research) --------------------
+
+HEDGE_TAU = 0.7  # operate at τ≥0.7 (the robustness battery: τ=0.6 hedges too eagerly)
+HEDGE_PERSIST = 5
+HEDGE_RATIO = 0.5
+
+
+def _max_drawdown(equity: pd.Series) -> float:
+    """Worst peak-to-trough fall of an equity curve, as a positive fraction."""
+    peak = equity.cummax()
+    return float(((peak - equity) / peak).max() or 0.0)
+
+
+def _run_hedge_overlay(nifbees: pd.Series) -> dict[str, object] | None:
+    """Overlay the validated tax-free short-futures hedge on the smart-rebalance book's curve — the
+    'minimise loss in a crash without selling' layer. Stateless (recomputed from the curve each run);
+    fake money, never a real F&O trade. ``None`` if the book has too little history yet."""
+    try:
+        import json
+
+        if not ADAPTIVE_BOOK_PATH.exists():
+            return None
+        curve = json.loads(ADAPTIVE_BOOK_PATH.read_text(encoding="utf-8")).get("equity_curve", [])
+        if len(curve) < 3:
+            return None  # need a few marks before a hedge overlay means anything
+        s = pd.Series({p["date"]: float(p["equity"]) for p in curve}).sort_index()
+        s.index = pd.to_datetime(s.index)
+        book_ret = s.pct_change().dropna()
+        if book_ret.empty:
+            return None
+        gauge = stress_gauge(nifbees)
+        active = hedge_active(gauge, tau=HEDGE_TAU, persist=HEDGE_PERSIST)
+        index_ret = nifbees.pct_change()
+        res = apply_futures_hedge(
+            book_ret,
+            index_ret.reindex(book_ret.index).fillna(0.0),
+            active.reindex(book_ret.index).fillna(False),
+            h=HEDGE_RATIO,
+        )
+        unhedged = (1 + book_ret).cumprod()
+        hedge_on_now = bool(active.reindex(book_ret.index).fillna(False).iloc[-1])
+        return {
+            "hedged_return": (float(res.equity.iloc[-1]) - 1.0) * 100,
+            "unhedged_return": (float(unhedged.iloc[-1]) - 1.0) * 100,
+            "hedged_dd": _max_drawdown(res.equity) * 100,
+            "unhedged_dd": _max_drawdown(unhedged) * 100,
+            "hedge_on": hedge_on_now,
+            "episodes": res.episodes,
+        }
+    except Exception as exc:  # fail-soft — the hedge readout must never break the run
+        print(f"[autopilot] hedge overlay skipped (non-fatal): {exc}")
+        return None
+
+
 # ---- commands ------------------------------------------------------------------------------------
 
 
@@ -424,6 +499,10 @@ def cmd_daily() -> int:
         adaptive = _run_adaptive_book(as_of, nifbees)
         if adaptive is not None:
             state["adaptive_last_marked"] = as_of_str
+
+    hedge = _run_hedge_overlay(
+        nifbees
+    )  # downside protection on the smart-rebalance book (stateless)
 
     # A/B/C deploy — guarded so a same-day re-run never double-deploys the wallet books.
     already_marked = state.get("last_marked") == as_of_str
@@ -478,7 +557,8 @@ def cmd_daily() -> int:
         _append_track(as_of_str, standings)
     DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_MD.write_text(
-        _render_dashboard(as_of_str, standings, ledger, level, sig_desc, adaptive), encoding="utf-8"
+        _render_dashboard(as_of_str, standings, ledger, level, sig_desc, adaptive, hedge),
+        encoding="utf-8",
     )
     save_books(books)
     save_ledger(ledger)
