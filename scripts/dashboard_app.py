@@ -110,6 +110,16 @@ def _queue_injection_to_repo(amount: int, reason: str) -> tuple[bool, str]:
         )
         with urllib.request.urlopen(put, timeout=10):
             return True, "queued to the repo"
+    except urllib.error.HTTPError as e:
+        # Surface GitHub's actual reason (in the body) — a bare "403 Forbidden" hides whether it's a
+        # missing Contents:write permission, the repo not being in the token's scope, or a protected
+        # branch. The body message ("Resource not accessible by personal access token", etc.) is decisive.
+        detail = ""
+        try:
+            detail = json.loads(e.read().decode()).get("message", "")
+        except Exception:
+            pass
+        return False, f"HTTP {e.code}: {detail or e.reason}"
     except Exception as exc:
         return False, str(exc)
 
