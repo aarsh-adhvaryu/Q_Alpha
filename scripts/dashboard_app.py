@@ -12,12 +12,13 @@ acts in his own broker. Live holdings carry no purchase dates, so live tax is ap
 **upload a Zerodha Console tradebook CSV** in the Live view — that replays exact dated FIFO lots
 (criterion 4) and switches the page to exact-tax mode; otherwise it shows the short-term caveat.
 
-Three tabs = the whole system on one screen: **📄 Paper book** (the validated optimizer + advisor),
-**🔴 Live (Zerodha)** (the real account, read-only), and **🤖 Auto-pilot** — the fake-money "watch the
-system invest & see if it works" view: a wallet you fund, three books (strategy · strategy+AI ·
-buy-and-hold), the "did it work / did the AI help" scoreboard, and the daily AI brief. All native
-product code; the AI only nudges a fake book via a fixed rule and never computes a number — the
-validated engine is always the calculator (rule (a) intact).
+TWO tabs = the whole thing on one screen. **🧠 The system** — ONE fake-money book running everything
+on its own advice (cash in → AI-paced deploys into weakness → tax-gated real-world rebalancing →
+hedge readout in stress), vs a no-AI shadow and a buy-and-hold baseline with identical cash flows;
+the validated ₹2L core (the official GO gate) runs untouched in an expander underneath. **🔴 Live
+(Zerodha)** — the real account + the interactive advisor; the human places every order. The AI only
+paces deploy size via a fixed rule and never computes a number — the validated engine is always the
+calculator (rule (a) intact).
 """
 
 from __future__ import annotations
@@ -472,129 +473,134 @@ def _today_brief(
     )
 
 
-def _all_engines_summary(core_return: float, nifty_return: float | None) -> None:
-    """One table with every book's return, side by side — the validated ₹2L core (annual), the
-    smart-rebalance engine (self-timed ₹2L), and the 3 wallet books (A/B/C) — each independent."""
-    rows: list[dict[str, str]] = []
-    nifty = f"{nifty_return:+.2f}%" if nifty_return is not None else "—"
-    rows.append(
-        {
-            "Engine": "₹2L core — validated (annual)",
-            "Return": f"{core_return:+.2f}%",
-            "vs Nifty": nifty,
-        }
-    )
-    adaptive_csv = Path("data/autopilot/adaptive_track.csv")
-    if adaptive_csv.exists():
-        r = pd.read_csv(adaptive_csv).iloc[-1]
-        rows.append(
-            {
-                "Engine": "Smart-rebalance — self-timed (₹2L)",
-                "Return": f"{float(r['return_pct']):+.2f}%",
-                "vs Nifty": f"{float(r['bench_pct']):+.2f}%",
-            }
-        )
-    track_csv = Path("data/autopilot/track.csv")
-    if track_csv.exists():
-        r = pd.read_csv(track_csv).iloc[-1]
-        names = {"A": "A · strategy (wallet)", "B": "B · strategy + AI", "C": "C · buy & hold"}
-        for n, label in names.items():
-            rows.append(
-                {
-                    "Engine": label,
-                    "Return": f"{float(r[f'{n}_return_pct']):+.2f}%",
-                    "vs Nifty": nifty,
-                }
-            )
-    st.subheader("🏁 All engines, side by side")
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-    st.caption(
-        "Each runs **independently** on fake money — the validated core rebalances ~once a year, the "
-        "smart-rebalance engine trades only when the tax-gate clears, the wallet books deploy fresh "
-        "money into dips. Comparing them, live, is the whole point. Early numbers are low-power."
-    )
-    _engines_return_chart()
+def _system_chart(core_return: float | None = None) -> None:
+    """Return-% over time: the System book, its no-AI shadow, and the buy-and-hold baseline."""
+    from autopilot import SYSTEM_TRACK_CSV
 
-
-def _engines_return_chart() -> None:
-    """A line chart of every book's return-% over time — the wallet books (A/B/C) and the
-    smart-rebalance engine, so you watch them race. Needs ≥2 marks to draw."""
-    track_csv = Path("data/autopilot/track.csv")
-    if not track_csv.exists():
+    if not SYSTEM_TRACK_CSV.exists():
         return
-    df = pd.read_csv(track_csv)
+    df = pd.read_csv(SYSTEM_TRACK_CSV)
     if len(df) < 2:
-        st.caption("📈 The return chart appears once there are a few daily marks.")
+        st.caption("📈 The chart appears once there are a few daily marks.")
         return
     series = pd.DataFrame({"date": pd.to_datetime(df["date"])}).set_index("date")
-    series["A · strategy"] = df["A_return_pct"].to_numpy()
-    series["B · strategy + AI"] = df["B_return_pct"].to_numpy()
-    series["C · buy & hold"] = df["C_return_pct"].to_numpy()
-    adaptive_csv = Path("data/autopilot/adaptive_track.csv")
-    if adaptive_csv.exists():
-        adf = pd.read_csv(adaptive_csv)
-        a = adf.set_index(pd.to_datetime(adf["date"]))["return_pct"]
-        series["Smart-rebalance"] = a.reindex(series.index).to_numpy()
+    series["🧠 System"] = df["system_return_pct"].to_numpy()
+    series["System, AI off"] = df["shadow_return_pct"].to_numpy()
+    series["NIFTYBEES baseline"] = df["baseline_return_pct"].to_numpy()
     st.line_chart(series, height=260)
-    st.caption("Return % since start, per engine. Fake money · low-power until months accrue.")
+    st.caption("Return % since start. Fake money · low-power until months accrue.")
 
 
-def _autopilot_tab(core_return: float, nifty_return: float | None) -> None:
-    """Auto-pilot — the fake-money "watch the system invest & see if it works" view. The advisor
-    recommends; three books follow it (A strategy · B strategy+AI · C buy-and-hold) so you can watch
-    whether it makes money and whether the AI helps. You fund a **wallet** here; the daily cron
-    deploys it. **Fake money — nothing here ever trades.** (Native product code; no research import.)"""
-    from qalpha.live.autopilot import (
-        BOOK_NAMES,
-        inject_all,
-        load_books,
-        load_state,
-        log_manual_injection,
-        save_books,
-        save_state,
-    )
+def _system_holdings(labels: dict[str, str]) -> None:
+    """What each book actually holds right now (system/shadow via the qalpha ledger; baseline flat)."""
+    import json as _json
+
+    from autopilot import BASELINE_PATH, SHADOW_BOOK_PATH, SYSTEM_BOOK_PATH
+
+    from qalpha.live.paper import PaperBook as PaperBookCls
+
+    tabs = st.tabs(list(labels.values()))
+    cfg = Config()
+    for tab, key in zip(tabs, labels, strict=True):
+        with tab:
+            rows: list[dict[str, object]] = []
+            if key in ("system", "shadow"):
+                path = SYSTEM_BOOK_PATH if key == "system" else SHADOW_BOOK_PATH
+                if path.exists():
+                    port = PaperBookCls.load(path, cfg).portfolio
+                    rows = [
+                        {"Ticker": t, "Shares": int(q)} for t, q in sorted(port.positions().items())
+                    ]
+            elif BASELINE_PATH.exists():
+                holds = _json.loads(BASELINE_PATH.read_text(encoding="utf-8")).get("holdings", {})
+                rows = [{"Ticker": t, "Shares": int(q)} for t, q in sorted(holds.items())]
+            if rows:
+                st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            else:
+                st.caption("No holdings yet.")
+
+
+def _core_go_expander(
+    book: PaperBook,
+    prices: PriceData,
+    universe: Universe,
+    sector_of: dict[str, str],
+    benchmark: pd.Series,
+    as_of: date,
+) -> None:
+    """The validated ₹2L core — the official criterion-6 GO gate. It keeps running untouched
+    underneath the System book; this expander is its full, unchanged view."""
+    with st.expander("🎯 The official GO gate — the validated ₹2L core underneath (unchanged)"):
+        st.info(_plain_summary(book, prices, benchmark, universe, sector_of, as_of))
+        st.markdown(_today_brief(book, prices, benchmark, universe, sector_of, as_of))
+        st.caption(
+            f"Notional paper book (no real money) · as of **{as_of}** · decisions from the validated "
+            "engine — this page never trades. The real-money GO rides THIS book (its clean annual-"
+            "cadence run is the evidence); the System book above is the full system being proven."
+        )
+        _paper_overview(book, prices, benchmark, universe, sector_of, as_of)
+        _go_readiness_view(book, benchmark, as_of)
+        with st.expander("🩺 Position health — between-rebalance watch"):
+            _position_health_view(book, prices, as_of)
+        with st.expander("🛡 Systemic risk — hedge watch"):
+            _systemic_risk_view(benchmark, as_of)
+        with st.expander("🧾 Logs & system health — autonomous run trail"):
+            _logs_view(book, as_of)
+        with st.expander("📖 Jargon, in plain English"):
+            st.markdown(glossary_markdown())
+
+
+def _system_tab(
+    book: PaperBook,
+    prices: PriceData,
+    universe: Universe,
+    sector_of: dict[str, str],
+    benchmark: pd.Series,
+    as_of: date,
+) -> None:
+    """🧠 The system — ONE fake-money book running everything the system can do, on its own advice:
+    cash in → AI-paced deploys into weakness → tax-gated (real-world, not calendar) rebalancing →
+    hedge readout in stress. Vs a no-AI shadow and a buy-and-hold baseline with identical cash flows.
+    **Fake money — nothing here ever places a real trade.**"""
+    from autopilot import BASELINE_PATH
+
+    from qalpha.live.autopilot import load_state, save_state
 
     st.caption(
-        "The system follows its own advice on **fake money** so you can see it work before a real-money "
-        "GO. You add money to the wallet; the daily run deploys it into the most out-of-favour names "
-        "(₹0-tax buys). **Nothing here ever places a real trade.**"
+        "**The whole system, acting on its own advice, on fake money** — deploys idle cash when the "
+        "advisor says so (AI-paced), rebalances only when the tax-gate says it's worth it (checked "
+        "daily, not on a calendar), hedges in stress. Its track record IS the advice's track record. "
+        "**Nothing here ever places a real trade.**"
     )
 
-    # --- All engines, side by side: the validated ₹2L core + smart-rebalance + the 3 wallet books,
-    #     each running independently, each vs Nifty. This is the "watch them all together" view. ---
-    _all_engines_summary(core_return, nifty_return)
-
-    # --- Wallet & controls: fund the books (deployed on the next daily run) + the monthly toggle ---
-    st.subheader("💰 Wallet")
-    books = load_books()
+    # --- Wallet: fund the system (all three books equally, so the comparison stays fair) ---
     state = load_state()
-    cols = st.columns(3)
-    labels = {"A": "A · strategy", "B": "B · strategy + AI", "C": "C · buy & hold"}
-    for col, n in zip(cols, BOOK_NAMES, strict=True):
-        col.metric(labels[n], f"₹{float(books[n].cash):,.0f} idle")
+    import json as _json
+
+    wallets = state.get("wallets") if isinstance(state.get("wallets"), dict) else {}
+    sys_wallet = float(str(wallets.get("system", "0"))) if wallets else 0.0
+    base_cash = 0.0
+    if BASELINE_PATH.exists():
+        base_cash = float(_json.loads(BASELINE_PATH.read_text(encoding="utf-8")).get("cash", "0"))
+    c1, c2 = st.columns(2)
+    c1.metric("💰 Idle wallet (dry powder)", f"₹{sys_wallet:,.0f}")
+    c2.metric("Baseline idle", f"₹{base_cash:,.0f}")
 
     with st.form("add_money", clear_on_submit=True):
-        amount = st.number_input("Add money to the wallet (₹)", min_value=0, value=0, step=5000)
+        amount = st.number_input("Add money (₹)", min_value=0, value=0, step=5000)
         reason = st.text_input("Why (optional — an IPO, a tip, a dip)", value="")
         submitted = st.form_submit_button("➕ Add money")
     if submitted and amount > 0:
-        why = reason or "(unspecified)"
-        ok, msg = _queue_injection_to_repo(int(amount), why)
+        ok, msg = _queue_injection_to_repo(int(amount), reason or "(unspecified)")
         if ok:
             st.success(
-                f"Queued ₹{int(amount):,} into all three books (kept equal so the comparison stays "
-                "fair). The daily cron applies it and deploys on its next run."
+                f"Queued ₹{int(amount):,} — the daily run credits all three books equally and the "
+                "system deploys its share when conditions say so."
             )
         else:
-            # No token (or the write failed): fall back to a session-only add so the button still does
-            # *something*, but warn loudly that it won't reach the cron / will be overwritten.
-            inject_all(books, Decimal(str(int(amount))))
-            save_books(books)
-            log_manual_injection(Decimal(str(int(amount))), why)
             st.warning(
-                f"Added ₹{int(amount):,} **to this session only** — it won't reach the daily cron "
-                f"(and will be overwritten) because repo persistence isn't set up ({msg}). "
-                "Add a `GITHUB_TOKEN` to the app's Streamlit secrets to make Add-money stick."
+                f"Could not queue to the repo ({msg}) — check the `GITHUB_TOKEN` in the app's "
+                "Streamlit secrets. Nothing was added."
             )
 
     auto_on = bool(state.get("monthly_autodeposit", True))
@@ -604,52 +610,40 @@ def _autopilot_tab(core_return: float, nifty_return: float | None) -> None:
         save_state(state)
         st.toast(f"Monthly auto-top-up {'on' if new_auto else 'off'}.")
 
-    # --- The scoreboard: did it work, did the AI help? (rendered from the cron's committed report) ---
+    # --- The scoreboard (written by the daily run) + the race chart ---
     st.divider()
-    st.subheader("🧪 Did it work? Did the AI help?")
     if AUTOPILOT_DASHBOARD_MD.exists():
         st.markdown(AUTOPILOT_DASHBOARD_MD.read_text(encoding="utf-8"))
     else:
-        st.info(
-            "No marks yet — the daily cron seeds the books and writes this on its first run "
-            "(`scripts/autopilot.py daily`)."
-        )
+        st.info("No marks yet — the daily run writes the scoreboard on its first pass.")
+    _system_chart()
 
-    # --- The trades: what each book actually holds + bought most recently ---
-    from qalpha.live.autopilot import load_ledger
-
+    # --- Holdings ---
     st.divider()
     st.subheader("📦 What each book holds")
-    ledger = load_ledger()
-    last_by_book: dict[str, object] = {}
-    for d in ledger:
-        last_by_book[d.book] = d  # ledger is chronological → keeps the latest per book
-    tabs = st.tabs([labels[n] for n in BOOK_NAMES])
-    for tab, n in zip(tabs, BOOK_NAMES, strict=True):
-        with tab:
-            holds = books[n].holdings
-            if holds:
-                rows = [{"Ticker": t, "Shares": q} for t, q in sorted(holds.items())]
-                st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-            else:
-                st.caption("No holdings yet — all idle cash.")
-            last = last_by_book.get(n)
-            if last is not None and getattr(last, "basket", None):
-                bought = ", ".join(f"{t}×{q}" for t, q in sorted(last.basket.items()))
-                st.caption(f"🛒 Last buy ({last.as_of}): {bought}  ·  _{last.model_rationale}_")
+    _system_holdings(
+        {
+            "system": "🧠 System",
+            "shadow": "System, AI off",
+            "baseline": "NIFTYBEES baseline",
+        }
+    )
 
-    # --- Today's AI market brief (context only; Book B acts on its SIGNAL via a fixed rule) ---
+    # --- Today's AI market brief (context only; the system acts on its SIGNAL via the fixed rule) ---
     st.divider()
-    st.subheader("🧠 Today's AI market brief")
-    if AI_BRIEF_MD.exists() and "No brief generated yet" not in AI_BRIEF_MD.read_text(
-        encoding="utf-8"
+    with st.expander(
+        "🧠 Today's AI market brief (context only — the fixed rule acts on its SIGNAL)"
     ):
-        st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
-        st.caption(
-            "Context only, **not a signal** — the AI supplies a read; a fixed rule acts on it."
-        )
-    else:
-        st.info("No brief yet — the daily cron writes it after market close.")
+        if AI_BRIEF_MD.exists() and "No brief generated yet" not in AI_BRIEF_MD.read_text(
+            encoding="utf-8"
+        ):
+            st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
+        else:
+            st.info("No brief yet — the daily run writes it after market close.")
+
+    # --- The validated core (the official GO gate) — running untouched underneath ---
+    st.divider()
+    _core_go_expander(book, prices, universe, sector_of, benchmark, as_of)
 
 
 def main() -> None:
@@ -671,33 +665,13 @@ def main() -> None:
     st.title("Q-Alpha — Tax-Smart Portfolio Advisor")
     _paper_status_panel(book)
 
-    paper_tab, live_tab, autopilot_tab = st.tabs(
-        ["📄 Paper book", "🔴 Live (Zerodha)", "🤖 Auto-pilot (does it work? does the AI help?)"]
-    )
+    system_tab, live_tab = st.tabs(["🧠 The system", "🔴 Live (Zerodha)"])
 
-    with paper_tab:
-        # Plain-English summary first — how you're doing / market / readiness / to-dos, in everyday
-        # words — then the detailed "what to do" brief and the numbers.
-        st.info(_plain_summary(book, prices, benchmark, universe, sector_of, as_of))
-        st.markdown(_today_brief(book, prices, benchmark, universe, sector_of, as_of))
-        st.divider()
-        st.caption(
-            f"Notional paper book (no real money) · as of **{as_of}** · decisions from the validated "
-            "engine — this page never trades."
-        )
-        _paper_overview(book, prices, benchmark, universe, sector_of, as_of)
-        with st.expander("🎯 GO readiness — the real-money verdict"):
-            _go_readiness_view(book, benchmark, as_of)
-        with st.expander("🩺 Position health — between-rebalance watch"):
-            _position_health_view(book, prices, as_of)
-        with st.expander("🛡 Systemic risk — hedge watch"):
-            _systemic_risk_view(benchmark, as_of)
-        with st.expander("🧾 Logs & system health — autonomous run trail"):
-            _logs_view(book, as_of)
-        with st.expander("📖 Jargon, in plain English — look anything up"):
-            st.markdown(glossary_markdown())
-        st.divider()
-        _advisor_with_safety(book.portfolio, prices, _prices_on(prices, as_of), benchmark, as_of)
+    with system_tab:
+        # ONE view of everything: the System book acting on its own advice (fake money), its no-AI
+        # shadow + buy-and-hold baseline, the hedge readout, the AI brief — and the validated core
+        # (the official GO gate) running untouched in an expander underneath.
+        _system_tab(book, prices, universe, sector_of, benchmark, as_of)
 
     with live_tab:
         # Act on the REAL Zerodha account: login → live holdings + advisor (sell / raise / add money).
@@ -734,12 +708,6 @@ def main() -> None:
             )
 
         _live_view()
-
-    with autopilot_tab:
-        _autopilot_tab(
-            core_return=book.total_return_pct(prices, as_of),
-            nifty_return=_benchmark_return_pct(benchmark, book.start_date, as_of),
-        )
 
 
 def _streamed_prices(

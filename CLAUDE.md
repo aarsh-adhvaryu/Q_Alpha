@@ -72,6 +72,34 @@ additions, all fake-money, rule (a) intact.
 - Gates green (241 tests). Rule (a) intact throughout (AI never the calculator; validated headline +
   ₹2L GO book untouched; the hedge/auto-pilot are fake-money experiments).
 
+**THE SYSTEM BOOK (2026-07-12, branch `system-book`) — the closed trust loop.** The user's demand:
+*"I can only trust the advisor if it takes the decision AND acts on it — no paperbook, no autopilot
+separate, all in one; the optimizer must handle the real world, not just a scheduled time."* Built:
+- **ONE fake-money book runs the entire system on its own advice** (`scripts/autopilot.py`, fully
+  rewritten): cash in (monthly ₹50k + Add-money queue) → **AI-paced deploys into weakness** (the exact
+  Add-money advice, executed on itself; `signal_tilt` sizes it) → **§4.6 tax-gated adaptive rebalance
+  evaluated EVERY day** (trades only when worth the tax — it may later consolidate opportunistic buys
+  into the core target, again only when worth the tax) → **hedge overlay readout** (flow-adjusted).
+  The System book = the former smart-rebalance book upgraded in place (`data/paper/adaptive_book.json`,
+  its ₹2L history carries over).
+- **Two comparators, identical cash flows:** `data/paper/shadow_book.json` (cloned at first run; AI
+  OFF → System−Shadow = the AI's added value) and `data/autopilot/baseline_book.json` (NIFTYBEES
+  buy-and-hold → System−Baseline = the system's value over doing nothing). The A/B/C wallet books are
+  **FROZEN** (prereg carries a disclosed amendment note; same questions, now asked of the full system).
+- **Dashboard = TWO tabs:** 🧠 **The system** (wallet + Add-money, scoreboard from
+  `reports/autopilot_dashboard.md`, race chart from `data/autopilot/system_track.csv`, per-book
+  holdings, AI brief expander, and the **validated ₹2L core-GO view unchanged in an expander
+  underneath**) · 🔴 **Live (Zerodha)** (unchanged; the human places every order).
+- **Load-bearing valuation detail:** the system book holds core + watchlist names, so it's valued on a
+  **merged panel** (`_merge_panels`, everything ffilled — causal) — an index/session mismatch between
+  panels must never silently drop a holding's mark (found in smoke: a stale core panel cratered equity
+  −88% until the ffill fix). Money-weighted returns: wallet→book deploys are logged as flows
+  (`data/autopilot/system_flows.json`) and stripped from the curve before hedge/return math.
+- The clean ₹2L GO book (`data/paper/book.json`) is **untouched** — still the criterion-6 evidence.
+  Rule (a) intact: AI paces size only; the engine computes everything. Gates green;
+  cmd_daily smoke-tested end-to-end locally (deploys executed, gate refused a same-day rebalance with
+  its reason logged, idempotent re-run).
+
 ## 🧭 CURRENT STATE — (2026-07-11, Ops Layer)
 
 **Everything below this block is the older working log; this block is what's true now.** The
