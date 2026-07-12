@@ -137,8 +137,9 @@ it tells a human the tax-smart move; the human places the order. Every tax numbe
 - **Live Zerodha integration** (`live/holdings.py`, `tradebook.py`, `taxpnl.py`) — reads your real
   holdings + live prices; a Console tradebook upload reconstructs exact dated FIFO lots; the FIFO
   engine was **reconciled to the paise** against a real Zerodha Tax P&L (criterion 4).
-- **Deployed dashboard** (`scripts/dashboard_app.py`, Streamlit Cloud) — equity vs Nifty TRI, the
-  advisor tabs, plus four watch tabs:
+- **Deployed dashboard** (`scripts/dashboard_app.py`, Streamlit Cloud) — two tabs: **🧠 The system**
+  (the System book below, with the validated core's full view in an expander underneath) and **🔴 Live
+  (Zerodha)** (the real account + the interactive advisor). The watch views:
   - **🎯 GO readiness** — a deterministic, no-AI scorecard that flips to GO *only* when the forward
     paper run clears every criterion (enough days · survived a real ≥10% market drop · keeps pace with
     the benchmark · drawdown within the validated envelope · clean data feed). It can read **READY —
@@ -153,6 +154,27 @@ it tells a human the tax-smart move; the human places the order. Every tax numbe
 - **Autonomous paper run** (`scripts/paper.py` + GitHub Actions) — a notional ₹2L book marked daily by
   a weekday cron, which **auto-applies the strategy's scheduled (annual) rebalances** so the forward
   record tests the live strategy, not a frozen basket. This is criterion 6 — the unskippable evidence.
+
+### The System book — the whole system proving itself on its own advice
+
+The trust problem with any advisor: it *suggests* trades but never lives with them. So a second
+fake-money book (`scripts/autopilot.py`, daily cron) **runs the entire system on itself**: it receives
+cash (a monthly top-up + a dashboard Add-money button), **executes the Add-money advisor's own buy
+list** on itself (deploy-into-weakness, ₹0-tax buys, sizing paced by market weakness × a fixed rule
+over an LLM's daily market read — the AI supplies a *lean*, deterministic code acts on it), evaluates
+the **§4.6 tax-benefit gate every day** (it rebalances when the benefit beats 2× cost+tax — this week
+or in six months, the market decides, not a calendar — and logs every refusal with its reason), and
+carries the research-validated **tax-free hedge overlay as a daily measurement** (hedged-vs-unhedged
+return + drawdown, computed on both the System book *and*, read-only, the untouched GO book).
+
+Two comparators with **identical cash flows** keep it honest: a **shadow twin with the AI off**
+(System − Shadow = exactly what the AI adds — either sign is a valid finding) and a **NIFTYBEES
+buy-and-hold baseline** (System − Baseline = what the whole system adds over doing nothing).
+
+**The endgame contract (pre-committed):** real-money integration happens only when ALL FOUR are green —
+the core clears its deterministic GO scorecard · System > Baseline · the AI verdict is in · the hedge
+has been *witnessed* cutting a real stress event. If any pillar fails, that's reported, not integrated
+around. Real money never auto-trades; the human places every order — that rule outlives the GO.
 
 ---
 
