@@ -163,6 +163,15 @@ def test_ai_hit_rate_counts_only_resolved_book_b() -> None:
     assert ai_hit_rate([]) == (0, 0)
 
 
+def test_ai_hit_rate_book_param_selects_system_deploys() -> None:
+    ds = [
+        resolve_decision(_decision("SYS"), 3.0, 1.0),  # worked
+        resolve_decision(_decision("SHD"), 3.0, 1.0),  # shadow → not counted for SYS
+        resolve_decision(_decision("SYS"), 0.0, 1.0),  # didn't
+    ]
+    assert ai_hit_rate(ds, book="SYS") == (1, 2)
+
+
 def test_decision_round_trip() -> None:
     d = resolve_decision(_decision(), 2.1, 0.9)
     assert Decision.from_dict(d.to_dict()) == d

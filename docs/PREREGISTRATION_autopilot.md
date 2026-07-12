@@ -1,5 +1,17 @@
 # Pre-registration — the A/B/C forward study: "does it work, and does the AI help?"
 
+> **⚠️ AMENDED 2026-07-12 — the study was consolidated into the SYSTEM BOOK (disclosed, not hidden).**
+> The user's verdict after watching the A/B/C wallet silos run: the trust test must be **one book
+> running the entire system on its own advice**, not fragments. So: the A/B/C wallet books are
+> **FROZEN** (their data remains committed as history), and the design continues as **System vs
+> Shadow vs Baseline** with identical cash flows — the *same* two pre-registered questions, asked of
+> the full system: **System − Baseline** = "did the system beat doing nothing?" (was A − C) and
+> **System − Shadow (AI off)** = "did the AI help?" (was B − A). The deploy-tilt rule (`signal_tilt`,
+> ×0.5–1.5), the tranche schedule, the ~20-trading-day per-decision scoring, and every honesty guard
+> below carry over unchanged. New in the System book (each a *validated* mechanism, not a tuned one):
+> the §4.6 tax-gated adaptive rebalance (evaluated daily, trades only when worth the tax) and the
+> tax-free hedge readout. This note is the amendment record; nothing below was rewritten.
+
 **Registered before running (the repo's iron rule).** This fixes the question, the method, and the
 bar *before* any book accrues, so the answer can't be rationalised after the fact.
 
