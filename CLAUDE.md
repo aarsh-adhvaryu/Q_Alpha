@@ -52,6 +52,26 @@ additions, all fake-money, rule (a) intact.
   side-by-side" table (validated ₹2L annual core + smart-rebalance + A/B/C wallet books, each vs Nifty).
   **NEVER the validated GO book** (`data/paper/book.json`) — a separate book, headline untouched.
 
+**Unified advisor + hedge (2026-07-11, branch `unified-advisor-hedge`):** the "one coherent system" pass.
+- **Add-money = math + AI.** The Add-money advisor (Live + Paper) now surfaces the AI's market read and
+  applies the same `signal_tilt` Book B uses to suggest *how much* of the idle cash to deploy now vs
+  hold as dry powder (a tranche by market-weakness × AI lean). **Names + tax stay 100% deterministic;
+  the AI never picks a stock or computes a number.** "Deploy all now (time-in-market)" is the honest
+  default; the AI-paced option is offered with a market-timing caveat. Idle cash = demat cash (injected
+  or freed by a sell). The auto-pilot's Book B forward-tests whether acting on the AI actually helps.
+- **Hedge promoted from research → `src/qalpha/live/hedge.py`** (`stress_gauge` [drawdown→[0,1], the
+  product-native gauge; the cross-asset fragility gauge stays the research upgrade path] + `hedge_active`
+  + `apply_futures_hedge`, the validated tax-free short-futures overlay; `tests/test_hedge.py` incl.
+  no-look-ahead). Wired into the auto-pilot as a **downside-protection overlay on the smart-rebalance
+  book** (`_run_hedge_overlay`, stateless/recomputed, τ≥0.7 h=0.5) → shows hedged-vs-unhedged return +
+  **drawdown** in the Auto-pilot dashboard. **Fake money — never a real F&O trade.** *Why this and not
+  "sell defensively":* selling to dodge a drawdown was tested (research HMM overlay) and LOST to the
+  capital-gains tax; the hedge keeps the shares (₹0 CG tax) and cuts the crash. Coincident gauge → in a
+  calm window it stays off and curves match; its value shows only in a real stress event.
+- **Plots:** an "all engines" return-% line chart in the Auto-pilot tab (A/B/C + smart-rebalance).
+- Gates green (241 tests). Rule (a) intact throughout (AI never the calculator; validated headline +
+  ₹2L GO book untouched; the hedge/auto-pilot are fake-money experiments).
+
 ## 🧭 CURRENT STATE — (2026-07-11, Ops Layer)
 
 **Everything below this block is the older working log; this block is what's true now.** The
