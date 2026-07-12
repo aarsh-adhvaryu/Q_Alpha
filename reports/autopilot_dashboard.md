@@ -1,27 +1,27 @@
-# Auto-pilot — did the system make money, and did the AI help?
+# The System book — the whole system acting on its own advice
 
-_As of **2026-07-10** · 1 marks · market weakness: **elevated** · **fake money, no real orders**._
+_As of **2026-07-10** · 1 marks · market weakness: **elevated** · AI: lean=up confidence=medium (tilt 1.25×) · **fake money, no real orders**._
 
-| Book | What it does | Value | Contributed | Profit | Return |
+| Book | What it is | Value | Contributed | Profit | Return |
 |---|---|---:|---:|---:|---:|
-| **A** | Strategy only (deploy into weakness) | ₹100,500 | ₹100,500 | ₹0 | +0.00% |
-| **B** | Strategy + AI nudge | ₹100,500 | ₹100,500 | ₹0 | +0.00% |
-| **C** | Buy-and-hold NIFTYBEES | ₹100,500 | ₹100,500 | ₹0 | +0.00% |
+| **system** | 🧠 **System** — deploys on its own advice (AI-paced) + tax-gated rebalance | ₹349,067 | ₹350,000 | ₹-933 | -0.27% |
+| **shadow** | System, AI off (the attribution twin) | ₹349,127 | ₹350,000 | ₹-873 | -0.25% |
+| **baseline** | Everything into NIFTYBEES (do-nothing baseline) | ₹350,000 | ₹350,000 | ₹0 | +0.00% |
 
-- **A − C** (does the strategy beat buy-and-hold?): **₹0**
-- **B − A** (does the AI insight add value?): **₹0**
-- **AI decision hit-rate** (Book-B deploys that beat Nifty): **0/0**
-- Today's AI signal: lean=up confidence=medium (tilt 1.25×)
+- **System − Baseline** (does the whole system beat doing nothing?): **₹-933**
+- **System − Shadow** (does the AI add value?): **₹-60**
+- **AI deploy hit-rate** (system deploys that beat Nifty over ~20d): **0/0**
 
-> **Low power early — this is not a verdict.** The claims need ≥3 months and a real volatility event before they mean anything; until then these are just the accruing numbers.
+## Today's decisions
 
-## 🔁 Smart-rebalance engine (self-timed core strategy, ₹2L fake)
+- **system** deployed ₹93,750 — weakness=elevated; deploy ₹93,750 into: VEDL.NS (−65%), TRENT.NS (−47%), TCS.NS (−37%)
+- **shadow** deployed ₹75,000 — weakness=elevated; deploy ₹75,000 into: VEDL.NS (−65%), TRENT.NS (−47%), TCS.NS (−37%)
+- **system** 🔁 rebalanced — drift 35.3% > threshold and §4.6 net-benefit gate cleared
+- **shadow** 🔁 rebalanced — drift 30.9% > threshold and §4.6 net-benefit gate cleared
 
-Runs the validated core strategy but **evaluates every day and trades only when the §4.6 tax-benefit gate clears** — self-timed, not annual, not forced-frequent. Tests whether the rebalance engine makes money without churning to tax.
+## Recent resolved deploys
 
-- Value **₹199,396** · return **-0.30%** vs Nifty **-0.85%** · rebalances so far: **1** · today: 🔁 REBALANCED today
-
-## Recent resolved decisions
-
-| Date | Book | Basket return | Nifty | Verdict | AI insight |
+| Date | Book | Basket return | Nifty | Verdict | AI at the time |
 |---|---|---:|---:|---|---|
+
+> **Low power early — not a verdict.** Needs months + a real volatility event. The baseline seeded at its own first run (a few sessions after the system's 2026-07-06 start) — flows are identical from then on. The earlier A/B/C wallet books are frozen (superseded by System-vs-Shadow inside the full system).

@@ -3,5 +3,20 @@
     "at": "2026-07-12T05:04:12",
     "amount": "500",
     "reason": "ipo"
+  },
+  {
+    "at": "2026-07-12T08:59:24",
+    "amount": "50000",
+    "reason": "(unspecified)"
+  },
+  {
+    "at": "2026-07-12T08:59:24",
+    "amount": "50000",
+    "reason": "ipo"
+  },
+  {
+    "at": "2026-07-12T08:59:24",
+    "amount": "50000",
+    "reason": "(unspecified)"
   }
 ]
