@@ -440,17 +440,22 @@ def _render_report(
         "",
     ]
     lines += [f"- {n}" for n in (today_notes or ["- held — no action worth its cost today."])]
-    if hedge is not None:
-        hstate = "🛡️ HEDGE ON" if hedge["hedge_on"] else "hedge off (calm)"
+    if hedge is not None or core_hedge is not None:
+        # Render whenever EITHER overlay has data: the GO book has months of curve on day one, so
+        # its protection line must not wait for the young System book to accrue 3 marks.
         lines += [
             "",
             "## 🛡 Downside protection — the tax-free hedge overlay",
             "",
-            f"- **System book:** return **{float(hedge['hedged_return']):+.2f}%** hedged vs "
-            f"**{float(hedge['unhedged_return']):+.2f}%** unhedged · worst drawdown "
-            f"**−{float(hedge['hedged_dd']):.1f}%** vs **−{float(hedge['unhedged_dd']):.1f}%** · "
-            f"episodes **{int(hedge['episodes'])}** · now: {hstate}",
         ]
+        if hedge is not None:
+            hstate = "🛡️ HEDGE ON" if hedge["hedge_on"] else "hedge off (calm)"
+            lines += [
+                f"- **System book:** return **{float(hedge['hedged_return']):+.2f}%** hedged vs "
+                f"**{float(hedge['unhedged_return']):+.2f}%** unhedged · worst drawdown "
+                f"**−{float(hedge['hedged_dd']):.1f}%** vs **−{float(hedge['unhedged_dd']):.1f}%** · "
+                f"episodes **{int(hedge['episodes'])}** · now: {hstate}",
+            ]
         if core_hedge is not None:
             lines += [
                 f"- **Validated ₹2L core (measured only — the GO book itself is untouched):** return "

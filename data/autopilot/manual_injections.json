@@ -28,5 +28,15 @@
     "at": "2026-07-12T09:25:03",
     "amount": "10000",
     "reason": "(from dashboard)"
+  },
+  {
+    "at": "2026-07-12T10:00:58",
+    "amount": "50000",
+    "reason": "IPO"
+  },
+  {
+    "at": "2026-07-12T10:00:58",
+    "amount": "10000",
+    "reason": "(from dashboard)"
   }
 ]

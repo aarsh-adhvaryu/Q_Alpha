@@ -473,7 +473,7 @@ def _today_brief(
     )
 
 
-def _system_chart(core_return: float | None = None) -> None:
+def _system_chart() -> None:
     """Return-% over time: the System book, its no-AI shadow, and the buy-and-hold baseline."""
     from autopilot import SYSTEM_TRACK_CSV
 
