@@ -63,7 +63,13 @@ from qalpha.live.hedge import apply_futures_hedge, hedge_active, stress_gauge
 from qalpha.live.paper import PaperBook, StrategyParams
 
 sys.path.insert(0, str(Path(__file__).parent))
-from paper import BENCHMARK_PARQUET, _load_benchmark_series, _load_market, _refresh_benchmark
+from paper import (
+    BENCHMARK_PARQUET,
+    BOOK_PATH,
+    _load_benchmark_series,
+    _load_market,
+    _refresh_benchmark,
+)
 
 FORWARD_START = "2026-07-06"  # the system book's fixed start (continuity with the adaptive book)
 RESOLVE_CALENDAR_DAYS = 28  # ≈20 trading days — each deploy is scored vs Nifty over this window
@@ -332,14 +338,18 @@ def _max_drawdown(equity: pd.Series) -> float:
     return float(((peak - equity) / peak).max() or 0.0)
 
 
-def _run_hedge_overlay(nifbees: pd.Series, flows: dict[str, str]) -> dict[str, float] | None:
-    """Overlay the validated tax-free short-futures hedge on the SYSTEM book's curve. Returns are
-    **flow-adjusted** — a wallet→book deploy is a transfer, not a gain, so it's stripped before the
-    daily return is computed. Stateless; fake money; never a real F&O trade."""
+def _run_hedge_overlay(
+    nifbees: pd.Series, flows: dict[str, str], book_path: Path = SYSTEM_BOOK_PATH
+) -> dict[str, float] | None:
+    """Overlay the validated tax-free short-futures hedge on a book's committed equity curve —
+    **measured only, the book itself is untouched** (run on the System book AND, read-only, on the
+    validated ₹2L GO book so the protection evidence accrues on both without contaminating the GO
+    gate). Returns are **flow-adjusted** — a wallet→book deploy is a transfer, not a gain, so it's
+    stripped before the daily return is computed. Stateless; fake money; never a real F&O trade."""
     try:
-        if not SYSTEM_BOOK_PATH.exists():
+        if not book_path.exists():
             return None
-        curve = json.loads(SYSTEM_BOOK_PATH.read_text(encoding="utf-8")).get("equity_curve", [])
+        curve = json.loads(book_path.read_text(encoding="utf-8")).get("equity_curve", [])
         if len(curve) < 3:
             return None
         eq = pd.Series({p["date"]: float(p["equity"]) for p in curve}).sort_index()
@@ -394,6 +404,7 @@ def _render_report(
     sig: str,
     today_notes: list[str],
     hedge: dict[str, float] | None,
+    core_hedge: dict[str, float] | None = None,
 ) -> str:
     n_days = len(pd.read_csv(SYSTEM_TRACK_CSV)) if SYSTEM_TRACK_CSV.exists() else 0
     worked, total = ai_hit_rate(ledger, book="SYS")
@@ -435,14 +446,26 @@ def _render_report(
             "",
             "## 🛡 Downside protection — the tax-free hedge overlay",
             "",
-            f"- Return **{float(hedge['hedged_return']):+.2f}%** hedged vs "
+            f"- **System book:** return **{float(hedge['hedged_return']):+.2f}%** hedged vs "
             f"**{float(hedge['unhedged_return']):+.2f}%** unhedged · worst drawdown "
             f"**−{float(hedge['hedged_dd']):.1f}%** vs **−{float(hedge['unhedged_dd']):.1f}%** · "
             f"episodes **{int(hedge['episodes'])}** · now: {hstate}",
+        ]
+        if core_hedge is not None:
+            lines += [
+                f"- **Validated ₹2L core (measured only — the GO book itself is untouched):** return "
+                f"**{float(core_hedge['hedged_return']):+.2f}%** hedged vs "
+                f"**{float(core_hedge['unhedged_return']):+.2f}%** unhedged · worst drawdown "
+                f"**−{float(core_hedge['hedged_dd']):.1f}%** vs "
+                f"**−{float(core_hedge['unhedged_dd']):.1f}%**",
+            ]
+        lines += [
             "",
             "> Keep the shares (₹0 capital-gains tax), short Nifty futures while systemic stress is "
             "elevated. The gauge is **coincident** — in calm the hedge is off and curves match; its "
-            "value shows only in a real stress event. (Selling defensively was tested and LOST to tax.)",
+            "value shows only in a real stress event. (Selling defensively was tested and LOST to "
+            "tax.) The GO-book line is a read-only measurement so the protection evidence accrues on "
+            "the validated core too, without touching the criterion-6 gate.",
         ]
     lines += [
         "",
@@ -585,6 +608,9 @@ def cmd_daily() -> int:
     if n_res:
         print(f"[system] resolved {n_res} deploy decision(s).")
     hedge = _run_hedge_overlay(nifbees, flows.get("system", {}))
+    # The same protection, MEASURED on the validated ₹2L GO book's committed curve (read-only — the
+    # GO book itself is untouched, so the criterion-6 gate stays clean and its clock never restarts).
+    core_hedge = _run_hedge_overlay(nifbees, {}, book_path=BOOK_PATH)
 
     rows: dict[str, dict[str, float]] = {}
     for key, bk in (("system", system), ("shadow", shadow)):
@@ -616,7 +642,7 @@ def cmd_daily() -> int:
     )
     DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_MD.write_text(
-        _render_report(as_of_str, rows, ledger, level, sig_desc, today_notes, hedge),
+        _render_report(as_of_str, rows, ledger, level, sig_desc, today_notes, hedge, core_hedge),
         encoding="utf-8",
     )
 
