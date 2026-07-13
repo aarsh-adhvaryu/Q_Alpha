@@ -1,21 +1,18 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🟢 Markets ended Friday +1.08% on strong TCS earnings and easing crude; momentum carries into week but FII outflows temper enthusiasm.
+**Sentiment:** 🟠 Nifty ended nearly flat (+0.02%) as IT strength offset losses in metals, O&G and realty amid geopolitical caution.
 
-**Drivers:** 
-1. **IT demand cycle** → TCS reported $9.5B order book & $2.6B AI revenue; sector uplift (TCS +1.5%, TECHM +2.2%, INFY support) reduces near-term earnings anxiety.
-2. **Crude/energy stabilization** → Oil prices ease; lowers input cost risk for OMCs (IOC, BPCL margin support) and airlines (INDIGO relief); supports RELIANCE (+2.3%).
-3. **FII outflows headwind** → ₹2,603 Cr net selling July 10 signals caution; risk-on appetite cooling despite strong earnings.
+**Drivers:**
+1. US-Iran escalation pushes crude oil higher, raising inflation & input cost concerns. Brent crude climbed 4% to ~$79/barrel → OMC/energy stocks pressured; auto, cement, paint input costs rise.
+2. Auto, metal and banking stocks led losses while Nifty IT jumped 3.59% → FX/earnings tail-wind for exporters; domestic-facing cyclicals hurt.
 
-**Watchlist names affected:** TCS, HCLTECH, INFY (tailwind), TECHM (already up); RELIANCE, IOC, BPCL (crude tailwind); INDIGO (aviation margin relief); AXISBANK (+2% Friday, momentum play).
+**Watchlist names affected:**
+Beaten: TATASTEEL, ASIANPAINT, MARUTI (metals, paint, auto). Lifted: TCS (+5.5%), HCLTECH (+5.2%), TECHM (+3.2%).
 
-**Likely reaction:** Index likely **flat to +0.4%** over 1–2 sessions; **medium confidence**. TCS momentum may carry INFY & HCLTECH higher, but FII outflow pattern suggests upside capped. RELIANCE & INDIGO could outperform on macro tailwinds; watch for any crude spike reversals.
+**Likely reaction:** Equity index likely to oscillate near flat to slightly down (-0.2–+0.3%) over next 1–2 sessions; *low* confidence given geopolitical noise overshadowing earnings. Watch MARUTI, TATASTEEL for reversion if crude stabilizes.
 
-**Discretionary ideas:**  
-- *Satellite sleeve rules apply:* Short-term tech outperformance (TCS, TECHM, INFY) vs. defensive plays (BRITANNIA, NESTLEIND) if earnings season sustains; avoid size into FII weakness.
+**Risk note:** India VIX surged ~10%, signalling elevated volatility; Strait of Hormuz closure risk could spike crude further.
 
-**Risk note:** June inflation print (expected >4% RBI target) due this week—potential RBI hawkish signals could reverse the ease-ing sentiment and trip FIIs further.
+SIGNAL: lean=flat; band=-0.2..0.3; confidence=low
 
-SIGNAL: lean=up; band=0.0..0.4; confidence=medium
-
-— 🤖 claude-haiku-4-5 · 23,677 in / 701 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 24,999 in / 650 out tokens · ✓ complete

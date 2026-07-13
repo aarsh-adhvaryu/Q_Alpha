@@ -100,5 +100,44 @@
     "outcome_return_pct": null,
     "benchmark_return_pct": null,
     "verdict": ""
+  },
+  {
+    "as_of": "2026-07-13",
+    "book": "SYS",
+    "amount": "28125.00",
+    "basket": {
+      "HYUNDAI.NS": 4,
+      "ITC.NS": 27,
+      "MAZDOCK.NS": 3,
+      "AMBUJACEM.NS": 12,
+      "IRFC.NS": 1
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b928,125 into: VEDL.NS (\u221266%), TRENT.NS (\u221247%), IRFC.NS (\u221234%)",
+    "ai_insight": "lean=flat confidence=low (tilt 1.00\u00d7)",
+    "resolve_on": "2026-08-10",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-07-13",
+    "book": "SHD",
+    "amount": "37500.00",
+    "basket": {
+      "MAZDOCK.NS": 4,
+      "MUTHOOTFIN.NS": 3,
+      "WIPRO.NS": 47,
+      "AMBUJACEM.NS": 19,
+      "ITC.NS": 7,
+      "IRFC.NS": 1
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b937,500 into: VEDL.NS (\u221266%), TRENT.NS (\u221247%), IRFC.NS (\u221234%)",
+    "ai_insight": "n/a (AI off)",
+    "resolve_on": "2026-08-10",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
   }
 ]
