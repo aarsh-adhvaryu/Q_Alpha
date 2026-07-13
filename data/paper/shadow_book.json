@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "113.98",
+    "cash": "64.45",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -168,6 +168,19 @@
         "quantity_remaining": "112"
       },
       {
+        "ticker": "IRFC.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "1",
+        "buy_price": "89.75",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.01",
+        "other_costs": "0.00",
+        "lot_id": "60bc09c7-06f5-46fa-8c0b-ceec84943091",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
         "ticker": "WIPRO.NS",
         "acquisition_date": "2026-07-10",
         "quantity_original": "1",
@@ -179,6 +192,71 @@
         "lot_id": "8eae14fe-f19c-4f01-aca9-3abd0a66377f",
         "broker_trade_id": null,
         "quantity_remaining": "1"
+      },
+      {
+        "ticker": "WIPRO.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "47",
+        "buy_price": "178.43",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.26",
+        "other_costs": "0.31",
+        "lot_id": "2d3373f3-982f-4f8f-b475-3187359cc979",
+        "broker_trade_id": null,
+        "quantity_remaining": "47"
+      },
+      {
+        "ticker": "MAZDOCK.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "4",
+        "buy_price": "2402.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.44",
+        "other_costs": "0.35",
+        "lot_id": "d0676378-9c91-40f9-bd68-24a9db9a4a08",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "MUTHOOTFIN.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "3",
+        "buy_price": "3058.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.38",
+        "other_costs": "0.33",
+        "lot_id": "2276b479-2cd4-41b4-b850-aeb5482161b3",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
+      },
+      {
+        "ticker": "AMBUJACEM.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "19",
+        "buy_price": "432.15",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.23",
+        "other_costs": "0.30",
+        "lot_id": "43ad61d7-d517-4a22-b35c-5de457003d90",
+        "broker_trade_id": null,
+        "quantity_remaining": "19"
+      },
+      {
+        "ticker": "ITC.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "7",
+        "buy_price": "279.65",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.29",
+        "other_costs": "0.07",
+        "lot_id": "17bedacb-7f63-4a30-a890-a85a8a4177d5",
+        "broker_trade_id": null,
+        "quantity_remaining": "7"
       }
     ],
     "ltcg_by_fy": {}
@@ -317,6 +395,66 @@
       "as_of": "2026-07-10",
       "reason": "drift 30.9% > threshold and \u00a74.6 net-benefit gate cleared",
       "orders": []
+    },
+    {
+      "as_of": "2026-07-13",
+      "reason": "deploy: weakness=elevated; deploy \u20b937,500 into: VEDL.NS (\u221266%), TRENT.NS (\u221247%), IRFC.NS (\u221234%)",
+      "orders": [
+        {
+          "date": "2026-07-13",
+          "ticker": "MAZDOCK.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "2402.60",
+          "cost": "30.62",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-13",
+          "ticker": "MUTHOOTFIN.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "3058.50",
+          "cost": "29.24",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-13",
+          "ticker": "WIPRO.NS",
+          "side": "BUY",
+          "quantity": "47",
+          "price": "178.43",
+          "cost": "26.73",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-13",
+          "ticker": "AMBUJACEM.NS",
+          "side": "BUY",
+          "quantity": "19",
+          "price": "432.15",
+          "cost": "26.16",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-13",
+          "ticker": "ITC.NS",
+          "side": "BUY",
+          "quantity": "7",
+          "price": "279.65",
+          "cost": "6.24",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-13",
+          "ticker": "IRFC.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "89.75",
+          "cost": "0.28",
+          "tax": "0.00"
+        }
+      ]
     }
   ],
   "last_target": {
@@ -331,6 +469,11 @@
       "date": "2026-07-10",
       "equity": "274126.89",
       "cash": "113.98"
+    },
+    {
+      "date": "2026-07-13",
+      "equity": "311278.49",
+      "cash": "64.45"
     }
   ]
 }
