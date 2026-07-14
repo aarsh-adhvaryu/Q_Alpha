@@ -139,5 +139,40 @@
     "outcome_return_pct": null,
     "benchmark_return_pct": null,
     "verdict": ""
+  },
+  {
+    "as_of": "2026-07-14",
+    "book": "SYS",
+    "amount": "10546.88",
+    "basket": {
+      "HDFCLIFE.NS": 7,
+      "JIOFIN.NS": 15,
+      "HINDZINC.NS": 5,
+      "IOC.NS": 3
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b910,547 into: VEDL.NS (\u221266%), IRFC.NS (\u221234%), INFY.NS (\u221234%)",
+    "ai_insight": "lean=down confidence=medium (tilt 0.75\u00d7)",
+    "resolve_on": "2026-08-11",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-07-14",
+    "book": "SHD",
+    "amount": "18750.00",
+    "basket": {
+      "HYUNDAI.NS": 4,
+      "HDFCLIFE.NS": 12,
+      "JIOFIN.NS": 18
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b918,750 into: VEDL.NS (\u221266%), TRENT.NS (\u221248%), IRFC.NS (\u221234%)",
+    "ai_insight": "n/a (AI off)",
+    "resolve_on": "2026-08-11",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
   }
 ]

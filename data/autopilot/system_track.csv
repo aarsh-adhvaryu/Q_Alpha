@@ -1,3 +1,4 @@
 date,system_value,system_profit,system_return_pct,shadow_value,shadow_profit,shadow_return_pct,baseline_value,baseline_profit,baseline_return_pct,hedge_on
 2026-07-10,349067.03,-932.97,-0.267,349126.89,-873.11,-0.249,350000.0,0.0,0.0,False
 2026-07-13,349148.82,-851.18,-0.243,348778.49,-1221.51,-0.349,350292.54,292.54,0.084,False
+2026-07-14,347100.8,-2899.2,-0.828,346711.61,-3288.39,-0.94,347812.16,-2187.84,-0.625,False
