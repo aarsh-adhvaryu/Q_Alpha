@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "31.08",
+    "cash": "67.99",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -244,6 +244,58 @@
         "lot_id": "2511b274-fd98-4d40-806c-5c177adb8131",
         "broker_trade_id": null,
         "quantity_remaining": "3"
+      },
+      {
+        "ticker": "HDFCLIFE.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "7",
+        "buy_price": "555.20",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.58",
+        "other_costs": "0.14",
+        "lot_id": "0d76b579-6f43-48f6-9e25-a061f07ade6c",
+        "broker_trade_id": null,
+        "quantity_remaining": "7"
+      },
+      {
+        "ticker": "JIOFIN.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "15",
+        "buy_price": "235.97",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.53",
+        "other_costs": "0.13",
+        "lot_id": "78705113-e145-490d-b0a0-08d0f24e1ebd",
+        "broker_trade_id": null,
+        "quantity_remaining": "15"
+      },
+      {
+        "ticker": "HINDZINC.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "5",
+        "buy_price": "527.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.40",
+        "other_costs": "0.09",
+        "lot_id": "e2c0fe4f-cb98-4386-8e92-2b0e670d3da0",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
+      },
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "3",
+        "buy_price": "137.05",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.06",
+        "other_costs": "0.01",
+        "lot_id": "ac25a68f-ec2c-4622-b267-c31501a97f1f",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
       }
     ],
     "ltcg_by_fy": {}
@@ -433,6 +485,48 @@
           "tax": "0.00"
         }
       ]
+    },
+    {
+      "as_of": "2026-07-14",
+      "reason": "deploy: weakness=elevated; deploy \u20b910,547 into: VEDL.NS (\u221266%), IRFC.NS (\u221234%), INFY.NS (\u221234%)",
+      "orders": [
+        {
+          "date": "2026-07-14",
+          "ticker": "HDFCLIFE.NS",
+          "side": "BUY",
+          "quantity": "7",
+          "price": "555.20",
+          "cost": "12.38",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-14",
+          "ticker": "JIOFIN.NS",
+          "side": "BUY",
+          "quantity": "15",
+          "price": "235.97",
+          "cost": "11.28",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-14",
+          "ticker": "HINDZINC.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "527.90",
+          "cost": "8.41",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-14",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "137.05",
+          "cost": "1.30",
+          "tax": "0.00"
+        }
+      ]
     }
   ],
   "last_target": {
@@ -452,6 +546,11 @@
       "date": "2026-07-13",
       "equity": "321023.82",
       "cash": "31.08"
+    },
+    {
+      "date": "2026-07-14",
+      "equity": "329522.68",
+      "cash": "67.99"
     }
   ]
 }

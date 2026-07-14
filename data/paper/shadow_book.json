@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "64.45",
+    "cash": "6.05",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -257,6 +257,45 @@
         "lot_id": "17bedacb-7f63-4a30-a890-a85a8a4177d5",
         "broker_trade_id": null,
         "quantity_remaining": "7"
+      },
+      {
+        "ticker": "HYUNDAI.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "4",
+        "buy_price": "1959.70",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.18",
+        "other_costs": "0.28",
+        "lot_id": "7cb4e792-5321-487d-9c9d-de66e67200a1",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "HDFCLIFE.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "12",
+        "buy_price": "555.20",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.00",
+        "other_costs": "0.25",
+        "lot_id": "406847e8-8aa8-4745-95fe-5afcd12416f8",
+        "broker_trade_id": null,
+        "quantity_remaining": "12"
+      },
+      {
+        "ticker": "JIOFIN.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "18",
+        "buy_price": "235.97",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.64",
+        "other_costs": "0.15",
+        "lot_id": "7523a48e-9ffc-4bb4-ae33-4c9d93fed819",
+        "broker_trade_id": null,
+        "quantity_remaining": "18"
       }
     ],
     "ltcg_by_fy": {}
@@ -455,6 +494,39 @@
           "tax": "0.00"
         }
       ]
+    },
+    {
+      "as_of": "2026-07-14",
+      "reason": "deploy: weakness=elevated; deploy \u20b918,750 into: VEDL.NS (\u221266%), TRENT.NS (\u221248%), IRFC.NS (\u221234%)",
+      "orders": [
+        {
+          "date": "2026-07-14",
+          "ticker": "HYUNDAI.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "1959.70",
+          "cost": "24.98",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-14",
+          "ticker": "HDFCLIFE.NS",
+          "side": "BUY",
+          "quantity": "12",
+          "price": "555.20",
+          "cost": "21.23",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-14",
+          "ticker": "JIOFIN.NS",
+          "side": "BUY",
+          "quantity": "18",
+          "price": "235.97",
+          "cost": "13.53",
+          "tax": "0.00"
+        }
+      ]
     }
   ],
   "last_target": {
@@ -474,6 +546,11 @@
       "date": "2026-07-13",
       "equity": "311278.49",
       "cash": "64.45"
+    },
+    {
+      "date": "2026-07-14",
+      "equity": "327961.61",
+      "cash": "6.05"
     }
   ]
 }
