@@ -174,5 +174,39 @@
     "outcome_return_pct": null,
     "benchmark_return_pct": null,
     "verdict": ""
+  },
+  {
+    "as_of": "2026-07-15",
+    "book": "SYS",
+    "amount": "8789.06",
+    "basket": {
+      "LODHA.NS": 3,
+      "DLF.NS": 5,
+      "IOC.NS": 14
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b98,789 into: VEDL.NS (\u221267%), INFY.NS (\u221235%), WIPRO.NS (\u221234%)",
+    "ai_insight": "lean=flat confidence=medium (tilt 1.00\u00d7)",
+    "resolve_on": "2026-08-12",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-07-15",
+    "book": "SHD",
+    "amount": "9375.00",
+    "basket": {
+      "HINDZINC.NS": 7,
+      "IOC.NS": 21,
+      "DLF.NS": 4
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b99,375 into: VEDL.NS (\u221267%), INFY.NS (\u221235%), WIPRO.NS (\u221234%)",
+    "ai_insight": "n/a (AI off)",
+    "resolve_on": "2026-08-12",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
   }
 ]
