@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "67.99",
+    "cash": "89.91",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -296,6 +296,45 @@
         "lot_id": "ac25a68f-ec2c-4622-b267-c31501a97f1f",
         "broker_trade_id": null,
         "quantity_remaining": "3"
+      },
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-07-15",
+        "quantity_original": "14",
+        "buy_price": "140.24",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.29",
+        "other_costs": "0.07",
+        "lot_id": "150db5db-9eef-4aed-b012-2b99440b409f",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "LODHA.NS",
+        "acquisition_date": "2026-07-15",
+        "quantity_original": "3",
+        "buy_price": "1162.40",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.52",
+        "other_costs": "0.12",
+        "lot_id": "683df93c-7a9d-4088-9d48-25e561aff8e3",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
+      },
+      {
+        "ticker": "DLF.NS",
+        "acquisition_date": "2026-07-15",
+        "quantity_original": "5",
+        "buy_price": "657.75",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.49",
+        "other_costs": "0.12",
+        "lot_id": "2a32265b-9759-4143-97fa-21f1ca1adb46",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
       }
     ],
     "ltcg_by_fy": {}
@@ -527,6 +566,39 @@
           "tax": "0.00"
         }
       ]
+    },
+    {
+      "as_of": "2026-07-15",
+      "reason": "deploy: weakness=elevated; deploy \u20b98,789 into: VEDL.NS (\u221267%), INFY.NS (\u221235%), WIPRO.NS (\u221234%)",
+      "orders": [
+        {
+          "date": "2026-07-15",
+          "ticker": "LODHA.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "1162.40",
+          "cost": "11.10",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-15",
+          "ticker": "DLF.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "657.75",
+          "cost": "10.48",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-15",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "140.24",
+          "cost": "6.25",
+          "tax": "0.00"
+        }
+      ]
     }
   ],
   "last_target": {
@@ -551,6 +623,11 @@
       "date": "2026-07-14",
       "equity": "329522.68",
       "cash": "67.99"
+    },
+    {
+      "date": "2026-07-15",
+      "equity": "338706.83",
+      "cash": "89.91"
     }
   ]
 }

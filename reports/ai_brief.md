@@ -1,22 +1,20 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Sensex and Nifty slipped 0.79% and 0.7% respectively as of mid-morning; heavy geopolitical spillover offsetting tech tailwinds.
+**Sentiment:** 🟢 Nifty50 gained 26.45 points (0.11%), closing at 24,078.50 after surrendering morning rally gains to profit-booking.
 
 **Drivers:**
-1. Escalating US-Iran hostilities triggered a spike in global crude oil prices; WTI surged 4.2% to $74.37 on threat to Strait of Hormuz flows → auto sector index declined 1.6% as rising crude raised concerns about higher fuel expenses and increased input costs; OMC/paint input cost headwinds.
-2. Nifty Bank and Financial Services indices fell up to 1.6% as investors worried about higher fuel prices and rising input costs → credit expansion risk premium on inflation anxiety.
-3. TCS +5.4% on a multi-million-dollar AI deal with ABB, HCL Tech surged 5% → selective IT strength countervailing broader sell-off.
+1. IBM guidance miss → Nifty IT fell 0.7%; enterprise IT spending shifting toward AI infra (servers/networking) away from software/services; delayed customer contracts signalling caution.
+2. Brent crude climbed above $85/bbl on Strait of Hormuz escalation → US blockade + strikes on Iran = imported inflation risk for India; cement, chemicals, auto input costs rise; energy stocks buoyed by refining margin tailwinds.
 
-**Watchlist names affected:** 
-**Down:** Tata Steel (-2.1%), Eternal (-1.6%), IndiGo (-1.3%), Maruti (-1.1%), UltraTech Cement (-1.1%), BEL (-1%). 
-**Up:** TCS, HCLTECH, TECHM (IT beneficiaries).
+**Watchlist names affected:**  
+**Losers:** Nifty IT lagged → **INFY, WIPRO, HCLTECH, TCS**; metals under pressure → **HINDALCO, VEDL, JSWSTEEL** (margin pressure if energy input costs spike).  
+**Gainers:** Shriram Finance & UltraTech Cement rose >2.8% on strong buying → **SHRIRAMFIN, ULTRACEMCO**, financials/auto gaining (post-profit-booking rebound).
 
-**Likely reaction:** Weak global cues and heightened geopolitical uncertainty continue to weigh on sentiment; absent a ceasefire signal or crude pullback, expect **flat to -0.4%** on Nifty 1–2 sessions ahead, **medium** confidence. TATASTEEL, M&M, MARUTI likely to remain under pressure; INFY/TCS may lend technical support.
+**Likely reaction (YOUR READ):**  
+Index likely to trade **flat to slightly down (-0.1% to +0.4%)** over next 1–2 sessions with **medium confidence**. Reasons: (a) Profit-booking reflex after morning rally intact; (b) IBM contagion pressures IT but contained to that sector; (c) Oil above $85 is a near-term headwind for equities (inflation narrative resurfaces), though not enough to break the 24,000 support yet. **Most likely to move:** **INFY/WIPRO down 0.5–1.5%** (IBM spillover); **SHRIRAMFIN/KOTAKBANK up 0.3–0.7%** (defensive bounce on rate cut hopes if inflation narrative shifts). Broader defensive tilt expected.
 
-**Discretionary ideas:** None stand out on risk/reward until oil stabilizes.
+**Risk note:** Crude oil prices, global interest-rate expectations, and FII flows remain key sentiment anchors; Hormuz escalation could whip volatility higher intraday.
 
-**Risk note:** India VIX rose ~3% towards 14-level; geopolitical re-escalation tail risk remains live; India imports ~85% of crude oil, structural import-cost drag if Hormuz supply remains disrupted.
+SIGNAL: lean=flat; band=-0.1..0.4; confidence=medium
 
-SIGNAL: lean=down; band=-0.4..0.0; confidence=medium
-
-— 🤖 claude-haiku-4-5 · 19,386 in / 865 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 44,997 in / 890 out tokens · ✓ complete
