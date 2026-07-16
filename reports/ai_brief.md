@@ -1,20 +1,24 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🟢 Nifty50 gained 26.45 points (0.11%), closing at 24,078.50 after surrendering morning rally gains to profit-booking.
+**Sentiment**: 🟠 Nifty50 ended flat, down 0.02% at 24,073.
 
-**Drivers:**
-1. IBM guidance miss → Nifty IT fell 0.7%; enterprise IT spending shifting toward AI infra (servers/networking) away from software/services; delayed customer contracts signalling caution.
-2. Brent crude climbed above $85/bbl on Strait of Hormuz escalation → US blockade + strikes on Iran = imported inflation risk for India; cement, chemicals, auto input costs rise; energy stocks buoyed by refining margin tailwinds.
+**Drivers**:
+1. **Escalating US-Iran tensions → Oil volatility drag**: Brent crude fell to 84.63 USD/Bbl on July 16, down 0.37% from the previous day, but Iran threatened to shut off more regional energy exports after the US struck coastal defenses and reimposed a naval blockade. Blockade risk keeps energy hedging live; OMC import costs remain elevated.
 
-**Watchlist names affected:**  
-**Losers:** Nifty IT lagged → **INFY, WIPRO, HCLTECH, TCS**; metals under pressure → **HINDALCO, VEDL, JSWSTEEL** (margin pressure if energy input costs spike).  
-**Gainers:** Shriram Finance & UltraTech Cement rose >2.8% on strong buying → **SHRIRAMFIN, ULTRACEMCO**, financials/auto gaining (post-profit-booking rebound).
+2. **Softer-than-expected US inflation + strong IT/auto earnings backdrop**: Softer than expected U.S. inflation eased rate concerns and offered downside support. HCL Technologies, Maruti Suzuki, Mahindra & Mahindra, and Tech Mahindra led gains, offsetting weakness in financials.
 
-**Likely reaction (YOUR READ):**  
-Index likely to trade **flat to slightly down (-0.1% to +0.4%)** over next 1–2 sessions with **medium confidence**. Reasons: (a) Profit-booking reflex after morning rally intact; (b) IBM contagion pressures IT but contained to that sector; (c) Oil above $85 is a near-term headwind for equities (inflation narrative resurfaces), though not enough to break the 24,000 support yet. **Most likely to move:** **INFY/WIPRO down 0.5–1.5%** (IBM spillover); **SHRIRAMFIN/KOTAKBANK up 0.3–0.7%** (defensive bounce on rate cut hopes if inflation narrative shifts). Broader defensive tilt expected.
+3. **Bank margin compression + realty weakness**: Nifty Realty, Nifty Bank, and Nifty Financial Services weighed the most. Axis Bank, BEL, Adani Ports, and NTPC were among top losers.
 
-**Risk note:** Crude oil prices, global interest-rate expectations, and FII flows remain key sentiment anchors; Hormuz escalation could whip volatility higher intraday.
+**Watchlist names affected**:
+- **Gainers**: HCLTECH, MARUTI, M&M, INFY, TECHM (IT/auto strength)  
+- **Losers**: AXISBANK, ADANIPORTS, NTPC, KOTAKBANK, HDFCBANK (financials/PSU weakness)
 
-SIGNAL: lean=flat; band=-0.1..0.4; confidence=medium
+**Likely reaction** (medium confidence): **Flat-to-down 0.2–0.6%** over the next 1–2 sessions. Geopolitical scare premium keeps oil sticky; IT momentum supports a floor but broad financials (AXISBANK, KOTAKBANK) and defensive plays (ADANIPORTS, NTPC) likely to remain under pressure. Initial rate-cut relief is fading as Strait-of-Hormuz blockade risk re-anchors inflation hedging.
 
-— 🤖 claude-haiku-4-5 · 44,997 in / 890 out tokens · ✓ complete
+**Discretionary ideas**: None. (Event risk too asymmetric; wait for ceasefire credibility improvement or fresh inflation surprises before satellite trades.)
+
+**Risk note**: Hormuz blockade could spike crude 5–8% overnight; watch Trump–Iran negotiations for any softening as a potential reversal signal.
+
+SIGNAL: lean=down; band=-0.2..0.6; confidence=medium
+
+— 🤖 claude-haiku-4-5 · 41,082 in / 906 out tokens · ✓ complete
