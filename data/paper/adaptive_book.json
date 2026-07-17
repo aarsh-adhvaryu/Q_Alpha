@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "89.91",
+    "cash": "52.53",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -311,6 +311,19 @@
         "quantity_remaining": "14"
       },
       {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-07-17",
+        "quantity_original": "1",
+        "buy_price": "141.69",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.02",
+        "other_costs": "0.00",
+        "lot_id": "b02a54bf-be40-44e8-a0e1-3f290f15ae19",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
         "ticker": "LODHA.NS",
         "acquisition_date": "2026-07-15",
         "quantity_original": "3",
@@ -333,6 +346,45 @@
         "stamp_duty": "0.49",
         "other_costs": "0.12",
         "lot_id": "2a32265b-9759-4143-97fa-21f1ca1adb46",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
+      },
+      {
+        "ticker": "JINDALSTEL.NS",
+        "acquisition_date": "2026-07-17",
+        "quantity_original": "2",
+        "buy_price": "1025.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.31",
+        "other_costs": "0.07",
+        "lot_id": "70984faf-cdfe-44cc-a42b-ada17618180c",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "HINDALCO.NS",
+        "acquisition_date": "2026-07-17",
+        "quantity_original": "2",
+        "buy_price": "944.15",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.28",
+        "other_costs": "0.07",
+        "lot_id": "d9db647b-9d07-4a65-a802-7cd863ae48d4",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "ETERNAL.NS",
+        "acquisition_date": "2026-07-17",
+        "quantity_original": "5",
+        "buy_price": "286.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.21",
+        "other_costs": "0.05",
+        "lot_id": "eb43577f-6e98-406c-a9e7-750a4edabf93",
         "broker_trade_id": null,
         "quantity_remaining": "5"
       }
@@ -599,6 +651,48 @@
           "tax": "0.00"
         }
       ]
+    },
+    {
+      "as_of": "2026-07-17",
+      "reason": "deploy: weakness=elevated; deploy \u20b95,493 into: VEDL.NS (\u221268%), WIPRO.NS (\u221234%), INFY.NS (\u221234%)",
+      "orders": [
+        {
+          "date": "2026-07-17",
+          "ticker": "JINDALSTEL.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "1025.00",
+          "cost": "6.53",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-17",
+          "ticker": "HINDALCO.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "944.15",
+          "cost": "6.02",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-17",
+          "ticker": "ETERNAL.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "286.60",
+          "cost": "4.56",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-17",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "141.69",
+          "cost": "0.44",
+          "tax": "0.00"
+        }
+      ]
     }
   ],
   "last_target": {
@@ -633,6 +727,11 @@
       "date": "2026-07-16",
       "equity": "338841.50",
       "cash": "89.91"
+    },
+    {
+      "date": "2026-07-17",
+      "equity": "345241.77",
+      "cash": "52.53"
     }
   ]
 }
