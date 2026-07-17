@@ -1,24 +1,18 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment**: 🟠 Nifty50 ended flat, down 0.02% at 24,073.
+**Sentiment**: 🟢 Sensex up 1.25% (964 points) and Nifty 50 up 1.09% (261 points), buoyed by heavy buying in private banks, IT and auto stocks.
 
 **Drivers**:
-1. **Escalating US-Iran tensions → Oil volatility drag**: Brent crude fell to 84.63 USD/Bbl on July 16, down 0.37% from the previous day, but Iran threatened to shut off more regional energy exports after the US struck coastal defenses and reimposed a naval blockade. Blockade risk keeps energy hedging live; OMC import costs remain elevated.
+1. **IT sector outperformance** — Tech Mahindra gained 3%+ on 28.4% June-quarter profit growth, driving accumulation in Infosys, TCS, HCL Tech. Earnings momentum favours large-cap valuations over mid-caps.
+2. **Earnings-driven financials rally** — Jio Financial Services gained 5% on strong Q1, lifting the financial services sector; Reliance Industries Q1 ahead added positive sentiment.
+3. **Geopolitical headwind (elevated, not acute)** — Brent crude near $85/bbl amid Middle East tensions; energy volatility caps upside but does not yet trigger margin compression for OMCs or aviation.
 
-2. **Softer-than-expected US inflation + strong IT/auto earnings backdrop**: Softer than expected U.S. inflation eased rate concerns and offered downside support. HCL Technologies, Maruti Suzuki, Mahindra & Mahindra, and Tech Mahindra led gains, offsetting weakness in financials.
+**Watchlist names affected**: TCS, INFY, TECHM (IT rally core), HCLTECH, JIOFIN (earnings surge), RELIANCE (Q1 watch), HDFC Bank, ICICIBANK, KOTAKBANK (private bank phase-in). Oil sensitivity: IOC, BPCL, INDIGO (marginal).
 
-3. **Bank margin compression + realty weakness**: Nifty Realty, Nifty Bank, and Nifty Financial Services weighed the most. Axis Bank, BEL, Adani Ports, and NTPC were among top losers.
+**Likely reaction**: **Lean = up; band +0.4–0.9%; confidence = medium**. Index momentum has broken above 24,200 technical resistance; earnings season (Reliance, banks) likely sustains demand for large-cap quality next 1–2 sessions. Primary risk is geopolitical volatility (Iran-US flashpoint) or disappointing bank Q1 results. **Most likely movers**: TCS +1.5–2% (earnings beta), JIOFIN +1–1.5% (continued earnings flow), INDIGO flat to -0.5% (crude tail risk).
 
-**Watchlist names affected**:
-- **Gainers**: HCLTECH, MARUTI, M&M, INFY, TECHM (IT/auto strength)  
-- **Losers**: AXISBANK, ADANIPORTS, NTPC, KOTAKBANK, HDFCBANK (financials/PSU weakness)
+**Risk note**: US military strikes on Iran keep geopolitical uncertainty elevated; breakout above 24,200 is fragile if macro surprises or crude spikes.
 
-**Likely reaction** (medium confidence): **Flat-to-down 0.2–0.6%** over the next 1–2 sessions. Geopolitical scare premium keeps oil sticky; IT momentum supports a floor but broad financials (AXISBANK, KOTAKBANK) and defensive plays (ADANIPORTS, NTPC) likely to remain under pressure. Initial rate-cut relief is fading as Strait-of-Hormuz blockade risk re-anchors inflation hedging.
+SIGNAL: lean=up; band=0.4..0.9; confidence=medium
 
-**Discretionary ideas**: None. (Event risk too asymmetric; wait for ceasefire credibility improvement or fresh inflation surprises before satellite trades.)
-
-**Risk note**: Hormuz blockade could spike crude 5–8% overnight; watch Trump–Iran negotiations for any softening as a potential reversal signal.
-
-SIGNAL: lean=down; band=-0.2..0.6; confidence=medium
-
-— 🤖 claude-haiku-4-5 · 41,082 in / 906 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 17,431 in / 827 out tokens · ✓ complete
