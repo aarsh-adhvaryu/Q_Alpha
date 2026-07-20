@@ -1,18 +1,23 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment**: 🟢 Sensex up 1.25% (964 points) and Nifty 50 up 1.09% (261 points), buoyed by heavy buying in private banks, IT and auto stocks.
+**Sentiment:** 🔴 Index fell 0.39% on July 20 as banking and financial stocks weighed heavily, reversing the prior week's +1.09% rally.
 
-**Drivers**:
-1. **IT sector outperformance** — Tech Mahindra gained 3%+ on 28.4% June-quarter profit growth, driving accumulation in Infosys, TCS, HCL Tech. Earnings momentum favours large-cap valuations over mid-caps.
-2. **Earnings-driven financials rally** — Jio Financial Services gained 5% on strong Q1, lifting the financial services sector; Reliance Industries Q1 ahead added positive sentiment.
-3. **Geopolitical headwind (elevated, not acute)** — Brent crude near $85/bbl amid Middle East tensions; energy volatility caps upside but does not yet trigger margin compression for OMCs or aviation.
+**Drivers:**
+1. **Private bank de-rating**: Axis Bank dropped >5%; HDFC and Kotak also fell sharply, likely on Q1 earnings disappointments or valuation reset post-rally.
+2. **Geopolitical oil premium**: US-Iran tensions in West Asia monitored; WTI ~$79.60, Brent $84.95 on renewed naval blockade, compressing refiner/OMC spreads → cost headwind for autos/paints; airline fuel burn increases.
 
-**Watchlist names affected**: TCS, INFY, TECHM (IT rally core), HCLTECH, JIOFIN (earnings surge), RELIANCE (Q1 watch), HDFC Bank, ICICIBANK, KOTAKBANK (private bank phase-in). Oil sensitivity: IOC, BPCL, INDIGO (marginal).
+**Watchlist names affected:**
+- **Losers**: AXISBANK, HDFCBANK, KOTAKBANK (earnings reset + relative valuation).
+- **Gainers**: TRENT, CIPLA, JSWSTEEL (defensive consumer, pharma overlap; metals gain from oil premium).
+- **Vulnerable**: MARUTI, BAJAJ-AUTO (higher fuel/input costs); ASIANPAINT, ETERNNAL (paint input pressure).
 
-**Likely reaction**: **Lean = up; band +0.4–0.9%; confidence = medium**. Index momentum has broken above 24,200 technical resistance; earnings season (Reliance, banks) likely sustains demand for large-cap quality next 1–2 sessions. Primary risk is geopolitical volatility (Iran-US flashpoint) or disappointing bank Q1 results. **Most likely movers**: TCS +1.5–2% (earnings beta), JIOFIN +1–1.5% (continued earnings flow), INDIGO flat to -0.5% (crude tail risk).
+**Likely reaction:** Broad market resilient; retail, pharma, metals outperforming. Private bank weakness is likely sector-specific rerating, not systemic tail. Index likely **flat to -0.3%** over next 1–2 sessions (low confidence) as sentiment digests Q1 dispersion and oil remains elevated but not spiking. **AXISBANK, HDFCBANK most likely down 1–2%**; **TRENT, CIPLA up 0.5–1.5%**.
 
-**Risk note**: US military strikes on Iran keep geopolitical uncertainty elevated; breakout above 24,200 is fragile if macro surprises or crude spikes.
+**Discretionary ideas:**
+- **Short MARUTI / BAJAJ-AUTO on oil-headwind relief trades** (satellite sleeve rules apply): if Strait tension eases or ceasefire reopens, paint/auto input deflation may take 2–3 weeks to flow; current weakness is front-run.
 
-SIGNAL: lean=up; band=0.4..0.9; confidence=medium
+**Risk note:** Strait tanker transits plummeted 50%—further escalation could spike crude >$90, triggering systemic re-hedge. Earnings dispersion may widen sector divergence further.
 
-— 🤖 claude-haiku-4-5 · 17,431 in / 827 out tokens · ✓ complete
+SIGNAL: lean=flat; band=-0.3..0.2; confidence=low
+
+— 🤖 claude-haiku-4-5 · 25,560 in / 874 out tokens · ✓ complete
