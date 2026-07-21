@@ -1,23 +1,21 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Index fell 0.39% on July 20 as banking and financial stocks weighed heavily, reversing the prior week's +1.09% rally.
+**Sentiment:** 🔴 Nifty50 down 0.21%, Sensex down 0.31% for second consecutive session.
 
 **Drivers:**
-1. **Private bank de-rating**: Axis Bank dropped >5%; HDFC and Kotak also fell sharply, likely on Q1 earnings disappointments or valuation reset post-rally.
-2. **Geopolitical oil premium**: US-Iran tensions in West Asia monitored; WTI ~$79.60, Brent $84.95 on renewed naval blockade, compressing refiner/OMC spreads → cost headwind for autos/paints; airline fuel burn increases.
+1. **Geopolitical stress → crude headwind**: Rising Brent crude oil prices due to geopolitical uncertainty are adding pressure by increasing India's import costs, raising inflation concerns and putting pressure on the rupee. Brent held near month-high amid escalating US-Iran tensions, Houthi Red Sea threats, and security incidents in Strait of Hormuz.
+   
+2. **Private banking earnings miss**: Disappointing performances from major private banks, including HDFC Bank and Axis Bank, whose post-earnings stock declines have dragged the financial sector lower.
 
-**Watchlist names affected:**
-- **Losers**: AXISBANK, HDFCBANK, KOTAKBANK (earnings reset + relative valuation).
-- **Gainers**: TRENT, CIPLA, JSWSTEEL (defensive consumer, pharma overlap; metals gain from oil premium).
-- **Vulnerable**: MARUTI, BAJAJ-AUTO (higher fuel/input costs); ASIANPAINT, ETERNNAL (paint input pressure).
+3. **IT sector weakness**: HDFC Bank, Infosys, and State Bank of India were top losers in Nifty50.
 
-**Likely reaction:** Broad market resilient; retail, pharma, metals outperforming. Private bank weakness is likely sector-specific rerating, not systemic tail. Index likely **flat to -0.3%** over next 1–2 sessions (low confidence) as sentiment digests Q1 dispersion and oil remains elevated but not spiking. **AXISBANK, HDFCBANK most likely down 1–2%**; **TRENT, CIPLA up 0.5–1.5%**.
+**Watchlist names affected:**  
+**HDFC Bank** (FIN, -2.08%), **INFY** (IT, -1.59%), **RELIANCE** (ENERGY, -1.44%), **SBIN** (FIN), **ICICIBANK** (FIN), **IOC** (ENERGY).
 
-**Discretionary ideas:**
-- **Short MARUTI / BAJAJ-AUTO on oil-headwind relief trades** (satellite sleeve rules apply): if Strait tension eases or ceasefire reopens, paint/auto input deflation may take 2–3 weeks to flow; current weakness is front-run.
+**Likely reaction:** Near-term directional lean **down** with band **-0.4 to -0.1%**, **medium** confidence. Nifty Midcap and Smallcap showed positive sentiment, but large-cap private finance and energy import sensitivity likely persist; **HDFC Bank** and **INFY** remain watch names for continued weakness; **RELIANCE** could test support if crude stabilizes above $88 to balance import cost fears.
 
-**Risk note:** Strait tanker transits plummeted 50%—further escalation could spike crude >$90, triggering systemic re-hedge. Earnings dispersion may widen sector divergence further.
+**Risk note:** Diplomatic ceasefire proposals exist but Strait of Hormuz remains severely disrupted; escalation could spike crude and rupee volatility sharply intraday.
 
-SIGNAL: lean=flat; band=-0.3..0.2; confidence=low
+SIGNAL: lean=down; band=-0.4..-0.1; confidence=medium
 
-— 🤖 claude-haiku-4-5 · 25,560 in / 874 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 44,322 in / 813 out tokens · ✓ complete
