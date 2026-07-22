@@ -936,8 +936,10 @@ def _advisor_tabs(
     with add_tab:
         st.caption(
             "**Idle cash → what to buy.** The **math** picks a diversified, **tax-free (buys-only)** "
-            "spread across Nifty 100 tilted to out-of-favour names; the **AI's market read** nudges "
-            "*how much* to deploy now vs hold as dry powder. The AI never picks the names or the tax."
+            "spread across Nifty 100 tilted to out-of-favour names, for the **full amount** "
+            "(time-in-market — the evidence-backed default). The AI's market read is shown as "
+            "**context only**: its pacing rule is unproven and trades only fake money in the System "
+            "book until its System-vs-Shadow verdict is in."
         )
         amount = st.number_input(
             "Idle cash to invest (₹)",
@@ -956,8 +958,10 @@ def _advisor_tabs(
             key=f"add_names_{namespace}",
         )
 
-        # The AI read + AI-nudged sizing (math picks names; AI nudges the tranche) — same rule the
-        # auto-pilot's Book B is forward-testing, so a suggestion here is one the harness validates.
+        # The AI read — INFORMATIONAL ONLY on the real-money surface. The AI-paced tranche rule is
+        # the hypothesis the System book is forward-testing (System vs Shadow); per the endgame
+        # contract it earns real-money influence only if that verdict comes back positive. Until
+        # then nothing here acts on it — the actionable advice below deploys the full amount.
         from qalpha.live.autopilot import book_deploy_amount, parse_ai_signal, signal_tilt
         from qalpha.live.deploy import market_weakness
 
@@ -976,47 +980,42 @@ def _advisor_tabs(
         )
         st.info(
             f"Market **{wk.level}** ({wk.drawdown * 100:.0f}% off 1y high) · {ai_read}. "
-            f"Opportunistic sizing would deploy **₹{paced:,.0f}** now and hold "
-            f"**₹{Decimal(amount) - paced:,.0f}** as dry powder for deeper dips."
+            f"_FYI: the AI-paced rule **under test** would deploy ₹{paced:,.0f} now and hold the "
+            "rest — it is unproven, so it only trades fake money in the 🧠 System book. If it beats "
+            "its no-AI shadow over the test, it graduates here; until then this line is just "
+            "information._"
         )
-        choice = st.radio(
-            "How much to deploy now?",
-            [
-                f"Deploy all ₹{int(amount):,} (time-in-market — the safe default)",
-                f"AI-paced: ₹{paced:,.0f} now, hold the rest",
-            ],
-            key=f"add_choice_{namespace}",
-            help="Deploying it all is the evidence-safe choice (time-in-market beats timing). The "
-            "AI-paced option holds dry powder for dips — more opportunistic, but that's a timing bet "
-            "the auto-pilot is testing forward.",
-        )
-        deploy_amt = Decimal(amount) if choice.startswith("Deploy all") else paced
 
+        # Persist the last suggestion across the 30s live auto-refresh — the fragment rerun would
+        # otherwise wipe it the moment the button state resets.
+        advice_key = f"add_advice_{namespace}"
         if st.button("Suggest what to buy", key=f"add_btn_{namespace}"):
             wl = _watchlist()
             if wl is None:
                 st.error("Watchlist prices not ready yet — try again in a minute.")
-            elif deploy_amt < 1000:
-                st.warning("AI-paced amount is tiny — hold the cash, or choose 'Deploy all'.")
             else:
                 from qalpha.live.deploy import advise_deploy_into_weakness
 
                 tickers, sector_of, wl_prices = wl
-                st.markdown(
-                    advise_deploy_into_weakness(
-                        portfolio,
-                        deploy_amt,
-                        tickers,
-                        sector_of,
-                        wl_prices,
-                        benchmark,  # the REAL Nifty TRI, not the watchlist mean
-                        as_of,
-                        max_names=n_stocks,
-                    ).render()
-                )
-                if AI_BRIEF_MD.exists():
-                    with st.expander("🧠 The AI's market read behind this sizing (context only)"):
-                        st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
+                st.session_state[advice_key] = advise_deploy_into_weakness(
+                    portfolio,
+                    Decimal(amount),
+                    tickers,
+                    sector_of,
+                    wl_prices,
+                    benchmark,  # the REAL Nifty TRI, not the watchlist mean
+                    as_of,
+                    max_names=n_stocks,
+                ).render()
+        if st.session_state.get(advice_key):
+            st.markdown(st.session_state[advice_key])
+            st.caption(
+                "This suggestion stays put through the 30s auto-refresh — press the button again "
+                "for fresh prices."
+            )
+            if AI_BRIEF_MD.exists():
+                with st.expander("🧠 Today's AI market read (context only — never a signal)"):
+                    st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
 
 
 def _holdings_frame(portfolio: Portfolio, prices_dec: dict[str, Decimal]) -> pd.DataFrame:
