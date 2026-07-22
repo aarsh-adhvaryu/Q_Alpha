@@ -171,6 +171,13 @@ Two comparators with **identical cash flows** keep it honest: a **shadow twin wi
 (System − Shadow = exactly what the AI adds — either sign is a valid finding) and a **NIFTYBEES
 buy-and-hold baseline** (System − Baseline = what the whole system adds over doing nothing).
 
+**Nothing unproven touches real money.** On the real-account advisor the AI's market read is shown as
+*context only* — the actionable buy list always deploys the full amount (time-in-market, the
+evidence-backed default). The AI-paced sizing rule trades exclusively fake money in the System book
+until its System-vs-Shadow verdict is in; it graduates to the real-money surface only on a positive
+verdict. (This discipline was enforced by the user mid-build — an early version offered the untested
+option on real money, and it was removed.)
+
 **The endgame contract (pre-committed):** real-money integration happens only when ALL FOUR are green —
 the core clears its deterministic GO scorecard · System > Baseline · the AI verdict is in · the hedge
 has been *witnessed* cutting a real stress event. If any pillar fails, that's reported, not integrated
