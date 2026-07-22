@@ -2,6 +2,61 @@
 
 Guidance for Claude Code (and humans) working in this repo.
 
+## 🚦 SESSION HANDOFF — a NEW session starts HERE (written 2026-07-21)
+
+**The system is live, autonomous, and mid-test. The user is hands-off for ~6 months** (Telegram pings
+him; silence = healthy). If you are a fresh session, this block is your orientation — read it, then
+the ENDGAME CONTRACT below, then skim the dated blocks only as needed.
+
+**Read order for a new session:** this block → 🏁 THE ENDGAME CONTRACT → the 2026-07-11/12 blocks
+(unification · System book) → README.md (the front door). The research repo
+(`../Q_Alpha_Research`) is the **archive** (hedge forward run + published negatives incl. QUBO ×2);
+its CLAUDE.md explains itself.
+
+**What runs without anyone (weekday cron `paper.yml`, 12:23 UTC, verified green):** prices refresh →
+₹2L GO book marked (criterion-6 evidence) → Telegram opportunity scan → AI brief (Haiku+web-search →
+`reports/ai_brief.md`, emits the `SIGNAL:` line) → System book (`scripts/autopilot.py daily`: apply
+queued Add-money → monthly ₹50k top-up on the 1st → AI-paced deploys → daily §4.6 gate evaluation →
+hedge overlay measured on System AND GO books) → everything committed. State lives in
+`data/autopilot/*` + `data/paper/{book,adaptive_book,shadow_book}.json`; reports in `reports/*.md`.
+
+**Where the run stood at handoff (2026-07-21, 8 marks — treat as stale, re-pull):** System +0.37% ·
+Shadow +0.25% · Baseline +0.02% (all on ₹3.5L contributed; AI ahead by noise-level ₹431 — DO NOT
+over-claim). GO book ₹~2.01L, 25+/63 days, NOT YET (Δ vs Nifty ≈ −2%, red line −3% — the number to
+watch). Hedge off (gauge ~0.5 < τ0.7). First deploy resolutions land **~2026-08-07** (hit-rate table
+starts filling); wallets refill **on the 1st of each month**.
+
+**Locked disciplines a new session must NOT undo:**
+1. **Rule (a):** the validated 18.2% backtest headline + engine are frozen; never tune to a GO; the
+   LLM never computes a number for the validated path.
+2. **The clean ₹2L GO book (`data/paper/book.json`) is the control** — never trade it off-schedule,
+   never add the hedge TO it (measure-only), never restart its clock.
+3. **AI is informational-only on real-money surfaces** (PR #45, user-enforced): the AI-paced sizing
+   option was REMOVED from the Zerodha Add-money advisor; it graduates back ONLY on a positive
+   System-vs-Shadow verdict per the contract. Do not re-add it early.
+4. **Real money never auto-trades; the user places every order.** Outlives the GO.
+5. **Pre-registration before any new experiment; negatives get published.**
+
+**User context (matters for advice):** he may build a REAL manual book during the test (possibly
+₹10L+, incl. IPOs). That's fine and by design — the advisor is source-agnostic (works on any
+holdings); remind him to **upload the Zerodha Console tradebook CSV** for exact dated-lot tax (raw
+holdings are undated → conservative STCG assumption; IPO allotments are off-market credits and may
+stay undated). At GO, a pre-existing manual book is **converged, never liquidated**: new-money
+routing to target + §4.6-gated consolidation + least-tax sells. His picks' returns are his own — the
+18.2% claim applies to the model's strategy only.
+
+**Operational facts (don't re-debug):** AI-brief input tokens swing ~20k–50k/day with the news cycle
+(web-search results bill as input; server-side loop re-reads context) — ~₹4–8/day is NORMAL, only
+investigate >80k. Secrets: `ANTHROPIC_API_KEY` + `TELEGRAM_*` on repo Actions; `GITHUB_TOKEN`
+(classic, repo scope, no expiry) + `KITE_*` + `APP_PASSWORD` in Streamlit secrets — GitHub secrets
+are write-only, never try to read them. Streamlit app may nap after ~a week idle (viewer only — data
+accrues in git regardless; wake with a click). Kite login is daily-manual and only needed for the
+Live tab. Merging to `main` auto-deploys Streamlit; always branch + PR (the harness blocks
+self-merges — the user clicks merge).
+
+**When the GO ping comes:** verdict = ALL FOUR pillars of the ENDGAME CONTRACT below, then the
+integration step it defines. If any pillar fails, report honestly; never integrate around a red.
+
 ## 🧭 CURRENT STATE — read this FIRST (2026-07-11, unification)
 
 **The live system is now ONE system in this product repo.** The user's audit verdict: the pieces felt
