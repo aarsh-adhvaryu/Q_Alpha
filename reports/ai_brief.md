@@ -1,19 +1,18 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Third consecutive session of losses; Nifty50 slipped below 24,000 mark to 23,996.
+**Sentiment**: 🔴 Indian stocks closed sharply lower on Wednesday, with the S&P/BSE Sensex dropping 0.9% to 76,755 and the NSE Nifty 50 falling 0.8% to 23,996.
 
-**Drivers:**
-1. Geopolitical conflicts in West Asia and fresh US tariff proposals dragged investor sentiment → elevated crude pressure on oil importers, higher input costs for aviation & refining.
-2. PSU bank and realty shares weighed the index → sector-specific weakness offsetting any broader support; realty lending pressure.
+**Drivers**:
+1. **US AI/software sector pullback** → Infosys lost 2% and Tech Mahindra dropped 1.2%, aligned with the pullback in the US AI software sector due to unease of higher borrowing costs and worries that elevated infrastructure spending may not bring the expected returns. Domestic IT caught the contagion.
+2. **Elevated crude oil & refining margin squeeze** → Hindustan Petroleum reported its first quarterly loss since 2022 as elevated crude prices squeezed refining margins. Higher input costs ripple across aviation, paints, and auto.
+3. **Pharma earnings misses** → Dr. Reddy's Laboratories came under pressure after issuing a supply warning and missing profit estimates.
 
-**Watchlist names affected:**
-InterGlobe Aviation, Dr. Reddy's Laboratories, and Jio Financial Services were the top losers in the Nifty50. Wider pressure on INDIGO (aviation fuel costs), JIOFIN (sectoral pressure), DRREDDY (global pharma headwinds).
+**Watchlist names affected**: IndusInd Bank (-5.6%), Adani Green (-4.6%), Dr. Reddy's Laboratories (-2.9%) led declines; IT (INFY, TECHM, WIPRO, HCLTECH) under sustained structural pressure from AI disruption; energy plays (BPCL, IOC, HPCL proxies) margin-compressed; ASIANPAINT under input-cost headwind.
 
-**Likely reaction:**
-Downside bias continues near-term over next 1–2 sessions; magnitude **−0.4 to −1.0%** with **medium** confidence. Risk-off sentiment likely pressures equities if West Asia tensions remain elevated. INDIGO, JIOFIN most vulnerable to immediate selling; energy & realty sectors remain stressed. 
+**Likely reaction**: Expect **flat to modestly down (-0.2–0.6%)** over next 1–2 sessions, **low–medium confidence**. US tech volatility will dictate sentiment; any stabilization abroad could offer relief. Downside bias on earnings disappointment (pharma, energy) and persistent IT repricing. **INFY/TECHM** likely to remain weak until AI revenue clarity improves; **BPCL** vulnerable to further crude shocks.
 
-**Risk note:** Nifty MidCap and SmallCap fell 1.09% and 1.54% respectively—breadth deterioration signals broad weakness, not isolated sector moves.
+**Risk note**: Geopolitical crude spike, US Fed rate path, and Q1 FY27 earnings beats/misses remain key circuit-breakers.
 
-SIGNAL: lean=down; band=-0.4..-1.0; confidence=medium
+SIGNAL: lean=down; band=-0.2..0.6; confidence=low
 
-— 🤖 claude-haiku-4-5 · 26,071 in / 630 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 53,081 in / 858 out tokens · ✓ complete
