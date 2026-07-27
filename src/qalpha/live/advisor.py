@@ -28,7 +28,12 @@ from decimal import ROUND_CEILING, ROUND_DOWN, Decimal
 
 import pandas as pd
 
-from qalpha.accounting.capital_gains import RealizedGain, financial_year, net_tax_total
+from qalpha.accounting.capital_gains import (
+    RealizedGain,
+    apply_grandfathering,
+    financial_year,
+    net_capital_gains_tax,
+)
 from qalpha.backtest.portfolio import Portfolio, TradeRecord
 from qalpha.config import Config
 
@@ -42,6 +47,11 @@ _MAX_DEPLOY_SHARES = 1_000_000
 
 def _rupees(value: Decimal) -> str:
     return f"₹{value:,.2f}"
+
+
+def _add_cess(tax: Decimal, cess_rate: Decimal) -> Decimal:
+    """Gross a base capital-gains tax up by the 4% Health & Education Cess (the real ITR figure)."""
+    return (tax * (Decimal("1") + cess_rate)).quantize(Decimal("0.01"))
 
 
 def exemption_remaining(portfolio: Portfolio, cfg: Config, as_of: date) -> Decimal:
@@ -77,8 +87,11 @@ class SellAdvice:
     cost: Decimal
     stcg_gain: Decimal
     ltcg_gain: Decimal
-    total_tax: Decimal
+    total_tax: Decimal  # real ITR figure: §70 set-off + §112A grandfathering + 4% cess
+    cess: Decimal  # the 4% Health & Education Cess component included in total_tax
     setoff_saving: Decimal  # tax saved because loss lots in this sell offset the gain lots (§70)
+    grandfather_saving: Decimal  # tax saved by the §112A pre-2018 FMV step-up
+    grandfather_unpriced: list[str]  # pre-2018 tickers missing a 31-Jan-2018 FMV (tax over-stated)
     ltcg_sheltered: Decimal
     exemption_remaining: Decimal
     net_proceeds: Decimal
@@ -93,11 +106,23 @@ class SellAdvice:
             f"- Realized gain: short-term {_rupees(self.stcg_gain)} · "
             f"long-term {_rupees(self.ltcg_gain)}",
             f"- Transaction cost: {_rupees(self.cost)}",
-            f"- **Capital-gains tax: {_rupees(self.total_tax)}**",
+            f"- **Capital-gains tax: {_rupees(self.total_tax)}** "
+            f"(incl. {_rupees(self.cess)} @ 4% Health & Education Cess)",
             f"- **Net you receive: {_rupees(self.net_proceeds)}**",
             "",
             "**Tax-smart notes**",
         ]
+        if self.grandfather_saving > 0:
+            lines.append(
+                f"- {_rupees(self.grandfather_saving)} of tax is saved by §112A grandfathering — "
+                f"pre-2018 lots are re-costed to their 31-Jan-2018 value."
+            )
+        if self.grandfather_unpriced:
+            lines.append(
+                f"- ⚠️ Lots in **{', '.join(self.grandfather_unpriced)}** were acquired before "
+                f"1-Feb-2018 but have no 31-Jan-2018 FMV provided — the tax above uses actual cost "
+                f"and may be **over-stated**. Provide each name's 31-Jan-2018 FMV for the exact figure."
+            )
         if self.ltcg_sheltered > 0:
             lines.append(
                 f"- {_rupees(self.ltcg_sheltered)} of long-term gain is shielded by your remaining "
@@ -188,8 +213,15 @@ def advise_sell(
     cfg: Config,
     *,
     quantity: Decimal | None = None,
+    grandfather_fmv: Mapping[str, Decimal] | None = None,
 ) -> SellAdvice:
-    """Tax breakdown + smart alternatives for selling ``quantity`` (default: all) of ``ticker``."""
+    """Tax breakdown + smart alternatives for selling ``quantity`` (default: all) of ``ticker``.
+
+    The quoted tax is the **real ITR figure**: §70 intra-year loss set-off, §112A grandfathering for
+    any pre-2018 lot whose 31-Jan-2018 FMV is supplied via ``grandfather_fmv`` (ticker → FMV/share),
+    and the 4% Health & Education Cess. (The frozen backtest engine stays cess-free and on actual
+    cost — this real-life layer never feeds the validated headline.)
+    """
     held = portfolio.ledger.quantity_held(ticker)
     if held <= 0:
         raise ValueError(f"no open position in {ticker}")
@@ -197,16 +229,35 @@ def advise_sell(
     if qty <= 0:
         raise ValueError("sell quantity must be positive")
 
-    realized, cb = portfolio.preview_sell(as_of, ticker, qty, price)
+    realized_raw, cb = portfolio.preview_sell(as_of, ticker, qty, price)
+    # §112A: re-cost pre-2018 long-term lots to their 31-Jan-2018 FMV (when supplied); flag any that
+    # are pre-2018 but unpriced (kept on actual cost → conservative, tax possibly over-stated).
+    realized, gf_unpriced = apply_grandfathering(realized_raw, price, grandfather_fmv or {})
     stcg = [g for g in realized if g.gain_type == "STCG"]
     ltcg = [g for g in realized if g.gain_type == "LTCG"]
-    # Per-lot tax sums each lot in isolation (a loss → ₹0); the legally-correct figure nets the
-    # loss lots against the gain lots within the FY (§70 set-off) using the *remaining* exemption.
+
     fy = financial_year(as_of)
-    gross_tax = sum((g.tax for g in realized), _ZERO)
-    total_tax = net_tax_total(
-        realized, cfg.tax, exemption_used_by_fy={fy: portfolio.gains.ltcg_realized(fy)}
+    used = {fy: portfolio.gains.ltcg_realized(fy)}
+    # The legally-correct figure nets losses against gains within the FY (§70) and adds cess; the
+    # FY rows carry the exemption actually applied to the (grandfathered) LTCG.
+    rows = net_capital_gains_tax(realized, cfg.tax, exemption_used_by_fy=used)
+    total_tax = sum((r.total_tax for r in rows), _ZERO)
+    cess = sum((r.cess for r in rows), _ZERO)
+    ltcg_sheltered = sum((r.ltcg_exempted for r in rows), _ZERO)
+
+    # Attribution, all on the same (cess-inclusive) basis so each saving is isolated:
+    #  · setoff  = per-lot-in-isolation tax  −  net tax, both on actual cost;
+    #  · grandfather = net tax on actual cost  −  net tax after the FMV step-up.
+    tax_actualcost = sum(
+        (
+            r.total_tax
+            for r in net_capital_gains_tax(realized_raw, cfg.tax, exemption_used_by_fy=used)
+        ),
+        _ZERO,
     )
+    gross_no_setoff = (
+        sum((g.tax for g in realized_raw), _ZERO) * (Decimal("1") + cfg.tax.cess_rate)
+    ).quantize(Decimal("0.01"))
     headroom = exemption_remaining(portfolio, cfg, as_of)
     return SellAdvice(
         ticker=ticker,
@@ -218,8 +269,11 @@ def advise_sell(
         stcg_gain=sum((g.gain for g in stcg), _ZERO),
         ltcg_gain=sum((g.gain for g in ltcg), _ZERO),
         total_tax=total_tax,
-        setoff_saving=max(_ZERO, gross_tax - total_tax),
-        ltcg_sheltered=sum((g.gain - g.taxable_gain for g in ltcg if g.gain > 0), _ZERO),
+        cess=cess,
+        setoff_saving=max(_ZERO, gross_no_setoff - tax_actualcost),
+        grandfather_saving=max(_ZERO, tax_actualcost - total_tax),
+        grandfather_unpriced=sorted({g.ticker for g in gf_unpriced}),
+        ltcg_sheltered=ltcg_sheltered,
         exemption_remaining=headroom,
         net_proceeds=qty * price - cb.total - total_tax,
         tax_free_quantity=_tax_free_quantity(portfolio, ticker, price, as_of, headroom),
@@ -322,7 +376,8 @@ def advise_raise_cash(
         rec = smart.sell(as_of, row.ticker, shares, row.price)
         orders.append(rec)
         raised += shares * row.price - rec.cost - rec.tax
-    smart_tax = sum((o.tax for o in orders), _ZERO)
+    cess_rate = portfolio.tax_cfg.cess_rate  # real ITR figures include the 4% cess
+    smart_tax = _add_cess(sum((o.tax for o in orders), _ZERO), cess_rate)
 
     # Naive baseline: sell the same fraction of every holding to raise ``amount``.
     naive = portfolio.clone()
@@ -336,6 +391,7 @@ def advise_raise_cash(
         shares = (qty * frac).to_integral_value(rounding=ROUND_DOWN)
         if shares > 0:
             naive_tax += naive.sell(as_of, ticker, shares, price).tax
+    naive_tax = _add_cess(naive_tax, cess_rate)
 
     return RaiseCashAdvice(
         as_of=as_of,
@@ -441,9 +497,10 @@ def advise_deploy(
 
     naive = portfolio.clone()
     naive.cash += amount
-    naive_cost, naive_tax, _ = naive.estimate_rebalance(
+    naive_cost, naive_tax_base, _ = naive.estimate_rebalance(
         as_of, target, prices, min_trade_fraction=0.0
     )
+    naive_tax = _add_cess(naive_tax_base, portfolio.tax_cfg.cess_rate)  # real ITR figure
 
     return DeployAdvice(
         as_of=as_of,

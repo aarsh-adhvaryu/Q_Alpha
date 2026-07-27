@@ -14,7 +14,7 @@ encoded here:
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from itertools import groupby
@@ -187,11 +187,36 @@ class NetCapitalGains:
     taxable_stcg: Decimal  # net STCG after STCL set-off
     taxable_ltcg: Decimal  # net LTCG after loss set-off AND exemption
     ltcg_exempted: Decimal  # LTCG sheltered by the ₹1.25L FY exemption
-    stcg_tax: Decimal
-    ltcg_tax: Decimal
-    total_tax: Decimal
-    carryforward_stcl: Decimal  # STCL left unused this FY (carry forward up to 8 AYs — not applied)
-    carryforward_ltcl: Decimal  # LTCL left unused this FY (sets off only future LTCG)
+    stcg_tax: Decimal  # base STCG tax (20%), before cess
+    ltcg_tax: Decimal  # base LTCG tax (12.5%), before cess
+    cess: Decimal  # 4% Health & Education Cess on (stcg_tax + ltcg_tax)
+    total_tax: Decimal  # stcg_tax + ltcg_tax + cess — the real ITR figure
+    carryforward_stcl: Decimal  # live STCL carry balance after this FY (§74, ≤8 AYs, applied)
+    carryforward_ltcl: Decimal  # live LTCL carry balance after this FY (sets off only future LTCG)
+
+
+_CARRY_FORWARD_YEARS = 8  # §74: a capital loss carries for 8 assessment years after the loss year.
+
+
+def _consume_losses(
+    buckets: list[tuple[int, Decimal]], gain: Decimal
+) -> tuple[Decimal, list[tuple[int, Decimal]]]:
+    """Set off ``gain`` against brought-forward loss ``buckets`` (oldest first, to beat expiry).
+
+    Returns ``(remaining_gain, remaining_buckets)``. Oldest-first both maximises the chance a loss is
+    used before its 8-AY window closes and is the standard set-off order.
+    """
+    remaining = gain
+    out: list[tuple[int, Decimal]] = []
+    for origin_fy, amount in buckets:
+        if remaining <= 0:
+            out.append((origin_fy, amount))
+            continue
+        used = min(remaining, amount)
+        remaining -= used
+        if amount - used > 0:
+            out.append((origin_fy, amount - used))
+    return remaining, out
 
 
 def net_capital_gains_tax(
@@ -200,21 +225,26 @@ def net_capital_gains_tax(
     *,
     exemption_used_by_fy: Mapping[int, Decimal] | None = None,
 ) -> list[NetCapitalGains]:
-    """Legally-correct per-FY capital-gains tax with intra-year loss set-off (one row per FY).
+    """Legally-correct per-FY capital-gains tax with loss set-off + 8-AY carry-forward (row per FY).
 
-    Indian set-off rules (Income-tax Act §70/§71, intra-year):
+    Indian set-off rules (Income-tax Act §70/§71 intra-year, §74 carry-forward):
 
     * **Short-term capital loss (STCL)** sets off against STCG **and** LTCG.
     * **Long-term capital loss (LTCL)** sets off against **only** LTCG.
+    * An unabsorbed loss **carries forward up to 8 assessment years** and sets off against *future*
+      gains of the eligible head (never backward — a later loss can't reach an earlier year's gain).
 
-    To minimise tax, STCL is applied to STCG first (taxed 20%) before spilling to LTCG (12.5%); LTCL
-    then offsets any remaining LTCG; the ₹1.25L FY exemption shelters the net LTCG. ``exemption_used_
-    by_fy`` is the LTCG already sheltered earlier in the same FY (so an incremental advisor sell uses
-    only the *remaining* shelter). Losses unused this FY are reported as carry-forward but **not**
-    carried across years here (that 8-AY mechanism is a Phase-0 deferral, like tax-loss harvesting).
+    Each FY (processed chronologically): current-year set-off first — STCL → STCG (taxed 20%) then
+    the remainder → LTCG (12.5%); LTCL → remaining LTCG — then **brought-forward** losses (oldest
+    first) set off the same way, then the ₹1.25L FY exemption shelters the residual net LTCG. Any
+    still-unabsorbed current-year loss joins the carry pool; ``carryforward_stcl``/``carryforward_
+    ltcl`` report the **live carry balance** after the FY. ``exemption_used_by_fy`` is the LTCG shelter
+    already spent earlier in the same FY (so an incremental advisor sell uses only the remainder).
     """
     used_by_fy = exemption_used_by_fy or {}
     rows: list[NetCapitalGains] = []
+    bf_stcl: list[tuple[int, Decimal]] = []  # brought-forward STCL as (origin_fy, amount), oldest→
+    bf_ltcl: list[tuple[int, Decimal]] = []
     keyed = sorted(gains, key=lambda g: financial_year(g.sell_date))
     for fy, group in groupby(keyed, key=lambda g: financial_year(g.sell_date)):
         items = list(group)
@@ -223,26 +253,40 @@ def net_capital_gains_tax(
         ltcg = sum((g.gain for g in items if _is_ltcg(g) and g.gain > 0), _ZERO)
         ltcl = -sum((g.gain for g in items if _is_ltcg(g) and g.gain < 0), _ZERO)
 
-        # STCL → STCG first (higher rate), then the remainder → LTCG.
+        # (1) Current-year set-off: STCL → STCG first (higher rate), then the remainder → LTCG.
         s_used = min(stcl, stcg)
         net_stcg = stcg - s_used
         stcl_left = stcl - s_used
         s_to_ltcg = min(stcl_left, ltcg)
-        ltcg_after_stcl = ltcg - s_to_ltcg
+        net_ltcg = ltcg - s_to_ltcg
         stcl_left -= s_to_ltcg
-
         # LTCL → only LTCG.
-        l_used = min(ltcl, ltcg_after_stcl)
-        net_ltcg = ltcg_after_stcl - l_used
+        l_used = min(ltcl, net_ltcg)
+        net_ltcg -= l_used
         ltcl_left = ltcl - l_used
 
-        # ₹1.25L exemption shelters the net LTCG (after any shelter already used this FY).
+        # (2) Brought-forward set-off (§74): drop losses past their 8-AY window, then oldest-first
+        #     b/f STCL → remaining STCG then LTCG; b/f LTCL → remaining LTCG.
+        bf_stcl = [b for b in bf_stcl if fy - b[0] <= _CARRY_FORWARD_YEARS]
+        bf_ltcl = [b for b in bf_ltcl if fy - b[0] <= _CARRY_FORWARD_YEARS]
+        net_stcg, bf_stcl = _consume_losses(bf_stcl, net_stcg)
+        net_ltcg, bf_stcl = _consume_losses(bf_stcl, net_ltcg)
+        net_ltcg, bf_ltcl = _consume_losses(bf_ltcl, net_ltcg)
+
+        # (3) ₹1.25L exemption shelters the residual net LTCG (after any shelter used earlier this FY).
         remaining_exemption = max(_ZERO, cfg.ltcg_annual_exemption - used_by_fy.get(fy, _ZERO))
         exempted = min(net_ltcg, remaining_exemption)
         taxable_ltcg = net_ltcg - exempted
 
+        # (4) This FY's unabsorbed current-year losses join the carry pool.
+        if stcl_left > 0:
+            bf_stcl.append((fy, stcl_left))
+        if ltcl_left > 0:
+            bf_ltcl.append((fy, ltcl_left))
+
         stcg_tax = _paise(net_stcg * cfg.stcg_rate)
         ltcg_tax = _paise(taxable_ltcg * cfg.ltcg_rate)
+        cess = _paise((stcg_tax + ltcg_tax) * cfg.cess_rate)  # 4% Health & Education Cess
         rows.append(
             NetCapitalGains(
                 fy=fy,
@@ -255,9 +299,10 @@ def net_capital_gains_tax(
                 ltcg_exempted=exempted,
                 stcg_tax=stcg_tax,
                 ltcg_tax=ltcg_tax,
-                total_tax=stcg_tax + ltcg_tax,
-                carryforward_stcl=stcl_left,
-                carryforward_ltcl=ltcl_left,
+                cess=cess,
+                total_tax=stcg_tax + ltcg_tax + cess,
+                carryforward_stcl=sum((b[1] for b in bf_stcl), _ZERO),
+                carryforward_ltcl=sum((b[1] for b in bf_ltcl), _ZERO),
             )
         )
     return rows
@@ -281,3 +326,67 @@ def net_tax_total(
 
 def _is_ltcg(g: RealizedGain) -> bool:
     return g.gain_type == "LTCG"
+
+
+# ---- §112A grandfathering (equity acquired before 2018-02-01) ------------------------------------
+
+GRANDFATHER_CUTOFF = date(2018, 2, 1)
+"""§55(2)(ac): the grandfathering step-up applies only to equity acquired **before** this date."""
+
+
+def grandfathered_cost_of_acquisition(
+    actual_cost: Decimal,
+    fmv_31jan2018: Decimal,
+    full_value_consideration: Decimal,
+    acquisition_date: date,
+) -> Decimal:
+    """§55(2)(ac) grandfathered cost of acquisition for listed equity (for LTCG only).
+
+    For shares acquired **before 1 Feb 2018**, the cost of acquisition is stepped up to::
+
+        max( actual_cost , min( FMV_on_31Jan2018 , full_value_of_consideration ) )
+
+    so gains that had accrued up to 31-Jan-2018 are sheltered, but the step-up can never manufacture
+    a loss (it is capped at the sale value). All three amounts are **totals for the same quantity**
+    (per-share × qty). For a post-cutoff acquisition the actual cost is returned unchanged, so this is
+    always safe to call. The 31-Jan-2018 FMV is the highest quoted price that day (or the last day it
+    traded before) — external data the caller supplies per name.
+    """
+    if acquisition_date >= GRANDFATHER_CUTOFF:
+        return actual_cost
+    return max(actual_cost, min(fmv_31jan2018, full_value_consideration))
+
+
+def apply_grandfathering(
+    gains: Iterable[RealizedGain],
+    sell_price: Decimal,
+    fmv_by_ticker: Mapping[str, Decimal],
+) -> tuple[list[RealizedGain], list[RealizedGain]]:
+    """Re-cost pre-2018 long-term lots with the §112A grandfathered basis (advisor/reconcile layer).
+
+    Returns ``(adjusted_gains, unpriced)`` where ``adjusted_gains`` mirrors ``gains`` but with each
+    pre-cutoff LTCG lot's ``cost_of_acquisition``/``gain`` recomputed from its 31-Jan-2018 FMV (per
+    share, from ``fmv_by_ticker``), and ``unpriced`` lists the pre-cutoff LTCG lots for which **no
+    FMV was supplied** — those are left on actual cost (a conservative, tax-over-stating fallback) and
+    should be surfaced to the user so they can provide the FMV. Post-2018 and short-term lots pass
+    through untouched. Never applied to the frozen backtest engine — only to real-holding advice.
+    """
+    adjusted: list[RealizedGain] = []
+    unpriced: list[RealizedGain] = []
+    for g in gains:
+        if not (_is_ltcg(g) and g.acquisition_date < GRANDFATHER_CUTOFF):
+            adjusted.append(g)
+            continue
+        fmv_ps = fmv_by_ticker.get(g.ticker)
+        if fmv_ps is None:
+            unpriced.append(g)
+            adjusted.append(g)  # conservative: keep actual cost (tax may be over-stated)
+            continue
+        fmv_total = _paise(fmv_ps * g.quantity)
+        fvc_total = _paise(sell_price * g.quantity)  # full value of consideration (gross)
+        new_cost = grandfathered_cost_of_acquisition(
+            g.cost_of_acquisition, fmv_total, fvc_total, g.acquisition_date
+        )
+        new_gain = _paise(g.sale_consideration - new_cost)
+        adjusted.append(replace(g, cost_of_acquisition=new_cost, gain=new_gain))
+    return adjusted, unpriced
