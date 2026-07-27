@@ -3,13 +3,53 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import cast
 
 import pandas as pd
 
-from qalpha.live.dashboard import paper_freshness, systemic_risk_markdown
+from qalpha.accounting.tax_lots import FIFOLedger, TaxLot
+from qalpha.live.dashboard import ltcg_safe_sell_note, paper_freshness, systemic_risk_markdown
 from qalpha.live.paper import PaperBook
+
+
+def _ledger(*acq_dates: date) -> FIFOLedger:
+    led = FIFOLedger()
+    for d in acq_dates:
+        led.add_lot(
+            TaxLot(
+                ticker="X",
+                acquisition_date=d,
+                quantity_original=Decimal("10"),
+                buy_price=Decimal("100"),
+            )
+        )
+    return led
+
+
+def test_ltcg_safe_note_already_long_term() -> None:
+    # Bought > 365 days ago → whole line already long-term → sell now at 12.5%.
+    note = ltcg_safe_sell_note(_ledger(date(2025, 1, 1)), "X", date(2026, 7, 27))
+    assert note == "🟢 now (12.5%)"
+
+
+def test_ltcg_safe_note_still_short_term_shows_days_and_date() -> None:
+    # Bought 2026-06-12 → long-term on 2026-06-12 + 365 = 2027-06-12.
+    note = ltcg_safe_sell_note(_ledger(date(2026, 6, 12)), "X", date(2026, 7, 27))
+    assert note.startswith("⏳ 320d")  # (2027-06-12 - 2026-07-27) = 320 days
+    assert "12 Jun 27" in note
+
+
+def test_ltcg_safe_note_uses_newest_lot_for_whole_line() -> None:
+    # One old (LT) lot + one new (ST) lot → the *whole* line is only safe once the newest crosses.
+    led = _ledger(date(2024, 1, 1), date(2026, 6, 12))
+    note = ltcg_safe_sell_note(led, "X", date(2026, 7, 27))
+    assert "12 Jun 27" in note  # governed by the newest lot, not the already-long-term old one
+
+
+def test_ltcg_safe_note_no_holding() -> None:
+    assert ltcg_safe_sell_note(FIFOLedger(), "X", date(2026, 7, 27)) == "—"
 
 
 def _book(last_date: str | None) -> PaperBook:

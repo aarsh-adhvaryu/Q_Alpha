@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from qalpha.accounting.tax_lots import FIFOLedger
 from qalpha.data.prices import PriceData
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.paper import DailyPlan, PaperBook, _prices_on
@@ -314,6 +315,33 @@ def go_readiness_markdown(book: PaperBook, benchmark: pd.Series, as_of: date) ->
     return build_scorecard(book.equity_curve, benchmark, as_of).render()
 
 
+def ltcg_safe_sell_note(
+    ledger: FIFOLedger, ticker: str, as_of: date, ltcg_holding_days: int = 365
+) -> str:
+    """Per-holding "safe minimal holding period" cell for the tax-smart holdings table.
+
+    The single biggest tax lever the strategy leans on is the §111A→§112A crossover: a lot held
+    **past the long-term threshold** (default 365 days) is taxed at 12.5% (LTCG) instead of 20%
+    (STCG). This returns a compact cell saying when the *whole* open position in ``ticker`` becomes
+    long-term — the safe-sell date, taken from the **newest** open lot (hold until then and any sale
+    of the line is fully LTCG). Selling earlier is always allowed; it just taxes the still-short-term
+    portion at 20%.
+
+    * ``🟢 now (12.5%)`` — every open lot is already long-term; sell anytime at the low rate.
+    * ``⏳ Nd · DD Mon YY`` — hold N more days (to that date) before the line is fully LTCG-safe.
+    * ``—`` — nothing held / undated lots.
+    """
+    lots = ledger.open_lots(ticker)
+    if not lots:
+        return "—"
+    newest = max(lot.acquisition_date for lot in lots)
+    lt_date = newest + timedelta(days=ltcg_holding_days)
+    days = (lt_date - as_of).days
+    if days <= 0:
+        return "🟢 now (12.5%)"
+    return f"⏳ {days}d · {lt_date:%d %b %y}"
+
+
 def render_markdown(
     book: PaperBook,
     prices: PriceData,
@@ -371,12 +399,23 @@ def render_markdown(
     lines.append("## Holdings")
     lines.append("")
     if weights:
-        lines.append("| Ticker | Qty | Price | Value | Weight |")
-        lines.append("|---|---|---|---|---|")
+        ltcg_days = book.portfolio.tax_cfg.ltcg_holding_days
+        lines.append("| Ticker | Qty | Price | Value | Weight | LTCG-safe |")
+        lines.append("|---|---|---|---|---|---|")
         for t, q in sorted(book.portfolio.positions().items()):
             px = prices_dec.get(t, Decimal("0"))
             val = q * px
-            lines.append(f"| {t} | {q} | ₹{px} | ₹{val:,.0f} | {weights.get(t, 0.0) * 100:.1f}% |")
+            safe = ltcg_safe_sell_note(book.portfolio.ledger, t, as_of, ltcg_days)
+            lines.append(
+                f"| {t} | {q} | ₹{px} | ₹{val:,.0f} | {weights.get(t, 0.0) * 100:.1f}% | {safe} |"
+            )
+        lines.append("")
+        lines.append(
+            "> **LTCG-safe** = the safe minimal holding date: hold until then and the whole line "
+            "sells at the lower **12.5%** long-term rate instead of **20%** short-term "
+            "(§111A→§112A). Selling earlier is allowed — it just taxes the still-short-term shares "
+            "at 20%. `🟢 now` = already fully long-term."
+        )
     else:
         lines.append("_No holdings yet._")
     lines.append("")

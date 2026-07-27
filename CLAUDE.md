@@ -8,6 +8,22 @@ Guidance for Claude Code (and humans) working in this repo.
 him; silence = healthy). If you are a fresh session, this block is your orientation — read it, then
 the ENDGAME CONTRACT below, then skim the dated blocks only as needed.
 
+**➕ TAX ENGINE COMPLETED TO REAL-LIFE ACCURACY (2026-07-27, advisor/reconcile layer only — rule (a)
+intact, engine + 18.3% headline provably unchanged; re-ran the canonical backtest to confirm).** The
+advisor's quoted sell tax is now the real ITR figure: correct 20%/12.5% + ₹1.25L exemption + §70
+intra-year set-off + **§74 8-AY loss carry-forward** (`net_capital_gains_tax` now threads brought-
+forward STCL/LTCL chronologically, oldest-first, expiring past 8 AYs) + **4% Health & Education Cess**
+(`TaxConfig.cess_rate`; effective 20.8%/13%) + **§112A grandfathering** (`grandfathered_cost_of_
+acquisition`/`apply_grandfathering`, pre-1-Feb-2018 lots re-costed to 31-Jan-2018 FMV via an optional
+`advise_sell(grandfather_fmv=…)` map; unpriced pre-2018 lots are flagged, kept on conservative actual
+cost). **The frozen backtest engine (`compute_sell`) stays cess-free / actual-cost — never touched.**
+Also: a **LTCG-safe** column (safe minimal holding date per line) in the paper-report + Streamlit
+Paper/Live holdings tables (`dashboard.ltcg_safe_sell_note`). **Deliberately NOT modelled** (need the
+user's total income / a different tax head — out of a CG advisor's scope): surcharge, dividend-income
+tax, F&O business-income (the hedge is fake-money). **User confirmed he holds nothing pre-2018 →
+grandfathering is inert for his live book (pure passthrough); no 31-Jan-2018 FMV table needed.** Gates
+green (286 tests). This closes every code-fixable tax item — nothing tax-shaped remains on the path.
+
 **Read order for a new session:** this block → 🏁 THE ENDGAME CONTRACT → the 2026-07-11/12 blocks
 (unification · System book) → README.md (the front door). The research repo
 (`../Q_Alpha_Research`) is the **archive** (hedge forward run + published negatives incl. QUBO ×2);

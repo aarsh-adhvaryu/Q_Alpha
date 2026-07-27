@@ -65,6 +65,46 @@ def test_small_long_term_sale_is_fully_tax_free() -> None:
     assert adv.tax_free_quantity == Decimal("1000")
 
 
+def test_sell_tax_includes_the_4pct_cess() -> None:
+    pf = _pf()
+    _add(pf, "AAA", "2000", "100", date(2023, 1, 1))  # ₹200k LTCG, > exemption → taxable
+    adv = advise_sell(pf, "AAA", Decimal("200"), date(2024, 6, 1), Config())
+
+    base = adv.total_tax - adv.cess
+    assert adv.cess > 0
+    assert adv.cess == (base * Decimal("0.04")).quantize(Decimal("0.01"))  # 4% on the base tax
+    assert adv.total_tax == base + adv.cess
+    assert "Cess" in adv.render()
+
+
+def test_sell_flags_pre2018_lot_without_fmv() -> None:
+    pf = _pf()
+    _add(pf, "OLDCO", "2000", "100", date(2016, 1, 1))  # pre-1-Feb-2018, long-term
+    adv = advise_sell(pf, "OLDCO", Decimal("500"), date(2024, 6, 1), Config())
+
+    assert adv.grandfather_unpriced == ["OLDCO"]
+    assert "before 1-Feb-2018" in adv.render()
+
+
+def test_sell_applies_grandfathering_when_fmv_supplied() -> None:
+    pf = _pf()
+    _add(pf, "OLDCO", "2000", "100", date(2016, 1, 1))  # actual cost ₹100/sh
+    no_gf = advise_sell(pf, "OLDCO", Decimal("500"), date(2024, 6, 1), Config())
+    # 31-Jan-2018 FMV ₹400/sh → cost steps up ₹100→₹400, so the taxable gain (and tax) fall sharply.
+    gf = advise_sell(
+        pf,
+        "OLDCO",
+        Decimal("500"),
+        date(2024, 6, 1),
+        Config(),
+        grandfather_fmv={"OLDCO": Decimal("400")},
+    )
+    assert gf.total_tax < no_gf.total_tax
+    assert gf.grandfather_saving > 0
+    assert gf.grandfather_unpriced == []
+    assert "grandfathering" in gf.render()
+
+
 def test_short_term_near_boundary_flags_the_wait() -> None:
     pf = _pf()
     _add(pf, "BBB", "100", "100", date(2023, 8, 1))  # 349 days held on 2024-07-15 → ST

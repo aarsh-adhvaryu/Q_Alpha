@@ -124,12 +124,19 @@ it tells a human the tax-smart move; the human places the order. Every tax numbe
 (exact, auditable — no LLM ever computes a number).
 
 - **Tax-smart advisor** (`live/advisor.py`) — three modes on the validated FIFO/cost/tax engine:
-  *Sell* (exact STCG/LTCG split, the largest ₹0-tax quantity, the ₹1.25L exemption shelter), *Raise
-  cash* (least-tax source order), *Add money* (route new capital to underweights as ₹0-tax buys).
-- **§70 loss set-off** (`accounting/capital_gains.py`) — nets short-term losses against gains
-  (STCG first at 20%, then LTCG at 12.5%) the way Indian law actually works; the advisor shows the
-  tax it saves. (Wired into the advisor only — *not* the backtest engine — so the headline is provably
-  unchanged.)
+  *Sell* (exact STCG/LTCG split, the largest ₹0-tax quantity, the ₹1.25L exemption shelter, and each
+  holding's **LTCG-safe date** — the day it crosses into the cheaper 12.5% long-term bracket, shown as
+  a column in the holdings tables), *Raise cash* (least-tax source order), *Add money* (route new
+  capital to underweights as ₹0-tax buys).
+- **The Indian tax the advisor quotes is real-ITR-accurate** (`accounting/capital_gains.py`) — the
+  number shown for a sale is exactly what you would owe on your return: **§70 intra-year loss set-off**
+  (STCL against STCG first at 20%, then LTCG at 12.5%; LTCL against LTCG only), **§74 carry-forward** of
+  any unabsorbed loss for up to 8 assessment years (forward only — a later loss never reaches an
+  earlier year's gain), the **4% Health & Education Cess** (so the effective rates are 20.8% / 13%), and
+  **§112A grandfathering** (equity bought before 1 Feb 2018 re-costed to its 31-Jan-2018 value; lots
+  missing that reference price are flagged, never silently mis-taxed). All of this lives in the
+  **advisor/reconcile layer only — never the frozen backtest engine — so the validated headline stays
+  provably unchanged** (the canonical backtest is re-run to confirm after every tax change).
 - **Corporate actions** (`accounting/corporate_actions.py`, §14 crit 5) — splits (preserve cost &
   holding period), bonuses (₹0-cost shares dated the ex-date → can be short-term even when the
   originals are long-term), dividends (income, never capital gains). Interleaved into the tradebook
@@ -208,7 +215,9 @@ events.
 | Term | Plain meaning |
 |---|---|
 | **FIFO tax lots** | India taxes share sales oldest-first. We track every purchase lot with its date so STCG-vs-LTCG and the holding period are exact. |
-| **STCG / LTCG** | Short-term (<365 days) gains taxed 20%; long-term (≥365) taxed 12.5% with a ₹1.25L/yr exemption. The whole strategy leans toward the cheaper long-term side. |
+| **STCG / LTCG** | Short-term (<365 days) gains taxed 20%; long-term (≥365) taxed 12.5% with a ₹1.25L/yr exemption (both carry a **+4% cess** → 20.8% / 13% effective). The whole strategy leans toward the cheaper long-term side. |
+| **§70 / §74 set-off** | Losses offset gains within the year (§70); anything unused carries forward up to 8 years to offset *future* gains (§74). Cuts the real tax bill — the advisor applies both. |
+| **§112A grandfathering** | Shares bought before 1-Feb-2018 are re-costed to their 31-Jan-2018 market value, so gains that accrued before then aren't taxed. The advisor applies it when given the reference price. |
 | **Sharpe ratio** | Return per unit of risk (volatility). Higher = smoother ride for the same return. |
 | **Max drawdown** | The worst peak-to-trough fall — the "how bad did it hurt" number. |
 | **Ledoit–Wolf shrinkage** | A covariance estimator that's stable on short data (raw sample covariance is noisy and over-fits). |
@@ -231,6 +240,12 @@ Every model embeds choices. Here are ours, stated plainly, including the ones th
   cap), so the correction is small — we say so rather than overclaim a heroic fix.
 - **Single market, single asset class.** Indian large-cap equities only. The tax logic is India-specific
   (it would not transfer to, say, US wash-sale rules). This is a deliberate scope, not generality.
+- **The advisor's capital-gains tax is real-ITR-accurate; two tax heads are deliberately out of scope.**
+  Set-off, 8-year carry-forward, the 4% cess, and grandfathering are all applied. **Surcharge** (needs
+  your *total* income) and **dividend-income tax** (a separate head, taxed at your slab) are *not*
+  modelled — a capital-gains advisor doesn't know your other income, so it flags these rather than
+  guess. The frozen backtest engine also stays on the flat statutory rate (no cess) by design, so the
+  validated headline never moves; the real-life refinements live only in the advice layer.
 - **Annual rebalancing is a trade-off, not free.** Trading rarely maximizes after-tax return, but it
   means the model can *miss* a good mid-year reallocation. We accept this (the backtest shows acting on
   most mid-year signals loses to tax) and added a **position-health watch** for the genuine exceptions.
@@ -253,7 +268,7 @@ Every model embeds choices. Here are ours, stated plainly, including the ones th
 ```bash
 cd qalpha
 uv sync --extra dev          # create venv + install
-uv run pytest                # 169 tests, must stay green
+uv run pytest                # 286 tests, must stay green
 uv run ruff check .          # lint
 uv run ruff format --check . # format
 uv run mypy src              # strict type-check
@@ -266,7 +281,7 @@ src/qalpha/
   data/            yfinance ingest, point-in-time universe, bad-tick sanitizer
   factors/         momentum / volatility / liquidity scoring + regime classification
   alloc/           Ledoit-Wolf covariance conditioning, sector allocator, optimizer (minvar|equal|score|shrink)
-  accounting/      FIFO tax lots · Zerodha costs · capital-gains tax (+ §70 set-off) · corporate actions   ← reused live, same code the backtest validated
+  accounting/      FIFO tax lots · Zerodha costs · capital-gains tax (backtest engine) + the real-ITR advisor layer (§70 set-off · §74 carry-forward · 4% cess · §112A grandfathering) · corporate actions   ← reused live, same core the backtest validated
   backtest/        walk-forward engine, portfolio accountant, baselines, metrics, go/no-go report
   live/            Kite auth · holdings reader · tradebook replay · Tax-P&L reconcile · advisor · paper book · dashboard renderer · safety guards · realtime ticker · GO scorecard · position health
 ```
@@ -275,3 +290,32 @@ src/qalpha/
 float); **no look-ahead, ever** (all historical reads go through `PriceData.as_of(date)`; there's a
 test that fails on look-ahead); the accounting engine is standalone so the live system reuses the
 *exact* FIFO/cost/tax code the backtest was validated on.
+
+---
+
+## 9. Conclusion — the project, concluded
+
+Q-Alpha set out to answer one question honestly: *does a tax-aware strategy actually beat the
+alternatives once real Indian taxes and costs live inside the decision?* The answer, validated as far
+as simulation allows, is **yes — but the edge is discipline, not stock-picking**: trade rarely, stay
+tax-smart, anchor to 1/N. It clears the hard bar — beating the index *and* equal-weight, net of
+cost+tax, in-sample, on a genuinely unseen holdout, and across every rolling 3-year window (never a
+losing 3-year stretch) — and it earned that verdict by being stress-tested to near-failure and fixed
+*honestly* rather than tuned to look good.
+
+Around that finding sits a **complete, deployed, human-in-the-loop system**: a real-ITR-accurate tax
+advisor (§70 set-off · §74 carry-forward · 4% cess · §112A grandfathering · the LTCG-safe date for
+every holding), live Zerodha integration reconciled to the paise, an autonomous self-certifying paper
+run, and a System book that proves the whole thing on its own advice against honest same-cash-flow
+comparators — all of it fail-loud, none of it ever auto-trading real money.
+
+**On the engineering, the project is complete — there is nothing left to build on the path to
+go-live.** What stands between here and real money is not code: it is **calendar** (the mandatory
+~6-month forward paper run) and **one real market stress event** for the GO scorecard and the tax-free
+hedge to be witnessed against. Those cannot be simulated away, and by design they shouldn't be. When
+all four endgame pillars are green — core GO · System > baseline · the AI verdict in · the hedge
+witnessed — the proven pieces integrate into the real-money advisor; if any pillar fails, that is
+reported, not engineered around. Real money never auto-trades; the human places every order.
+
+The honesty *is* the product. Every wrong turn is in the record, every bias is named, and no number was
+ever tuned to look good. That is the claim worth making.
