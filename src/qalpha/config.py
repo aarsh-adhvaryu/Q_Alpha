@@ -71,6 +71,14 @@ class TaxConfig:
     ltcg_annual_exemption: Decimal = Decimal("125000")  # ₹1.25L LTCG exempt per FY
     ltcg_holding_days: int = 365
 
+    # Health & Education Cess — a flat 4% surcharge on the computed income-tax (incl. capital-gains
+    # tax), so the real effective rates are 20.8% (STCG) / 13% (LTCG). Applied by the **advisor /
+    # reconciliation layer** (`net_capital_gains_tax`) — the real ITR figure the user acts on — and
+    # deliberately NOT by the frozen backtest engine (`compute_sell`), so the validated 18.2%
+    # headline stays provably unchanged. Surcharge (income-slab-dependent, capped 15% on 111A/112A)
+    # is left out: it needs the user's total income, which the advisor doesn't model.
+    cess_rate: Decimal = Decimal("0.04")
+
 
 @dataclass(frozen=True)
 class LiquidityConfig:

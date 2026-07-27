@@ -45,6 +45,7 @@ from qalpha.live.dashboard import (
     glossary_markdown,
     go_readiness_markdown,
     live_pm_brief_markdown,
+    ltcg_safe_sell_note,
     paper_freshness,
     performance_read,
     plain_summary_markdown,
@@ -785,7 +786,10 @@ def _paper_overview(
         _equity_chart(book, benchmark)
     with right:
         st.subheader("Holdings")
-        st.dataframe(_holdings_frame(book.portfolio, prices_dec), hide_index=True, width="stretch")
+        st.dataframe(
+            _holdings_frame(book.portfolio, prices_dec, as_of), hide_index=True, width="stretch"
+        )
+        st.caption(_LTCG_SAFE_LEGEND)
 
 
 def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str, Decimal]]:
@@ -840,7 +844,13 @@ def _live_overview(portfolio: Portfolio, prices: dict[str, Decimal], *, caveat: 
     else:
         st.success("Exact tax mode — holding periods dated from your tradebook.")
     st.subheader("Holdings")
-    st.dataframe(_holdings_frame(portfolio, prices), hide_index=True, width="stretch")
+    # caveat is None  <=>  lots carry real purchase dates (exact tax) → the LTCG-safe date is known.
+    st.dataframe(
+        _holdings_frame(portfolio, prices, date.today(), dated=caveat is None),
+        hide_index=True,
+        width="stretch",
+    )
+    st.caption(_LTCG_SAFE_LEGEND)
 
 
 def _download_watchlist_panel() -> None:
@@ -1018,11 +1028,37 @@ def _advisor_tabs(
                     st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
 
 
-def _holdings_frame(portfolio: Portfolio, prices_dec: dict[str, Decimal]) -> pd.DataFrame:
+_LTCG_SAFE_LEGEND = (
+    "**LTCG-safe** = the safe minimal holding date: hold until then and the whole line sells at the "
+    "lower **12.5%** long-term rate instead of **20%** short-term (§111A→§112A). Selling earlier is "
+    "allowed — it just taxes the still-short-term shares at 20%. 🟢 now = already fully long-term; "
+    "❔ = upload your tradebook so purchase dates (and the crossover) are known."
+)
+
+
+def _holdings_frame(
+    portfolio: Portfolio,
+    prices_dec: dict[str, Decimal],
+    as_of: date,
+    *,
+    dated: bool = True,
+) -> pd.DataFrame:
+    """Holdings table with a **LTCG-safe** column — the safe minimal holding date per line.
+
+    ``dated`` reflects whether the lots carry real purchase dates: the paper book always does, and
+    the live account does once a tradebook CSV is uploaded. When it doesn't (broker blended-average
+    holdings), the crossover date is genuinely unknown, so the column says so instead of guessing.
+    """
     weights = portfolio.current_weights(prices_dec)
+    ltcg_days = portfolio.tax_cfg.ltcg_holding_days
     rows = []
     for t, q in sorted(portfolio.positions().items()):
         px = prices_dec.get(t, Decimal("0"))
+        safe = (
+            ltcg_safe_sell_note(portfolio.ledger, t, as_of, ltcg_days)
+            if dated
+            else "❔ upload tradebook"
+        )
         rows.append(
             {
                 "Ticker": t,
@@ -1030,6 +1066,7 @@ def _holdings_frame(portfolio: Portfolio, prices_dec: dict[str, Decimal]) -> pd.
                 "Price": f"₹{px:,.2f}",
                 "Value": f"₹{q * px:,.0f}",
                 "Weight": f"{weights.get(t, 0.0) * 100:.1f}%",
+                "LTCG-safe": safe,
             }
         )
     return pd.DataFrame(rows)
