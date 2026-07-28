@@ -46,6 +46,7 @@ class TradebookTrade:
     quantity: Decimal
     price: Decimal
     exec_time: str = ""  # order_execution_time, used only to order same-day trades
+    trade_id: str = ""  # Zerodha's unique per-trade id — the key for de-duping stacked exports
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ def parse_tradebook(source: str | IO[bytes] | IO[str]) -> list[TradebookTrade]:
         raise ValueError(f"tradebook is missing columns {missing}; got {list(df.columns)}")
 
     has_time = "order_execution_time" in df.columns
+    has_trade_id = "trade_id" in df.columns
     trades: list[TradebookTrade] = []
     for _, row in df.iterrows():
         side = Side.BUY if "buy" in str(row["trade_type"]).strip().lower() else Side.SELL
@@ -85,6 +87,7 @@ def parse_tradebook(source: str | IO[bytes] | IO[str]) -> list[TradebookTrade]:
                 quantity=Decimal(str(int(abs(float(row["quantity"]))))),
                 price=to_decimal_price(float(row["price"])),
                 exec_time=str(row["order_execution_time"]) if has_time else "",
+                trade_id=str(row["trade_id"]).strip() if has_trade_id else "",
             )
         )
     return trades

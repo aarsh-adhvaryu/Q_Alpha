@@ -53,6 +53,7 @@ from qalpha.live.dashboard import (
     today_brief_markdown,
     watchlist_is_stale,
 )
+from qalpha.live.gist_store import load_gist_file, save_gist_file
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
 from qalpha.live.paper import PaperBook, _prices_on
@@ -120,7 +121,16 @@ def _bridge_secrets() -> None:
     """Copy Streamlit Cloud secrets into the environment so the env-based credential/password code
     works unchanged (Streamlit Cloud exposes secrets via ``st.secrets``, not ``os.environ``)."""
     try:
-        for k in ("KITE_API_KEY", "KITE_API_SECRET", "APP_PASSWORD", "GITHUB_TOKEN", "GITHUB_REPO"):
+        _keys = (
+            "KITE_API_KEY",
+            "KITE_API_SECRET",
+            "APP_PASSWORD",
+            "GITHUB_TOKEN",
+            "GITHUB_REPO",
+            "GIST_TOKEN",
+            "TRADEBOOK_GIST_ID",
+        )
+        for k in _keys:
             if k in st.secrets:  # raises if no secrets configured → caught below
                 os.environ.setdefault(k, str(st.secrets[k]))
     except Exception:
@@ -792,42 +802,110 @@ def _paper_overview(
         st.caption(_LTCG_SAFE_LEGEND)
 
 
-def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str, Decimal]]:
-    """Render the live overview, with an optional tradebook upload that makes the tax exact.
+TRADEBOOK_GIST_FILE = "tradebook_master.csv"
 
-    Returns the portfolio + marking prices the advisor tabs should use: the dated tradebook replay
-    when a CSV is uploaded (exact holding periods), else the holdings snapshot (short-term assumed).
-    """
-    st.caption(
-        "Upload your Zerodha **Console → Reports → Tradebook** CSV for *exact* holding-period tax. "
-        "Without it, tax assumes short-term (holdings carry no purchase dates)."
+
+def _gist_config() -> tuple[str, str]:
+    """(token, gist_id) for the private tradebook gist — token falls back to GITHUB_TOKEN."""
+    token = (os.environ.get("GIST_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
+    gist_id = os.environ.get("TRADEBOOK_GIST_ID", "").strip() or st.session_state.get(
+        "tb_gist_id", ""
     )
-    uploaded = st.file_uploader("Tradebook CSV", type=["csv"], key="tradebook")
+    return token, gist_id
 
-    if uploaded is not None:
-        from qalpha.live.tradebook import parse_tradebook, reconcile_positions, replay_tradebook
 
+def _load_tradebook_master() -> list:  # list[TradebookTrade]
+    """The saved cumulative tradebook — session cache first, else the private gist (once per session)."""
+    from qalpha.live.tradebook_store import trades_from_master_csv
+
+    if "tb_master" in st.session_state:
+        return st.session_state["tb_master"]  # type: ignore[no-any-return]
+    token, gist_id = _gist_config()
+    text = load_gist_file(token, gist_id, TRADEBOOK_GIST_FILE) if (token and gist_id) else None
+    trades = trades_from_master_csv(text) if text else []
+    st.session_state["tb_master"] = trades
+    return trades
+
+
+def _save_tradebook_master(trades: list) -> str:  # list[TradebookTrade]
+    """Persist the master to the private gist (creating it on first save). Returns a status message."""
+    from qalpha.live.tradebook_store import trades_to_master_csv
+
+    st.session_state["tb_master"] = trades
+    token, gist_id = _gist_config()
+    if not token:
+        return "⚠️ session only — add a `GIST_TOKEN` secret (gist scope) to save across restarts."
+    new_id, msg = save_gist_file(token, gist_id, TRADEBOOK_GIST_FILE, trades_to_master_csv(trades))
+    if not new_id:
+        return f"⚠️ could not save to your gist ({msg}) — kept for this session only."
+    st.session_state["tb_gist_id"] = new_id
+    if not gist_id:
+        return f"✓ saved to a **new private gist** — add `TRADEBOOK_GIST_ID={new_id}` to your secrets to reuse it."
+    return "✓ saved to your private gist."
+
+
+def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str, Decimal]]:
+    """Render the live overview over the **cumulative** tradebook (stack new exports, never re-upload).
+
+    A private-gist-backed master accumulates every uploaded Console tradebook, de-duplicated by
+    ``trade_id`` — so once seeded, the exact-tax view survives restarts and the user only adds new
+    exports. Returns the portfolio + marking prices the advisor tabs use: the dated replay of the
+    master when it has trades, else the holdings snapshot (short-term assumed).
+    """
+    from qalpha.live.tradebook import parse_tradebook, reconcile_positions, replay_tradebook
+    from qalpha.live.tradebook_store import merge_trades, trades_to_master_csv
+
+    master = _load_tradebook_master()
+    if master:
+        st.caption(
+            f"📚 **{len(master)} trades saved** (private gist) — exact dated tax. Add a *new* export "
+            "below and it stacks on top (duplicates are ignored); no need to re-upload your history."
+        )
+    else:
+        st.caption(
+            "Upload your Zerodha **Console → Reports → Tradebook** CSV for *exact* holding-period tax. "
+            "It is saved privately and **cumulatively**, so next time you only add new exports. "
+            "Without it, tax assumes short-term (holdings carry no purchase dates)."
+        )
+
+    uploaded = st.file_uploader("Add a tradebook export (CSV)", type=["csv"], key="tradebook")
+    if uploaded is not None and not st.session_state.get(f"tb_done_{uploaded.file_id}"):
         try:
-            trades = parse_tradebook(uploaded)
-            result = replay_tradebook(trades, cfg, cash=live.portfolio.cash)
-        except Exception as exc:  # malformed CSV → fall back to the holdings snapshot
+            incoming = parse_tradebook(uploaded)
+        except Exception as exc:  # malformed CSV → keep the existing master
             st.error(f"Could not read the tradebook: {exc}")
         else:
-            st.success(
-                f"Loaded {result.n_trades} trades → dated FIFO lots. "
-                f"Realized capital-gains tax to date: ₹{result.realized_tax:,.2f}."
-            )
-            for w in result.warnings:
-                st.warning(w)
-            issues = reconcile_positions(result.portfolio, live.portfolio.positions())
-            if issues:
-                st.warning(
-                    "Reconstructed holdings differ from the broker:\n- " + "\n- ".join(issues)
-                )
-            else:
-                st.caption("✓ Reconstructed holdings match your broker account exactly.")
-            _live_overview(result.portfolio, live.prices, caveat=None)
-            return result.portfolio, live.prices
+            master, added = merge_trades(master, incoming)
+            status = _save_tradebook_master(master)
+            st.session_state[f"tb_done_{uploaded.file_id}"] = True  # dedupe Streamlit reruns
+            st.success(f"Added **{added}** new trade(s) → **{len(master)}** total. {status}")
+
+    if master:
+        try:
+            result = replay_tradebook(master, cfg, cash=live.portfolio.cash)
+        except Exception as exc:
+            st.error(f"Could not replay the saved tradebook: {exc}")
+            _live_overview(live.portfolio, live.prices, caveat=live.tax_caveat)
+            return live.portfolio, live.prices
+        st.download_button(
+            "⬇ Download combined tradebook",
+            data=trades_to_master_csv(master),
+            file_name=TRADEBOOK_GIST_FILE,
+            mime="text/csv",
+        )
+        st.caption(
+            f"{result.n_trades} trades replayed → dated FIFO lots · realized capital-gains tax to "
+            f"date: ₹{result.realized_tax:,.2f}."
+        )
+        for w in result.warnings:
+            st.warning(w)
+        issues = reconcile_positions(result.portfolio, live.portfolio.positions())
+        if issues:
+            st.warning("Reconstructed holdings differ from the broker:\n- " + "\n- ".join(issues))
+        else:
+            st.caption("✓ Reconstructed holdings match your broker account exactly.")
+        _live_overview(result.portfolio, live.prices, caveat=None)
+        return result.portfolio, live.prices
 
     _live_overview(live.portfolio, live.prices, caveat=live.tax_caveat)
     return live.portfolio, live.prices
