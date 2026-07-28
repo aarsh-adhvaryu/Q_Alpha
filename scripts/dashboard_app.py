@@ -53,7 +53,7 @@ from qalpha.live.dashboard import (
     today_brief_markdown,
     watchlist_is_stale,
 )
-from qalpha.live.gist_store import load_gist_file, save_gist_file
+from qalpha.live.gist_store import find_gist_id, load_gist_file, save_gist_file
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
 from qalpha.live.paper import PaperBook, _prices_on
@@ -806,11 +806,20 @@ TRADEBOOK_GIST_FILE = "tradebook_master.csv"
 
 
 def _gist_config() -> tuple[str, str]:
-    """(token, gist_id) for the private tradebook gist — token falls back to GITHUB_TOKEN."""
+    """(token, gist_id) for the private tradebook gist — token falls back to GITHUB_TOKEN.
+
+    Robust across restarts: if no id is pinned (``TRADEBOOK_GIST_ID``) or cached in the session, the
+    token is used to **auto-discover** the existing gist by its filename — so a reboot re-locates the
+    saved master on its own, and a later save updates that gist instead of creating a duplicate.
+    """
     token = (os.environ.get("GIST_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
     gist_id = os.environ.get("TRADEBOOK_GIST_ID", "").strip() or st.session_state.get(
         "tb_gist_id", ""
     )
+    if token and not gist_id:
+        gist_id = find_gist_id(token, TRADEBOOK_GIST_FILE) or ""
+        if gist_id:
+            st.session_state["tb_gist_id"] = gist_id
     return token, gist_id
 
 
