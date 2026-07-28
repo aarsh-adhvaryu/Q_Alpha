@@ -90,3 +90,24 @@ def test_csv_round_trip_preserves_trades_and_does_not_double_suffix() -> None:
 def test_empty_master_csv_is_empty_list() -> None:
     assert trades_from_master_csv("") == []
     assert trades_from_master_csv("   \n") == []
+
+
+# --- gist auto-discovery (so a reboot re-locates the saved master by the token alone) -------------
+
+
+def test_select_gist_picks_most_recent_match_by_filename() -> None:
+    from qalpha.live.gist_store import _select_gist
+
+    gists = [
+        {"id": "old", "updated_at": "2026-06-01T00:00:00Z", "files": {"tradebook_master.csv": {}}},
+        {"id": "new", "updated_at": "2026-07-01T00:00:00Z", "files": {"tradebook_master.csv": {}}},
+        {"id": "other", "updated_at": "2026-08-01T00:00:00Z", "files": {"notes.txt": {}}},
+    ]
+    assert _select_gist(gists, "tradebook_master.csv") == "new"
+
+
+def test_select_gist_returns_none_when_no_file_matches() -> None:
+    from qalpha.live.gist_store import _select_gist
+
+    assert _select_gist([{"id": "x", "files": {"other.csv": {}}}], "tradebook_master.csv") is None
+    assert _select_gist([], "tradebook_master.csv") is None

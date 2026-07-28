@@ -26,6 +26,34 @@ def _headers(token: str) -> dict[str, str]:
     }
 
 
+def _select_gist(gists: list[dict[str, object]], filename: str) -> str | None:
+    """Pick the most-recently-updated gist that contains ``filename``. Pure (testable)."""
+    matches = []
+    for g in gists:
+        files = g.get("files")
+        if isinstance(files, dict) and filename in files:
+            matches.append(g)
+    if not matches:
+        return None
+    matches.sort(key=lambda g: str(g.get("updated_at", "")), reverse=True)
+    return str(matches[0]["id"])
+
+
+def find_gist_id(token: str, filename: str) -> str | None:
+    """Discover the id of the user's gist holding ``filename`` — so the **token alone** re-locates the
+    saved master after a restart (no pinned id needed). ``None`` if none/unauthorised/error (fail-soft).
+    """
+    if not token:
+        return None
+    try:
+        req = urllib.request.Request(f"{_API}?per_page=100", headers=_headers(token))
+        with urllib.request.urlopen(req, timeout=10) as r:
+            gists = json.load(r)
+        return _select_gist(gists if isinstance(gists, list) else [], filename)
+    except (urllib.error.URLError, OSError, ValueError, KeyError):
+        return None
+
+
 def load_gist_file(token: str, gist_id: str, filename: str) -> str | None:
     """Return the content of ``filename`` in the private gist, or ``None`` (unset/missing/error)."""
     if not (token and gist_id):
