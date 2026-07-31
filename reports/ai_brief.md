@@ -1,17 +1,20 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🟢 Nifty closed +0.28%, Sensex +0.35%—muted gains after volatile consolidation.
+**Sentiment:** 🟢 NSE Nifty50 advanced 66.45 points, lifted by robust quarterly results from Bajaj Finance (up 8.11%) and Mahindra & Mahindra (up 3.58%).
 
 **Drivers:**
-1. US bond yields surged, signaling rate-hike pressure; West Asian crude volatility adds uncertainty → external headwinds limit upside despite FII inflows.
-2. Auto stocks led (M&M, Eicher Motors top gainers); realty crashed -2.06% → uneven sector rotation, real estate under pressure.
+1. **Strong auto & finance earnings** → Automobiles and financial services were leading outperformers; BAJAJFINSV, M&M, MARUTI benefiting from Q2 beat momentum.
+2. **Easing crude headwind** → Crude fell nearly 1% to below $84/bbl on July 30, following improved shipping through Strait of Hormuz amid diplomatic easing; compressed OMC refining margin pain for BPCL, ONGC; aviation/paint input cost relief partial.
+3. **FII stabilizing** → India VIX slipped 3.29%, indicating receding volatility; rupee steady at 95.38/USD supports PE re-rating on big caps.
 
-**Watchlist names affected:** M&M, Eicher Motors outperform; realty (DLF, LODHA) and IT (selective weakness) lagging inflows.
+**Watchlist names affected:**
+- **Gainers**: BAJAJFINSV, BAJAJHLDNG, M&M, MARUTI (earnings beta).
+- **Pressured**: INFY, TCS (IT tech weakness on global rotation); TCS fell 2.73%, Infosys down 2.26%; modest drag from OMCs: IOC, BPCL.
 
-**Likely reaction** (YOUR READ, not a validated signal—qualitative reasoning): **flat to marginally up, +0.1–0.4%, medium confidence**. Fed held rates steady, rupee firmed, and Q1 earnings support sentiment, but US yield spikes and crude volatility keep traders range-bound. **AUTO (M&M, EICHERMOT) likely to remain bid; REALTY (DLF, LODHA) at risk of further dips** as portfolio allocation rotates away from rate-sensitive sectors.
+**Likely reaction:** Index +0.4–0.8% over next 1–2 sessions, **medium confidence**. Historical pattern: Auto/fin earnings beats + crude relief + falling VIX → 2–3 day oversold bounce in financials and defensive autos. However, IT weakness caps rally. Watch: BAJAJFINSV for sustained momentum off 8% jump; INFY for sector capitulation signal.
 
-**Risk note:** US-Iran military escalation and crude above $85 could reignite intraday swings; watch rupee stability and FII daily flows.
+**Risk note:** Global recession fears, Middle East escalation (oil risk reversal), and OMC margin compression if crude rallies hard could reverse gains quickly.
 
-SIGNAL: lean=flat; band=0.1..0.4; confidence=medium
+SIGNAL: lean=up; band=0.4..0.8; confidence=medium
 
-— 🤖 claude-haiku-4-5 · 43,406 in / 717 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 42,931 in / 793 out tokens · ✓ complete
