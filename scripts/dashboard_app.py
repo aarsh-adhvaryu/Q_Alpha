@@ -117,6 +117,43 @@ def _queue_injection_to_repo(amount: int, reason: str) -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _fetch_pending_injections() -> tuple[list[dict], str]:
+    """Read the queued-but-not-yet-applied top-ups so the dashboard can SHOW them landing.
+
+    Prefers the **repo** (authoritative — the same file the cron applies) when a ``GITHUB_TOKEN`` is
+    set, else the local committed copy. Returns ``(items, source)`` where source is "repo"/"local"/
+    "none" — fail-soft (any error → the local/empty view)."""
+    import base64
+    import json
+    import urllib.error
+    import urllib.request
+
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        repo = os.environ.get("GITHUB_REPO", "aarsh-adhvaryu/Q_Alpha")
+        api = f"https://api.github.com/repos/{repo}/contents/data/autopilot/pending_injections.json"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "qalpha-dashboard",
+        }
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(api, headers=headers), timeout=10
+            ) as r:
+                raw = base64.b64decode(json.load(r)["content"]).decode("utf-8").strip()
+            return (json.loads(raw) if raw else []), "repo"
+        except (urllib.error.URLError, OSError, ValueError, KeyError):
+            pass  # fall through to the local copy
+    local = Path("data/autopilot/pending_injections.json")
+    if local.exists():
+        try:
+            return json.loads(local.read_text(encoding="utf-8") or "[]"), "local"
+        except (ValueError, OSError):
+            return [], "local"
+    return [], "none"
+
+
 def _bridge_secrets() -> None:
     """Copy Streamlit Cloud secrets into the environment so the env-based credential/password code
     works unchanged (Streamlit Cloud exposes secrets via ``st.secrets``, not ``os.environ``)."""
@@ -597,6 +634,15 @@ def _system_tab(
     c1.metric("💰 Idle wallet (dry powder)", f"₹{sys_wallet:,.0f}")
     c2.metric("Baseline idle", f"₹{base_cash:,.0f}")
 
+    # Add-money only persists if a repo-write token is configured — say so UP FRONT, not after a
+    # silent-looking failure (a missing token is exactly why past ₹50k top-ups never reached the book).
+    if not os.environ.get("GITHUB_TOKEN", "").strip():
+        st.error(
+            "⚠️ **Add-money can't be saved right now** — this app has no `GITHUB_TOKEN` "
+            "(contents:write) in its Streamlit secrets, so a top-up can't reach the model. Set that "
+            "secret first; until then, anything you add here is **not** recorded."
+        )
+
     with st.form("add_money", clear_on_submit=True):
         amount = st.number_input("Add money (₹)", min_value=0, value=0, step=5000)
         reason = st.text_input("Why (optional — an IPO, a tip, a dip)", value="")
@@ -605,14 +651,24 @@ def _system_tab(
         ok, msg = _queue_injection_to_repo(int(amount), reason or "(unspecified)")
         if ok:
             st.success(
-                f"Queued ₹{int(amount):,} — the daily run credits all three books equally and the "
-                "system deploys its share when conditions say so."
+                f"✓ **Queued ₹{int(amount):,}** to the repo — it appears in the pending list below, "
+                "and the next daily run credits all three books equally."
             )
         else:
-            st.warning(
-                f"Could not queue to the repo ({msg}) — check the `GITHUB_TOKEN` in the app's "
-                "Streamlit secrets. Nothing was added."
+            st.error(
+                f"❌ **NOT saved — ₹{int(amount):,} was not added.** Reason: {msg}. Set a "
+                "`GITHUB_TOKEN` with contents:write in Streamlit secrets, then add it again."
             )
+
+    # Show the queue so a top-up is *visibly* landing (empty once the daily run applies it).
+    pending, source = _fetch_pending_injections()
+    if pending:
+        total = sum(int(float(str(i.get("amount", 0) or 0))) for i in pending)
+        where = "from the repo" if source == "repo" else "local view — may lag the repo"
+        st.info(
+            f"⏳ **₹{total:,} across {len(pending)} top-up(s) queued** — waiting for the next daily "
+            f"run to credit all three books ({where})."
+        )
 
     auto_on = bool(state.get("monthly_autodeposit", True))
     new_auto = st.toggle("Auto-add ₹50,000 on the 1st of each month (simulated SIP)", value=auto_on)
