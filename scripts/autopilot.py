@@ -1,7 +1,8 @@
 """autopilot.py — the daily runner for the SYSTEM BOOK: the whole system acting on its own advice.
 
 ONE fake-money book runs everything the system can do, every day, against the real world (not a
-calendar): it receives cash (monthly top-up + the dashboard's Add-money), **deploys idle cash into
+calendar): it receives cash (the dashboard's Add-money, added manually when the user chooses — no
+automatic monthly top-up), **deploys idle cash into
 out-of-favour names exactly as the Add-money advisor suggests** (AI-paced sizing via the fixed
 ``signal_tilt``), **rebalances only when the §4.6 tax-benefit gate says it's worth the tax**
 (evaluated every run — self-timed, never forced), and carries the tax-free hedge readout in stress.
@@ -15,7 +16,6 @@ Two comparators with **identical cash flows**, so the comparison is fair:
     python scripts/autopilot.py daily              # the cron entry point
     python scripts/autopilot.py status             # recent track record
     python scripts/autopilot.py inject 50000 --reason "XYZ IPO"   # manual top-up (all three, equally)
-    python scripts/autopilot.py autodeposit off    # toggle the ₹50k monthly top-up
 
 **Fake money, never a real order.** Rule (a) intact: the validated engine computes every number; the
 AI only paces deploy size. The clean ₹2L GO book (``data/paper/book.json``) is untouched — it remains
@@ -92,7 +92,6 @@ FLOWS_PATH = Path(
 SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
 
 SYSTEM_CAPITAL = Decimal("200000")  # the core each book started with
-MONTHLY_DEPOSIT = Decimal("50000")
 DEPLOY_FLOOR = Decimal("5000")  # don't bother deploying dust (mirrors the idle-cash floor)
 
 HEDGE_TAU = 0.7  # operate at τ≥0.7 (robustness battery: τ=0.6 hedges too eagerly)
@@ -543,16 +542,9 @@ def cmd_daily() -> int:
         print(f"[system] already marked {as_of_str} — deposits saved, deploy skipped.")
         return 0
 
-    # Monthly top-up (first observed session of a new month; the ₹2L core counts as the start month).
-    month = as_of_str[:7]
-    last_month = state.get("trio_last_deposit_month")
-    if last_month is None:
-        state["trio_last_deposit_month"] = month
-    elif month != last_month:
-        if state.get("monthly_autodeposit", True):
-            _inject_trio(MONTHLY_DEPOSIT, wallets, contributed, baseline)
-            print(f"[system] monthly top-up ₹{MONTHLY_DEPOSIT:,.0f} to all three books.")
-        state["trio_last_deposit_month"] = month
+    # Funding is manual: the user adds money via the dashboard when he chooses (queued Add-money,
+    # applied above). There is no automatic monthly top-up — every injection is a deliberate,
+    # user-initiated deposit credited equally to all three books.
 
     # Market + AI context.
     level = market_weakness(nifbees, as_of).level
@@ -685,14 +677,6 @@ def cmd_inject(amount: Decimal, reason: str) -> int:
     return 0
 
 
-def cmd_autodeposit(on: bool) -> int:
-    state = load_state()
-    state["monthly_autodeposit"] = on
-    save_state(state)
-    print(f"[system] monthly ₹50k auto-top-up is now {'ON' if on else 'OFF'}.")
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -703,8 +687,6 @@ def main(argv: list[str] | None = None) -> int:
     p_inj = sub.add_parser("inject", help="manual top-up into all three books")
     p_inj.add_argument("amount", type=Decimal)
     p_inj.add_argument("--reason", default="(unspecified)")
-    p_auto = sub.add_parser("autodeposit", help="toggle the ₹50k monthly top-up")
-    p_auto.add_argument("state", choices=["on", "off"])
     args = parser.parse_args(argv)
 
     if args.cmd == "daily":
@@ -713,8 +695,6 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_status()
     if args.cmd == "inject":
         return cmd_inject(args.amount, args.reason)
-    if args.cmd == "autodeposit":
-        return cmd_autodeposit(args.state == "on")
     return 1
 
 
