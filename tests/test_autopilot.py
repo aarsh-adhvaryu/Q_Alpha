@@ -239,8 +239,8 @@ def test_books_state_round_trip_and_inject(tmp_path: Path) -> None:
     again = load_books(tmp_path / "b.json")
     assert all(again[n].cash == Decimal("100000") for n in BOOK_NAMES)
 
-    st = load_state(tmp_path / "s.json")  # default carries the monthly-autodeposit toggle
-    assert st["monthly_autodeposit"] is True and st["seeded"] is False
+    st = load_state(tmp_path / "s.json")  # fresh state — funding is manual, no auto-deposit
+    assert st["seeded"] is False and "monthly_autodeposit" not in st
     st["seeded"] = True
     save_state(st, tmp_path / "s.json")
     assert load_state(tmp_path / "s.json")["seeded"] is True

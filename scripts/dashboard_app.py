@@ -612,7 +612,7 @@ def _system_tab(
     **Fake money — nothing here ever places a real trade.**"""
     from autopilot import BASELINE_PATH
 
-    from qalpha.live.autopilot import load_state, save_state
+    from qalpha.live.autopilot import load_state
 
     st.caption(
         "**The whole system, acting on its own advice, on fake money** — deploys idle cash when the "
@@ -670,12 +670,7 @@ def _system_tab(
             f"run to credit all three books ({where})."
         )
 
-    auto_on = bool(state.get("monthly_autodeposit", True))
-    new_auto = st.toggle("Auto-add ₹50,000 on the 1st of each month (simulated SIP)", value=auto_on)
-    if new_auto != auto_on:
-        state["monthly_autodeposit"] = new_auto
-        save_state(state)
-        st.toast(f"Monthly auto-top-up {'on' if new_auto else 'off'}.")
+    st.caption("Funding is manual — add money above whenever you like (e.g. a monthly top-up).")
 
     # --- The scoreboard (written by the daily run) + the race chart ---
     st.divider()

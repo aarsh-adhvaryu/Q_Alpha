@@ -32,7 +32,8 @@ its CLAUDE.md explains itself.
 **What runs without anyone (weekday cron `paper.yml`, 12:23 UTC, verified green):** prices refresh →
 ₹2L GO book marked (criterion-6 evidence) → Telegram opportunity scan → AI brief (Haiku+web-search →
 `reports/ai_brief.md`, emits the `SIGNAL:` line) → System book (`scripts/autopilot.py daily`: apply
-queued Add-money → monthly ₹50k top-up on the 1st → AI-paced deploys → daily §4.6 gate evaluation →
+queued Add-money (manual only — the auto monthly ₹50k top-up was REMOVED 2026-07-28 per the user;
+he adds money himself when he opens the app) → AI-paced deploys → daily §4.6 gate evaluation →
 hedge overlay measured on System AND GO books) → everything committed. State lives in
 `data/autopilot/*` + `data/paper/{book,adaptive_book,shadow_book}.json`; reports in `reports/*.md`.
 
@@ -176,7 +177,8 @@ separate, all in one; the optimizer must handle the real world, not just a sched
 ## 🏁 THE ENDGAME CONTRACT (locked with the user 2026-07-12 — read before any "GO" work)
 
 **The user is walking away for ~6 months; the system runs itself** (weekday cron: mark GO book → AI
-brief → System book deploy/gate/hedge → commit; ₹50k monthly auto-top-up; Telegram pings him on
+brief → System book deploy/gate/hedge → commit; funding is manual Add-money (no auto monthly
+top-up — removed 2026-07-28); Telegram pings him on
 weakness escalation, GO flip, guard/pipeline failure — silence means healthy). His words: *"if the
 system does go green, it should be ALL — the AI, the paperbook, the hedge, all working — then after
 that we integrate to the final usable system."*
