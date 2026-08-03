@@ -143,7 +143,9 @@ it tells a human the tax-smart move; the human places the order. Every tax numbe
   replay so a held name that splits reconstructs to the broker's exact share count.
 - **Live Zerodha integration** (`live/holdings.py`, `tradebook.py`, `taxpnl.py`) — reads your real
   holdings + live prices; a Console tradebook upload reconstructs exact dated FIFO lots; the FIFO
-  engine was **reconciled to the paise** against a real Zerodha Tax P&L (criterion 4).
+  engine was **reconciled to the paise** against a real Zerodha Tax P&L (criterion 4). The tradebook is
+  kept **cumulatively** — new exports stack onto one master (de-duplicated by trade id) persisted in a
+  **private gist**, so the exact-tax view survives restarts and you never re-upload your history.
 - **Deployed dashboard** (`scripts/dashboard_app.py`, Streamlit Cloud) — two tabs: **🧠 The system**
   (the System book below, with the validated core's full view in an expander underneath) and **🔴 Live
   (Zerodha)** (the real account + the interactive advisor). The watch views:
