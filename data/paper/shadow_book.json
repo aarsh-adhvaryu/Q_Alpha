@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "81.24",
+    "cash": "81.31",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -259,6 +259,19 @@
         "quantity_remaining": "7"
       },
       {
+        "ticker": "ITC.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "31",
+        "buy_price": "287.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.33",
+        "other_costs": "0.32",
+        "lot_id": "e3a69afb-e818-4f0c-b7d4-84420a92c7c9",
+        "broker_trade_id": null,
+        "quantity_remaining": "31"
+      },
+      {
         "ticker": "HYUNDAI.NS",
         "acquisition_date": "2026-07-14",
         "quantity_original": "4",
@@ -324,6 +337,19 @@
         "quantity_remaining": "21"
       },
       {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "7",
+        "buy_price": "143.70",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.15",
+        "other_costs": "0.04",
+        "lot_id": "80fb10dc-5f93-4deb-9b45-cca691149256",
+        "broker_trade_id": null,
+        "quantity_remaining": "7"
+      },
+      {
         "ticker": "DLF.NS",
         "acquisition_date": "2026-07-15",
         "quantity_original": "4",
@@ -335,6 +361,32 @@
         "lot_id": "92c051b5-c9f2-4317-ab2e-d86155eeb1b4",
         "broker_trade_id": null,
         "quantity_remaining": "4"
+      },
+      {
+        "ticker": "HDFCBANK.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "14",
+        "buy_price": "753.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.58",
+        "other_costs": "0.38",
+        "lot_id": "dc61f13c-596f-4e74-a7cd-ca94461a74a0",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "BANKBARODA.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "37",
+        "buy_price": "247.25",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.37",
+        "other_costs": "0.33",
+        "lot_id": "f6d2dac4-5fff-43b2-9907-56e9b0bc8729",
+        "broker_trade_id": null,
+        "quantity_remaining": "37"
       }
     ],
     "ltcg_by_fy": {}
@@ -599,6 +651,48 @@
           "tax": "0.00"
         }
       ]
+    },
+    {
+      "as_of": "2026-08-03",
+      "reason": "deploy: weakness=elevated; deploy \u20b929,688 into: VEDL.NS (\u221266%), TRENT.NS (\u221245%), IRFC.NS (\u221232%)",
+      "orders": [
+        {
+          "date": "2026-08-03",
+          "ticker": "HDFCBANK.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "753.00",
+          "cost": "33.58",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "BANKBARODA.NS",
+          "side": "BUY",
+          "quantity": "37",
+          "price": "247.25",
+          "cost": "29.15",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "ITC.NS",
+          "side": "BUY",
+          "quantity": "31",
+          "price": "287.00",
+          "cost": "28.34",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "7",
+          "price": "143.70",
+          "cost": "3.21",
+          "tax": "0.00"
+        }
+      ]
     }
   ],
   "last_target": {
@@ -688,6 +782,11 @@
       "date": "2026-07-31",
       "equity": "346713.89",
       "cash": "81.24"
+    },
+    {
+      "date": "2026-08-03",
+      "equity": "381163.64",
+      "cash": "81.31"
     }
   ]
 }

@@ -226,5 +226,42 @@
     "outcome_return_pct": null,
     "benchmark_return_pct": null,
     "verdict": ""
+  },
+  {
+    "as_of": "2026-08-03",
+    "book": "SYS",
+    "amount": "33309.94",
+    "basket": {
+      "MUTHOOTFIN.NS": 4,
+      "HDFCBANK.NS": 14,
+      "BANKBARODA.NS": 39,
+      "HDFCLIFE.NS": 2,
+      "IOC.NS": 2
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b933,310 into: VEDL.NS (\u221266%), TRENT.NS (\u221245%), IRFC.NS (\u221232%)",
+    "ai_insight": "lean=up confidence=medium (tilt 1.25\u00d7)",
+    "resolve_on": "2026-08-31",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-08-03",
+    "book": "SHD",
+    "amount": "29687.50",
+    "basket": {
+      "HDFCBANK.NS": 14,
+      "BANKBARODA.NS": 37,
+      "ITC.NS": 31,
+      "IOC.NS": 7
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b929,688 into: VEDL.NS (\u221266%), TRENT.NS (\u221245%), IRFC.NS (\u221232%)",
+    "ai_insight": "n/a (AI off)",
+    "resolve_on": "2026-08-31",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
   }
 ]

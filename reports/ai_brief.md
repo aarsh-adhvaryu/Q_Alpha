@@ -1,20 +1,20 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🟢 NSE Nifty50 advanced 66.45 points, lifted by robust quarterly results from Bajaj Finance (up 8.11%) and Mahindra & Mahindra (up 3.58%).
+**Sentiment:** 🟢 Nifty climbed 390.70 points, or 1.60%, to end at 24,774.30, continuing a four-day winning streak on strong fundamentals.
 
 **Drivers:**
-1. **Strong auto & finance earnings** → Automobiles and financial services were leading outperformers; BAJAJFINSV, M&M, MARUTI benefiting from Q2 beat momentum.
-2. **Easing crude headwind** → Crude fell nearly 1% to below $84/bbl on July 30, following improved shipping through Strait of Hormuz amid diplomatic easing; compressed OMC refining margin pain for BPCL, ONGC; aviation/paint input cost relief partial.
-3. **FII stabilizing** → India VIX slipped 3.29%, indicating receding volatility; rupee steady at 95.38/USD supports PE re-rating on big caps.
+1. **Crude oil collapse** — Oil fell more than $5 a barrel after Trump held off fresh attacks on Iran to seal a deal, with Brent down 5.11% to $83.44. → OMC margins expand (IOC, BPCL, RELIANCE), lower input costs for aviation (INDIGO), autos (MARUTI, BAJAJ-AUTO), and paints (ASIANPAINT).
 
-**Watchlist names affected:**
-- **Gainers**: BAJAJFINSV, BAJAJHLDNG, M&M, MARUTI (earnings beta).
-- **Pressured**: INFY, TCS (IT tech weakness on global rotation); TCS fell 2.73%, Infosys down 2.26%; modest drag from OMCs: IOC, BPCL.
+2. **FII inflows + positive earnings** — Investor confidence improved after crude oil prices fell sharply, while continued buying by FIIs and stronger domestic economic conditions supported the market. → Banks, IT, FMCG align with earnings beat narrative.
 
-**Likely reaction:** Index +0.4–0.8% over next 1–2 sessions, **medium confidence**. Historical pattern: Auto/fin earnings beats + crude relief + falling VIX → 2–3 day oversold bounce in financials and defensive autos. However, IT weakness caps rally. Watch: BAJAJFINSV for sustained momentum off 8% jump; INFY for sector capitulation signal.
+3. **Global tech tailwind** — Markets followed positive finish at Wall Street as S&P 500 and Nasdaq gained due to positive cues from major technology stocks. → IT (TCS, INFY, WIPRO) outperform.
 
-**Risk note:** Global recession fears, Middle East escalation (oil risk reversal), and OMC margin compression if crude rallies hard could reverse gains quickly.
+**Watchlist names affected:** InterGlobe Aviation, TCS, Infosys, Eternal, ITC, and Axis Bank were among major winners. Also benefiting: INDIGO (aviation fuel), ASIANPAINT (input costs), IOC/BPCL (margins). Financial sector broad-based gains on FII flows.
 
-SIGNAL: lean=up; band=0.4..0.8; confidence=medium
+**Likely reaction:** Near-term **up 0.5–1.2%** (medium confidence). RBI MPC meeting scheduled Aug 5 may play important role in market direction, creating near-term headline risk. Most likely movers: INDIGO and ASIANPAINT further up on cost-tailwinds; energy (IOC, BPCL) consolidation if crude stabilizes above $82; IT stable-to-higher. Risk of profit-taking if crude stabilizes or RBI surprises on rates.
 
-— 🤖 claude-haiku-4-5 · 42,931 in / 793 out tokens · ✓ complete
+**Risk note:** 14 of 16 major sectoral indices registered gains at the opening bell, signalling frothy breadth—mean-reversion or external shocks (Iran talks breakdown, RBI tightening) could reverse quickly.
+
+SIGNAL: lean=up; band=0.5..1.2; confidence=medium
+
+— 🤖 claude-haiku-4-5 · 41,094 in / 906 out tokens · ✓ complete

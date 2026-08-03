@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "52.53",
+    "cash": "114.94",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -259,6 +259,19 @@
         "quantity_remaining": "7"
       },
       {
+        "ticker": "HDFCLIFE.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "2",
+        "buy_price": "553.10",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.17",
+        "other_costs": "0.04",
+        "lot_id": "908a8dc2-1387-4542-919a-a4a5e111e9b1",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
         "ticker": "JIOFIN.NS",
         "acquisition_date": "2026-07-14",
         "quantity_original": "15",
@@ -324,6 +337,19 @@
         "quantity_remaining": "1"
       },
       {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "2",
+        "buy_price": "143.70",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.04",
+        "other_costs": "0.01",
+        "lot_id": "1c2665ab-399f-47d6-be4e-b0de4b03194f",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
         "ticker": "LODHA.NS",
         "acquisition_date": "2026-07-15",
         "quantity_original": "3",
@@ -387,6 +413,45 @@
         "lot_id": "eb43577f-6e98-406c-a9e7-750a4edabf93",
         "broker_trade_id": null,
         "quantity_remaining": "5"
+      },
+      {
+        "ticker": "MUTHOOTFIN.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "4",
+        "buy_price": "2890.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.73",
+        "other_costs": "0.41",
+        "lot_id": "a0a9fc28-8cee-4034-a373-6dd7c504b1d5",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "HDFCBANK.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "14",
+        "buy_price": "753.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.58",
+        "other_costs": "0.38",
+        "lot_id": "fb632fee-fe45-4d4b-bd59-21dcc98b4ce9",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "BANKBARODA.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "39",
+        "buy_price": "247.25",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.45",
+        "other_costs": "0.35",
+        "lot_id": "d723a53d-4435-4fb0-9cb7-f5541cc22394",
+        "broker_trade_id": null,
+        "quantity_remaining": "39"
       }
     ],
     "ltcg_by_fy": {}
@@ -693,6 +758,57 @@
           "tax": "0.00"
         }
       ]
+    },
+    {
+      "as_of": "2026-08-03",
+      "reason": "deploy: weakness=elevated; deploy \u20b933,310 into: VEDL.NS (\u221266%), TRENT.NS (\u221245%), IRFC.NS (\u221232%)",
+      "orders": [
+        {
+          "date": "2026-08-03",
+          "ticker": "MUTHOOTFIN.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "2890.90",
+          "cost": "36.83",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "HDFCBANK.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "753.00",
+          "cost": "33.58",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "BANKBARODA.NS",
+          "side": "BUY",
+          "quantity": "39",
+          "price": "247.25",
+          "cost": "30.73",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "HDFCLIFE.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "553.10",
+          "cost": "3.53",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "143.70",
+          "cost": "0.91",
+          "tax": "0.00"
+        }
+      ]
     }
   ],
   "last_target": {
@@ -782,6 +898,11 @@
       "date": "2026-07-31",
       "equity": "353477.89",
       "cash": "52.53"
+    },
+    {
+      "date": "2026-08-03",
+      "equity": "392579.67",
+      "cash": "114.94"
     }
   ]
 }
