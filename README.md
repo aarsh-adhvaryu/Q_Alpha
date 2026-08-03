@@ -166,7 +166,8 @@ it tells a human the tax-smart move; the human places the order. Every tax numbe
 
 The trust problem with any advisor: it *suggests* trades but never lives with them. So a second
 fake-money book (`scripts/autopilot.py`, daily cron) **runs the entire system on itself**: it receives
-cash (a monthly top-up + a dashboard Add-money button), **executes the Add-money advisor's own buy
+cash (manually, via the dashboard's Add-money button — credited equally to all three books),
+**executes the Add-money advisor's own buy
 list** on itself (deploy-into-weakness, ₹0-tax buys, sizing paced by market weakness × a fixed rule
 over an LLM's daily market read — the AI supplies a *lean*, deterministic code acts on it), evaluates
 the **§4.6 tax-benefit gate every day** (it rebalances when the benefit beats 2× cost+tax — this week
