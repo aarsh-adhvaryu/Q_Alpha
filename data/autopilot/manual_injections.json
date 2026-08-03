@@ -58,5 +58,10 @@
     "at": "2026-07-22T13:39:30",
     "amount": "10000",
     "reason": "(from dashboard)"
+  },
+  {
+    "at": "2026-08-03T15:22:28",
+    "amount": "50000",
+    "reason": "monthly"
   }
 ]
