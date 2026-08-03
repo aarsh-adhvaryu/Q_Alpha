@@ -366,12 +366,11 @@ def save_books(books: dict[str, Book], path: Path = BOOKS_PATH) -> None:
 
 
 def load_state(path: Path = STATE_PATH) -> dict[str, object]:
-    """Wallet/run state: ``seeded``, ``last_deposit_month``, ``monthly_autodeposit`` (toggle)."""
+    """Wallet/run state: ``seeded``, ``last_deposit_month`` (funding is manual — no auto-deposit)."""
     if path.exists():
         data: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
-        data.setdefault("monthly_autodeposit", True)
         return data
-    return {"seeded": False, "last_deposit_month": None, "monthly_autodeposit": True}
+    return {"seeded": False, "last_deposit_month": None}
 
 
 def save_state(state: dict[str, object], path: Path = STATE_PATH) -> None:
