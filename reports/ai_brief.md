@@ -1,20 +1,23 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🟢 Nifty climbed 390.70 points, or 1.60%, to end at 24,774.30, continuing a four-day winning streak on strong fundamentals.
+**Sentiment:** 🔴 Sensex fell -0.28% today; a pullback after Monday's +0.70% rally on easing oil, amid cautious Asian weakness and pre-RBI wait.
 
-**Drivers:**
-1. **Crude oil collapse** — Oil fell more than $5 a barrel after Trump held off fresh attacks on Iran to seal a deal, with Brent down 5.11% to $83.44. → OMC margins expand (IOC, BPCL, RELIANCE), lower input costs for aviation (INDIGO), autos (MARUTI, BAJAJ-AUTO), and paints (ASIANPAINT).
+**Drivers:** 
+1. **Oil modestly softer:** Brent fell -5.69% to $82.92/bbl (Aug 3); slipped below USD 85 per barrel mark, coupled with easing geopolitical tensions. Margins for OMC, aviation, paint improve; BUT reversal after Monday's sharp relief.
+2. **RBI decision looming:** Investors likely to remain cautious ahead of Reserve Bank of India's (RBI) Monetary Policy Committee (MPC) policy decision due on August 5. Rate hold priced in, but reaction risk.
+3. **Asian contagion:** Asian markets declined on Tuesday, despite a rally on Wall Street; Japan's Nikkei down 0.54%, Hong Kong's Hang Seng down 0.35%, South Korea's Kospi in red. Profit-taking post-Monday's +0.70% surge.
 
-2. **FII inflows + positive earnings** — Investor confidence improved after crude oil prices fell sharply, while continued buying by FIIs and stronger domestic economic conditions supported the market. → Banks, IT, FMCG align with earnings beat narrative.
+**Watchlist names affected:** 
+**Energy/Consumer beneficiaries cooling:** RELIANCE, IOC, BPCL (oil relief fade); ASIANPAINT, ETERNAL (input cost tailwind lost momentum). **Financials cautious:** HDFCBANK, ICICIBANK, KOTAKBANK (waiting on RBI). **IT strength fades:** TCS, INFY, WIPRO (Asian equity weakness).
 
-3. **Global tech tailwind** — Markets followed positive finish at Wall Street as S&P 500 and Nasdaq gained due to positive cues from major technology stocks. → IT (TCS, INFY, WIPRO) outperform.
+**Likely reaction** (qualitative read, low confidence):
+Nifty flat to -0.5% intra-day unless RBI signals rate cut; next 2 sessions depend entirely on Aug 5 decision + global oil reversal. If RBI pauses or hints dovish: HDFCBANK, KOTAKBANK +0.2–0.4% relief; if hawkish, brief dip. OMC (RELIANCE, IOC) vulnerable to further oil upside; paint (ASIANPAINT) short-term defensive. Breadth turning mixed; MidCap/SmallCap decoupling early signal.
 
-**Watchlist names affected:** InterGlobe Aviation, TCS, Infosys, Eternal, ITC, and Axis Bank were among major winners. Also benefiting: INDIGO (aviation fuel), ASIANPAINT (input costs), IOC/BPCL (margins). Financial sector broad-based gains on FII flows.
+**Discretionary ideas:**
+— **ASIANPAINT satellite:** Input-cost tailwind may be temporary; watch Q2 margin commentary (satellite sleeve rules apply).
 
-**Likely reaction:** Near-term **up 0.5–1.2%** (medium confidence). RBI MPC meeting scheduled Aug 5 may play important role in market direction, creating near-term headline risk. Most likely movers: INDIGO and ASIANPAINT further up on cost-tailwinds; energy (IOC, BPCL) consolidation if crude stabilizes above $82; IT stable-to-higher. Risk of profit-taking if crude stabilizes or RBI surprises on rates.
+**Risk note:** Benchmark Nifty 50 traded lower after Monday's late-session rally, driven partly by new closing auction process rather than broad improvement; investors watchful of geopolitical tensions in Middle East and potential impact on rupee.
 
-**Risk note:** 14 of 16 major sectoral indices registered gains at the opening bell, signalling frothy breadth—mean-reversion or external shocks (Iran talks breakdown, RBI tightening) could reverse quickly.
+SIGNAL: lean=flat; band=-0.3..0.4; confidence=low
 
-SIGNAL: lean=up; band=0.5..1.2; confidence=medium
-
-— 🤖 claude-haiku-4-5 · 41,094 in / 906 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 66,508 in / 1,099 out tokens · ✓ complete

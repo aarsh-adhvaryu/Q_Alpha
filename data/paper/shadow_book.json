@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "81.31",
+    "cash": "40.68",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -181,6 +181,19 @@
         "quantity_remaining": "1"
       },
       {
+        "ticker": "IRFC.NS",
+        "acquisition_date": "2026-08-04",
+        "quantity_original": "1",
+        "buy_price": "89.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.01",
+        "other_costs": "0.00",
+        "lot_id": "7683d5de-1853-47e6-a2ba-30831694aa47",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
         "ticker": "WIPRO.NS",
         "acquisition_date": "2026-07-10",
         "quantity_original": "1",
@@ -324,6 +337,19 @@
         "quantity_remaining": "7"
       },
       {
+        "ticker": "HINDZINC.NS",
+        "acquisition_date": "2026-08-04",
+        "quantity_original": "3",
+        "buy_price": "562.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.25",
+        "other_costs": "0.06",
+        "lot_id": "946a02a0-f3db-46d3-a140-b4c865ddcc71",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
+      },
+      {
         "ticker": "IOC.NS",
         "acquisition_date": "2026-07-15",
         "quantity_original": "21",
@@ -348,6 +374,19 @@
         "lot_id": "80fb10dc-5f93-4deb-9b45-cca691149256",
         "broker_trade_id": null,
         "quantity_remaining": "7"
+      },
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-08-04",
+        "quantity_original": "33",
+        "buy_price": "141.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.70",
+        "other_costs": "0.17",
+        "lot_id": "c53e4123-8539-4c3e-8b4e-7e7ca9daa1ef",
+        "broker_trade_id": null,
+        "quantity_remaining": "33"
       },
       {
         "ticker": "DLF.NS",
@@ -387,6 +426,19 @@
         "lot_id": "f6d2dac4-5fff-43b2-9907-56e9b0bc8729",
         "broker_trade_id": null,
         "quantity_remaining": "37"
+      },
+      {
+        "ticker": "HINDUNILVR.NS",
+        "acquisition_date": "2026-08-04",
+        "quantity_original": "4",
+        "buy_price": "2096.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.26",
+        "other_costs": "0.31",
+        "lot_id": "788a4260-dced-418e-b6e3-3062e12ce485",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
       }
     ],
     "ltcg_by_fy": {}
@@ -693,14 +745,61 @@
           "tax": "0.00"
         }
       ]
+    },
+    {
+      "as_of": "2026-08-04",
+      "reason": "deploy: weakness=elevated; deploy \u20b914,844 into: VEDL.NS (\u221266%), HDFCLIFE.NS (\u221232%), IRFC.NS (\u221232%)",
+      "orders": [
+        {
+          "date": "2026-08-04",
+          "ticker": "HINDUNILVR.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "2096.50",
+          "cost": "26.73",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-04",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "33",
+          "price": "141.60",
+          "cost": "14.89",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-04",
+          "ticker": "HINDZINC.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "562.90",
+          "cost": "5.38",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-04",
+          "ticker": "IRFC.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "89.60",
+          "cost": "0.28",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-04",
+      "reason": "drift 70.8% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
     }
   ],
   "last_target": {
-    "SBIN.NS": 0.2,
-    "GRASIM.NS": 0.2,
-    "SUNPHARMA.NS": 0.19999999999999998,
-    "APOLLOHOSP.NS": 0.19999999999999998,
-    "ASIANPAINT.NS": 0.2
+    "TITAN.NS": 0.20045881984166697,
+    "SUNPHARMA.NS": 0.2,
+    "LT.NS": 0.1990823603166661,
+    "SBIN.NS": 0.20045881984166697,
+    "APOLLOHOSP.NS": 0.2
   },
   "equity_curve": [
     {
@@ -787,6 +886,11 @@
       "date": "2026-08-03",
       "equity": "381163.64",
       "cash": "81.31"
+    },
+    {
+      "date": "2026-08-04",
+      "equity": "394110.23",
+      "cash": "40.68"
     }
   ]
 }

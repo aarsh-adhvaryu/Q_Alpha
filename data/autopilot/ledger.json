@@ -263,5 +263,40 @@
     "outcome_return_pct": null,
     "benchmark_return_pct": null,
     "verdict": ""
+  },
+  {
+    "as_of": "2026-08-04",
+    "book": "SYS",
+    "amount": "9992.98",
+    "basket": {
+      "VBL.NS": 10,
+      "ONGC.NS": 18,
+      "RELIANCE.NS": 1
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b99,993 into: VEDL.NS (\u221266%), HDFCLIFE.NS (\u221232%), IRFC.NS (\u221232%)",
+    "ai_insight": "lean=flat confidence=low (tilt 1.00\u00d7)",
+    "resolve_on": "2026-09-01",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-08-04",
+    "book": "SHD",
+    "amount": "14843.75",
+    "basket": {
+      "HINDUNILVR.NS": 4,
+      "IOC.NS": 33,
+      "HINDZINC.NS": 3,
+      "IRFC.NS": 1
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b914,844 into: VEDL.NS (\u221266%), HDFCLIFE.NS (\u221232%), IRFC.NS (\u221232%)",
+    "ai_insight": "n/a (AI off)",
+    "resolve_on": "2026-09-01",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
   }
 ]
