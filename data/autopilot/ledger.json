@@ -298,5 +298,22 @@
     "outcome_return_pct": null,
     "benchmark_return_pct": null,
     "verdict": ""
+  },
+  {
+    "as_of": "2026-08-05",
+    "book": "SHD",
+    "amount": "7421.88",
+    "basket": {
+      "RELIANCE.NS": 4,
+      "VBL.NS": 5,
+      "IRFC.NS": 1
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b97,422 into: VEDL.NS (\u221265%), IRFC.NS (\u221233%), HDFCLIFE.NS (\u221231%)",
+    "ai_insight": "n/a (AI off)",
+    "resolve_on": "2026-09-02",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
   }
 ]

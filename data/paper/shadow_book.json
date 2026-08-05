@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "40.68",
+    "cash": "45.10",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -190,6 +190,19 @@
         "stamp_duty": "0.01",
         "other_costs": "0.00",
         "lot_id": "7683d5de-1853-47e6-a2ba-30831694aa47",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
+        "ticker": "IRFC.NS",
+        "acquisition_date": "2026-08-05",
+        "quantity_original": "1",
+        "buy_price": "88.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.01",
+        "other_costs": "0.00",
+        "lot_id": "51ecaf17-05e7-48cb-bfff-1217f96cff7a",
         "broker_trade_id": null,
         "quantity_remaining": "1"
       },
@@ -439,6 +452,32 @@
         "lot_id": "788a4260-dced-418e-b6e3-3062e12ce485",
         "broker_trade_id": null,
         "quantity_remaining": "4"
+      },
+      {
+        "ticker": "RELIANCE.NS",
+        "acquisition_date": "2026-08-05",
+        "quantity_original": "4",
+        "buy_price": "1280.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.77",
+        "other_costs": "0.19",
+        "lot_id": "215c588f-47ba-4eaa-b330-ea4096821028",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "VBL.NS",
+        "acquisition_date": "2026-08-05",
+        "quantity_original": "5",
+        "buy_price": "437.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.33",
+        "other_costs": "0.07",
+        "lot_id": "f73bb395-e45b-4b31-a478-313724fa6d70",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
       }
     ],
     "ltcg_by_fy": {}
@@ -792,14 +831,53 @@
       "as_of": "2026-08-04",
       "reason": "drift 70.8% > threshold and \u00a74.6 net-benefit gate cleared",
       "orders": []
+    },
+    {
+      "as_of": "2026-08-05",
+      "reason": "deploy: weakness=elevated; deploy \u20b97,422 into: VEDL.NS (\u221265%), IRFC.NS (\u221233%), HDFCLIFE.NS (\u221231%)",
+      "orders": [
+        {
+          "date": "2026-08-05",
+          "ticker": "RELIANCE.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "1280.00",
+          "cost": "16.32",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-05",
+          "ticker": "VBL.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "437.00",
+          "cost": "6.96",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-05",
+          "ticker": "IRFC.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "88.90",
+          "cost": "0.28",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-05",
+      "reason": "drift 71.5% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
     }
   ],
   "last_target": {
-    "TITAN.NS": 0.20045881984166697,
-    "SUNPHARMA.NS": 0.2,
-    "LT.NS": 0.1990823603166661,
-    "SBIN.NS": 0.20045881984166697,
-    "APOLLOHOSP.NS": 0.2
+    "TITAN.NS": 0.16778051805758631,
+    "SUNPHARMA.NS": 0.1733088794133365,
+    "LT.NS": 0.11887656856170147,
+    "SBIN.NS": 0.18339182122070596,
+    "APOLLOHOSP.NS": 0.1733088794133365,
+    "NTPC.NS": 0.18333333333333335
   },
   "equity_curve": [
     {
@@ -891,6 +969,11 @@
       "date": "2026-08-04",
       "equity": "394110.23",
       "cash": "40.68"
+    },
+    {
+      "date": "2026-08-05",
+      "equity": "402459.62",
+      "cash": "45.10"
     }
   ]
 }
