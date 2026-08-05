@@ -1,23 +1,24 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Sensex fell -0.28% today; a pullback after Monday's +0.70% rally on easing oil, amid cautious Asian weakness and pre-RBI wait.
+**Sentiment:** 🟠 Nifty closed 9 points higher, showing flat finish amid mixed drivers.
 
-**Drivers:** 
-1. **Oil modestly softer:** Brent fell -5.69% to $82.92/bbl (Aug 3); slipped below USD 85 per barrel mark, coupled with easing geopolitical tensions. Margins for OMC, aviation, paint improve; BUT reversal after Monday's sharp relief.
-2. **RBI decision looming:** Investors likely to remain cautious ahead of Reserve Bank of India's (RBI) Monetary Policy Committee (MPC) policy decision due on August 5. Rate hold priced in, but reaction risk.
-3. **Asian contagion:** Asian markets declined on Tuesday, despite a rally on Wall Street; Japan's Nikkei down 0.54%, Hong Kong's Hang Seng down 0.35%, South Korea's Kospi in red. Profit-taking post-Monday's +0.70% surge.
+**Drivers:**
+1. RBI held repo rate at 5.25% with neutral stance → rate-sensitive sectors (realty, select financials) gained; equity risk premium stable but not re-rating higher.
+2. Oil rebounded (+1.02% Brent to $80.17, +0.45% WTI to $76.11) after Houthi tanker strike → OMC refining margins narrowed; aviation/paints cost pressures persist despite early optimism on Hormuz deal.
 
 **Watchlist names affected:** 
-**Energy/Consumer beneficiaries cooling:** RELIANCE, IOC, BPCL (oil relief fade); ASIANPAINT, ETERNAL (input cost tailwind lost momentum). **Financials cautious:** HDFCBANK, ICICIBANK, KOTAKBANK (waiting on RBI). **IT strength fades:** TCS, INFY, WIPRO (Asian equity weakness).
+- Realty index rose 2.7%, with eight of ten constituents green (**DLF, LODHA** — RBI neutral stance lifted sentiment). 
+- Hindalco, NTPC, JSW Steel top gainers (metals/power on post-RBI relief).
+- TCS, HCL Tech, Sun Pharma losers (IT profit-taking, pharma under cost/FX pressure).
 
-**Likely reaction** (qualitative read, low confidence):
-Nifty flat to -0.5% intra-day unless RBI signals rate cut; next 2 sessions depend entirely on Aug 5 decision + global oil reversal. If RBI pauses or hints dovish: HDFCBANK, KOTAKBANK +0.2–0.4% relief; if hawkish, brief dip. OMC (RELIANCE, IOC) vulnerable to further oil upside; paint (ASIANPAINT) short-term defensive. Breadth turning mixed; MidCap/SmallCap decoupling early signal.
+**Likely reaction:**  
+Flat to marginally up (+0.2–0.5%) low confidence. Index lacks conviction—RBI neutrality removes tail-risk but doesn't inspire fresh buying; oil rebound into $80 caps energy upside and reintroduces input-cost drag for cyclicals. Realty likely to hold gains; BPCL/IOC sideways to down on margin compression. TCS/INFY recovery unlikely into close given late profit-taking.
 
-**Discretionary ideas:**
-— **ASIANPAINT satellite:** Input-cost tailwind may be temporary; watch Q2 margin commentary (satellite sleeve rules apply).
+**Discretionary ideas:**  
+None standing out. Geopolitical volatility on Hormuz talks remains binary.
 
-**Risk note:** Benchmark Nifty 50 traded lower after Monday's late-session rally, driven partly by new closing auction process rather than broad improvement; investors watchful of geopolitical tensions in Middle East and potential impact on rupee.
+**Risk note:** Oil oscillation driven by Houthi/Iran diplomatic flux—any escalation shock could reverse index sharply.
 
-SIGNAL: lean=flat; band=-0.3..0.4; confidence=low
+SIGNAL: lean=flat; band=0.0..0.5; confidence=low
 
-— 🤖 claude-haiku-4-5 · 66,508 in / 1,099 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 41,980 in / 811 out tokens · ✓ complete
