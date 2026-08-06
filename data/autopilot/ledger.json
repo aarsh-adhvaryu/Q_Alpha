@@ -315,5 +315,21 @@
     "outcome_return_pct": null,
     "benchmark_return_pct": null,
     "verdict": ""
+  },
+  {
+    "as_of": "2026-08-06",
+    "book": "SYS",
+    "amount": "6245.61",
+    "basket": {
+      "TATAPOWER.NS": 11,
+      "IOC.NS": 14
+    },
+    "model_rationale": "weakness=elevated; deploy \u20b96,246 into: VEDL.NS (\u221265%), IRFC.NS (\u221232%), HDFCLIFE.NS (\u221232%)",
+    "ai_insight": "lean=up confidence=medium (tilt 1.25\u00d7)",
+    "resolve_on": "2026-09-03",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
   }
 ]

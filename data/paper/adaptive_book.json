@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "39.06",
+    "cash": "103.22",
     "lots": [
       {
         "ticker": "APOLLOHOSP.NS",
@@ -350,6 +350,19 @@
         "quantity_remaining": "2"
       },
       {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-08-06",
+        "quantity_original": "14",
+        "buy_price": "142.66",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.30",
+        "other_costs": "0.07",
+        "lot_id": "6ad92faa-0d97-4b5a-94c4-010038c29279",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
         "ticker": "LODHA.NS",
         "acquisition_date": "2026-07-15",
         "quantity_original": "3",
@@ -491,6 +504,19 @@
         "lot_id": "878a4c4d-28be-4ad3-aaa6-00d833b09637",
         "broker_trade_id": null,
         "quantity_remaining": "1"
+      },
+      {
+        "ticker": "TATAPOWER.NS",
+        "acquisition_date": "2026-08-06",
+        "quantity_original": "11",
+        "buy_price": "378.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.62",
+        "other_costs": "0.14",
+        "lot_id": "6c07bdcf-5cb0-43a3-9d66-4d1ad5d18df2",
+        "broker_trade_id": null,
+        "quantity_remaining": "11"
       }
     ],
     "ltcg_by_fy": {}
@@ -891,15 +917,44 @@
       "as_of": "2026-08-05",
       "reason": "drift 71.5% > threshold and \u00a74.6 net-benefit gate cleared",
       "orders": []
+    },
+    {
+      "as_of": "2026-08-06",
+      "reason": "deploy: weakness=elevated; deploy \u20b96,246 into: VEDL.NS (\u221265%), IRFC.NS (\u221232%), HDFCLIFE.NS (\u221232%)",
+      "orders": [
+        {
+          "date": "2026-08-06",
+          "ticker": "TATAPOWER.NS",
+          "side": "BUY",
+          "quantity": "11",
+          "price": "378.60",
+          "cost": "13.25",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-06",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "142.66",
+          "cost": "6.36",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-06",
+      "reason": "drift 79.3% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
     }
   ],
   "last_target": {
-    "TITAN.NS": 0.16778051805758631,
-    "SUNPHARMA.NS": 0.1733088794133365,
-    "LT.NS": 0.11887656856170147,
-    "SBIN.NS": 0.18339182122070596,
-    "APOLLOHOSP.NS": 0.1733088794133365,
-    "NTPC.NS": 0.18333333333333335
+    "NTPC.NS": 0.17390413153920747,
+    "TITAN.NS": 0.15611862342039057,
+    "SUNPHARMA.NS": 0.18333333333333335,
+    "ONGC.NS": 0.18333333333333335,
+    "SBIN.NS": 0.1788611863334727,
+    "LT.NS": 0.12444939204026256
   },
   "equity_curve": [
     {
@@ -996,6 +1051,11 @@
       "date": "2026-08-05",
       "equity": "401572.33",
       "cash": "39.06"
+    },
+    {
+      "date": "2026-08-06",
+      "equity": "408792.25",
+      "cash": "103.22"
     }
   ]
 }
