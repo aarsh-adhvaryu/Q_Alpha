@@ -23,10 +23,10 @@
     "model_rationale": "weakness=elevated; deployed \u20b949784 into: VEDL.NS (\u221265%), TRENT.NS (\u221247%), TCS.NS (\u221237%)",
     "ai_insight": "n/a (no AI)",
     "resolve_on": "2026-08-07",
-    "resolved": false,
-    "outcome_return_pct": null,
-    "benchmark_return_pct": null,
-    "verdict": ""
+    "resolved": true,
+    "outcome_return_pct": 5.811019470214843,
+    "benchmark_return_pct": 1.7304610176697204,
+    "verdict": "worked"
   },
   {
     "as_of": "2026-07-10",
@@ -52,10 +52,10 @@
     "model_rationale": "weakness=elevated; deployed \u20b962211 into: VEDL.NS (\u221265%), TRENT.NS (\u221247%), TCS.NS (\u221237%)",
     "ai_insight": "lean=up confidence=medium (tilt 1.25\u00d7)",
     "resolve_on": "2026-08-07",
-    "resolved": false,
-    "outcome_return_pct": null,
-    "benchmark_return_pct": null,
-    "verdict": ""
+    "resolved": true,
+    "outcome_return_pct": 5.145711425781249,
+    "benchmark_return_pct": 1.7304610176697204,
+    "verdict": "worked"
   },
   {
     "as_of": "2026-07-10",
@@ -74,10 +74,10 @@
     "model_rationale": "weakness=elevated; deploy \u20b993,750 into: VEDL.NS (\u221265%), TRENT.NS (\u221247%), TCS.NS (\u221237%)",
     "ai_insight": "lean=up confidence=medium (tilt 1.25\u00d7)",
     "resolve_on": "2026-08-07",
-    "resolved": false,
-    "outcome_return_pct": null,
-    "benchmark_return_pct": null,
-    "verdict": ""
+    "resolved": true,
+    "outcome_return_pct": 18.64308203125,
+    "benchmark_return_pct": 1.7304610176697204,
+    "verdict": "worked"
   },
   {
     "as_of": "2026-07-10",
@@ -96,10 +96,10 @@
     "model_rationale": "weakness=elevated; deploy \u20b975,000 into: VEDL.NS (\u221265%), TRENT.NS (\u221247%), TCS.NS (\u221237%)",
     "ai_insight": "n/a (AI off)",
     "resolve_on": "2026-08-07",
-    "resolved": false,
-    "outcome_return_pct": null,
-    "benchmark_return_pct": null,
-    "verdict": ""
+    "resolved": true,
+    "outcome_return_pct": 21.262106119791664,
+    "benchmark_return_pct": 1.7304610176697204,
+    "verdict": "worked"
   },
   {
     "as_of": "2026-07-13",
