@@ -115,10 +115,10 @@
     "model_rationale": "weakness=elevated; deploy \u20b928,125 into: VEDL.NS (\u221266%), TRENT.NS (\u221247%), IRFC.NS (\u221234%)",
     "ai_insight": "lean=flat confidence=low (tilt 1.00\u00d7)",
     "resolve_on": "2026-08-10",
-    "resolved": false,
-    "outcome_return_pct": null,
-    "benchmark_return_pct": null,
-    "verdict": ""
+    "resolved": true,
+    "outcome_return_pct": 4.914666341145835,
+    "benchmark_return_pct": 1.8743203381431963,
+    "verdict": "worked"
   },
   {
     "as_of": "2026-07-13",
@@ -135,10 +135,10 @@
     "model_rationale": "weakness=elevated; deploy \u20b937,500 into: VEDL.NS (\u221266%), TRENT.NS (\u221247%), IRFC.NS (\u221234%)",
     "ai_insight": "n/a (AI off)",
     "resolve_on": "2026-08-10",
-    "resolved": false,
-    "outcome_return_pct": null,
-    "benchmark_return_pct": null,
-    "verdict": ""
+    "resolved": true,
+    "outcome_return_pct": 1.3058668619791658,
+    "benchmark_return_pct": 1.8743203381431963,
+    "verdict": "didn't"
   },
   {
     "as_of": "2026-07-14",
