@@ -1,23 +1,30 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment**: 🔴 Nifty opened down 0.39% amid rising crude oil prices and weak global cues with renewed geopolitical tensions.
+---
+
+**Sentiment**: 🟠 Nifty closed flat (+0.05%) as marginal gains from strong Q1 earnings and FII buying collided with crude rally and PSU bank weakness.
 
 **Drivers**:
-1. **Crude oil (~$82/bbl, +0.41% day-on-day)** — Brent fell to 82.15 USD/Bbl on August 7, 2026 but remains elevated on geopolitical tensions, US–Iran conflict, and Houthi attacks in the Red Sea. Higher oil → margin pressure on refiners (OMC), aviation/automotive/paint input costs rise.
-2. **FII selling; DII support** — FIIs offloaded Rs 17.86 crore on Aug 5; DIIs bought Rs 4,013.60 crore. External selling outweighs domestic strength.
+1. Brent crude at $84.6/barrel; Strait of Hormuz geopolitical uncertainty → OMC refining margins compress, aviation/auto input costs pressured
+2. Sugar prices +5.27% (NY Oct); global supply deficit on EU/Brazil production failure + weak India monsoon (11% below normal as of Aug 7) → sugar exports constrained, rural inflation risk
+3. Titan Q1 earnings +63% YoY; Hero MotoCorp, Oil India strong → earnings relief offsetting macro headwinds
 
-**Watchlist names affected**: 
-- **Energy/Refining**: BPCL, IOC, ONGC (margin pressure)
-- **Consumer discretionary**: ASIANPAINT, TRENT (input-cost headwind)
-- **Banks**: HDFCBANK, ICICIBANK (FII exit weight)
-- **IT**: INFY, TCS (outperformer; traditional safe haven)
+**Watchlist names affected**:
+- **Energy shorts**: BPCL, IOC, ONGC (crude margin compression)
+- **PSU weakness**: SBIN, PNB, BANKBARODA (Nifty PSU Bank -1.67%)
+- **Earnings winners**: TITAN (on strength), BOSCHLTD/EICHERMOT (indirect auto input pressure)
+- **Inflation hedge long**: ITC, BRITANNIA (sugar cost pass-through risk)
 
-**Likely reaction**: **DOWN 0.2–0.6%, medium confidence**. Nifty likely to drift lower in next 1–2 sessions on crude overhang and persistent FII withdrawal, though domestic support cushions downside. **BPCL, IOC most likely to compress 0.5–1.5% further**; **TCS, INFY likely to hold / edge up 0.1–0.3%** as FII alternatives.
+**Likely reaction**:
+Nifty likely to trade **flat to slightly down (−0.2% to +0.4%)** over next 1–2 sessions — **low confidence**. Crude's +1.4% move and PSU bank headwinds historically outweigh earnings beats when geopolitical tension persists. **BPCL**, **IOC** likely to underperform; **TITAN**, **HDFCBANK** likely to outperform on quality + earnings rerating. Supply-side volatility (Hormuz deal news) will trigger intraday swings.
 
-**Discretionary ideas**: None flagged; volatility remains manageable; watch for escalation in Red Sea tensions or diplomatic breakthrough (both binary tail risks).
+**Discretionary ideas**:
+- Short **IOC / BPCL** on crude >$84 (satellite sleeve rules apply): Hormuz delay = sustained margin pressure; resistance at current levels.
 
-**Risk note**: Geopolitical flare-up could reignite oil spike; narrow DII-led support may evaporate on broader risk-off.
+**Risk note**: Hormuz deal breakthrough or monsoon recovery could spark 1–2% reversal upward; watch for Trump–Iran news flow.
 
-SIGNAL: lean=down; band=-0.2..0.6; confidence=medium
+---
 
-— 🤖 claude-haiku-4-5 · 43,457 in / 806 out tokens · ✓ complete
+SIGNAL: lean=flat; band=-0.2..0.4; confidence=low
+
+— 🤖 claude-haiku-4-5 · 51,052 in / 874 out tokens · ✓ complete
