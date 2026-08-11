@@ -956,15 +956,20 @@
       "as_of": "2026-08-10",
       "reason": "drift 79.5% > threshold and \u00a74.6 net-benefit gate cleared",
       "orders": []
+    },
+    {
+      "as_of": "2026-08-11",
+      "reason": "drift 79.5% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
     }
   ],
   "last_target": {
-    "NTPC.NS": 0.17372188961390542,
-    "ONGC.NS": 0.18333333333333335,
+    "NTPC.NS": 0.1735392082943651,
+    "TITAN.NS": 0.15682330931980942,
     "SUNPHARMA.NS": 0.18333333333333335,
-    "LT.NS": 0.12503453443605161,
-    "TITAN.NS": 0.15589800252676678,
-    "SBIN.NS": 0.17867890675660952
+    "ONGC.NS": 0.18333333333333335,
+    "SBIN.NS": 0.17869180143931251,
+    "LT.NS": 0.12427901427984635
   },
   "equity_curve": [
     {
@@ -1075,6 +1080,11 @@
     {
       "date": "2026-08-10",
       "equity": "410517.38",
+      "cash": "103.22"
+    },
+    {
+      "date": "2026-08-11",
+      "equity": "407404.64",
       "cash": "103.22"
     }
   ]
