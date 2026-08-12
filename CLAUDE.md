@@ -24,6 +24,32 @@ tax, F&O business-income (the hedge is fake-money). **User confirmed he holds no
 grandfathering is inert for his live book (pure passthrough); no 31-Jan-2018 FMV table needed.** Gates
 green (286 tests). This closes every code-fixable tax item — nothing tax-shaped remains on the path.
 
+**🔧 OPS/UX HARDENING (2026-07-28, all merged; gates green — 294 tests).** Three reliability fixes so
+the live surfaces don't silently lose the user's data/money:
+1. **Persistent cumulative tradebook.** The Live-tab tradebook upload was session-only (re-upload the
+   whole history on every restart). Now it keeps ONE master, de-duplicated by Zerodha `trade_id`
+   (composite fallback), in a **private gist** (`live/gist_store.py` + `live/tradebook_store.py`): the
+   user just **stacks new exports**. Robust across reboots via **auto-discovery** — `find_gist_id`
+   locates the gist by filename so the **token alone** re-loads the master (pinning `TRADEBOOK_GIST_ID`
+   is an optional fast-path); a "Download combined tradebook" button is the always-available fallback.
+   Own master CSV round-trips without re-`canonical_ticker` (no `.NS.NS`). **Real trades never touch the
+   public repo.** Needs a `GIST_TOKEN` (gist scope) — falls back to `GITHUB_TOKEN`.
+2. **Add-money made fail-loud + a visible pending queue.** Root cause of a lost ₹50k top-up: with no
+   working `GITHUB_TOKEN` (contents:write) the Add-money button fell back to a soft warning and the
+   deposit never reached `pending_injections.json`, so the System book stayed at ₹350k. Now: a red
+   up-front banner when the token is missing, a hard "❌ NOT saved" on failure, and a **pending-queue
+   panel** (`_fetch_pending_injections`, authoritative repo read) so a top-up is *seen* landing and
+   clearing. (User has since set a working token — an Add-money queue commit is on `main`.)
+3. **Auto ₹50k monthly top-up REMOVED (per user).** Funding is **manual only** — he adds money via the
+   dashboard when he opens it; it still credits all three books equally, so the A/B stays fair. The
+   `autodeposit` toggle/CLI + `MONTHLY_DEPOSIT` are gone; the frozen A/B/C `scheduled_injection` prereg
+   record is left untouched (not on the live path).
+
+**Secrets checklist (Streamlit):** `GITHUB_TOKEN` = contents:write on the repo (Add-money + pending) ·
+`GIST_TOKEN` = gist scope (tradebook; or one token with **both** repo-contents + gist, set as
+`GITHUB_TOKEN`, and drop `GIST_TOKEN`) · `KITE_*` + `APP_PASSWORD` (Live tab) · `ANTHROPIC_API_KEY` +
+`TELEGRAM_*` on repo Actions. **Docs finalized this session** — README §4/§6/§7/§9 + this block.
+
 **Read order for a new session:** this block → 🏁 THE ENDGAME CONTRACT → the 2026-07-11/12 blocks
 (unification · System book) → README.md (the front door). The research repo
 (`../Q_Alpha_Research`) is the **archive** (hedge forward run + published negatives incl. QUBO ×2);
@@ -41,7 +67,8 @@ hedge overlay measured on System AND GO books) → everything committed. State l
 Shadow +0.25% · Baseline +0.02% (all on ₹3.5L contributed; AI ahead by noise-level ₹431 — DO NOT
 over-claim). GO book ₹~2.01L, 25+/63 days, NOT YET (Δ vs Nifty ≈ −2%, red line −3% — the number to
 watch). Hedge off (gauge ~0.5 < τ0.7). First deploy resolutions land **~2026-08-07** (hit-rate table
-starts filling); wallets refill **on the 1st of each month**.
+starts filling); **the user funds the books manually via the dashboard** (no auto monthly refill —
+removed 2026-07-28).
 
 **Locked disciplines a new session must NOT undo:**
 1. **Rule (a):** the validated 18.2% backtest headline + engine are frozen; never tune to a GO; the
