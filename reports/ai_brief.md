@@ -1,18 +1,18 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Sensex fell 0.57%, closing at 78,096 points as rising crude oil prices weighed on investor sentiment and inflation concerns.
+**Sentiment**: 🔴 Sensex fell 0.24% to 77,966 on August 12, marking the second consecutive day of losses.
 
-**Drivers:**
-1. **Geopolitical oil tension** → Brent crude climbed to a one-week high of $87.7/barrel amid renewed Middle East tensions, raising concerns for oil-importing India. OMCs (IOC, BPCL, GAIL) margin squeeze; input cost pressures on ASIANPAINT, ETERNAL.
-2. **Index reshuffle momentum** → BSE will replace Wipro in Nifty 50 effective September 30, 2026. BSE +appetite; WIPRO structural weakness signal.
-3. **Adani legal relief** → US judge dismissed criminal fraud/bribery case against Gautam Adani; Justice Department agreed to drop charges. Sentiment tailwind for ADANIPORTS, ADANIGREEN, ADANIENT; some covering of shorts.
+**Drivers**:
+1. **US-Iran Strait of Hormuz tensions** → elevated crude prices and geopolitical uncertainty restricting upside; rupee fell 8 paise to 95.25 vs USD on stronger dollar and rising crude. OMC/energy imports margin pressure; INR weakness hits importers.
+2. **Elevated oil prices + FII caution** → US-Iran tensions and Strait of Hormuz reopening uncertainty supporting higher crude. Input cost inflation for aviation, paint, FMCG; energy exporters supported but demand-side stocks pressured.
 
-**Watchlist names affected:** BPCL, IOC, GAIL (margin pain from crude), ASIANPAINT, ETERNAL (input costs), WIPRO (index exit pressure), ADANIPORTS, ADANIGREEN (legal relief upside).
+**Watchlist names affected**:
+- **RELIANCE** (energy): crude exposure, but strong position; **BPCL, IOC** (OMC margin compression); **ASIANPAINT** (input cost headwind); **INDIGO, SPICEJET proxies** (fuel cost pressure); **TATAPOWER** (exposed to crude-linked inflation); **TCS, INFY** (IT, FII-flow dependent).
 
-**Likely reaction** (near 1–2 sessions): **Slight down bias, 0.2–0.6% decay** with *medium* confidence. Oil spike typically persists 2–3 sessions before profit-taking; index rotation (BSE vs WIPRO) will create hedging flows. Adani pop likely absorbed in today's close. BPCL and IOC likely to underperform; WIPRO may stabilise on short-covering relief bounce intraday but remains structurally weaker. ADANIPORTS could consolidate gains.
+**Likely reaction**: Index flat-to-mildly down over next 1–2 sessions on caution; **confidence: medium**. Magnitude band: **-0.2% to +0.3%**. **ASIANPAINT** and **BPCL** most likely to underperform on input-cost headwinds; **RELIANCE** and **ONGC** possible stabilisers on crude support. Stock-specific themes will likely dominate.
 
-**Risk note:** Strait of Hormuz closure risk persists; global oil setup remains mixed. Geopolitical re-escalation could spike crude further.
+**Risk note**: Near-term setup range-bound with institutional support; upcoming inflation data and geopolitical swings could destabilise; selective approach advised.
 
-SIGNAL: lean=down; band=0.2..0.6; confidence=medium
+SIGNAL: lean=flat; band=-0.2..0.3; confidence=medium
 
-— 🤖 claude-haiku-4-5 · 54,036 in / 847 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 24,350 in / 701 out tokens · ✓ complete

@@ -187,10 +187,10 @@
     "model_rationale": "weakness=elevated; deploy \u20b98,789 into: VEDL.NS (\u221267%), INFY.NS (\u221235%), WIPRO.NS (\u221234%)",
     "ai_insight": "lean=flat confidence=medium (tilt 1.00\u00d7)",
     "resolve_on": "2026-08-12",
-    "resolved": false,
-    "outcome_return_pct": null,
-    "benchmark_return_pct": null,
-    "verdict": ""
+    "resolved": true,
+    "outcome_return_pct": 1.3094697891380724,
+    "benchmark_return_pct": 1.702844259208262,
+    "verdict": "flat"
   },
   {
     "as_of": "2026-07-15",
@@ -204,10 +204,10 @@
     "model_rationale": "weakness=elevated; deploy \u20b99,375 into: VEDL.NS (\u221267%), INFY.NS (\u221235%), WIPRO.NS (\u221234%)",
     "ai_insight": "n/a (AI off)",
     "resolve_on": "2026-08-12",
-    "resolved": false,
-    "outcome_return_pct": null,
-    "benchmark_return_pct": null,
-    "verdict": ""
+    "resolved": true,
+    "outcome_return_pct": 3.379199544270832,
+    "benchmark_return_pct": 1.702844259208262,
+    "verdict": "worked"
   },
   {
     "as_of": "2026-07-17",
