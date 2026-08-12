@@ -35,17 +35,25 @@ def test_ltcg_safe_note_already_long_term() -> None:
 
 
 def test_ltcg_safe_note_still_short_term_shows_days_and_date() -> None:
-    # Bought 2026-06-12 → long-term on 2026-06-12 + 365 = 2027-06-12.
+    # Bought 2026-06-12. §2(42A) needs MORE than 12 months, so the 12-month anniversary
+    # (2027-06-12) is still short-term — the first safe date is the day after, 2027-06-13.
     note = ltcg_safe_sell_note(_ledger(date(2026, 6, 12)), "X", date(2026, 7, 27))
-    assert note.startswith("⏳ 320d")  # (2027-06-12 - 2026-07-27) = 320 days
-    assert "12 Jun 27" in note
+    assert note.startswith("⏳ 321d")  # (2027-06-13 - 2026-07-27) = 321 days
+    assert "13 Jun 27" in note
 
 
 def test_ltcg_safe_note_uses_newest_lot_for_whole_line() -> None:
     # One old (LT) lot + one new (ST) lot → the *whole* line is only safe once the newest crosses.
     led = _ledger(date(2024, 1, 1), date(2026, 6, 12))
     note = ltcg_safe_sell_note(led, "X", date(2026, 7, 27))
-    assert "12 Jun 27" in note  # governed by the newest lot, not the already-long-term old one
+    assert "13 Jun 27" in note  # governed by the newest lot, not the already-long-term old one
+
+
+def test_ltcg_safe_note_anniversary_is_not_yet_safe() -> None:
+    """The regression this fix exists for: on the 12-month anniversary the line is STILL 20%."""
+    led = _ledger(date(2025, 7, 27))
+    assert ltcg_safe_sell_note(led, "X", date(2026, 7, 27)) == "⏳ 1d · 28 Jul 26"  # not 🟢
+    assert ltcg_safe_sell_note(led, "X", date(2026, 7, 28)) == "🟢 now (12.5%)"
 
 
 def test_ltcg_safe_note_no_holding() -> None:

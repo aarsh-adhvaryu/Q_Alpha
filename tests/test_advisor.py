@@ -112,10 +112,62 @@ def test_short_term_near_boundary_flags_the_wait() -> None:
 
     assert len(adv.boundary_waits) == 1
     wait = adv.boundary_waits[0]
-    assert wait.days_to_long_term == 16
-    assert wait.long_term_date == date(2024, 7, 31)  # acquisition + 365 days (2024 is a leap year)
+    # §2(42A) is 12 CALENDAR months + a day, not 365 days: bought 2023-08-01 → the anniversary is
+    # 2024-08-01 (366 days out, 2024 being a leap year) and the first long-term date is 2024-08-02.
+    # The old "+365 days" rule said 2024-07-31 — two days early, i.e. it would have told the user to
+    # sell while the gain was still taxed at 20%.
+    assert wait.days_to_long_term == 18
+    assert wait.long_term_date == date(2024, 8, 2)
     assert wait.estimated_saving > 0
     assert "turn long-term" in adv.render()
+
+
+def test_sale_on_the_12_month_anniversary_is_still_short_term() -> None:
+    """§2(42A): long-term needs *more than* 12 months. The engine's `>= 365 days` says otherwise.
+
+    Selling exactly one year after the buy must be quoted at 20% (STCG), not 12.5% — the advisor
+    re-classifies the engine's row so the real-money quote matches the ITR.
+    """
+    pf = _pf()
+    _add(pf, "AAA", "100", "100", date(2025, 8, 12))  # 365 days held on 2026-08-12
+    adv = advise_sell(pf, "AAA", Decimal("200"), date(2026, 8, 12), Config())
+
+    assert adv.ltcg_gain == Decimal("0")  # NOT long-term yet
+    assert adv.stcg_gain > 0
+    assert adv.boundary_demoted  # the demotion is surfaced, not silent
+    assert adv.total_tax > 0  # would have been ₹0 (sheltered by the LTCG exemption) before the fix
+    assert "NOT long-term yet" in adv.render()
+    assert "13 Aug 2026" in adv.render()  # the genuinely safe date
+
+    # One day later it really is long-term, and the exemption shelters it.
+    later = advise_sell(pf, "AAA", Decimal("200"), date(2026, 8, 13), Config())
+    assert later.ltcg_gain > 0
+    assert not later.boundary_demoted
+    assert later.total_tax == Decimal("0")
+
+
+def test_leap_year_anniversary_is_366_days_out() -> None:
+    """Across a leap year the 12-month line is 366 days, so `>= 365` is two days early."""
+    pf = _pf()
+    _add(pf, "AAA", "100", "100", date(2023, 8, 1))
+    # 2024-07-31 is 365 days later — the old rule called this long-term.
+    assert advise_sell(pf, "AAA", Decimal("200"), date(2024, 7, 31), Config()).ltcg_gain == 0
+    # 2024-08-01 is the anniversary itself — still short-term.
+    assert advise_sell(pf, "AAA", Decimal("200"), date(2024, 8, 1), Config()).ltcg_gain == 0
+    # 2024-08-02 is the first genuinely long-term day.
+    assert advise_sell(pf, "AAA", Decimal("200"), date(2024, 8, 2), Config()).ltcg_gain > 0
+
+
+def test_tax_free_quantity_respects_the_calendar_boundary() -> None:
+    """A lot at exactly 365 days must not be counted as exemption-sheltered ₹0-tax stock."""
+    pf = _pf()
+    _add(pf, "AAA", "100", "100", date(2025, 8, 12))
+    assert (
+        advise_sell(pf, "AAA", Decimal("200"), date(2026, 8, 12), Config()).tax_free_quantity == 0
+    )
+    assert (
+        advise_sell(pf, "AAA", Decimal("200"), date(2026, 8, 13), Config()).tax_free_quantity == 100
+    )
 
 
 def test_sell_unknown_ticker_raises() -> None:
