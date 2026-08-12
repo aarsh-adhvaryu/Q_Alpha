@@ -10,7 +10,15 @@ from typing import cast
 import pandas as pd
 
 from qalpha.accounting.tax_lots import FIFOLedger, TaxLot
-from qalpha.live.dashboard import ltcg_safe_sell_note, paper_freshness, systemic_risk_markdown
+from qalpha.live.dashboard import (
+    ChecklistItem,
+    checklist_markdown,
+    ltcg_safe_sell_note,
+    next_actions,
+    paper_freshness,
+    systemic_risk_markdown,
+    unverified_tax_branches,
+)
 from qalpha.live.paper import PaperBook
 
 
@@ -281,3 +289,85 @@ def test_live_pm_brief_handles_no_affordable_buys() -> None:
     md = live_pm_brief_markdown(Decimal("6000"), advice, floor=Decimal("5000"))
     assert "🔴 deep" in md
     assert "nothing fits cleanly" in md
+
+
+# ---- the operating checklist -------------------------------------------------------------------
+
+
+def _actions(**over: object) -> list[ChecklistItem]:
+    base: dict[str, object] = {
+        "advice_safe": True,
+        "tradebook_trades": 4,
+        "reconciles": True,
+        "idle_cash": Decimal("0"),
+        "cash_floor": Decimal("5000"),
+        "holdings": 1,
+        "days_to_next_ltcg": None,
+        "unreconciled_sells": 0,
+    }
+    base.update(over)
+    return next_actions(**base)  # type: ignore[arg-type]
+
+
+def test_checklist_blocks_when_inputs_are_untrustworthy() -> None:
+    item = _actions(advice_safe=False)[0]
+    assert item.state == "blocked"
+    assert "withheld" in item.detail
+
+
+def test_checklist_asks_for_a_tradebook_when_there_is_none() -> None:
+    item = _actions(tradebook_trades=0)[1]
+    assert item.state == "todo"
+    assert "Console" in item.detail
+
+
+def test_checklist_blocks_on_a_tradebook_that_does_not_reconcile() -> None:
+    """An unreconciled book means every tax figure is an estimate — that must not read as 'done'."""
+    item = _actions(reconciles=False)[1]
+    assert item.state == "blocked"
+    assert "IPO allotments" in item.detail
+
+
+def test_checklist_prompts_to_deploy_only_above_the_floor() -> None:
+    assert _actions(idle_cash=Decimal("50000"))[2].state == "todo"
+    assert _actions(idle_cash=Decimal("100"))[2].state == "done"
+
+
+def test_checklist_says_hold_until_the_ltcg_crossover() -> None:
+    hold = _actions(days_to_next_ltcg=308)[3]
+    assert hold.state == "waiting"
+    assert "308 days" in hold.detail
+    assert _actions(days_to_next_ltcg=None)[3].state == "done"
+
+
+def test_checklist_asks_for_the_taxpnl_only_after_a_sell() -> None:
+    assert not any("realized tax" in i.label for i in _actions(unreconciled_sells=0))
+    assert any("realized tax" in i.label for i in _actions(unreconciled_sells=1))
+
+
+def test_checklist_markdown_renders_every_item() -> None:
+    md = checklist_markdown(_actions())
+    assert md.count("\n") == len(_actions()) - 1
+    assert "✅" in md
+
+
+# ---- unverified tax branches --------------------------------------------------------------------
+
+
+def test_simple_stcg_gain_sale_flags_nothing() -> None:
+    """The already-reconciled shape (single lot, STCG, gain) must stay silent."""
+    assert (
+        unverified_tax_branches(
+            has_loss_lot=False, has_ltcg=False, distinct_cost_bases=1, uses_exemption=False
+        )
+        == []
+    )
+
+
+def test_each_unverified_branch_is_named() -> None:
+    out = unverified_tax_branches(
+        has_loss_lot=True, has_ltcg=True, distinct_cost_bases=3, uses_exemption=True
+    )
+    assert len(out) == 4
+    assert any("§70" in b for b in out)
+    assert any("3 different cost bases" in b for b in out)

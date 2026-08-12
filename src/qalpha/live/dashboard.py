@@ -350,6 +350,165 @@ def ltcg_safe_sell_note(ledger: FIFOLedger, ticker: str, as_of: date) -> str:
     return f"⏳ {days}d · {lt_date:%d %b %y}"
 
 
+# ---- the operating checklist: what the user should do next, from real state ----------------------
+
+
+@dataclass(frozen=True)
+class ChecklistItem:
+    """One step of the live operating procedure, resolved against the account's actual state."""
+
+    label: str
+    state: str  # "done" | "todo" | "blocked" | "waiting"
+    detail: str
+
+    @property
+    def icon(self) -> str:
+        return {"done": "✅", "todo": "👉", "blocked": "🛑", "waiting": "⏳"}[self.state]
+
+
+def next_actions(
+    *,
+    advice_safe: bool,
+    tradebook_trades: int,
+    reconciles: bool,
+    idle_cash: Decimal,
+    cash_floor: Decimal,
+    holdings: int,
+    days_to_next_ltcg: int | None,
+    unreconciled_sells: int,
+) -> list[ChecklistItem]:
+    """The operating procedure as state, not prose — so the app can say what to do next.
+
+    Ordered by dependency: a blocked step above makes the ones below it moot. Each item is derived
+    from something the app already knows, never from a stored "user said done" flag — the checklist
+    can therefore never drift out of sync with the account.
+    """
+    items: list[ChecklistItem] = []
+
+    items.append(
+        ChecklistItem(
+            "Inputs trustworthy",
+            "done" if advice_safe else "blocked",
+            "Prices fresh, every holding quoted, broker session live."
+            if advice_safe
+            else "Advice is withheld — fix the banner above before acting on any number here.",
+        )
+    )
+
+    if tradebook_trades == 0:
+        items.append(
+            ChecklistItem(
+                "Upload your tradebook",
+                "todo",
+                "Console → Reports → Tradebook → Equity → download CSV → upload above. "
+                "Without it, holding periods are unknown and tax is assumed short-term.",
+            )
+        )
+    elif not reconciles:
+        items.append(
+            ChecklistItem(
+                "Reconcile the tradebook",
+                "blocked",
+                f"{tradebook_trades} trades loaded but the rebuilt holdings do not match your "
+                "broker. Off-market credits (IPO allotments, transfers) are the usual cause — "
+                "every tax figure is an estimate until this matches.",
+            )
+        )
+    else:
+        items.append(
+            ChecklistItem(
+                "Tradebook reconciled",
+                "done",
+                f"{tradebook_trades} trades replayed; rebuilt holdings match your broker exactly. "
+                "Stack each new export after you trade.",
+            )
+        )
+
+    if idle_cash >= cash_floor:
+        items.append(
+            ChecklistItem(
+                "Deploy idle cash",
+                "todo",
+                f"₹{idle_cash:,.0f} sitting idle. Use **Add money** below for the ₹0-tax buy plan, "
+                "then place the orders yourself in Kite.",
+            )
+        )
+    else:
+        items.append(
+            ChecklistItem(
+                "No idle cash to deploy",
+                "done",
+                f"₹{idle_cash:,.0f} is below the ₹{cash_floor:,.0f} floor — nothing to route.",
+            )
+        )
+
+    if holdings == 0:
+        items.append(ChecklistItem("Hold and wait", "waiting", "No positions yet."))
+    elif days_to_next_ltcg is None:
+        items.append(
+            ChecklistItem(
+                "Hold — every line is long-term",
+                "done",
+                "All holdings qualify for the 12.5% rate. Selling is still a choice, not a plan: "
+                "low turnover is the validated edge.",
+            )
+        )
+    else:
+        items.append(
+            ChecklistItem(
+                "Hold — don't sell yet",
+                "waiting",
+                f"{days_to_next_ltcg} days until your next line turns long-term. Selling before "
+                "then is taxed at 20% instead of 12.5%.",
+            )
+        )
+
+    if unreconciled_sells > 0:
+        items.append(
+            ChecklistItem(
+                "Reconcile your realized tax",
+                "todo",
+                f"You have {unreconciled_sells} sell(s) on record. Console → Reports → Tax P&L → "
+                "download the .xlsx and upload it above to confirm our figure matches Zerodha's "
+                "to the paise.",
+            )
+        )
+
+    return items
+
+
+def checklist_markdown(items: list[ChecklistItem]) -> str:
+    """Render the checklist as compact Markdown (one line per step)."""
+    return "\n".join(f"{i.icon} **{i.label}** — {i.detail}" for i in items)
+
+
+# Tax branches that our FIFO engine implements and unit-tests, but which have never been confirmed
+# against a real Zerodha Tax P&L (the only reconciled sell to date was single-lot, all-STCG, no loss).
+def unverified_tax_branches(
+    *,
+    has_loss_lot: bool,
+    has_ltcg: bool,
+    distinct_cost_bases: int,
+    uses_exemption: bool,
+) -> list[str]:
+    """Which never-broker-verified tax branches a proposed sell would exercise.
+
+    Surfaced so the user knows *before* placing the order that this particular sale is the one worth
+    reconciling afterwards. None of these are believed wrong — they are simply unconfirmed by a third
+    party, and a sale that touches them is the evidence that would close the gap.
+    """
+    branches: list[str] = []
+    if has_loss_lot:
+        branches.append("§70 loss set-off (a loss lot nets against the gain)")
+    if has_ltcg:
+        branches.append("long-term classification at the 12.5% rate")
+    if distinct_cost_bases > 1:
+        branches.append(f"multi-lot FIFO across {distinct_cost_bases} different cost bases")
+    if uses_exemption:
+        branches.append("the ₹1.25L annual LTCG exemption")
+    return branches
+
+
 def render_markdown(
     book: PaperBook,
     prices: PriceData,
