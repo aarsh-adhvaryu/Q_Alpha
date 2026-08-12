@@ -50,6 +50,8 @@ from qalpha.live.autopilot import (
     load_pending,
     load_state,
     log_manual_injection,
+    manual_log_drift,
+    manual_log_total,
     parse_ai_signal,
     pct_return,
     resolve_decision,
@@ -231,6 +233,28 @@ def _persist_trio_state(
 ) -> None:
     state["wallets"] = {k: str(v) for k, v in wallets.items()}
     state["contributed"] = {k: str(v) for k, v in contributed.items()}
+
+
+def _log_applied(applied: list[tuple[Decimal, str]]) -> None:
+    """Write the audit entries for deposits that are now durably saved.
+
+    Called **after** ``save_state`` on every exit path, never before: the log is an audit record, so
+    an entry for money the books never received is worse than no entry at all.
+    """
+    for amount, reason in applied:
+        log_manual_injection(amount, reason)
+
+
+def _report_log_drift(contributed: dict[str, Decimal]) -> None:
+    """Surface (never silently fix) any gap between the audit log and the money actually credited."""
+    injected = contributed.get("system", SYSTEM_CAPITAL) - SYSTEM_CAPITAL
+    drift = manual_log_drift(injected)
+    if drift != 0:
+        print(
+            f"[system] ⚠️ manual-injection log drift ₹{drift:,.0f} "
+            f"(log ₹{manual_log_total():,.0f} vs ₹{injected:,.0f} actually credited) — "
+            "the log over-counts pre-2026-08-12 phantom entries; state.json is the truth."
+        )
 
 
 def _inject_trio(
@@ -523,14 +547,16 @@ def cmd_daily() -> int:
         state["baseline_seeded"] = True
 
     # Add-money queued from the dashboard — ALWAYS applied (even on an already-marked day) so a
-    # top-up is never lost; it deploys on the next session.
-    pending_total = Decimal("0")
+    # top-up is never lost; it deploys on the next session. The audit entries are held back and
+    # written only once the deposit is persisted (see `_log_applied`) — logging them here, ahead of
+    # the deploy/gate/mark pipeline below, is what left phantom entries whenever a run died midway.
+    pending_applied: list[tuple[Decimal, str]] = []
     for item in load_pending():
         amt = Decimal(str(item.get("amount", "0")))
         if amt > 0:
             _inject_trio(amt, wallets, contributed, baseline)
-            log_manual_injection(amt, str(item.get("reason", "(from dashboard)")))
-            pending_total += amt
+            pending_applied.append((amt, str(item.get("reason", "(from dashboard)"))))
+    pending_total = sum((a for a, _ in pending_applied), Decimal("0"))
     if pending_total > 0:
         clear_pending()
         print(f"[system] applied ₹{pending_total:,.0f} of queued Add-money to all three books.")
@@ -539,6 +565,7 @@ def cmd_daily() -> int:
         _persist_trio_state(state, wallets, contributed)
         _save_baseline(baseline)
         save_state(state)
+        _log_applied(pending_applied)
         print(f"[system] already marked {as_of_str} — deposits saved, deploy skipped.")
         return 0
 
@@ -649,6 +676,8 @@ def cmd_daily() -> int:
     _save_flows(flows)
     save_ledger(ledger)
     save_state(state)
+    _log_applied(pending_applied)  # money is durable — only now is the audit entry true
+    _report_log_drift(contributed)
     print(
         f"[system] marked {as_of_str}: "
         + " · ".join(f"{k} ₹{rows[k]['value']:,.0f} ({rows[k]['return_pct']:+.2f}%)" for k in rows)
@@ -669,10 +698,10 @@ def cmd_inject(amount: Decimal, reason: str) -> int:
     baseline = _load_baseline()
     wallets, contributed = _wallets(state), _contributed(state)
     _inject_trio(amount, wallets, contributed, baseline)
-    log_manual_injection(amount, reason)
     _persist_trio_state(state, wallets, contributed)
     _save_baseline(baseline)
     save_state(state)
+    log_manual_injection(amount, reason)  # after persist — see log_manual_injection's docstring
     print(f"[system] injected ₹{amount:,.0f} into all three books — reason: {reason}")
     return 0
 

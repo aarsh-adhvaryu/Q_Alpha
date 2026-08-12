@@ -963,10 +963,22 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
             st.warning(w)
         issues = reconcile_positions(result.portfolio, live.portfolio.positions())
         if issues:
+            # The tradebook doesn't fully explain the broker's holdings — typically an off-market
+            # credit (IPO allotment, gift, demat transfer) that no tradebook export contains. The
+            # dated lots are then wrong for those names, so the tax figures below are NOT exact:
+            # say so in the caveat rather than presenting them as reconciled (they used to be
+            # shown with caveat=None, i.e. claiming full accuracy under a warning banner).
             st.warning("Reconstructed holdings differ from the broker:\n- " + "\n- ".join(issues))
+            caveat = (
+                "⚠️ The uploaded tradebook does not reconcile with your broker holdings (see above), "
+                "so purchase dates are incomplete and **every tax figure on this page is an "
+                "estimate, not your ITR number**. Off-market credits (IPO allotments, transfers) "
+                "never appear in a tradebook export — add those lots before acting on the tax."
+            )
         else:
             st.caption("✓ Reconstructed holdings match your broker account exactly.")
-        _live_overview(result.portfolio, live.prices, caveat=None)
+            caveat = None
+        _live_overview(result.portfolio, live.prices, caveat=caveat)
         return result.portfolio, live.prices
 
     _live_overview(live.portfolio, live.prices, caveat=live.tax_caveat)
@@ -1191,15 +1203,10 @@ def _holdings_frame(
     holdings), the crossover date is genuinely unknown, so the column says so instead of guessing.
     """
     weights = portfolio.current_weights(prices_dec)
-    ltcg_days = portfolio.tax_cfg.ltcg_holding_days
     rows = []
     for t, q in sorted(portfolio.positions().items()):
         px = prices_dec.get(t, Decimal("0"))
-        safe = (
-            ltcg_safe_sell_note(portfolio.ledger, t, as_of, ltcg_days)
-            if dated
-            else "❔ upload tradebook"
-        )
+        safe = ltcg_safe_sell_note(portfolio.ledger, t, as_of) if dated else "❔ upload tradebook"
         rows.append(
             {
                 "Ticker": t,

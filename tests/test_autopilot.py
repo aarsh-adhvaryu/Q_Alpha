@@ -254,8 +254,24 @@ def test_apply_pending_injects_all_books_and_clears(tmp_path: Path) -> None:
     p = tmp_path / "pending.json"
     p.write_text(json.dumps([{"amount": "50000", "reason": "IPO"}, {"amount": "10000"}]))
     books = {n: Book(name=n) for n in BOOK_NAMES}
-    total = apply_pending(books, p)
+    total, applied = apply_pending(books, p)
     assert total == Decimal("60000")
     assert all(books[n].cash == Decimal("60000") for n in BOOK_NAMES)  # equal into all three
+    # The entries come back for the caller to log AFTER persisting — apply_pending never logs.
+    assert applied == [(Decimal("50000"), "IPO"), (Decimal("10000"), "(from dashboard)")]
     assert load_pending(p) == []  # queue cleared
-    assert apply_pending(books, p) == Decimal("0")  # nothing left to apply
+    assert apply_pending(books, p) == (Decimal("0"), [])  # nothing left to apply
+
+
+def test_manual_log_drift_flags_phantom_entries(tmp_path: Path) -> None:
+    """The audit log over-counting the money actually credited must be *measurable*, not silent."""
+    import json
+
+    from qalpha.live.autopilot import manual_log_drift, manual_log_total
+
+    p = tmp_path / "manual.json"
+    assert manual_log_total(p) == Decimal("0")  # no log yet
+    p.write_text(json.dumps([{"amount": "50000"}, {"amount": "50000"}, {"amount": "10000"}]))
+    assert manual_log_total(p) == Decimal("110000")
+    assert manual_log_drift(Decimal("110000"), p) == Decimal("0")  # log matches reality
+    assert manual_log_drift(Decimal("50000"), p) == Decimal("60000")  # phantom ₹60k surfaced
