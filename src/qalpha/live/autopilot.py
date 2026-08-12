@@ -407,24 +407,40 @@ def clear_pending(path: Path = PENDING_PATH) -> None:
     path.write_text("[]\n", encoding="utf-8")
 
 
-def apply_pending(books: dict[str, Book], path: Path = PENDING_PATH) -> Decimal:
-    """Deposit every queued injection into all three books, log each, and clear the queue. Returns the
-    total applied (₹0 if the queue was empty)."""
+def apply_pending(
+    books: dict[str, Book], path: Path = PENDING_PATH
+) -> tuple[Decimal, list[tuple[Decimal, str]]]:
+    """Deposit every queued injection into all three books and clear the queue. Returns the total
+    applied (₹0 if the queue was empty) **and** the entries the caller must hand to
+    :func:`log_manual_injection` *after* it has persisted the books.
+
+    Logging deliberately does NOT happen here — see :func:`log_manual_injection` for why the audit
+    entry has to be written after the money is durable, not before.
+    """
     pending = load_pending(path)
     total = Decimal("0")
+    applied: list[tuple[Decimal, str]] = []
     for item in pending:
         amt = Decimal(str(item.get("amount", "0")))
         if amt > 0:
             inject_all(books, amt)
-            log_manual_injection(amt, str(item.get("reason", "(from dashboard)")))
+            applied.append((amt, str(item.get("reason", "(from dashboard)"))))
             total += amt
     if pending:
         clear_pending(path)
-    return total
+    return total, applied
 
 
 def log_manual_injection(amount: Decimal, reason: str, path: Path = MANUAL_LOG_PATH) -> None:
-    """Append a discretionary top-up (amount + the user's stated reason) for honesty/audit."""
+    """Append a discretionary top-up (amount + the user's stated reason) for honesty/audit.
+
+    **Call this only after the deposit has been persisted** (``save_state``/``save_books``). This
+    file is an audit record, so a phantom entry is worse than a missing one: writing it up-front —
+    as the runner used to, before the deploy/gate/mark pipeline that follows — meant any crash in
+    that pipeline left the log claiming money the books never received. Between 2026-07-12 and
+    2026-08-12 that overstated the log by ₹240,500 against a true ₹200,000 of injections.
+    :func:`manual_log_drift` measures exactly that gap.
+    """
     from datetime import datetime
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -437,3 +453,24 @@ def log_manual_injection(amount: Decimal, reason: str, path: Path = MANUAL_LOG_P
         }
     )
     path.write_text(json.dumps(log, indent=2) + "\n", encoding="utf-8")
+
+
+def manual_log_total(path: Path = MANUAL_LOG_PATH) -> Decimal:
+    """Total ₹ the audit log claims was injected (₹0 if there is no log yet)."""
+    if not path.exists():
+        return Decimal("0")
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return Decimal("0")
+    entries = json.loads(text)
+    return sum((Decimal(str(e.get("amount", "0"))) for e in entries), Decimal("0"))
+
+
+def manual_log_drift(injected: Decimal, path: Path = MANUAL_LOG_PATH) -> Decimal:
+    """``log total − money actually credited``. Non-zero ⇒ the log is not a reliable record.
+
+    ``injected`` is the truth from the state file (``contributed − seed``). Any drift is reported,
+    never silently corrected: the log is an append-only record, so the honest move is to surface the
+    discrepancy rather than rewrite history.
+    """
+    return manual_log_total(path) - injected
