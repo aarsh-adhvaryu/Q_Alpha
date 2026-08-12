@@ -31,6 +31,7 @@ import pandas as pd
 from qalpha.backtest.portfolio import Portfolio, to_decimal_price
 from qalpha.data.prices import PriceData
 from qalpha.live.advisor import DeployAdvice, advise_deploy
+from qalpha.live.satellite import SatelliteRegistry, core_view_excluding
 
 _HIGH_WINDOW = 252  # ~1 trading year for the rolling high
 
@@ -166,6 +167,27 @@ class WeaknessDeployAdvice:
     deploy: DeployAdvice
     target: pd.Series
     cheapest: list[tuple[str, float]]  # top out-of-favour names (ticker, pullback)
+    # Holdings outside the watchlist (or registered satellite) — tracked, never steered. Their
+    # capital is treated as withdrawn (satellite-sleeve philosophy): shown so the user knows the
+    # advisor saw them, excluded from target sizing. Value is None when no price source covers
+    # the name (fail-loud: listed as unpriced rather than silently dropped).
+    off_watchlist: tuple[tuple[str, Decimal | None], ...] = ()
+
+    def off_watchlist_note(self) -> str:
+        """The ℹ️ visibility line — '' when the book is watchlist-only (render unchanged)."""
+        if not self.off_watchlist:
+            return ""
+        priced = [(t, v) for t, v in self.off_watchlist if v is not None]
+        unpriced = [t for t, v in self.off_watchlist if v is None]
+        total = sum((v for _, v in priced), Decimal("0"))
+        parts = [f"{t} ₹{v:,.0f}" for t, v in priced]
+        if unpriced:
+            parts.append("unpriced: " + ", ".join(unpriced))
+        n = len(self.off_watchlist)
+        return (
+            f"ℹ️ ₹{total:,.0f} across {n} holding{'s' if n != 1 else ''} outside the watchlist "
+            f"({'; '.join(parts)}) — tracked, not steered; excluded from target sizing."
+        )
 
     def render(self) -> str:
         lines = [
@@ -174,6 +196,9 @@ class WeaknessDeployAdvice:
             "Most out-of-favour (pulled back from 1y high — technical, not P/E):",
         ]
         lines += [f"  - {t}: {p * 100:.0f}% below 1y high" for t, p in self.cheapest]
+        note = self.off_watchlist_note()
+        if note:
+            lines += ["", note]
         lines += ["", self.deploy.render()]
         return "\n".join(lines)
 
@@ -191,6 +216,7 @@ def advise_deploy_into_weakness(
     max_sector_weight: float = 0.30,
     max_name_fraction: float = 0.20,
     max_names: int | None = None,
+    broker_prices: Mapping[str, Decimal] | None = None,
 ) -> WeaknessDeployAdvice:
     """Recommend deploying ``amount`` of new money across the Nifty-100 watchlist — diversified,
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
@@ -203,6 +229,13 @@ def advise_deploy_into_weakness(
     share** costs more than this fraction of ``amount`` is dropped from the target, so a single pricey
     share can't swallow a small deploy (it returns once the deploy is large enough to fit it). If that
     would leave too few names (<3), the filter is relaxed — better some deploy than none.
+
+    ``broker_prices`` (optional) marks holdings the watchlist panel can't price (IPO allotments,
+    off-index picks) — pass the live ``ltp()`` / paper marks. Any held name outside ``watchlist``
+    (or registered satellite) is **shown + excluded**: listed with its value in the advice so the
+    user knows the advisor saw it, but its capital is treated as withdrawn (the satellite-sleeve
+    philosophy) — targets are sized over the core book only, and it is never bought or sold here.
+    Watchlist names the user picked himself still steer the gap-fill exactly as before.
     """
     adj = prices.adj_close
     cutoff = pd.Timestamp(as_of)
@@ -230,7 +263,32 @@ def advise_deploy_into_weakness(
             if not series.empty:
                 price_dec[t] = to_decimal_price(float(series.iloc[-1]))
 
-    deploy = advise_deploy(portfolio, amount, target, price_dec, as_of)
+    # Show + exclude: held names outside the watchlist (or registered satellite) are tracked, not
+    # steered. Their capital is withdrawn from the sizing base (core view), and they're valued for
+    # the visibility line — broker price first, panel price as fallback, None = unpriced (listed,
+    # never silently dropped; Portfolio.holdings_value would otherwise skip them without a trace).
+    registry = SatelliteRegistry.load()
+    held = set(portfolio.positions())
+    excluded = (held - set(watchlist)) | (held & registry.tickers)
+    off_watchlist: tuple[tuple[str, Decimal | None], ...] = ()
+    core = portfolio
+    if excluded:
+        core = core_view_excluding(portfolio, excluded)
+        qty = portfolio.positions()
+
+        def _mark(t: str) -> Decimal | None:
+            price = (broker_prices or {}).get(t, price_dec.get(t))
+            return qty[t] * price if price is not None else None
+
+        off_watchlist = tuple((t, _mark(t)) for t in sorted(excluded))
+
+    deploy = advise_deploy(core, amount, target, price_dec, as_of)
     weakness = market_weakness(index_close, as_of)
     cheapest = sorted(cheap.items(), key=lambda kv: kv[1], reverse=True)[:5]
-    return WeaknessDeployAdvice(weakness=weakness, deploy=deploy, target=target, cheapest=cheapest)
+    return WeaknessDeployAdvice(
+        weakness=weakness,
+        deploy=deploy,
+        target=target,
+        cheapest=cheapest,
+        off_watchlist=off_watchlist,
+    )
