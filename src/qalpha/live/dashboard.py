@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from qalpha.accounting.capital_gains import twelve_months_after
 from qalpha.accounting.tax_lots import FIFOLedger
 from qalpha.data.prices import PriceData
 from qalpha.live.go_scorecard import build_scorecard
@@ -321,9 +322,7 @@ def go_readiness_markdown(book: PaperBook, benchmark: pd.Series, as_of: date) ->
     return build_scorecard(book.equity_curve, benchmark, as_of).render()
 
 
-def ltcg_safe_sell_note(
-    ledger: FIFOLedger, ticker: str, as_of: date, ltcg_holding_days: int = 365
-) -> str:
+def ltcg_safe_sell_note(ledger: FIFOLedger, ticker: str, as_of: date) -> str:
     """Per-holding "safe minimal holding period" cell for the tax-smart holdings table.
 
     The single biggest tax lever the strategy leans on is the §111A→§112A crossover: a lot held
@@ -341,7 +340,10 @@ def ltcg_safe_sell_note(
     if not lots:
         return "—"
     newest = max(lot.acquisition_date for lot in lots)
-    lt_date = newest + timedelta(days=ltcg_holding_days)
+    # §2(42A) needs *more than* 12 calendar months, so the first safe date is the day AFTER the
+    # anniversary. `ltcg_holding_days` (365) is the engine's approximation and is a day early —
+    # quoting it here would tell the user to sell while the line is still taxed at 20%.
+    lt_date = twelve_months_after(newest) + timedelta(days=1)
     days = (lt_date - as_of).days
     if days <= 0:
         return "🟢 now (12.5%)"
@@ -405,13 +407,12 @@ def render_markdown(
     lines.append("## Holdings")
     lines.append("")
     if weights:
-        ltcg_days = book.portfolio.tax_cfg.ltcg_holding_days
         lines.append("| Ticker | Qty | Price | Value | Weight | LTCG-safe |")
         lines.append("|---|---|---|---|---|---|")
         for t, q in sorted(book.portfolio.positions().items()):
             px = prices_dec.get(t, Decimal("0"))
             val = q * px
-            safe = ltcg_safe_sell_note(book.portfolio.ledger, t, as_of, ltcg_days)
+            safe = ltcg_safe_sell_note(book.portfolio.ledger, t, as_of)
             lines.append(
                 f"| {t} | {q} | ₹{px} | ₹{val:,.0f} | {weights.get(t, 0.0) * 100:.1f}% | {safe} |"
             )

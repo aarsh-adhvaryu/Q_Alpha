@@ -31,8 +31,11 @@ import pandas as pd
 from qalpha.accounting.capital_gains import (
     RealizedGain,
     apply_grandfathering,
+    apply_long_term_boundary,
     financial_year,
+    is_long_term_holding,
     net_capital_gains_tax,
+    twelve_months_after,
 )
 from qalpha.backtest.portfolio import Portfolio, TradeRecord
 from qalpha.config import Config
@@ -97,6 +100,8 @@ class SellAdvice:
     net_proceeds: Decimal
     tax_free_quantity: Decimal
     boundary_waits: list[BoundaryWait]
+    # Lots past 365 days but NOT past the 12-calendar-month line — still short-term (§2(42A)).
+    boundary_demoted: tuple[RealizedGain, ...] = ()
 
     def render(self) -> str:
         lines = [
@@ -112,6 +117,17 @@ class SellAdvice:
             "",
             "**Tax-smart notes**",
         ]
+        if self.boundary_demoted:
+            qty = sum((g.quantity for g in self.boundary_demoted), _ZERO)
+            lt_date = max(
+                twelve_months_after(g.acquisition_date) + timedelta(days=1)
+                for g in self.boundary_demoted
+            )
+            lines.append(
+                f"- ⚠️ **{qty} share(s) are NOT long-term yet**, despite being held 365+ days: the "
+                f"law needs *more than* 12 calendar months, so these are taxed at **20%**, not "
+                f"12.5%. Sell on or after **{lt_date:%d %b %Y}** for the lower rate."
+            )
         if self.grandfather_saving > 0:
             lines.append(
                 f"- {_rupees(self.grandfather_saving)} of tax is saved by §112A grandfathering — "
@@ -166,7 +182,7 @@ def _tax_free_quantity(
     free = _ZERO
     for lot in portfolio.ledger.open_lots(ticker):
         gain_per_share = price - lot.cost_basis_per_share
-        is_long_term = (as_of - lot.acquisition_date).days >= portfolio.tax_cfg.ltcg_holding_days
+        is_long_term = is_long_term_holding(lot.acquisition_date, as_of)
         if gain_per_share <= 0:
             free += lot.quantity_remaining  # loss/flat: no tax on any of it
             continue
@@ -190,14 +206,17 @@ def _boundary_waits(realized: list[RealizedGain], cfg: Config) -> list[BoundaryW
     for g in realized:
         if g.gain_type != "STCG" or g.gain <= 0:
             continue
-        days_to_lt = cfg.tax.ltcg_holding_days - g.holding_days
+        # First date the lot is genuinely long-term: the day AFTER the 12-month anniversary
+        # (§2(42A) needs *more than* 12 months — selling on the anniversary is still short-term).
+        lt_date = twelve_months_after(g.acquisition_date) + timedelta(days=1)
+        days_to_lt = (lt_date - g.sell_date).days
         if 0 < days_to_lt <= _BOUNDARY_WINDOW_DAYS:
             out.append(
                 BoundaryWait(
                     quantity=g.quantity,
                     holding_days=g.holding_days,
                     days_to_long_term=days_to_lt,
-                    long_term_date=g.acquisition_date + timedelta(days=cfg.tax.ltcg_holding_days),
+                    long_term_date=lt_date,
                     gain=g.gain,
                     estimated_saving=(g.gain * spread).quantize(Decimal("0.01")),
                 )
@@ -230,6 +249,10 @@ def advise_sell(
         raise ValueError("sell quantity must be positive")
 
     realized_raw, cb = portfolio.preview_sell(as_of, ticker, qty, price)
+    # §2(42A): the engine's `holding_days >= 365` fast path calls a lot long-term a day early (and up
+    # to two days early across a leap year). Re-classify against the exact 12-calendar-month test
+    # BEFORE anything else, so the quoted rate, the exemption and §112A all key off the true type.
+    realized_raw, boundary_demoted = apply_long_term_boundary(realized_raw, cfg.tax)
     # §112A: re-cost pre-2018 long-term lots to their 31-Jan-2018 FMV (when supplied); flag any that
     # are pre-2018 but unpriced (kept on actual cost → conservative, tax possibly over-stated).
     realized, gf_unpriced = apply_grandfathering(realized_raw, price, grandfather_fmv or {})
@@ -278,6 +301,7 @@ def advise_sell(
         net_proceeds=qty * price - cb.total - total_tax,
         tax_free_quantity=_tax_free_quantity(portfolio, ticker, price, as_of, headroom),
         boundary_waits=_boundary_waits(realized, cfg),
+        boundary_demoted=tuple(boundary_demoted),
     )
 
 
