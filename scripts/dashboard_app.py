@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -331,10 +331,55 @@ def _advisor_with_safety(
         _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg, prices_dec)
         default_add = int(available_cash)
     st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
+    if live_session is not None:
+        _next_actions_panel(portfolio, as_of, available_cash, report.safe_to_advise, cfg)
     _advisor_tabs(
         portfolio, prices_dec, benchmark, as_of, default_add_amount=default_add, namespace=namespace
     )
     _satellite_section(portfolio, prices_dec, as_of)
+
+
+def _next_actions_panel(
+    portfolio: Portfolio,
+    as_of: date,
+    available_cash: Decimal | None,
+    advice_safe: bool,
+    cfg: Config,
+) -> None:
+    """ "What do I do next?" — the operating procedure, resolved against this account's real state.
+
+    Every line is derived from what the app already knows (tradebook loaded? reconciles? idle cash?
+    days to the next LTCG crossover? any sells on record?), so it cannot drift out of step with the
+    account the way a written checklist does.
+    """
+    from qalpha.accounting.capital_gains import twelve_months_after
+    from qalpha.live.dashboard import checklist_markdown, next_actions
+
+    master = _load_tradebook_master()
+    reconciles = bool(st.session_state.get("tb_reconciles", False))
+
+    # Days until the *soonest* holding turns long-term (None ⇒ every line already is).
+    waits: list[int] = []
+    for ticker in portfolio.positions():
+        for lot in portfolio.ledger.open_lots(ticker):
+            safe_on = twelve_months_after(lot.acquisition_date) + timedelta(days=1)
+            if safe_on > as_of:
+                waits.append((safe_on - as_of).days)
+    sells = sum(1 for t in master if getattr(t, "side", None) is not None and t.side.name == "SELL")
+
+    items = next_actions(
+        advice_safe=advice_safe,
+        tradebook_trades=len(master),
+        reconciles=reconciles,
+        idle_cash=available_cash if available_cash is not None else portfolio.cash,
+        cash_floor=cfg.deploy_policy.idle_cash_floor,
+        holdings=len(portfolio.positions()),
+        days_to_next_ltcg=min(waits) if waits else None,
+        unreconciled_sells=sells,
+    )
+    with st.container(border=True):
+        st.markdown("#### 🧭 What to do next")
+        st.markdown(checklist_markdown(items))
 
 
 def _auto_pm_brief(
@@ -961,6 +1006,7 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
         )
         for w in result.warnings:
             st.warning(w)
+        _taxpnl_reconcile_panel(result, cfg)
         issues = reconcile_positions(result.portfolio, live.portfolio.positions())
         if issues:
             # The tradebook doesn't fully explain the broker's holdings — typically an off-market
@@ -968,6 +1014,7 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
             # dated lots are then wrong for those names, so the tax figures below are NOT exact:
             # say so in the caveat rather than presenting them as reconciled (they used to be
             # shown with caveat=None, i.e. claiming full accuracy under a warning banner).
+            st.session_state["tb_reconciles"] = False
             st.warning("Reconstructed holdings differ from the broker:\n- " + "\n- ".join(issues))
             caveat = (
                 "⚠️ The uploaded tradebook does not reconcile with your broker holdings (see above), "
@@ -976,6 +1023,7 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
                 "never appear in a tradebook export — add those lots before acting on the tax."
             )
         else:
+            st.session_state["tb_reconciles"] = True
             st.caption("✓ Reconstructed holdings match your broker account exactly.")
             caveat = None
         _live_overview(result.portfolio, live.prices, caveat=caveat)
@@ -983,6 +1031,58 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
 
     _live_overview(live.portfolio, live.prices, caveat=live.tax_caveat)
     return live.portfolio, live.prices
+
+
+def _taxpnl_reconcile_panel(result: object, cfg: Config) -> None:
+    """Upload the Console **Tax P&L** xlsx → reconcile our realized gains against Zerodha, in-app.
+
+    This is the criterion-4 check that used to require dropping to a terminal
+    (``scripts/reconcile_taxpnl.py``). Same functions, same tolerance — the user just uploads the
+    file. Read-only and fail-soft: any parse error is reported and nothing else on the page changes.
+    """
+    from dataclasses import fields, replace
+
+    from qalpha.config import CostConfig
+    from qalpha.live.taxpnl import parse_taxpnl, reconcile_gross
+    from qalpha.live.tradebook import replay_tradebook
+
+    sells = list(getattr(result, "realized_gains", []))
+    if not sells:
+        return  # nothing realized yet → nothing to reconcile
+
+    with st.expander(
+        f"🧾 Verify realized tax against Zerodha ({len(sells)} sell lot(s) on record)"
+    ):
+        st.caption(
+            "Console → Reports → **Tax P&L** → pick the financial year → download the `.xlsx` and "
+            "drop it here. We replay your tradebook at zero cost (so our gain is gross, the same "
+            "basis Zerodha reports) and compare per gain type. The delta should be ₹0.00."
+        )
+        up = st.file_uploader("Tax P&L export (.xlsx)", type=["xlsx"], key="taxpnl")
+        if up is None:
+            return
+        try:
+            statement = parse_taxpnl(up)
+            zeros = {
+                f.name: Decimal("0")
+                for f in fields(cfg.cost)
+                if isinstance(getattr(cfg.cost, f.name), Decimal)
+            }
+            free: CostConfig = replace(cfg.cost, **zeros)
+            gross = replay_tradebook(_load_tradebook_master(), replace(cfg, cost=free))
+            ours: dict[str, Decimal] = {}
+            for g in gross.realized_gains:
+                ours[g.gain_type] = ours.get(g.gain_type, Decimal("0")) + g.gain
+            rec = reconcile_gross(ours, statement)
+        except Exception as exc:
+            st.error(f"Could not read or reconcile the Tax P&L: {exc}")
+            return
+        (st.success if rec.ok else st.error)(
+            "✅ Reconciled to the paise — our realized gains match Zerodha's Tax P&L."
+            if rec.ok
+            else "❌ MISMATCH — do not rely on the tax figures until this is explained."
+        )
+        st.code("\n".join(rec.lines))
 
 
 def _live_overview(portfolio: Portfolio, prices: dict[str, Decimal], *, caveat: str | None) -> None:
@@ -1003,6 +1103,37 @@ def _live_overview(portfolio: Portfolio, prices: dict[str, Decimal], *, caveat: 
         width="stretch",
     )
     st.caption(_LTCG_SAFE_LEGEND)
+
+
+def _unverified_branch_warning(advice: object) -> None:
+    """Flag a proposed sell that exercises tax logic no broker statement has ever confirmed.
+
+    The only reconciled sell to date was single-lot, all-STCG, no-loss (₹25.25, Δ ₹0.00). The set-off,
+    LTCG and multi-lot paths are unit-tested but unconfirmed by Zerodha — so a sale that touches them
+    is exactly the one worth reconciling afterwards. Informational: it never blocks the trade.
+    """
+    from qalpha.live.dashboard import unverified_tax_branches
+
+    realized = list(getattr(advice, "realized", []))
+    if not realized:
+        return
+    branches = unverified_tax_branches(
+        has_loss_lot=any(g.gain < 0 for g in realized),
+        has_ltcg=any(g.gain_type == "LTCG" for g in realized),
+        distinct_cost_bases=len(
+            {g.cost_of_acquisition / g.quantity for g in realized if g.quantity}
+        ),
+        uses_exemption=getattr(advice, "ltcg_sheltered", Decimal("0")) > 0,
+    )
+    if not branches:
+        return
+    st.warning(
+        "🧾 **This sale exercises tax logic never confirmed against a broker statement:**\n"
+        + "\n".join(f"- {b}" for b in branches)
+        + "\n\nThe figures above come from the same engine that reconciled to the paise on a simpler "
+        "sale, so they are trustworthy — but **after you place this order, upload the Tax P&L** "
+        "(panel above) to confirm. That closes the last open gap in the tax engine."
+    )
 
 
 def _download_watchlist_panel() -> None:
@@ -1077,16 +1208,16 @@ def _advisor_tabs(
                 key=f"sell_qty_{namespace}",
             )
             if st.button("Advise sell", key=f"sell_btn_{namespace}") and ticker in prices_dec:
-                st.markdown(
-                    advise_sell(
-                        portfolio,
-                        ticker,
-                        prices_dec[ticker],
-                        as_of,
-                        Config(),
-                        quantity=Decimal(qty),
-                    ).render()
+                advice = advise_sell(
+                    portfolio,
+                    ticker,
+                    prices_dec[ticker],
+                    as_of,
+                    Config(),
+                    quantity=Decimal(qty),
                 )
+                st.markdown(advice.render())
+                _unverified_branch_warning(advice)
 
     with raise_tab:
         amount = st.number_input(
