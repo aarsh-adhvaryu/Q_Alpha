@@ -136,3 +136,90 @@ def test_advise_deploy_into_weakness_is_buys_only() -> None:
     assert abs(float(advice.target.sum()) - 1.0) < 1e-9
     # The deepest-pulled-back name should head the cheapest list.
     assert advice.cheapest[0][0] == "DEEP.NS"
+    # A watchlist-only book has nothing off-list → the render is unchanged (no ℹ️ line).
+    assert advice.off_watchlist == ()
+    assert advice.off_watchlist_note() == ""
+    assert "ℹ️" not in advice.render()
+
+
+def _book_with_off_watchlist_name(cash: Decimal) -> tuple[Portfolio, Decimal]:
+    """A book holding 100 shares of IPO.NS @ ₹500 — a name the watchlist panel cannot price."""
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=cash + Decimal("50000"))
+    pf.buy(_DATES[-1].date(), "IPO.NS", Decimal("100"), Decimal("500"))
+    return pf, Decimal("50000")  # 100 x 500 = ₹50,000 of off-watchlist value
+
+
+def test_off_watchlist_holding_is_shown_and_excluded_from_sizing() -> None:
+    """An IPO/off-index holding must be visible in the advice but never steer or receive money."""
+    prices = _prices()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
+    index_close = prices.adj_close.mean(axis=1)
+    pf, off_value = _book_with_off_watchlist_name(Decimal("100000"))
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("50000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        index_close,
+        as_of,
+        broker_prices={"IPO.NS": Decimal("500")},
+    )
+
+    # Shown: named, valued, and flagged as excluded.
+    assert advice.off_watchlist == (("IPO.NS", off_value),)
+    note = advice.off_watchlist_note()
+    assert "IPO.NS" in note and "50,000" in note and "excluded" in note
+    assert note in advice.render()
+    # Excluded: never bought, and it does not inflate the per-name ₹ targets.
+    assert all(o.ticker != "IPO.NS" for o in advice.deploy.buy_orders)
+    assert advice.deploy.buy_orders  # the watchlist names still get deployed
+
+
+def test_off_watchlist_exclusion_shrinks_targets_vs_counting_it() -> None:
+    """Sizing is over the core book only — proof: the same book without the off-list lot buys the same."""
+    prices = _prices()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
+    index_close = prices.adj_close.mean(axis=1)
+    cfg = Config()
+
+    with_off, _ = _book_with_off_watchlist_name(Decimal("100000"))
+    # Same cash as the off-list book after its buy costs — so the ONLY difference is the lot itself.
+    core_only = Portfolio(cfg.cost, cfg.tax, cash=with_off.cash)
+
+    a = advise_deploy_into_weakness(
+        with_off,
+        Decimal("50000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        index_close,
+        as_of,
+        broker_prices={"IPO.NS": Decimal("500")},
+    )
+    b = advise_deploy_into_weakness(
+        core_only, Decimal("50000"), list(sector_of), sector_of, prices, index_close, as_of
+    )
+    # The off-list lot is withdrawn capital → identical buy plan to a book that never held it.
+    assert {o.ticker: o.quantity for o in a.deploy.buy_orders} == {
+        o.ticker: o.quantity for o in b.deploy.buy_orders
+    }
+
+
+def test_off_watchlist_unpriced_name_is_listed_not_dropped() -> None:
+    """No price anywhere → listed as unpriced (fail-loud), never silently omitted."""
+    prices = _prices()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
+    index_close = prices.adj_close.mean(axis=1)
+    pf, _ = _book_with_off_watchlist_name(Decimal("100000"))
+
+    advice = advise_deploy_into_weakness(  # no broker_prices → IPO.NS cannot be marked
+        pf, Decimal("50000"), list(sector_of), sector_of, prices, index_close, as_of
+    )
+    assert advice.off_watchlist == (("IPO.NS", None),)
+    assert "unpriced: IPO.NS" in advice.off_watchlist_note()

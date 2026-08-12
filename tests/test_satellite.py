@@ -25,6 +25,7 @@ from qalpha.live.satellite import (
     core_fraction,
     core_value,
     core_view,
+    core_view_excluding,
     funnel_window,
     has_sufficient_history,
     history_guard,
@@ -141,6 +142,20 @@ def test_core_view_is_full_book_without_satellite() -> None:
     prices = {"CORE": Decimal("100"), "IPO": Decimal("500")}
     view = core_view(pf, empty)
     assert view.market_value(prices) == pf.market_value(prices)
+
+
+def test_core_view_excluding_mirrors_core_view() -> None:
+    """The generalised exclusion (used by the deploy advisor for off-watchlist names) matches the
+    registry-driven view when handed the registry's own tickers."""
+    cfg = DEFAULT_CONFIG
+    pf = _book(cfg)
+    reg = SatelliteRegistry({"IPO": date(2026, 6, 20)})
+    prices = {"CORE": Decimal("100"), "IPO": Decimal("500")}
+    generalised = core_view_excluding(pf, {"IPO"})
+    assert generalised.positions() == core_view(pf, reg).positions()
+    assert generalised.cash == pf.cash
+    assert generalised.market_value(prices) == Decimal("20000")
+    assert set(pf.positions()) == {"CORE", "IPO"}  # the real book is untouched
 
 
 # ---- insufficient-history guard / graduation ----------------------------------------------------
