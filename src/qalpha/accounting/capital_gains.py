@@ -357,6 +357,58 @@ def grandfathered_cost_of_acquisition(
     return max(actual_cost, min(fmv_31jan2018, full_value_consideration))
 
 
+def twelve_months_after(day: date) -> date:
+    """The 12-calendar-month anniversary of ``day`` (29 Feb → 28 Feb, the ITR convention)."""
+    try:
+        return day.replace(year=day.year + 1)
+    except ValueError:  # 29 Feb in a leap year has no anniversary in a non-leap year
+        return day.replace(year=day.year + 1, month=2, day=28)
+
+
+def is_long_term_holding(acquisition_date: date, sell_date: date) -> bool:
+    """§2(42A): listed equity is long-term only when held **more than** 12 calendar months.
+
+    The engine's fast path (``TaxLot.is_long_term``) approximates this as ``holding_days >= 365``,
+    which is a day early: a sale *on* the 12-month anniversary is "not more than 12 months", i.e.
+    still short-term, and across a leap year the anniversary is 366 days out. This is the exact
+    calendar test the advisor quotes real money against — the frozen engine keeps its own.
+    """
+    return sell_date > twelve_months_after(acquisition_date)
+
+
+def apply_long_term_boundary(
+    gains: Iterable[RealizedGain], cfg: TaxConfig
+) -> tuple[list[RealizedGain], list[RealizedGain]]:
+    """Re-classify LTCG rows that fail the exact calendar-month test (advisor/reconcile layer).
+
+    Returns ``(adjusted, demoted)``: ``adjusted`` mirrors ``gains`` with every row that the engine's
+    ``>= 365 days`` rule called long-term — but which was held only *to* the 12-month anniversary,
+    not past it — flipped back to ``STCG`` and re-taxed at the short-term rate; ``demoted`` lists
+    exactly those rows so the caller can tell the user *why* the rate changed. Rows that are already
+    short-term, or genuinely past the anniversary, pass through untouched.
+
+    Never applied to the frozen backtest engine — only to real-holding advice, so the validated
+    headline is provably unchanged (same discipline as :func:`apply_grandfathering`).
+    """
+    adjusted: list[RealizedGain] = []
+    demoted: list[RealizedGain] = []
+    for g in gains:
+        if not _is_ltcg(g) or is_long_term_holding(g.acquisition_date, g.sell_date):
+            adjusted.append(g)
+            continue
+        # Short-term after all: no ₹1.25L shelter applies, so the whole positive gain is taxable.
+        taxable = max(_ZERO, g.gain)
+        row = replace(
+            g,
+            gain_type="STCG",
+            taxable_gain=taxable,
+            tax=_paise(taxable * cfg.stcg_rate),
+        )
+        adjusted.append(row)
+        demoted.append(row)
+    return adjusted, demoted
+
+
 def apply_grandfathering(
     gains: Iterable[RealizedGain],
     sell_price: Decimal,
