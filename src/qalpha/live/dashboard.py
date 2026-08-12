@@ -97,9 +97,15 @@ def live_pm_brief_markdown(
         if counts
         else "nothing fits cleanly right now"
     )
+    off = advice.off_watchlist
+    off_note = ""
+    if off:
+        total = sum((v for _, v in off if v is not None), Decimal("0"))
+        off_note = f" · ₹{total:,.0f} in {len(off)} off-watchlist name{'s' if len(off) != 1 else ''} excluded"
     return (
         f"💰 **Idle cash ₹{available_cash:,.0f}** → market {icon} {advice.weakness.level}: "
         f"{action} (₹0 capital-gains tax, buys only) · leftover ₹{advice.deploy.leftover_cash:,.0f}"
+        f"{off_note}"
     )
 
 
