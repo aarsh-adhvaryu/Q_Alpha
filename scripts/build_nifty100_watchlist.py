@@ -71,10 +71,51 @@ NEXT_50: dict[str, str] = {
 }
 
 
+# The engine's coarse taxonomy lumps every financial into one "FIN" tag — 22 of the 96 watchlist
+# names. Since ``deploy_target`` caps each *sector* at 30% of a deploy, banks end up competing with
+# NBFCs and insurers for one shared budget, so a deploy can never lean into banks specifically.
+# Splitting the bucket three ways gives each its own cap. **Watchlist-only** (this file's CSV is the
+# advisor's fresh-capital opportunity set) — the backtest engine reads its sector map from
+# ``build_nifty_universe``/``nifty50_membership.csv``, which are untouched, so rule (a) holds and the
+# validated headline cannot move. Honest side-effect: combined financials may now exceed 30% in an
+# extreme tilt (base weights ≈ 9/9/4% make that unlikely).
+WATCHLIST_SECTOR_OVERRIDES: dict[str, str] = {
+    # Deposit-taking banks (public + private)
+    "AXISBANK": "BANK",
+    "BANKBARODA": "BANK",
+    "CANBK": "BANK",
+    "HDFCBANK": "BANK",
+    "ICICIBANK": "BANK",
+    "KOTAKBANK": "BANK",
+    "PNB": "BANK",
+    "SBIN": "BANK",
+    "UNIONBANK": "BANK",
+    # Non-bank lenders / holding companies
+    "BAJAJHLDNG": "NBFC",
+    "BAJFINANCE": "NBFC",
+    "CHOLAFIN": "NBFC",
+    "IRFC": "NBFC",
+    "JIOFIN": "NBFC",
+    "MUTHOOTFIN": "NBFC",
+    "PFC": "NBFC",
+    "RECLTD": "NBFC",
+    "SHRIRAMFIN": "NBFC",
+    # Insurance + asset management
+    "BAJAJFINSV": "INSURANCE",
+    "HDFCAMC": "INSURANCE",
+    "HDFCLIFE": "INSURANCE",
+    "SBILIFE": "INSURANCE",
+}
+
+
 def build() -> dict[str, str]:
-    """{symbol: sector} for the current Nifty 100 (Nifty-50 sector wins on any overlap)."""
+    """{symbol: sector} for the current Nifty 100 (Nifty-50 sector wins on any overlap).
+
+    ``WATCHLIST_SECTOR_OVERRIDES`` is applied last, so the FIN split wins over both halves.
+    """
     members = dict(NEXT_50)
     members.update({NAME_TO_SYMBOL[n][0]: NAME_TO_SYMBOL[n][1] for n in CURRENT_2025})
+    members.update({s: sec for s, sec in WATCHLIST_SECTOR_OVERRIDES.items() if s in members})
     return members
 
 

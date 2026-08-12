@@ -155,6 +155,25 @@ def core_fraction(
     return float(core_value(portfolio, registry, prices) / mv)
 
 
+def core_view_excluding(portfolio: Portfolio, excluded: set[str]) -> Portfolio:
+    """A ``Portfolio`` of **only the non-``excluded`` lots + the same cash** — the withdrawn-cash
+    view (see :func:`core_view`), generalised to any exclusion set so the deploy advisor can
+    auto-detect off-watchlist holdings without a registry entry.
+
+    The real book is left untouched — this is a read view, never the thing trades execute against.
+    The FY LTCG tally and slippage model are carried so any tax/cost estimate stays exact.
+    """
+    view = Portfolio(portfolio.cost_cfg, portfolio.tax_cfg, cash=portfolio.cash)
+    view.slippage_model = portfolio.slippage_model
+    for ticker in portfolio.ledger.all_tickers():
+        if ticker in excluded:
+            continue
+        for lot in portfolio.ledger.open_lots(ticker):
+            view.ledger.add_lot(copy.deepcopy(lot))
+    view.gains.restore_ltcg_by_fy(portfolio.gains.realized_ltcg_by_fy())
+    return view
+
+
 def core_view(portfolio: Portfolio, registry: SatelliteRegistry) -> Portfolio:
     """A ``Portfolio`` of **only the core lots + the same cash** — the withdrawn-cash view the live
     caller hands to ``decide_rebalance``.
@@ -165,15 +184,7 @@ def core_view(portfolio: Portfolio, registry: SatelliteRegistry) -> Portfolio:
     read view, never the thing trades execute against. The FY LTCG tally and slippage model are carried
     so the gate's tax/cost estimate stays exact.
     """
-    view = Portfolio(portfolio.cost_cfg, portfolio.tax_cfg, cash=portfolio.cash)
-    view.slippage_model = portfolio.slippage_model
-    for ticker in portfolio.ledger.all_tickers():
-        if registry.is_satellite(ticker):
-            continue
-        for lot in portfolio.ledger.open_lots(ticker):
-            view.ledger.add_lot(copy.deepcopy(lot))
-    view.gains.restore_ltcg_by_fy(portfolio.gains.realized_ltcg_by_fy())
-    return view
+    return core_view_excluding(portfolio, registry.tickers)
 
 
 # ---- the insufficient-history guard (the fail-loud secondary net) -------------------------------

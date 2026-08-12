@@ -328,7 +328,7 @@ def _advisor_with_safety(
     floor = cfg.deploy_policy.idle_cash_floor
     default_add = 50000
     if available_cash is not None and available_cash >= floor:
-        _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg)
+        _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg, prices_dec)
         default_add = int(available_cash)
     st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
     _advisor_tabs(
@@ -343,6 +343,7 @@ def _auto_pm_brief(
     available_cash: Decimal,
     as_of: date,
     cfg: Config,
+    broker_prices: dict[str, Decimal],
 ) -> None:
     """Render the zero-typing idle-cash buy brief on the Live tab (cached per (cash, as_of))."""
     cache_key = f"pm_brief::{available_cash}::{as_of}"
@@ -363,6 +364,7 @@ def _auto_pm_brief(
             benchmark,
             as_of,
             max_names=cfg.deploy_policy.max_names_default,
+            broker_prices=broker_prices,
         )
         brief = live_pm_brief_markdown(
             available_cash, advice, floor=cfg.deploy_policy.idle_cash_floor
@@ -1154,6 +1156,7 @@ def _advisor_tabs(
                     benchmark,  # the REAL Nifty TRI, not the watchlist mean
                     as_of,
                     max_names=n_stocks,
+                    broker_prices=prices_dec,  # marks holdings the watchlist panel can't price
                 ).render()
         if st.session_state.get(advice_key):
             st.markdown(st.session_state[advice_key])
