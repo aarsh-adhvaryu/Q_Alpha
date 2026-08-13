@@ -1,15 +1,15 @@
 # The System book — the whole system acting on its own advice
 
-_As of **2026-08-12** · 24 marks · market weakness: **elevated** · AI: lean=flat confidence=medium (tilt 1.00×) · **fake money, no real orders**._
+_As of **2026-08-13** · 25 marks · market weakness: **elevated** · AI: lean=flat confidence=low (tilt 1.00×) · **fake money, no real orders**._
 
 | Book | What it is | Value | Contributed | Profit | Return |
 |---|---|---:|---:|---:|---:|
-| **system** | 🧠 **System** — deploys on its own advice (AI-paced) + tax-gated rebalance | ₹410,478 | ₹400,000 | ₹10,478 | +2.62% |
-| **shadow** | System, AI off (the attribution twin) | ₹408,942 | ₹400,000 | ₹8,942 | +2.24% |
-| **baseline** | Everything into NIFTYBEES (do-nothing baseline) | ₹403,857 | ₹400,000 | ₹3,857 | +0.96% |
+| **system** | 🧠 **System** — deploys on its own advice (AI-paced) + tax-gated rebalance | ₹409,721 | ₹400,000 | ₹9,721 | +2.43% |
+| **shadow** | System, AI off (the attribution twin) | ₹408,208 | ₹400,000 | ₹8,208 | +2.05% |
+| **baseline** | Everything into NIFTYBEES (do-nothing baseline) | ₹403,624 | ₹400,000 | ₹3,624 | +0.91% |
 
-- **System − Baseline** (does the whole system beat doing nothing?): **₹6,621**
-- **System − Shadow** (does the AI add value?): **₹1,536**
+- **System − Baseline** (does the whole system beat doing nothing?): **₹6,096**
+- **System − Shadow** (does the AI add value?): **₹1,513**
 - **AI deploy hit-rate** (system deploys that beat Nifty over ~20d): **3/4**
 
 ## Today's decisions
@@ -19,8 +19,8 @@ _As of **2026-08-12** · 24 marks · market weakness: **elevated** · AI: lean=f
 
 ## 🛡 Downside protection — the tax-free hedge overlay
 
-- **System book:** return **+3.33%** hedged vs **+3.33%** unhedged · worst drawdown **−1.4%** vs **−1.4%** · episodes **0** · now: hedge off (calm)
-- **Validated ₹2L core (measured only — the GO book itself is untouched):** return **+0.79%** hedged vs **+0.79%** unhedged · worst drawdown **−2.4%** vs **−2.4%**
+- **System book:** return **+3.14%** hedged vs **+3.14%** unhedged · worst drawdown **−1.4%** vs **−1.4%** · episodes **0** · now: hedge off (calm)
+- **Validated ₹2L core (measured only — the GO book itself is untouched):** return **+1.28%** hedged vs **+1.28%** unhedged · worst drawdown **−2.4%** vs **−2.4%**
 
 > Keep the shares (₹0 capital-gains tax), short Nifty futures while systemic stress is elevated. The gauge is **coincident** — in calm the hedge is off and curves match; its value shows only in a real stress event. (Selling defensively was tested and LOST to tax.) The GO-book line is a read-only measurement so the protection evidence accrues on the validated core too, without touching the criterion-6 gate.
 
