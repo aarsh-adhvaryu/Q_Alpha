@@ -222,10 +222,10 @@
     "model_rationale": "weakness=elevated; deploy \u20b95,493 into: VEDL.NS (\u221268%), WIPRO.NS (\u221234%), INFY.NS (\u221234%)",
     "ai_insight": "lean=up confidence=medium (tilt 1.25\u00d7)",
     "resolve_on": "2026-08-14",
-    "resolved": false,
-    "outcome_return_pct": null,
-    "benchmark_return_pct": null,
-    "verdict": ""
+    "resolved": true,
+    "outcome_return_pct": 8.751610983413634,
+    "benchmark_return_pct": 0.6836485230611056,
+    "verdict": "worked"
   },
   {
     "as_of": "2026-08-03",
