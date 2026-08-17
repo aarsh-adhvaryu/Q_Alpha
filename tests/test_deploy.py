@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import pandas as pd
 
+from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.accounting.costs import Side
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
@@ -15,6 +16,11 @@ from qalpha.live.deploy import (
     cheapness_scores,
     deploy_target,
     market_weakness,
+)
+from qalpha.live.price_integrity import (
+    excluded_from_tilt,
+    rebase_starts,
+    unexplained_gaps,
 )
 
 _DATES = pd.bdate_range("2023-01-02", periods=300)
@@ -223,3 +229,135 @@ def test_off_watchlist_unpriced_name_is_listed_not_dropped() -> None:
     )
     assert advice.off_watchlist == (("IPO.NS", None),)
     assert "unpriced: IPO.NS" in advice.off_watchlist_note()
+
+
+# ---- price continuity (PLAN_TRUST_REPAIR.md PR-2 — fixes T1.1) -----------------------------------
+
+
+def _prices_with_a_demerger() -> PriceData:
+    """ARTIFACT steps down 65% in one session; SLIDER grinds down 40% honestly over the window.
+
+    This is the exact shape of the real defect: on ``adj_close``, VEDL's 2026-04-30 demerger and a
+    genuine year-long decline are indistinguishable to a 1-year-high rule.
+    """
+    n = len(_DATES)
+    step_at = 200
+    paths = {
+        "ATHIGH.NS": _series(100, 100),
+        "SLIDER.NS": _series(100, 60),  # ends ~40% below its high — a real decline
+        "ARTIFACT.NS": [100.0] * step_at + [35.0] * (n - step_at),  # a demerger, not a crash
+    }
+    rows = []
+    for t, vals in paths.items():
+        for d, v in zip(_DATES, vals, strict=True):
+            rows.append({"date": d, "ticker": t, "close": v, "adj_close": v, "volume": 1000})
+    return PriceData.from_long(pd.DataFrame(rows))
+
+
+def test_an_artifact_no_longer_outranks_a_genuine_decline() -> None:
+    """The defect in one assertion: unguarded, the demerger reads as the cheapest name on the list."""
+    prices = _prices_with_a_demerger()
+    as_of = _DATES[-1].date()
+    names = ["ATHIGH.NS", "SLIDER.NS", "ARTIFACT.NS"]
+
+    unguarded = cheapness_scores(prices, names, as_of)
+    assert unguarded["ARTIFACT.NS"] > unguarded["SLIDER.NS"]  # 65% "off" beats a real 40% fall
+
+    gaps = unexplained_gaps(prices.adj_close, names, as_of)
+    guarded = cheapness_scores(
+        prices, names, as_of, rebase_from=rebase_starts(gaps), no_tilt=excluded_from_tilt(gaps)
+    )
+    # Re-based to its post-gap window the artifact is flat — it never fell, it got smaller.
+    assert guarded["ARTIFACT.NS"] < 0.01
+    assert guarded["SLIDER.NS"] > guarded["ARTIFACT.NS"]
+    # The genuine decline is untouched: the guard corrects a basis, it does not damp the tilt.
+    assert guarded["SLIDER.NS"] == unguarded["SLIDER.NS"]
+    assert guarded["ATHIGH.NS"] == unguarded["ATHIGH.NS"]
+
+
+def test_the_advisor_stops_overweighting_the_artifact_and_says_why() -> None:
+    """End-to-end: the artifact's target weight falls below the genuinely-cheap name's."""
+    prices = _prices_with_a_demerger()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "SLIDER.NS": "FIN", "ARTIFACT.NS": "MTL"}
+    index_close = prices.adj_close.mean(axis=1)
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    # max_sector_weight=1.0: with one name per sector the 0.30 cap is infeasible and flattens every
+    # weight to 1/3, which would mask the very tilt under test.
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        index_close,
+        as_of,
+        max_sector_weight=1.0,
+    )
+    assert advice.target["SLIDER.NS"] > advice.target["ARTIFACT.NS"]
+    # And the advice explains itself rather than quietly changing its mind.
+    assert [g.ticker for g in advice.price_gaps] == ["ARTIFACT.NS"]
+    note = advice.price_gaps_note()
+    assert "ARTIFACT.NS" in note and "demerger" in note
+    assert note in advice.render()
+
+
+def test_a_known_split_does_not_trigger_the_guard() -> None:
+    """A real, understood action must not be reported to the user as a data defect."""
+    prices = _prices_with_a_demerger()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "SLIDER.NS": "FIN", "ARTIFACT.NS": "MTL"}
+    index_close = prices.adj_close.mean(axis=1)
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        index_close,
+        as_of,
+        known_actions={
+            "ARTIFACT.NS": [
+                CorporateAction.split("ARTIFACT.NS", _DATES[200].date(), Decimal("2.857"))
+            ]
+        },
+    )
+    assert advice.price_gaps == ()
+    assert advice.price_gaps_note() == ""
+
+
+def test_a_clean_watchlist_is_completely_unchanged_by_the_guard() -> None:
+    """No gaps anywhere → byte-identical advice. The guard must cost nothing on healthy data."""
+    prices = _prices()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
+    index_close = prices.adj_close.mean(axis=1)
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        index_close,
+        as_of,
+        max_sector_weight=1.0,
+    )
+    assert advice.price_gaps == ()
+    assert advice.price_gaps_note() == ""
+    # The delivered target is exactly what the pre-PR-2 path produced: same cheapness, same weights.
+    unguarded = deploy_target(
+        list(sector_of),
+        sector_of,
+        cheapness_scores(prices, list(sector_of), as_of),
+        tilt=1.0,
+        max_sector_weight=1.0,
+    )
+    assert advice.target.to_dict() == unguarded.to_dict()

@@ -21,16 +21,24 @@ buys):
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
 import pandas as pd
 
+from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.backtest.portfolio import Portfolio, to_decimal_price
 from qalpha.data.prices import PriceData
 from qalpha.live.advisor import DeployAdvice, advise_deploy
+from qalpha.live.price_integrity import (
+    PriceGap,
+    excluded_from_tilt,
+    gaps_note,
+    rebase_starts,
+    unexplained_gaps,
+)
 from qalpha.live.satellite import SatelliteRegistry, core_view_excluding
 
 _HIGH_WINDOW = 252  # ~1 trading year for the rolling high
@@ -77,26 +85,49 @@ def market_weakness(index_close: pd.Series, as_of: date) -> MarketWeakness:
 
 
 def cheapness_scores(
-    prices: PriceData, tickers: list[str], as_of: date, *, window: int = _HIGH_WINDOW
+    prices: PriceData,
+    tickers: list[str],
+    as_of: date,
+    *,
+    window: int = _HIGH_WINDOW,
+    rebase_from: Mapping[str, date] | None = None,
+    no_tilt: Collection[str] | None = None,
 ) -> dict[str, float]:
     """Per-name 'out of favour' score in [0,1): fractional pullback below its own 1y high.
 
     0 = at/above its rolling high; 0.30 = 30% below it. A *technical* cheapness proxy (pulled back),
     not fundamental valuation. Names without enough history get 0 (no tilt rather than a guess).
+
+    **Price-continuity inputs (PR-2).** ``adj_close`` corrects splits and dividends and nothing else,
+    so a demerger leaves a step-down that this rule would read as a discount for a full year — the
+    defect that put two price artifacts at the top of a real ₹100,000 recommendation. Callers pass
+    :func:`~qalpha.live.price_integrity.rebase_starts` as ``rebase_from`` to measure a flagged name's
+    high only over the window that starts at its gap (the first comparable price), and
+    :func:`~qalpha.live.price_integrity.excluded_from_tilt` as ``no_tilt`` for flagged names with too
+    little post-gap history to read — those score 0. Both default to off, leaving the original
+    behaviour exactly intact for every caller that does not opt in.
     """
     adj = prices.adj_close
     cutoff = pd.Timestamp(as_of)
+    rebase = rebase_from or {}
+    untilted = set(no_tilt or ())
     out: dict[str, float] = {}
     for t in tickers:
-        if t not in adj.columns:
+        if t not in adj.columns or t in untilted:
             out[t] = 0.0
             continue
         series = adj[t].loc[:cutoff].dropna()
         if len(series) < 20:
             out[t] = 0.0
             continue
-        high = float(series.tail(window).max())
         cur = float(series.iloc[-1])
+        start = rebase.get(t)
+        if start is not None:  # discontinuous series — the pre-gap high is a different instrument
+            series = series[series.index >= pd.Timestamp(start)]
+            if series.empty:
+                out[t] = 0.0
+                continue
+        high = float(series.tail(window).max())
         out[t] = max(0.0, 1.0 - cur / high) if high > 0 else 0.0
     return out
 
@@ -172,6 +203,14 @@ class WeaknessDeployAdvice:
     # advisor saw them, excluded from target sizing. Value is None when no price source covers
     # the name (fail-loud: listed as unpriced rather than silently dropped).
     off_watchlist: tuple[tuple[str, Decimal | None], ...] = ()
+    # Names whose price series has an unexplained one-day step (PR-2). Their cheapness has already
+    # been re-based (or zeroed) before sizing — this is the audit trail, so the UI can say *why* a
+    # name that looks 65% off its high is not being treated as 65% cheap.
+    price_gaps: tuple[PriceGap, ...] = ()
+
+    def price_gaps_note(self) -> str:
+        """The ⚠️ continuity line — '' when every series in the universe was continuous."""
+        return gaps_note({g.ticker: g for g in self.price_gaps})
 
     def off_watchlist_note(self) -> str:
         """The ℹ️ visibility line — '' when the book is watchlist-only (render unchanged)."""
@@ -196,6 +235,9 @@ class WeaknessDeployAdvice:
             "Most out-of-favour (pulled back from 1y high — technical, not P/E):",
         ]
         lines += [f"  - {t}: {p * 100:.0f}% below 1y high" for t, p in self.cheapest]
+        gaps = self.price_gaps_note()
+        if gaps:
+            lines += ["", gaps]
         note = self.off_watchlist_note()
         if note:
             lines += ["", note]
@@ -217,6 +259,7 @@ def advise_deploy_into_weakness(
     max_name_fraction: float = 0.20,
     max_names: int | None = None,
     broker_prices: Mapping[str, Decimal] | None = None,
+    known_actions: Mapping[str, Sequence[CorporateAction]] | None = None,
 ) -> WeaknessDeployAdvice:
     """Recommend deploying ``amount`` of new money across the Nifty-100 watchlist — diversified,
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
@@ -236,6 +279,14 @@ def advise_deploy_into_weakness(
     user knows the advisor saw it, but its capital is treated as withdrawn (the satellite-sleeve
     philosophy) — targets are sized over the core book only, and it is never bought or sold here.
     Watchlist names the user picked himself still steer the gap-fill exactly as before.
+
+    **Price continuity (PR-2).** Every candidate's series is checked for an unexplained one-day step
+    before it is scored. ``adj_close`` corrects splits and dividends but never demergers, so such a
+    step reads as a permanent discount to a 1-year-high rule — the defect that put two artifacts at
+    the top of a real recommendation. A flagged name's high is re-based to its gap rather than the
+    name being dropped, and the flags ride along on the advice so the UI can explain itself.
+    ``known_actions`` optionally supplies splits/dividends so a genuine, already-adjusted action is
+    not reported as a defect.
     """
     adj = prices.adj_close
     cutoff = pd.Timestamp(as_of)
@@ -246,7 +297,14 @@ def advise_deploy_into_weakness(
     affordable = [t for t in priced if last_price[t] <= cap]
     universe = affordable if len(affordable) >= 3 else priced  # don't over-restrict tiny deploys
 
-    cheap = cheapness_scores(prices, universe, as_of)
+    gaps = unexplained_gaps(adj, universe, as_of, actions=known_actions)
+    cheap = cheapness_scores(
+        prices,
+        universe,
+        as_of,
+        rebase_from=rebase_starts(gaps),
+        no_tilt=excluded_from_tilt(gaps),
+    )
     target = deploy_target(
         universe,
         sector_of,
@@ -291,4 +349,5 @@ def advise_deploy_into_weakness(
         target=target,
         cheapest=cheapest,
         off_watchlist=off_watchlist,
+        price_gaps=tuple(gaps[t] for t in sorted(gaps)),
     )

@@ -6,8 +6,8 @@ Guidance for Claude Code (and humans) working in this repo.
 
 **The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
 right, and the reasons are now documented and scoped. The full plan is
-[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 is BUILT** (branch
-`trust-repair-pr1`); PR-2 … PR-8 are not.
+[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 and PR-2 are BUILT**
+(branches `trust-repair-pr1`, `trust-repair-pr2`); PR-3 … PR-8 are not.
 Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
 A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
 
@@ -18,6 +18,20 @@ naming both defects. Every renderer stays wired behind the flag, so **PR-3 resto
 flipping one constant, not by rewriting anything.** Sell / Raise cash are untouched (validated
 FIFO/tax engine). Four gates green, 321 tests. **Do not flip the flag back until PR-2 (price
 continuity guard) and PR-3 (candidate health flag) are both merged.**
+
+**PR-2 (done): corporate actions no longer read as discounts.** New `live/price_integrity.py` —
+`unexplained_gaps` finds one-day steps that no split/dividend explains (the feed is *injected*, never
+fetched, so the guard is pure and costs no network call). The fix is a **re-base, not a veto**: a
+flagged name's 1-year high is measured from its gap day, so it keeps a correct reading.
+`cheapness_scores` gained `rebase_from`/`no_tilt`, both **default-off** — existing callers are
+bit-for-bit unchanged. Measured on the live watchlist: VEDL 65.4%→**23.1%**, TRENT 47.4%→**13.2%**,
+their combined share of a ₹100k deploy **44.4%→5.8%**. Also closes T1.3: `watchlist_freshness_guard` +
+`SafetyReport.buy_advice_safe` (a narrowing of `safe_to_advise`, non-blocking so it never silences
+Sell/Raise cash), and `_download_watchlist_panel` now reports failure instead of silently serving the
+previous panel. 343 tests. **Rule (a) verified: no backtest path imports `live/deploy.py` or
+`price_integrity.py` — the validated funnel is untouched.** ⚠️ `scripts/autopilot.py` uses the same
+advisor, so System/Shadow *future* deploys are corrected while their existing lots still hold the
+artifacts — the confound PR-7's re-seed clears.
 
 **Two defects in the buy recommendation, both new this session, both real-money-facing:**
 1. **Corporate actions read as discounts.** `cheapness_scores` (`live/deploy.py:100`) uses yfinance
