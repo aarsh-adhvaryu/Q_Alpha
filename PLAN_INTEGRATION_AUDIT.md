@@ -196,6 +196,78 @@ reads as additive. **Fix: relabel to Book value, or subtract cash.**
 
 ---
 
+## The four voices — verified name-by-name (2026-08-17)
+
+The user's sharpest question: *"the AI is telling something in watchlist and the AI is doing
+something else, while the advisor is saying something else, while the equity is something
+different."* All four were enumerated from committed data. They are not contradicting each other —
+**they are answering four different questions and none of them is wired to the next.**
+
+| # | Voice | What it names | Consumer |
+|---|---|---|---|
+| 1 | AI brief narrative | TECHM, HCLTECH, TCS, TATASTEEL, HINDALCO, AXISBANK | **none** |
+| 2 | AI machine output | `SIGNAL: lean=flat; band=-0.2..0.3; confidence=low` | deploy **size** — no names at all |
+| 3 | Advisor buy list | VEDL, TRENT, IRFC, HDFCLIFE, ITC | 1-year-drawdown ranking |
+| 4 | GO book holdings | APOLLOHOSP, ASIANPAINT, BEL, NTPC, SUNPHARMA | validated Nifty-50 funnel |
+| 5 | System book holdings | **32 names** (core + opportunistic sleeve) | mixed |
+
+### Overlap matrix (count of shared names)
+
+| | AI brief | GO book | System | Shadow |
+|---|---:|---:|---:|---:|
+| **AI brief** | 6 | **0** | 3 | 2 |
+| **GO book** | 0 | 5 | 3 | 3 |
+| **System** | 3 | 3 | 32 | 26 |
+| **Shadow** | 2 | 3 | 26 | 28 |
+
+**The AI brief shares zero names with the book that gates real money.** Its 3-name overlap with the
+System book is coincidental — there is no code path from the narrative to selection (see B4).
+
+### Shadow is not a twin at the portfolio level
+
+This is stronger evidence for B2 than the single-day basket gap:
+
+- System holds **32** names · Shadow holds **28** · shared **26**
+- Only in System: `ETERNAL, HINDALCO, JINDALSTEL, LODHA, ONGC, TATAPOWER`
+- Only in Shadow: `BAJAJHLDNG, HINDUNILVR`
+
+**Eight names — roughly a fifth of the book — differ between the "system" and its supposed "AI off
+twin".** Six weeks of amount-dependent composition drift has compounded into two materially
+different portfolios. System − Shadow is a comparison of two different funds, not an ablation.
+
+Reproduce:
+```bash
+uv run python -c "
+import json
+from decimal import Decimal
+def h(p):
+    lots=json.load(open(p))['portfolio']['lots']
+    return {l['ticker'].replace('.NS','') for l in lots
+            if Decimal(str(l.get('quantity_remaining',0)))>0}
+s,d=h('data/paper/adaptive_book.json'),h('data/paper/shadow_book.json')
+print('system only:',sorted(s-d)); print('shadow only:',sorted(d-s))"
+```
+
+### Why the page reads as incoherent
+
+Nothing here is *wrong* in isolation. The incoherence is that five name-lists sit on one screen in
+reading order, which implies a pipeline — *AI analyses → advisor selects → book holds* — that does
+not exist. The real topology is three disconnected islands:
+
+```
+AI brief ──(narrative)──> [nobody]
+         └─(SIGNAL)─────> deploy SIZE ──┐
+                                        ├─> System book (32 names)
+drawdown screen ──> advisor names ──────┘
+validated funnel ──> GO book (5 names)   [separate island, gates real money]
+```
+
+**Fix (presentation, no experiment impact):** label each surface with the question it answers and
+state what consumes it. The AI narrative should either be collapsed behind "commentary — nothing
+here is acted on", or dropped from the prompt entirely.
+
+---
+
 ## Pillar status against the ENDGAME CONTRACT
 
 | Pillar | Evidence today | Status |
