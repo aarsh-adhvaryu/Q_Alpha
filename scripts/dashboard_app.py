@@ -41,7 +41,9 @@ from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.live.advisor import advise_raise_cash, advise_sell
 from qalpha.live.dashboard import (
+    BUY_ADVICE_ON_REAL_MONEY,
     _benchmark_return_pct,
+    buy_advice_withheld_markdown,
     glossary_markdown,
     go_readiness_markdown,
     live_pm_brief_markdown,
@@ -328,7 +330,8 @@ def _advisor_with_safety(
     floor = cfg.deploy_policy.idle_cash_floor
     default_add = 50000
     if available_cash is not None and available_cash >= floor:
-        _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg, prices_dec)
+        if BUY_ADVICE_ON_REAL_MONEY:
+            _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg, prices_dec)
         default_add = int(available_cash)
     st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
     if live_session is not None:
@@ -376,6 +379,7 @@ def _next_actions_panel(
         holdings=len(portfolio.positions()),
         days_to_next_ltcg=min(waits) if waits else None,
         unreconciled_sells=sells,
+        buy_advice_available=BUY_ADVICE_ON_REAL_MONEY,
     )
     with st.container(border=True):
         st.markdown("#### 🧭 What to do next")
@@ -1227,89 +1231,119 @@ def _advisor_tabs(
             st.markdown(advise_raise_cash(portfolio, Decimal(amount), prices_dec, as_of).render())
 
     with add_tab:
-        st.caption(
-            "**Idle cash → what to buy.** The **math** picks a diversified, **tax-free (buys-only)** "
-            "spread across Nifty 100 tilted to out-of-favour names, for the **full amount** "
-            "(time-in-market — the evidence-backed default). The AI's market read is shown as "
-            "**context only**: its pacing rule is unproven and trades only fake money in the System "
-            "book until its System-vs-Shadow verdict is in."
-        )
-        amount = st.number_input(
-            "Idle cash to invest (₹)",
-            min_value=1000,
-            value=max(1000, default_add_amount),
-            step=1000,
-            key=f"add_amt_{namespace}",
-        )
-        n_stocks = st.slider(
-            "Spread across how many stocks?",
-            min_value=5,
-            max_value=40,
-            value=15,
-            help="Fewer = bigger, more concentrated positions (more risk, fewer orders). "
-            "More = broader & thinner. ~12–25 is the usual sweet spot.",
-            key=f"add_names_{namespace}",
-        )
-
-        # The AI read — INFORMATIONAL ONLY on the real-money surface. The AI-paced tranche rule is
-        # the hypothesis the System book is forward-testing (System vs Shadow); per the endgame
-        # contract it earns real-money influence only if that verdict comes back positive. Until
-        # then nothing here acts on it — the actionable advice below deploys the full amount.
-        from qalpha.live.autopilot import book_deploy_amount, parse_ai_signal, signal_tilt
-        from qalpha.live.deploy import market_weakness
-
-        wk = market_weakness(benchmark, as_of)
-        signal = (
-            parse_ai_signal(AI_BRIEF_MD.read_text(encoding="utf-8"), as_of.isoformat())
-            if AI_BRIEF_MD.exists()
-            else None
-        )
-        tilt = signal_tilt(signal)
-        paced = book_deploy_amount(Decimal(amount), wk.level, signal, ai=True)
-        ai_read = (
-            f"AI leans **{signal.lean}** ({signal.confidence}, ×{tilt:.2f})"
-            if signal is not None
-            else "no AI read today (neutral)"
-        )
-        st.info(
-            f"Market **{wk.level}** ({wk.drawdown * 100:.0f}% off 1y high) · {ai_read}. "
-            f"_FYI: the AI-paced rule **under test** would deploy ₹{paced:,.0f} now and hold the "
-            "rest — it is unproven, so it only trades fake money in the 🧠 System book. If it beats "
-            "its no-AI shadow over the test, it graduates here; until then this line is just "
-            "information._"
-        )
-
-        # Persist the last suggestion across the 30s live auto-refresh — the fragment rerun would
-        # otherwise wipe it the moment the button state resets.
-        advice_key = f"add_advice_{namespace}"
-        if st.button("Suggest what to buy", key=f"add_btn_{namespace}"):
-            wl = _watchlist()
-            if wl is None:
-                st.error("Watchlist prices not ready yet — try again in a minute.")
-            else:
-                from qalpha.live.deploy import advise_deploy_into_weakness
-
-                tickers, sector_of, wl_prices = wl
-                st.session_state[advice_key] = advise_deploy_into_weakness(
-                    portfolio,
-                    Decimal(amount),
-                    tickers,
-                    sector_of,
-                    wl_prices,
-                    benchmark,  # the REAL Nifty TRI, not the watchlist mean
-                    as_of,
-                    max_names=n_stocks,
-                    broker_prices=prices_dec,  # marks holdings the watchlist panel can't price
-                ).render()
-        if st.session_state.get(advice_key):
-            st.markdown(st.session_state[advice_key])
-            st.caption(
-                "This suggestion stays put through the 30s auto-refresh — press the button again "
-                "for fresh prices."
+        if not BUY_ADVICE_ON_REAL_MONEY:
+            # PR-1: the buy list is off the real-money surface until the continuity guard (PR-2) and
+            # the candidate health flag (PR-3) land. The renderer below is untouched — PR-3 restores
+            # it by flipping BUY_ADVICE_ON_REAL_MONEY, not by rewriting anything.
+            st.warning(buy_advice_withheld_markdown())
+        else:
+            _add_money_advisor(
+                portfolio,
+                prices_dec,
+                benchmark,
+                as_of,
+                default_add_amount=default_add_amount,
+                namespace=namespace,
             )
-            if AI_BRIEF_MD.exists():
-                with st.expander("🧠 Today's AI market read (context only — never a signal)"):
-                    st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
+
+
+def _add_money_advisor(
+    portfolio: Portfolio,
+    prices_dec: dict[str, Decimal],
+    benchmark: pd.Series,
+    as_of: date,
+    *,
+    default_add_amount: int,
+    namespace: str,
+) -> None:
+    """The Add-money (buy) advisor — idle cash → a deterministic, ₹0-tax buy plan.
+
+    Withheld from the real-money surface by ``BUY_ADVICE_ON_REAL_MONEY`` since 2026-08-17; kept
+    intact behind the flag so restoring it in PR-3 is a re-wire, not a rewrite.
+    """
+    st.caption(
+        "**Idle cash → what to buy.** The **math** picks a diversified, **tax-free (buys-only)** "
+        "spread across Nifty 100 tilted to out-of-favour names, for the **full amount** "
+        "(time-in-market — the evidence-backed default). The AI's market read is shown as "
+        "**context only**: its pacing rule is unproven and trades only fake money in the System "
+        "book until its System-vs-Shadow verdict is in."
+    )
+    amount = st.number_input(
+        "Idle cash to invest (₹)",
+        min_value=1000,
+        value=max(1000, default_add_amount),
+        step=1000,
+        key=f"add_amt_{namespace}",
+    )
+    n_stocks = st.slider(
+        "Spread across how many stocks?",
+        min_value=5,
+        max_value=40,
+        value=15,
+        help="Fewer = bigger, more concentrated positions (more risk, fewer orders). "
+        "More = broader & thinner. ~12–25 is the usual sweet spot.",
+        key=f"add_names_{namespace}",
+    )
+
+    # The AI read — INFORMATIONAL ONLY on the real-money surface. The AI-paced tranche rule is
+    # the hypothesis the System book is forward-testing (System vs Shadow); per the endgame
+    # contract it earns real-money influence only if that verdict comes back positive. Until
+    # then nothing here acts on it — the actionable advice below deploys the full amount.
+    from qalpha.live.autopilot import book_deploy_amount, parse_ai_signal, signal_tilt
+    from qalpha.live.deploy import market_weakness
+
+    wk = market_weakness(benchmark, as_of)
+    signal = (
+        parse_ai_signal(AI_BRIEF_MD.read_text(encoding="utf-8"), as_of.isoformat())
+        if AI_BRIEF_MD.exists()
+        else None
+    )
+    tilt = signal_tilt(signal)
+    paced = book_deploy_amount(Decimal(amount), wk.level, signal, ai=True)
+    ai_read = (
+        f"AI leans **{signal.lean}** ({signal.confidence}, ×{tilt:.2f})"
+        if signal is not None
+        else "no AI read today (neutral)"
+    )
+    st.info(
+        f"Market **{wk.level}** ({wk.drawdown * 100:.0f}% off 1y high) · {ai_read}. "
+        f"_FYI: the AI-paced rule **under test** would deploy ₹{paced:,.0f} now and hold the "
+        "rest — it is unproven, so it only trades fake money in the 🧠 System book. If it beats "
+        "its no-AI shadow over the test, it graduates here; until then this line is just "
+        "information._"
+    )
+
+    # Persist the last suggestion across the 30s live auto-refresh — the fragment rerun would
+    # otherwise wipe it the moment the button state resets.
+    advice_key = f"add_advice_{namespace}"
+    if st.button("Suggest what to buy", key=f"add_btn_{namespace}"):
+        wl = _watchlist()
+        if wl is None:
+            st.error("Watchlist prices not ready yet — try again in a minute.")
+        else:
+            from qalpha.live.deploy import advise_deploy_into_weakness
+
+            tickers, sector_of, wl_prices = wl
+            st.session_state[advice_key] = advise_deploy_into_weakness(
+                portfolio,
+                Decimal(amount),
+                tickers,
+                sector_of,
+                wl_prices,
+                benchmark,  # the REAL Nifty TRI, not the watchlist mean
+                as_of,
+                max_names=n_stocks,
+                broker_prices=prices_dec,  # marks holdings the watchlist panel can't price
+            ).render()
+    if st.session_state.get(advice_key):
+        st.markdown(st.session_state[advice_key])
+        st.caption(
+            "This suggestion stays put through the 30s auto-refresh — press the button again "
+            "for fresh prices."
+        )
+        if AI_BRIEF_MD.exists():
+            with st.expander("🧠 Today's AI market read (context only — never a signal)"):
+                st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
 
 
 _LTCG_SAFE_LEGEND = (
