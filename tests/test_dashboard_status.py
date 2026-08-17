@@ -229,6 +229,38 @@ def test_live_pm_brief_suppressed_below_floor() -> None:
     assert live_pm_brief_markdown(Decimal("4999"), advice, floor=Decimal("5000")) == ""
 
 
+# ---- the withheld buy list (PLAN_TRUST_REPAIR.md PR-1) -------------------------------------------
+
+
+def test_buy_advice_is_off_the_real_money_surface() -> None:
+    """The flag IS the gate — a green test here is what proves the buy list cannot render live.
+
+    PR-3 flips this to True once the price-continuity guard and the candidate health flag are in;
+    until then this test failing means the defective buy list is back on a real-money screen.
+    """
+    from qalpha.live.dashboard import BUY_ADVICE_ON_REAL_MONEY
+
+    assert BUY_ADVICE_ON_REAL_MONEY is False
+
+
+def test_withheld_notice_names_both_defects_and_what_still_works() -> None:
+    """An unexplained empty tab is the same trust failure in a smaller package — say why."""
+    from qalpha.live.dashboard import buy_advice_withheld_markdown
+
+    md = buy_advice_withheld_markdown()
+    # Defect 1 — corporate actions read as discounts, with the two names and their gap dates.
+    assert "VEDL" in md and "2026-04-30" in md
+    assert "TRENT" in md and "2026-01-01" in md
+    assert "demerger" in md.lower()
+    # Defect 2 — the advisor contradicts the §4.7 breakdown detector on its own recommendations.
+    assert "breaking down" in md
+    assert "IRFC" in md and "HDFCLIFE" in md and "ITC" in md
+    # And the honest framing: this rule is not the validated 18.2% strategy.
+    assert "18.2%" in md
+    # What is NOT withheld — sell/raise-cash run on the validated FIFO/tax engine.
+    assert "Sell a holding" in md and "Raise cash" in md
+
+
 # --- plain-English clarity layer (dashboard follow-up) ------------------------------------------
 
 
@@ -331,6 +363,16 @@ def test_checklist_blocks_on_a_tradebook_that_does_not_reconcile() -> None:
 def test_checklist_prompts_to_deploy_only_above_the_floor() -> None:
     assert _actions(idle_cash=Decimal("50000"))[2].state == "todo"
     assert _actions(idle_cash=Decimal("100"))[2].state == "done"
+
+
+def test_checklist_does_not_route_to_a_withheld_buy_list() -> None:
+    """PR-1: with the buy list withheld, 'use Add money for the buy plan' is a dead pointer."""
+    item = _actions(idle_cash=Decimal("50000"), buy_advice_available=False)[2]
+    assert item.state == "blocked"
+    assert "withheld" in item.detail
+    assert "Use **Add money**" not in item.detail
+    # Below the floor there is nothing to route either way — the withheld branch must not fire.
+    assert _actions(idle_cash=Decimal("100"), buy_advice_available=False)[2].state == "done"
 
 
 def test_checklist_says_hold_until_the_ltcg_crossover() -> None:

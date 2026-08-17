@@ -77,6 +77,49 @@ def watchlist_is_stale(last_date: date, today: date, *, max_weekdays: int = 3) -
     return _weekdays_after(last_date, today) - 1 >= max_weekdays
 
 
+#: Is the deterministic buy list allowed on the **real-money** surface?
+#:
+#: ``False`` since 2026-08-17 — PLAN_TRUST_REPAIR.md PR-1. Two defects make
+#: :func:`qalpha.live.deploy.advise_deploy_into_weakness` untrustworthy for a live account, and both
+#: are visible in today's recommendation (see :func:`buy_advice_withheld_markdown`). Nothing is
+#: deleted: the renderers stay wired behind this flag, so PR-3 — which lands the price-continuity
+#: guard and the per-candidate health flag — restores them by flipping this one constant.
+#:
+#: Scope: the **buy** side only. Sell and Raise-cash are untouched; they run on the validated
+#: FIFO/tax engine, which none of these defects touch.
+BUY_ADVICE_ON_REAL_MONEY = False
+
+
+def buy_advice_withheld_markdown() -> str:
+    """The notice shown in place of the buy list while it is withheld (PR-1).
+
+    Names both defects on screen rather than quietly hiding the tab. The user's request was to see
+    *why* the advice went away — an unexplained empty tab is the same trust failure in a smaller
+    package.
+    """
+    return (
+        "🚧 **The buy list is withheld — two defects found 2026-08-17.**\n\n"
+        "**1 · Corporate actions are read as discounts.** Cheapness is measured against each name's "
+        "1-year high on yfinance *Adj Close*, which corrects splits and dividends but **never "
+        "demergers or spinoffs**. Two of the 95 watchlist names have an unexplained one-day collapse "
+        "(VEDL −64.9% on 2026-04-30, TRENT −33.0% on 2026-01-01) and they rank **#1 and #2** on "
+        "cheapness — 44% of a ₹100,000 deploy chased two price artifacts, and the phantom discount "
+        "persists for a full year.\n\n"
+        "**2 · The advisor contradicts this system's own breakdown detector.** The §4.7 "
+        "idiosyncratic-breakdown test rates **4 of the 5 names last recommended** as 🔴 breaking down "
+        "(VEDL, IRFC, HDFCLIFE, ITC). It runs over *holdings* only and was never pointed at "
+        "*candidates* — so the same panel, on the same day, gave opposite verdicts on the same "
+        "stocks.\n\n"
+        "Also worth knowing: this buy rule is an **unvalidated technical screen**. It shares no "
+        "selection code and no names with the funnel the 18.2% backtest headline describes, and it "
+        "has never been tested against a baseline.\n\n"
+        "**Still live and unaffected:** *Sell a holding* and *Raise cash* — both run on the "
+        "validated FIFO/cost/tax engine.\n\n"
+        "This returns once the price-continuity guard and the per-candidate health flag are in "
+        "(PLAN_TRUST_REPAIR.md, PR-2 and PR-3). Nothing has been deleted."
+    )
+
+
 def live_pm_brief_markdown(
     available_cash: Decimal, advice: WeaknessDeployAdvice, *, floor: Decimal
 ) -> str:
@@ -376,6 +419,7 @@ def next_actions(
     holdings: int,
     days_to_next_ltcg: int | None,
     unreconciled_sells: int,
+    buy_advice_available: bool = True,
 ) -> list[ChecklistItem]:
     """The operating procedure as state, not prose — so the app can say what to do next.
 
@@ -424,7 +468,19 @@ def next_actions(
             )
         )
 
-    if idle_cash >= cash_floor:
+    if idle_cash >= cash_floor and not buy_advice_available:
+        # Don't route the user to a tab that is withheld — a checklist that points at advice the app
+        # is refusing to give is exactly the incoherence PR-1 exists to remove.
+        items.append(
+            ChecklistItem(
+                "Idle cash — buy plan withheld",
+                "blocked",
+                f"₹{idle_cash:,.0f} sitting idle, but the buy list is withheld pending two "
+                "defect fixes (see **Add money** for what they are). Holding cash is the safe "
+                "action until it returns; selling and raising cash are unaffected.",
+            )
+        )
+    elif idle_cash >= cash_floor:
         items.append(
             ChecklistItem(
                 "Deploy idle cash",

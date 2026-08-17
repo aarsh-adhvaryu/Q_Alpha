@@ -2,6 +2,58 @@
 
 Guidance for Claude Code (and humans) working in this repo.
 
+## 🛑 READ FIRST — TRUST REPAIR IS UNDERWAY (2026-08-17)
+
+**The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
+right, and the reasons are now documented and scoped. The full plan is
+[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 is BUILT** (branch
+`trust-repair-pr1`); PR-2 … PR-8 are not.
+Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
+A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
+
+**PR-1 (done): the buy list is OFF the real-money surface.** One flag —
+`live/dashboard.py:BUY_ADVICE_ON_REAL_MONEY = False` — gates the Add-money buy list, the zero-typing
+auto PM brief, and the "deploy idle cash" checklist item; the Add-money tab now renders a notice
+naming both defects. Every renderer stays wired behind the flag, so **PR-3 restores the surfaces by
+flipping one constant, not by rewriting anything.** Sell / Raise cash are untouched (validated
+FIFO/tax engine). Four gates green, 321 tests. **Do not flip the flag back until PR-2 (price
+continuity guard) and PR-3 (candidate health flag) are both merged.**
+
+**Two defects in the buy recommendation, both new this session, both real-money-facing:**
+1. **Corporate actions read as discounts.** `cheapness_scores` (`live/deploy.py:100`) uses yfinance
+   `adj_close`, which corrects splits + dividends but **never demergers**. Exactly two of 95
+   watchlist names have an unexplained one-day collapse (VEDL −64.9% on 2026-04-30, TRENT −33.0% on
+   2026-01-01) and they rank **#1 and #2** on cheapness — **44.4% of a ₹100k deploy chases two price
+   artifacts**, and the phantom discount persists a full year.
+2. **The advisor contradicts its own detector.** `position_health()` (the §4.7 idiosyncratic-breakdown
+   test) rates **4 of the 5 names the advisor recommended** as 🔴 breaking down — VEDL, IRFC, HDFCLIFE,
+   ITC. It runs over *holdings* only and is never pointed at *candidates*. Same panel, same day,
+   opposite verdicts. This — not missing sentiment — is why it recommends falling knives.
+
+Also established: **the buy rule has never been backtested** (no script references
+`advise_deploy_into_weakness`); it shares **zero** selection code and **zero** names with the
+validated funnel that the 18.2% headline describes. There is only **one** baseline, not two (`+0.98%`
+and `+3.92%` are the same NIFTYBEES series 28 days apart) and only **two** charts — the "clutter" is
+eight unlabelled return numbers on four bases. `manual_injections.json` over-counts contributions by
+**₹240,500**; `pending_injections.json` still has a two-machine write race that can destroy a queued
+deposit (same family as the ₹50k lost in July). **316 tests green and not one compares two panels
+reporting the same book** — which is why none of this was caught.
+
+**User decisions locked 2026-08-17 (do not re-litigate):**
+- **Flag, don't veto.** Add the continuity guard + show `position_health`'s 🔴 beside each recommended
+  name. Selection stays deterministic and unchanged.
+- **Pull the buy list off the real-money surface NOW** (PR-1), restore it only once guarded (PR-3).
+  Sell / Raise cash stay live — they run on the validated FIFO/tax engine.
+- **Re-seed System/Shadow from ground zero** rather than pick a fallback; archive the confounded
+  2026-07-10 → 08-17 run as a published negative. **This does NOT touch the GO book's clock.**
+- **The AI graduates to name-level verdicts** (PR-8) — math generates candidates, AI returns keep/drop
+  on a **~1-year horizon**, math sizes and executes. ⚠️ This makes the LLM a **selector**, changing
+  locked discipline #3 — it is **fake-money only** until a positive verdict, is pre-registered, and
+  the AI can never add a name outside the deterministic universe. **Real money never auto-trades.**
+
+**Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
+the 18.2% headline are untouched by every item in the plan.**
+
 ## 🚦 SESSION HANDOFF — a NEW session starts HERE (written 2026-07-21)
 
 **The system is live, autonomous, and mid-test. The user is hands-off for ~6 months** (Telegram pings
