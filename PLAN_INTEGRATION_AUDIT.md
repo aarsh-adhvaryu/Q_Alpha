@@ -1,64 +1,29 @@
-# Integration audit + remediation plan (2026-08-17)
+# Integration audit — final pass (2026-08-17)
 
-**Status: AUDIT ONLY — no code changed. Awaiting the user's call on what to execute.**
+**Status: AUDIT ONLY — no behaviour changed. Awaiting instruction.**
 
-## Why this exists
+## The user's observation, and the answer
 
-The user's verdict after reading the dashboard end to end: *"it looks the system has 400000, and the
-real go has 200000, 2 different things and 2 different baselines, at the same time — i am unable to
-trust the advisor for now."*
+> *"multiple things getting tested, and i am finding they work in its own but not in a sync system,
+> hence i cant see the difference"*
 
-That is a legitimate product failure independent of whether the maths is right. A prior audit pass
-was run from screenshots alone and produced four blockers. **This pass verified every one of them
-against the committed data and the source.** Two survived, one survived in altered form, and two
-were refuted — the screenshot reading was wrong. Recording both outcomes here, because a false
-blocker is as expensive as a missed one.
+That is the correct diagnosis, and it is now measurable. Every component works. They are not
+synchronised, and the desynchronisation is **larger than the effect being measured**.
 
-Every claim below is reproducible from files in this repo. Commands are given.
+### Why you cannot see the difference — in rupees
 
----
+| | Amount | Source |
+|---|---:|---|
+| **Signal** — System − Shadow profit, six weeks | **₹1,541** | `system_track.csv` (+0.39pp) |
+| Confound 1 — composition artifact, **one day** (2026-07-10) | ₹1,964 | `ledger.json`, baskets 2.62pp apart |
+| Confound 2 — cash drag (undeployed wallet) | ₹2,800 | 0.70pp, `+2.73%` deployed vs `+2.03%` contributed |
+| Confound 3 — exposure difference (total deployed) | ₹3,675 | `system_flows.json`, 1.9% more capital |
 
-## CONFIRMED — B2 · Shadow is not a clean twin, and the mechanism is now known
+**A single day of whole-share rounding (₹1,964) exceeds the entire six-week measured effect
+(₹1,541).** Signal-to-noise is below 1. The experiment cannot resolve the AI's contribution, and no
+amount of additional runtime fixes it — the noise scales with the number of deploy events.
 
-**This is the finding that matters. It invalidates ENDGAME CONTRACT pillar 3 as currently measured.**
-
-`scripts/autopilot.py:594` deploys both books through the *same* advisor on the *same* date, varying
-only the amount:
-
-```python
-for key, bk, use_ai in (("system", system, True), ("shadow", shadow, False)):
-    amt = book_deploy_amount(wallets[key], level, signal, ai=use_ai)
-    basket, rationale = _deploy_from_wallet(bk, amt, watchlist, wl_sectors, merged, nifbees, as_of)
-```
-
-The intent (per `docs/PREREGISTRATION_autopilot.md`) is that the AI tilt changes **size only**, so
-System − Shadow isolates the AI's contribution. If that held, both baskets would post an *identical
-percentage* return and differ only in rupees.
-
-They do not. From `data/autopilot/ledger.json`, same date, same advisor:
-
-| Date | Book | Deployed | Basket return | Benchmark |
-|---|---|---:|---:|---:|
-| 2026-07-10 | SYS | ₹93,750 | **+18.64%** | +1.73% |
-| 2026-07-10 | SHD | ₹75,000 | **+21.26%** | +1.73% |
-
-₹93,750 / ₹75,000 = 1.25× — exactly the AI tilt, as designed. But the basket returns are **2.6pp
-apart**, which the sizing rule cannot produce.
-
-**Root cause — `advise_deploy_into_weakness` is amount-dependent in *composition*, not just size:**
-
-1. `max_name_fraction=0.20` ([deploy.py](src/qalpha/live/deploy.py)) drops any name whose *single
-   share* costs more than 20% of the deploy. A smaller deploy therefore has a **different investable
-   universe** — pricier names fall out.
-2. The allocator buys **whole shares** greedily against the largest shortfall, so different amounts
-   land on different integer quantities and different tail names.
-
-Both are correct, deliberate features of the advisor. They are simply fatal to the experiment: the
-tilt silently changes *what is bought*, so **System − Shadow = ₹1,541 conflates "did the AI's sizing
-help?" with "did two different baskets perform differently?"** No amount of further runtime fixes
-this; it is a design fault in the comparison.
-
-**Reproduce:**
+Reproduce:
 ```bash
 uv run python -c "
 import json; L=json.load(open('data/autopilot/ledger.json'))
@@ -67,147 +32,206 @@ for d in L:
         print(d['book'], d['amount'], d['outcome_return_pct'])"
 ```
 
-### Fix options (user's call)
+---
 
-| Option | What it does | Cost |
+## Blocker verdicts
+
+| # | Claim | Verdict |
 |---|---|---|
-| **A — tilt the wallet, not the basket** (recommended) | Both books compute the basket at the **same notional amount**, then scale executed quantities by the tilt. Composition identical, size differs → clean attribution. | Re-seed the trio; current System−Shadow history is void. |
-| **B — accept and relabel** | Keep the mechanism, stop calling it an AI attribution. Report it as "AI-paced system vs unpaced system", a *joint* effect. | No re-seed. Pillar 3 becomes unanswerable. |
-| **C — freeze the shadow** | Retire System vs Shadow; report only System vs Baseline. | No re-seed. One fewer question answered. |
-
-Whichever is chosen, `docs/PREREGISTRATION_autopilot.md` gets a **disclosed amendment** (repo rule:
-negatives get published, amendments are recorded, never rewritten).
-
----
-
-## CONFIRMED — B4 · The AI brief's stock analysis feeds nothing
-
-`grep -rn 'ai_brief' --include='*.py' src scripts` shows the only importer is its own generator; the
-dashboard reads `reports/ai_brief.md` as markdown. The sole machine consumer is `parse_ai_signal` →
-`signal_tilt` → deploy **amount**.
-
-So the brief's "Watchlist names affected" (TECHM, HCLTECH, TCS, TATASTEEL, HINDALCO, AXISBANK) has
-**no consumer**. It shares a page with a buy list (VEDL, TRENT, IRFC, HDFCLIFE, ITC) chosen by a
-drawdown ranking, with zero intersection. A reader top-to-bottom will infer causation that does not
-exist.
-
-This is *architecturally intended* — rule (a) keeps the LLM out of the calculator, and the brief is
-labelled context-only. The problem is purely presentational: **the page implies a link it does not
-have**, at ~57k input tokens/day.
-
-**Fix (cheap, no experiment impact):** render only the `SIGNAL:` line and the tilt it produced;
-move the narrative behind a collapsed "AI commentary (nothing here is acted on)" expander, or drop
-the watchlist section from the prompt.
+| B1 | Experiment tests a different strategy than the GO rides | **TRUE — but by design** |
+| B2 | Shadow is not a clean twin | **TRUE — mechanism identified** |
+| B3 | Two baselines, different windows, interchangeable | **FALSE — trio is synchronised** |
+| B4 | AI brief feeds nothing | **TRUE** |
+| H1 | One book, two returns on one page | **TRUE — both correct, unlabelled** |
+| H2 | Hit-rate verdicts mislabeled | **FALSE — ledger is consistent** |
+| H3 | Rebalance fired on a trivial benefit / implausible drift | **FALSE — expected behaviour** |
+| H4 | "Equity" tile includes cash | **TRUE** |
 
 ---
 
-## CONFIRMED (altered) — B1 · The experiment and the GO ride different strategies
+### B2 · TRUE — the tilt changes *what is bought*, not just how much
 
-Verified windows and cadences:
+`scripts/autopilot.py:594` runs both books through the same advisor on the same date, varying only
+the amount. Under the pre-registered design the tilt changes **size only**, so both baskets should
+post an *identical percentage* return.
+
+From `data/autopilot/ledger.json`, 2026-07-10:
+
+| Book | Deployed | Basket return | Benchmark |
+|---|---:|---:|---:|
+| SYS | ₹93,750 | **+18.64%** | +1.73% |
+| SHD | ₹75,000 | **+21.26%** | +1.73% |
+
+₹93,750 / ₹75,000 = 1.25× — exactly the tilt. But the returns are **2.62pp apart**, which sizing
+cannot produce.
+
+**Root cause — `advise_deploy_into_weakness` is amount-dependent in composition:**
+
+1. `max_name_fraction=0.20` ([deploy.py](src/qalpha/live/deploy.py)) drops any name whose *single
+   share* exceeds 20% of the deploy → a smaller deploy has a **different investable universe**.
+2. Whole-share greedy allocation lands different integer quantities and different tail names.
+
+Both are correct, deliberate advisor features. Both are fatal to this comparison.
+
+**A second, independent confound in the same measurement:** the tranche rule is `fraction × wallet`,
+so front-loading shrinks every later tranche. Total deployed converges (₹196,253 vs ₹192,578, 1.9%
+apart) — meaning the tilt is really testing **deployment *timing***, not size, which is not what the
+pre-registration says it tests.
+
+**System − Shadow therefore conflates three things** — AI directional skill, composition noise, and
+timing — with the noise term dominating.
+
+#### Options
+
+| | Approach | Cost |
+|---|---|---|
+| **A** *(recommended)* | Compute the basket **once at a fixed notional**, then scale executed quantities by the tilt. Composition identical by construction; only size differs. | Re-seed the trio. Current System−Shadow history is void. |
+| **B** | Keep the mechanism; stop calling it AI attribution. Report as "AI-paced vs unpaced system" — a joint effect. | No re-seed. Pillar 3 unanswerable. |
+| **C** | Retire Shadow. Report System vs Baseline only. | No re-seed. One less question. |
+
+Any choice requires a **disclosed amendment** to `docs/PREREGISTRATION_autopilot.md` (repo rule:
+amendments are recorded, never rewritten).
+
+---
+
+### B1 · TRUE, but by design — a labelling fault
 
 | Book | File | Marks | Window | Rebalance |
 |---|---|---:|---|---|
 | GO (criterion 6) | `data/paper/book.json` | 45 | 2026-06-12 → 08-14 | **annual** |
-| System | `data/paper/adaptive_book.json` | 26 | 2026-07-10 → 08-14 | **§4.6-gated, evaluated daily** |
+| System | `data/paper/adaptive_book.json` | 26 | 2026-07-10 → 08-14 | **§4.6-gated, daily eval** |
 
-These are genuinely different rebalance policies over different windows. **This is by design and
-documented** (CLAUDE.md: the System book is the former smart-rebalance book upgraded in place), so it
-is *not* a code bug — the prior audit overstated it.
+Genuinely different policies over different windows — but documented and intentional (CLAUDE.md: the
+System book is the former smart-rebalance book upgraded in place). **Not a code bug.**
 
-What is wrong is the **claim** on the page: *"the System book above is the full system being
-proven."* It proves the adaptive variant. The real-money GO rides the annual book. Attribution on
-one does not transfer to the other, and nothing on the page says so.
-
-**Fix:** relabel. The System book is "the full system, adaptive-cadence variant — not the GO book".
-One sentence, no re-seed.
+What is wrong is the page's claim that *"the System book above is the full system being proven."* It
+proves the adaptive variant; the real-money GO rides the annual book. **Fix: one sentence of
+relabelling.**
 
 ---
 
-## REFUTED — B3 · The baseline is fine; the two *pages* are not comparable
+### B3 · FALSE — the trio is synchronised
 
-The prior audit claimed the NIFTYBEES baseline was mis-seeded and 2.7pp off the index. **The data
-says otherwise.** `data/autopilot/system_track.csv` row 1:
+`data/autopilot/system_track.csv`, first row:
 
 ```
-2026-07-10, ... , baseline_value=350000.0, baseline_profit=0.0, baseline_return_pct=0.0
+2026-07-10, ..., baseline_value=350000.0, baseline_profit=0.0, baseline_return_pct=0.0
 ```
 
-All three books start **2026-07-10 at ₹350,000**, baseline return exactly `0.0`. The trio shares a
-window; that comparison is valid.
+All three books start **2026-07-10 at ₹350,000**, baseline return exactly `0.0`. Return formulas are
+identical across all three (`profit / net_contributions`, money-weighted). The trio comparison is
+**valid**.
 
-The `+3.69%` Nifty TRI figure is on the **GO page**, measured since **2026-06-12** — a window 28 days
-longer. Comparing it to the baseline's `+0.98%` is a cross-page mismatch the *user* was invited to
-make, not one the code makes.
-
-**Fix:** presentational only. Never render a return from one book beside a return from another
-without both windows on screen.
+The `+3.69%` Nifty TRI is on the **GO page**, measured from 2026-06-12 — a window 28 days longer.
+That is a cross-page mismatch the layout invites, not a measurement error. **Fix: never render two
+books' returns side by side without both windows on screen.**
 
 ---
 
-## REFUTED — H2 · The hit-rate verdicts are correct
+### B4 · TRUE — the AI's stock analysis has no consumer
 
-The prior audit read the screenshot as marking `SYS +0.4% vs Nifty +0.7%` as *worked*. The ledger's
-actual figures are consistent with `resolve_decision` (`gap > _WORK_TOL` → worked):
+`grep -rn 'ai_brief' --include='*.py' src scripts` → the only importer is its own generator; the
+dashboard reads `reports/ai_brief.md` as markdown. The sole machine consumer is `parse_ai_signal` →
+`signal_tilt` → deploy **amount**.
+
+So the brief's watchlist (TECHM, HCLTECH, TCS, TATASTEEL, HINDALCO, AXISBANK) has **zero
+intersection** with either the GO holdings or the buy list, and no code path. Architecturally
+intended — rule (a) keeps the LLM out of the calculator — but the page **implies a link it does not
+have**, at ~57k input tokens/day.
+
+**Fix: render only the `SIGNAL:` line and the tilt it produced; collapse the narrative.**
+
+---
+
+### H1 · TRUE — two correct returns for one book, neither labelled
+
+The table says system **+2.03%**; the hedge section says **+2.73%**. Both are right:
+
+- `+2.03%` = `profit / net_contributions` — money-weighted on **all** capital, including the idle wallet.
+- `+2.73%` = return on the **flow-adjusted** curve — capital actually deployed.
+
+The 0.70pp gap **is the cash drag**, and it is larger than the entire AI effect being measured
+(+0.39pp). Worth showing deliberately, not as an unexplained discrepancy.
+
+---
+
+### H2 · FALSE — verdicts are consistent
+
+`resolve_decision` marks `worked` when `gap > _WORK_TOL`. Against the real ledger:
 
 | Date | Book | Basket | Bench | Verdict | Correct? |
 |---|---|---:|---:|---|---|
-| 2026-07-13 | SHD | 1.31% | 1.87% | didn't | ✓ |
-| 2026-07-14 | SYS | 3.31% | 2.11% | worked | ✓ |
-| 2026-07-15 | SYS | 1.31% | 1.70% | flat | ✓ |
-| 2026-07-17 | SYS | 8.75% | 0.68% | worked | ✓ |
+| 07-13 | SHD | 1.31% | 1.87% | didn't | ✓ |
+| 07-14 | SYS | 3.31% | 2.11% | worked | ✓ |
+| 07-15 | SYS | 1.31% | 1.70% | flat | ✓ |
+| 07-17 | SYS | 8.75% | 0.68% | worked | ✓ |
 
-**Not a bug.** The small-text reading was wrong.
-
-Standing caveat unchanged: **n = 5 resolved decisions.** The page's own "low power early — not a
-verdict" is the correct framing and should stay.
+SYS resolved = 5 (`worked ×4`, `flat ×1`) → **4/5 is correct.** The screenshot's small text was
+misread. Standing caveat unchanged: **n = 5**, and the page's "low power early — not a verdict" is
+the right framing.
 
 ---
 
-## CONFIRMED — H4 · The "Equity" tile includes cash
+### H3 · FALSE — the 79.4% drift is expected
 
-`data/paper/book.json` stores `equity` as **total book value**:
+The report reads *"rebalanced — drift 79.4% > threshold and §4.6 net-benefit gate cleared."* That
+looks implausible for a six-week-old book only if drift is read as deviation from a held target. It
+is deviation from the **core Nifty-50 target**, and the System book deliberately holds opportunistic
+watchlist names (VEDL, TRENT, IRFC…) that are *not in that target at all*. Large drift is the
+designed consequence of mixing an opportunistic sleeve with a core target. **Not a bug — but it
+needs a definition on screen.**
+
+---
+
+### H4 · TRUE — the "Equity" tile is total book value
+
+`data/paper/book.json` stores `equity` inclusive of cash:
 
 ```json
 {"date": "2026-08-14", "equity": "201903.98", "cash": "7335.38"}
 ```
 
-The screenshot's holdings sum to ₹193,388; + ₹7,335 cash = ₹200,723 = the "Equity" tile. Shown
-beside a separate "Cash ₹7,335" tile, it reads as additive and invites a ₹208k mental total.
-
-**Fix:** relabel the tile **Book value**, or make it `equity − cash`. One line.
+Holdings sum ₹193,388 + ₹7,335 cash = ₹200,723 = the tile. Shown beside a separate "Cash" tile it
+reads as additive. **Fix: relabel to Book value, or subtract cash.**
 
 ---
 
-## Verified sound — no action
+## Pillar status against the ENDGAME CONTRACT
 
-- Deploy arithmetic exact to the rupee (₹99,545.46 + ₹317.15 + ₹137.39 = ₹100,000.00).
-- Track CSV internally consistent (8,135 / 400,000 = 2.03%).
-- Trio funded equally — `_inject_trio` credits system/shadow/baseline the same amount, so no top-up
-  can bias the comparison.
-- The disclaimers are honest throughout: "fake money, no real orders", "low power early", "GO
-  verdict: NOT YET".
+| Pillar | Evidence today | Status |
+|---|---|---|
+| 1. Core GO | GO book 45 marks, no volatility event yet | ⏳ accruing |
+| 2. System > Baseline | +2.03% vs +0.98% over a synchronised window | 🟢 valid, low power |
+| 3. AI verdict | signal ₹1,541 < noise ₹1,964 | 🔴 **unmeasurable as built** |
+| 4. Hedge witnessed | `episodes 0`, `+2.73%` vs `+2.73%` identical | ⏳ no stress event |
+
+**Pillar 2 is the one piece of the experiment that is actually sound** — same window, same cash
+flows, same return formula, and the gap (+1.05pp) is not swamped by the confounds above, since both
+books face the same composition mechanics.
 
 ---
 
 ## Recommended order
 
-| # | Item | Effort | Blocks the GO? |
+| # | Item | Effort | Blocks a pillar? |
 |---|---|---|---|
-| 1 | **Decide B2** (option A / B / C) + amend the pre-registration | decision, then ~half a day for A | **Yes — pillar 3** |
-| 2 | Relabel the System book (B1) — it is not the GO book | 1 sentence | No, but it misleads |
-| 3 | Relabel Equity → Book value (H4) | 1 line | No |
-| 4 | Never render two books' returns side by side without windows (B3) | small | No |
-| 5 | Collapse the AI narrative to the SIGNAL line (B4) | small | No |
+| 1 | **Decide B2** (A / B / C) + amend the pre-registration | decision; ~half a day for A | **Yes — pillar 3** |
+| 2 | Relabel the System book — it is not the GO book | 1 sentence | No |
+| 3 | Relabel Equity → Book value | 1 line | No |
+| 4 | Show both returns with their basis (`+2.03%` contributed / `+2.73%` deployed) | small | No |
+| 5 | Never render two books' returns without windows | small | No |
+| 6 | Collapse the AI narrative to the `SIGNAL:` line | small | No |
+| 7 | Define "drift" on screen; retire the frozen A/B/C books from the page | small | No |
 
-**Items 2–5 are an afternoon and touch presentation only.** Item 1 is a real decision about the
-experiment's design, and under option A it voids the current System−Shadow history — which is the
-honest cost of having measured the wrong thing for six weeks.
+Items 2–7 are an afternoon and touch presentation only. **Item 1 is a design decision that is
+yours** — and under option A it voids the current System−Shadow history, which is the honest cost of
+having measured a confounded quantity for six weeks.
 
-## On running code to verify
+## On running code
 
-Everything in this document was verified by reading committed data and source. Where a fix needs a
-run to confirm (e.g. option A's claim that identical-notional baskets produce identical percentage
-returns), that is a short scripted check against the existing panels — say the word and it gets
-written, run, and its output pasted back before any behaviour changes.
+Everything above was verified against committed data and source; every table is reproducible with
+the commands shown. Where a fix needs a run to confirm — e.g. option A's claim that identical-notional
+baskets produce identical percentage returns — that is a short scripted check against the existing
+panels, and it will be written, run, and its output reported **before** any behaviour changes.
 
-**Nothing has been changed. Awaiting instruction.**
+**Nothing has been changed.**
