@@ -43,6 +43,7 @@ from qalpha.live.advisor import advise_raise_cash, advise_sell
 from qalpha.live.dashboard import (
     BUY_ADVICE_ON_REAL_MONEY,
     _benchmark_return_pct,
+    ai_signal_summary,
     buy_advice_blocked_markdown,
     buy_advice_scope_note,
     buy_advice_withheld_markdown,
@@ -60,6 +61,7 @@ from qalpha.live.dashboard import (
 from qalpha.live.gist_store import find_gist_id, load_gist_file, save_gist_file
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
+from qalpha.live.measures import ReturnMeasure, measures_table, window_mismatch_note
 from qalpha.live.paper import PaperBook, _prices_on
 from qalpha.live.position_health import position_health
 from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
@@ -659,6 +661,8 @@ def _core_go_expander(
             "engine — this page never trades. The real-money GO rides THIS book (its clean annual-"
             "cadence run is the evidence); the System book above is the full system being proven."
         )
+        # Two books, two funding histories, two windows, one screen — the confusion this fixes.
+        _two_book_window_note(book)
         _paper_overview(book, prices, benchmark, universe, sector_of, as_of)
         _go_readiness_view(book, benchmark, as_of)
         with st.expander("🩺 Position health — between-rebalance watch"):
@@ -766,15 +770,28 @@ def _system_tab(
 
     # --- Today's AI market brief (context only; the system acts on its SIGNAL via the fixed rule) ---
     st.divider()
-    with st.expander(
-        "🧠 Today's AI market brief (context only — the fixed rule acts on its SIGNAL)"
-    ):
-        if AI_BRIEF_MD.exists() and "No brief generated yet" not in AI_BRIEF_MD.read_text(
-            encoding="utf-8"
-        ):
-            st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
-        else:
-            st.info("No brief yet — the daily run writes it after market close.")
+    st.subheader("🧠 What the AI actually did today")
+    # T2.5 — lead with the one line that has consequences; the narrative goes behind it. Several
+    # paragraphs of per-name prose rendered under a buy list read as "the AI picked these", which is
+    # the opposite of true: its output has no ticker field at all.
+    from qalpha.live.autopilot import parse_ai_signal, signal_tilt
+
+    brief_text = AI_BRIEF_MD.read_text(encoding="utf-8") if AI_BRIEF_MD.exists() else ""
+    has_brief = bool(brief_text) and "No brief generated yet" not in brief_text
+    signal = parse_ai_signal(brief_text, as_of.isoformat()) if has_brief else None
+    st.info(
+        ai_signal_summary(
+            getattr(signal, "lean", None),
+            getattr(signal, "confidence", None),
+            signal_tilt(signal),
+            consumed_by="the 🧠 System book only (fake money)",
+        )
+    )
+    if has_brief:
+        with st.expander("Read the full brief (background reading — nothing consumes this prose)"):
+            st.markdown(brief_text)
+    else:
+        st.caption("No brief yet — the daily run writes it after market close.")
 
     # --- The validated core (the official GO gate) — running untouched underneath ---
     st.divider()
@@ -890,15 +907,53 @@ def _paper_overview(
     as_of: date,
 ) -> None:
     prices_dec = _prices_on(prices, as_of)
-    equity = book.portfolio.market_value(prices_dec)
-    ret = book.total_return_pct(prices, as_of)
+
+    # T2.3 — the tile and the chart beneath it must read the SAME source. This tile used to re-mark
+    # equity live against the host's price panel while the chart, the GO scorecard and the freshness
+    # panel all read the cron-committed curve, so one book showed two different numbers on one
+    # screen. The committed curve is the book of record (it is the criterion-6 evidence), so the tile
+    # reads that; any live drift is shown separately, and labelled as such, rather than silently
+    # replacing it.
+    curve = book.equity_curve
+    marked_on = date.fromisoformat(str(curve[-1]["date"])) if curve else as_of
+    book_value = (
+        Decimal(str(curve[-1]["equity"])) if curve else book.portfolio.market_value(prices_dec)
+    )
+    starting = book.starting_capital
+    ret = float((book_value - starting) / starting * 100) if starting > 0 else 0.0
     bench = _benchmark_return_pct(benchmark, book.start_date, as_of)
+
+    headline = ReturnMeasure(
+        label="Validated ₹2L core",
+        pct=ret,
+        basis="starting_capital",
+        start=book.start_date,
+        end=marked_on,
+        denominator=f"₹{starting:,.0f}",
+    )
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Equity", f"₹{equity:,.0f}", f"{ret:+.2f}%")
+    c1.metric("Book value (incl. cash)", f"₹{book_value:,.0f}", f"{ret:+.2f}%")
     c2.metric("Nifty 50 TRI", f"{bench:+.2f}%" if bench is not None else "—")
-    c3.metric("Cash", f"₹{book.portfolio.cash:,.0f}")
+    c3.metric("of which cash", f"₹{book.portfolio.cash:,.0f}")
     c4.metric("Realized tax to date", f"₹{book.realized_tax():,.0f}")
-    st.caption(performance_read(ret, bench))  # plain good/bad read so the numbers aren't bare
+    st.caption(
+        f"Both figures cover **{book.start_date} → {marked_on}**. "
+        f"Return is measured against {headline.basis_text} ({headline.denominator}); the Nifty 50 "
+        "TRI is the same window. — " + performance_read(ret, bench)
+    )
+
+    # The other bases are real and they disagree; they belong behind a note, not scattered on screen
+    # as bare percentages (T2.2). Exactly one headline above.
+    _how_measured_note(book, curve, marked_on, ret)
+
+    live_value = book.portfolio.market_value(prices_dec)
+    if curve and abs(live_value - book_value) > Decimal("1"):
+        st.caption(
+            f"ℹ️ Re-marked against this host's price panel right now the book would be "
+            f"₹{live_value:,.0f} ({float((live_value - book_value) / book_value * 100):+.2f}% vs the "
+            f"committed mark). The committed mark above is the book of record — this line exists so "
+            "the difference is visible rather than silently swapped in."
+        )
 
     plan = book.plan(prices, universe, sector_of, as_of)
     if plan.has_orders:
@@ -924,6 +979,87 @@ def _paper_overview(
             _holdings_frame(book.portfolio, prices_dec, as_of), hide_index=True, width="stretch"
         )
         st.caption(_LTCG_SAFE_LEGEND)
+
+
+def _how_measured_note(book: PaperBook, curve: list, marked_on: date, headline_pct: float) -> None:
+    """The "how this is measured" expander — every other basis, named, in one place (T2.2).
+
+    Three numbers existed for this one book (+0.95% vs starting capital, +1.26% and +1.30% vs the
+    first equity mark), differing only by the ₹611.92 of day-one trading cost that sits between the
+    denominators. All three were correct and none was labelled, which is what made them read as a
+    contradiction. One is promoted to the headline; the rest live here with the reason they differ.
+    """
+    if not curve:
+        return
+    first_mark = Decimal(str(curve[0]["equity"]))
+    starting = book.starting_capital
+    last = Decimal(str(curve[-1]["equity"]))
+    measures = [
+        ReturnMeasure(
+            "Headline",
+            headline_pct,
+            "starting_capital",
+            book.start_date,
+            marked_on,
+            f"₹{starting:,.0f}",
+        ),
+        ReturnMeasure(
+            "Since the first mark",
+            float((last - first_mark) / first_mark * 100) if first_mark > 0 else 0.0,
+            "first_mark",
+            date.fromisoformat(str(curve[0]["date"])),
+            marked_on,
+            f"₹{first_mark:,.0f}",
+        ),
+    ]
+    cost = starting - first_mark
+    with st.expander("ℹ️ How this is measured — and why you may see a different number elsewhere"):
+        st.markdown(measures_table(measures))
+        st.markdown(
+            f"Both are right. They differ by the **₹{cost:,.2f}** of trading cost paid on day one: "
+            "the headline counts it against the book (you handed over "
+            f"₹{starting:,.0f} and this is what it is worth now), while the first-mark basis starts "
+            "counting *after* it was spent. The headline is the stricter of the two, which is why it "
+            "is the one on the tile.\n\n"
+            "The hedge overlay report quotes the first-mark basis, so a small difference there is "
+            "this, not a disagreement about the book."
+        )
+
+
+def _two_book_window_note(book: PaperBook) -> None:
+    """Say plainly that the two books on this screen are disjoint and cover different windows (T2.1).
+
+    The System book is ₹2L core + ₹2L of dashboard Add-money and started 2026-07-10; the GO book is
+    ₹2L funded once on 2026-06-12 and never topped up. Structurally disjoint, differently funded,
+    28 days apart — and until now nothing on the page said so, which is why two honest numbers read
+    as a contradiction.
+    """
+    from autopilot import BASELINE_PATH
+
+    from qalpha.live.autopilot import Book
+
+    if not BASELINE_PATH.exists():
+        return
+    import json as _json
+
+    try:
+        other = Book.from_dict(_json.loads(BASELINE_PATH.read_text(encoding="utf-8")))
+    except (ValueError, KeyError, OSError):
+        return
+    if other.start_date is None or other.start_date == book.start_date:
+        return
+    note = window_mismatch_note(
+        [
+            ReturnMeasure("The System book above", 0.0, "contributed", other.start_date, None),
+            ReturnMeasure("This validated core", 0.0, "starting_capital", book.start_date, None),
+        ]
+    )
+    if note:
+        st.caption(
+            note.replace(" — ", " — ", 1)
+            + " They are also **separate books**: this one was funded ₹2L once and never topped up; "
+            "the System book above is ₹2L plus everything you have added since."
+        )
 
 
 TRADEBOOK_GIST_FILE = "tradebook_master.csv"

@@ -141,3 +141,37 @@ def test_the_sell_advisor_still_computes_on_the_real_money_surface() -> None:
     at.button(key="sell_btn_live").click().run()
     assert not at.exception
     assert any("ITC.NS" in m.value for m in at.markdown)
+
+
+# ---- one book, one number (PLAN_TRUST_REPAIR.md PR-4 — fixes T2.2, T2.3) -------------------------
+
+
+def test_the_headline_tile_reads_the_same_source_as_the_chart_beneath_it() -> None:
+    """T2.3: the tile re-marked equity live while the chart read the committed curve.
+
+    One book, two numbers, one screen. This asserts the tile's value is the committed curve's last
+    mark — the same series the chart, the GO scorecard and the freshness panel all read.
+    """
+    import json
+
+    raw = json.loads(_BOOK.read_text(encoding="utf-8"))
+    committed = float(raw["equity_curve"][-1]["equity"])
+
+    at = AppTest.from_file(str(_APP), default_timeout=90).run()
+    assert not at.exception
+    values = [m.value for m in at.metric]
+    assert any(f"₹{committed:,.0f}" == v for v in values), (
+        f"no tile shows the committed mark ₹{committed:,.0f}; tiles were {values}"
+    )
+    # And the tile is named for what it contains — it is inclusive of cash, beside a cash tile.
+    labels = [m.label for m in at.metric]
+    assert any("Book value" in lbl and "cash" in lbl for lbl in labels)
+
+
+def test_every_headline_return_arrives_with_a_window() -> None:
+    """T2.1/T2.2: a bare percentage with no window is what made two honest numbers look wrong."""
+    at = AppTest.from_file(str(_APP), default_timeout=90).run()
+    assert not at.exception
+    text = " ".join(c.value for c in at.caption) + " ".join(m.value for m in at.markdown)
+    assert "→" in text  # a window is printed
+    assert "measured against" in text or "Window:" in text
