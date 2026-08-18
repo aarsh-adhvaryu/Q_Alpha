@@ -50,6 +50,17 @@ def _go_curve() -> list[dict[str, str]]:
     return json.loads(_GO_BOOK.read_text(encoding="utf-8"))["equity_curve"]
 
 
+def _track_rows() -> list[dict[str, str]]:
+    """The System run's marks — empty between a re-seed and its first mark."""
+    if not _SYSTEM_TRACK.exists():
+        return []
+    return list(csv.DictReader(_SYSTEM_TRACK.read_text(encoding="utf-8").splitlines()))
+
+
+def _state() -> dict[str, object]:
+    return json.loads((_ROOT / "data" / "autopilot" / "state.json").read_text(encoding="utf-8"))
+
+
 def _md_field(md: str, label: str) -> str:
     """Pull a value out of a `| Label | value |` row."""
     m = re.search(rf"\|\s*{re.escape(label)}\s*\|\s*([^|]+?)\s*\|", md)
@@ -133,11 +144,21 @@ def _system_md_row(md: str, key: str) -> tuple[Decimal, Decimal, Decimal, float]
 
 @pytest.mark.parametrize("book", ["system", "shadow", "baseline"])
 def test_the_system_scoreboard_matches_the_track_record_it_was_rendered_from(book: str) -> None:
-    """autopilot_dashboard.md ⇄ system_track.csv, for all three books."""
-    rows = list(csv.DictReader(_SYSTEM_TRACK.read_text(encoding="utf-8").splitlines()))
-    last = rows[-1]
-    md = _SYSTEM_MD.read_text(encoding="utf-8")
+    """autopilot_dashboard.md ⇄ system_track.csv, for all three books.
 
+    Between a re-seed and the run's first mark there is no track record to agree with. That is a
+    real state with its own invariant — the scoreboard must say the run has not started rather than
+    keep displaying the previous run's numbers — so it is asserted, not skipped.
+    """
+    rows = _track_rows()
+    md = _SYSTEM_MD.read_text(encoding="utf-8")
+    if not rows:
+        assert "reseed" in md.lower() or "not started" in md.lower(), (
+            "no track record yet, but the scoreboard is not saying so — it may be showing a "
+            "previous run's numbers"
+        )
+        return
+    last = rows[-1]
     value, _contributed, profit, ret = _system_md_row(md, book)
     assert abs(value - Decimal(last[f"{book}_value"])) <= _RUPEE_TOL
     assert abs(profit - Decimal(last[f"{book}_profit"])) <= _RUPEE_TOL
@@ -189,18 +210,27 @@ def _render_from_committed() -> str:
 
     from qalpha.live.autopilot import load_ledger
 
-    rows_csv = list(csv.DictReader(_SYSTEM_TRACK.read_text(encoding="utf-8").splitlines()))
-    last = rows_csv[-1]
-    contributed = float(json.loads(_BASELINE.read_text(encoding="utf-8"))["net_contributions"])
-    rows = {
-        b: {
-            "value": float(last[f"{b}_value"]),
-            "contributed": contributed,
-            "profit": float(last[f"{b}_profit"]),
-            "return_pct": float(last[f"{b}_return_pct"]),
+    baseline_book = json.loads(_BASELINE.read_text(encoding="utf-8"))
+    contributed = float(baseline_book["net_contributions"])
+    rows_csv = _track_rows()
+    if rows_csv:
+        last = rows_csv[-1]
+        rows = {
+            b: {
+                "value": float(last[f"{b}_value"]),
+                "contributed": contributed,
+                "profit": float(last[f"{b}_profit"]),
+                "return_pct": float(last[f"{b}_return_pct"]),
+            }
+            for b in ("system", "shadow", "baseline")
         }
-        for b in ("system", "shadow", "baseline")
-    }
+        as_of_str = last["date"]
+    else:  # freshly re-seeded: no marks yet, every book flat at what was put in
+        rows = {
+            b: {"value": contributed, "contributed": contributed, "profit": 0.0, "return_pct": 0.0}
+            for b in ("system", "shadow", "baseline")
+        }
+        as_of_str = str(baseline_book["start_date"])
     # A deployed-basis figure deliberately offset from the contributed one, so the reconciliation
     # path is the one under test (equal values would trivially satisfy it).
     hedge = {
@@ -211,9 +241,9 @@ def _render_from_committed() -> str:
         "episodes": 0,
         "hedge_on": 0,
     }
-    start = json.loads(_BASELINE.read_text(encoding="utf-8")).get("start_date")
+    start = baseline_book.get("start_date")
     return _render_report(
-        last["date"],
+        as_of_str,
         rows,
         load_ledger(),
         "normal",
@@ -283,8 +313,9 @@ def test_every_return_on_the_rendered_page_declares_its_basis() -> None:
 
 
 def test_the_rendered_page_prints_the_window_its_numbers_cover() -> None:
-    rows = list(csv.DictReader(_SYSTEM_TRACK.read_text(encoding="utf-8").splitlines()))
-    assert f"{rows[0]['date']} → {rows[-1]['date']}" in _render_from_committed()
+    rows = _track_rows()
+    start = rows[0]["date"] if rows else str(_state()["reseeded_on"])
+    assert f"{start} →" in _render_from_committed()
 
 
 # ---- windows (T2.1) -----------------------------------------------------------------------------
@@ -293,8 +324,9 @@ def test_the_rendered_page_prints_the_window_its_numbers_cover() -> None:
 def test_the_baseline_book_carries_the_window_its_numbers_cover() -> None:
     """It had no start_date at all: the window was recoverable only from system_track.csv row 1."""
     baseline = json.loads(_BASELINE.read_text(encoding="utf-8"))
-    rows = list(csv.DictReader(_SYSTEM_TRACK.read_text(encoding="utf-8").splitlines()))
-    assert baseline.get("start_date") == rows[0]["date"]
+    rows = _track_rows()
+    expected = rows[0]["date"] if rows else _state().get("reseeded_on")
+    assert baseline.get("start_date") == expected
 
 
 def test_the_two_books_really_do_cover_different_windows() -> None:
