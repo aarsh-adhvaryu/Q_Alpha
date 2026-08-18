@@ -229,36 +229,49 @@ def test_live_pm_brief_suppressed_below_floor() -> None:
     assert live_pm_brief_markdown(Decimal("4999"), advice, floor=Decimal("5000")) == ""
 
 
-# ---- the withheld buy list (PLAN_TRUST_REPAIR.md PR-1) -------------------------------------------
+# ---- the buy-advice gate (PLAN_TRUST_REPAIR.md PR-1 → PR-3) --------------------------------------
 
 
-def test_buy_advice_is_off_the_real_money_surface() -> None:
-    """The flag IS the gate — a green test here is what proves the buy list cannot render live.
+def test_buy_advice_is_back_on_the_real_money_surface() -> None:
+    """PR-1 switched it off; PR-3 restores it once both defects are actually fixed.
 
-    PR-3 flips this to True once the price-continuity guard and the candidate health flag are in;
-    until then this test failing means the defective buy list is back on a real-money screen.
+    The flag survives as a working kill-switch, which is the point: turning the buy list off must
+    stay a one-constant change, not a revert.
     """
     from qalpha.live.dashboard import BUY_ADVICE_ON_REAL_MONEY
 
-    assert BUY_ADVICE_ON_REAL_MONEY is False
+    assert BUY_ADVICE_ON_REAL_MONEY is True
 
 
-def test_withheld_notice_names_both_defects_and_what_still_works() -> None:
-    """An unexplained empty tab is the same trust failure in a smaller package — say why."""
+def test_the_kill_switch_notice_does_not_claim_a_fixed_defect_as_the_reason() -> None:
+    """A notice that lies about why it is showing would be its own trust failure."""
     from qalpha.live.dashboard import buy_advice_withheld_markdown
 
     md = buy_advice_withheld_markdown()
-    # Defect 1 — corporate actions read as discounts, with the two names and their gap dates.
-    assert "VEDL" in md and "2026-04-30" in md
-    assert "TRENT" in md and "2026-01-01" in md
-    assert "demerger" in md.lower()
-    # Defect 2 — the advisor contradicts the §4.7 breakdown detector on its own recommendations.
-    assert "breaking down" in md
-    assert "IRFC" in md and "HDFCLIFE" in md and "ITC" in md
-    # And the honest framing: this rule is not the validated 18.2% strategy.
+    assert "switched off" in md
+    assert "VEDL" not in md and "demerger" not in md  # PR-1's reasons; both fixed
+    assert "Sell a holding" in md and "Raise cash" in md  # what stays live, always stated
+
+
+def test_blocked_notice_names_the_failing_guard_and_spares_the_sell_side() -> None:
+    """The *data* case, distinct from the kill switch: the rule is fine, the prices are not."""
+    from qalpha.live.dashboard import buy_advice_blocked_markdown
+
+    md = buy_advice_blocked_markdown(["latest watchlist price is 2026-07-10 — 27 weekdays stale"])
+    assert "2026-07-10" in md
+    assert "withheld" in md
+    assert "Raise cash" in md
+
+
+def test_the_scope_note_states_the_screen_was_never_backtested() -> None:
+    """T1.5 on screen: the buy rule is not the 18.2% strategy, and must say so on every render."""
+    from qalpha.live.dashboard import buy_advice_scope_note
+
+    md = buy_advice_scope_note()
+    assert "never been backtested" in md
     assert "18.2%" in md
-    # What is NOT withheld — sell/raise-cash run on the validated FIFO/tax engine.
-    assert "Sell a holding" in md and "Raise cash" in md
+    assert "no selection code" in md
+    assert "₹0 capital-gains tax" in md  # what it *is* still gets said plainly
 
 
 # --- plain-English clarity layer (dashboard follow-up) ------------------------------------------
@@ -366,7 +379,11 @@ def test_checklist_prompts_to_deploy_only_above_the_floor() -> None:
 
 
 def test_checklist_does_not_route_to_a_withheld_buy_list() -> None:
-    """PR-1: with the buy list withheld, 'use Add money for the buy plan' is a dead pointer."""
+    """With the buy list unavailable, 'use Add money for the buy plan' is a dead pointer.
+
+    Since PR-3 this fires on the *data* path too — a stale watchlist panel makes buy advice
+    unavailable even though the flag is on.
+    """
     item = _actions(idle_cash=Decimal("50000"), buy_advice_available=False)[2]
     assert item.state == "blocked"
     assert "withheld" in item.detail

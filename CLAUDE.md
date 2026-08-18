@@ -6,8 +6,8 @@ Guidance for Claude Code (and humans) working in this repo.
 
 **The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
 right, and the reasons are now documented and scoped. The full plan is
-[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 and PR-2 are BUILT**
-(branches `trust-repair-pr1`, `trust-repair-pr2`); PR-3 … PR-8 are not.
+[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1, PR-2 and PR-3 are
+BUILT** (branches `trust-repair-pr1/2/3`) — **Tier 1 is closed**; PR-4 … PR-8 are not.
 Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
 A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
 
@@ -64,6 +64,25 @@ reporting the same book** — which is why none of this was caught.
   on a **~1-year horizon**, math sizes and executes. ⚠️ This makes the LLM a **selector**, changing
   locked discipline #3 — it is **fake-money only** until a positive verdict, is pre-registered, and
   the AI can never add a name outside the deterministic universe. **Real money never auto-trades.**
+
+
+**PR-3 (done): the advisor now consults the detector it ships with; buy surfaces restored.**
+`position_health()` runs over **candidates**, and every recommended name carries its verdict into
+`WeaknessDeployAdvice.candidate_health` → `candidate_health_note()` → `render()`. **Flag, not veto** —
+a 🔴 name stays in the basket and is still bought, asserted by test so a later "helpful" veto cannot
+creep in. **On the live panel it is 13 of 15, not the 4 of 5 the audit found**, so the note carries the
+**universe base rate** (27% of the watchlist is breaking → the basket is **3.2× more concentrated**)
+— that ratio, not the raw count, is the interpretable number. ⚠️ Caveat for a future session: with the
+cross-sectional median at +0.4%, `DefensiveConfig`'s two conditions collapse into roughly one ("down
+more than ~10%"), so 🔴 is weaker evidence than its two-condition design implies until the §6.2
+walk-forward threshold calibration happens. **T1.4 fixed:** `_cap_sectors` is re-applied after
+`head(max_names)` — the old order let the delivered basket breach the cap it advertised at **every
+slider setting below ~13** (at 5 names: **80.1% IT**; at 8: 50.7%; at 12: 34.3% — all now ≤30%). At the
+default 15 it was already compliant, which is why nothing caught it. **T1.5 on screen:**
+`buy_advice_scope_note()` says "never backtested, shares nothing with the 18.2% funnel" on every
+render, and README §7 gained a matching bias bullet. `BUY_ADVICE_ON_REAL_MONEY = True`; the tab has
+three states (kill-switch off / prices failed PR-2's guard / live) and the kill-switch notice no
+longer cites the fixed defects as its reason. 353 tests.
 
 **Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
 the 18.2% headline are untouched by every item in the plan.**

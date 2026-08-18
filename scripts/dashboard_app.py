@@ -43,6 +43,8 @@ from qalpha.live.advisor import advise_raise_cash, advise_sell
 from qalpha.live.dashboard import (
     BUY_ADVICE_ON_REAL_MONEY,
     _benchmark_return_pct,
+    buy_advice_blocked_markdown,
+    buy_advice_scope_note,
     buy_advice_withheld_markdown,
     glossary_markdown,
     go_readiness_markdown,
@@ -339,15 +341,24 @@ def _advisor_with_safety(
     cfg = Config()
     floor = cfg.deploy_policy.idle_cash_floor
     default_add = 50000
+    buy_ok = BUY_ADVICE_ON_REAL_MONEY and report.buy_advice_safe
     if available_cash is not None and available_cash >= floor:
-        if BUY_ADVICE_ON_REAL_MONEY:
+        if buy_ok:
             _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg, prices_dec)
         default_add = int(available_cash)
     st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
     if live_session is not None:
-        _next_actions_panel(portfolio, as_of, available_cash, report.safe_to_advise, cfg)
+        _next_actions_panel(portfolio, as_of, available_cash, report.safe_to_advise, cfg, buy_ok)
     _advisor_tabs(
-        portfolio, prices_dec, benchmark, as_of, default_add_amount=default_add, namespace=namespace
+        portfolio,
+        prices_dec,
+        benchmark,
+        as_of,
+        default_add_amount=default_add,
+        namespace=namespace,
+        buy_blocked_reasons=[
+            g.detail for g in report.guards if g.name == "watchlist prices" and not g.ok
+        ],
     )
     _satellite_section(portfolio, prices_dec, as_of)
 
@@ -358,6 +369,7 @@ def _next_actions_panel(
     available_cash: Decimal | None,
     advice_safe: bool,
     cfg: Config,
+    buy_advice_available: bool = True,
 ) -> None:
     """ "What do I do next?" — the operating procedure, resolved against this account's real state.
 
@@ -389,7 +401,7 @@ def _next_actions_panel(
         holdings=len(portfolio.positions()),
         days_to_next_ltcg=min(waits) if waits else None,
         unreconciled_sells=sells,
-        buy_advice_available=BUY_ADVICE_ON_REAL_MONEY,
+        buy_advice_available=buy_advice_available,
     )
     with st.container(border=True):
         st.markdown("#### 🧭 What to do next")
@@ -1212,6 +1224,7 @@ def _advisor_tabs(
     *,
     default_add_amount: int = 50000,
     namespace: str = "paper",
+    buy_blocked_reasons: list[str] | None = None,
 ) -> None:
     """Interactive sell / raise-cash / add-money tabs.
 
@@ -1257,11 +1270,12 @@ def _advisor_tabs(
             st.markdown(advise_raise_cash(portfolio, Decimal(amount), prices_dec, as_of).render())
 
     with add_tab:
+        # Three states, deliberately distinguished: switched off at the flag (kill-switch), allowed
+        # but running on prices that failed a guard (PR-2 / T1.3), or live.
         if not BUY_ADVICE_ON_REAL_MONEY:
-            # PR-1: the buy list is off the real-money surface until the continuity guard (PR-2) and
-            # the candidate health flag (PR-3) land. The renderer below is untouched — PR-3 restores
-            # it by flipping BUY_ADVICE_ON_REAL_MONEY, not by rewriting anything.
             st.warning(buy_advice_withheld_markdown())
+        elif buy_blocked_reasons:
+            st.warning(buy_advice_blocked_markdown(buy_blocked_reasons))
         else:
             _add_money_advisor(
                 portfolio,
@@ -1287,12 +1301,13 @@ def _add_money_advisor(
     Withheld from the real-money surface by ``BUY_ADVICE_ON_REAL_MONEY`` since 2026-08-17; kept
     intact behind the flag so restoring it in PR-3 is a re-wire, not a rewrite.
     """
+    # The honest framing rides *with* the list, every render — this rule has never been backtested
+    # and shares nothing with the funnel behind the 18.2% headline (PR-3 / T1.5).
+    st.info(buy_advice_scope_note())
     st.caption(
-        "**Idle cash → what to buy.** The **math** picks a diversified, **tax-free (buys-only)** "
-        "spread across Nifty 100 tilted to out-of-favour names, for the **full amount** "
-        "(time-in-market — the evidence-backed default). The AI's market read is shown as "
-        "**context only**: its pacing rule is unproven and trades only fake money in the System "
-        "book until its System-vs-Shadow verdict is in."
+        "The AI's market read below is **context only**: its pacing rule is unproven and trades "
+        "only fake money in the System book until its System-vs-Shadow verdict is in. Deploying "
+        "the full amount (time-in-market) is the evidence-backed default."
     )
     amount = st.number_input(
         "Idle cash to invest (₹)",

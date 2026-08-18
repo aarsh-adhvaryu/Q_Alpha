@@ -70,11 +70,47 @@ def test_cheapness_scores_track_pullback() -> None:
 
 
 def test_deploy_target_tilts_to_cheaper_and_sums_to_one() -> None:
+    """A deeper fall earns a larger position — but that is only half the property (PR-3 / T1.4).
+
+    Asserting the drawdown ordering *alone* is what let the advisor recommend falling knives with a
+    green test suite: "further down ⇒ buy more" is exactly the behaviour that needed a second
+    opinion, not a guarantee. The ordering still holds — it is the deliberate tilt — but the
+    companion assertion below pins the thing that was missing: the delivered basket must also carry
+    the system's own breakdown verdict on those names, so a deeper fall that is *idiosyncratic*
+    arrives flagged rather than silently sized up.
+    """
     cheap = {"ATHIGH.NS": 0.0, "MILD.NS": 0.2, "DEEP.NS": 0.4}
     sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
     target = deploy_target(list(cheap), sector_of, cheap, tilt=1.0, max_sector_weight=1.0)
     assert abs(float(target.sum()) - 1.0) < 1e-9
     assert target["DEEP.NS"] > target["MILD.NS"] > target["ATHIGH.NS"]
+
+
+def test_the_deeper_fall_is_sized_up_and_flagged_at_the_same_time() -> None:
+    """The companion to the ordering above: sized larger AND carrying its own health verdict."""
+    prices = _prices()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_sector_weight=1.0,
+    )
+    assert advice.target["DEEP.NS"] > advice.target["ATHIGH.NS"]  # the tilt, unchanged
+    verdicts = {h.ticker: h for h in advice.candidate_health}
+    assert set(verdicts) == set(advice.target.index)  # every recommended name carries a verdict
+    # DEEP fell hardest and lags the cross-section → the detector says so, beside the bigger position.
+    assert verdicts["DEEP.NS"].level == "breaking"
+    assert verdicts["ATHIGH.NS"].level == "healthy"
+    assert verdicts["DEEP.NS"].trailing_return < verdicts["ATHIGH.NS"].trailing_return
 
 
 def test_deploy_target_max_names_concentrates() -> None:
@@ -361,3 +397,110 @@ def test_a_clean_watchlist_is_completely_unchanged_by_the_guard() -> None:
         max_sector_weight=1.0,
     )
     assert advice.target.to_dict() == unguarded.to_dict()
+
+
+# ---- candidate health + the sector cap (PLAN_TRUST_REPAIR.md PR-3 — fixes T1.2, T1.4) ------------
+
+
+def test_the_advisor_reports_the_breakdown_verdict_it_used_to_contradict() -> None:
+    """T1.2 in one test: the detector and the advisor now speak on the same page, same day."""
+    prices = _prices()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_sector_weight=1.0,
+    )
+    note = advice.candidate_health_note()
+    assert "DEEP.NS" in note
+    assert "🔴" in note
+    assert "review-for-exit" in note
+    assert note in advice.render()  # it reaches the rendered advice, not just the object
+
+
+def test_the_health_verdict_annotates_but_never_vetoes() -> None:
+    """User's locked decision: flag, don't veto. A 🔴 name stays in the basket, with its verdict."""
+    prices = _prices()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_sector_weight=1.0,
+    )
+    breaking = {h.ticker for h in advice.candidate_health if h.level == "breaking"}
+    assert breaking  # something is flagged
+    assert breaking <= set(advice.target.index)  # ...and it is still being recommended
+    assert breaking <= {o.ticker for o in advice.deploy.buy_orders}  # ...and still bought
+
+
+def test_the_note_reports_the_universe_base_rate_for_scale() -> None:
+    """A mostly-red table is uninterpretable without knowing how red the universe is."""
+    prices = _prices()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_sector_weight=1.0,
+    )
+    assert advice.universe_breaking_rate is not None
+    assert 0.0 <= advice.universe_breaking_rate <= 1.0
+    assert "of the whole watchlist" in advice.candidate_health_note()
+
+
+def test_the_sector_cap_binds_on_the_basket_actually_delivered() -> None:
+    """T1.4: the cap was applied *before* truncation, so the delivered top-N could breach it.
+
+    Six IT names dominate the cheapness ranking; concentrating into the top 4 used to hand over an
+    all-IT basket while the code advertised a 30% sector cap.
+    """
+    names = [f"IT{i}.NS" for i in range(6)] + [f"FIN{i}.NS" for i in range(3)]
+    sector_of = {t: ("IT" if t.startswith("IT") else "FIN") for t in names}
+    # The IT names are the cheapest, so they take the whole top of the ranking.
+    cheap = {t: (0.5 - 0.01 * i if t.startswith("IT") else 0.05) for i, t in enumerate(names)}
+
+    target = deploy_target(names, sector_of, cheap, tilt=1.0, max_sector_weight=0.30, max_names=4)
+    by_sector: dict[str, float] = {}
+    for t, w in target.items():
+        by_sector[sector_of[str(t)]] = by_sector.get(sector_of[str(t)], 0.0) + float(w)
+    assert len(target) == 4
+    assert abs(sum(by_sector.values()) - 1.0) < 1e-9
+    # Two sectors survive the cut, so the cap is feasible at 30/70 → IT is held to its share.
+    assert by_sector["IT"] <= 0.75  # was 1.00 (a 100% IT basket) before the re-cap
+    assert by_sector["FIN"] > 0.0  # the other sector is not squeezed out entirely
+
+
+def test_an_infeasible_cap_after_truncation_degrades_gracefully() -> None:
+    """Truncating to names from a single sector makes the cap unsatisfiable — must not raise."""
+    names = [f"IT{i}.NS" for i in range(5)]
+    sector_of = dict.fromkeys(names, "IT")
+    cheap = {t: 0.5 - 0.01 * i for i, t in enumerate(names)}
+    target = deploy_target(names, sector_of, cheap, tilt=1.0, max_sector_weight=0.30, max_names=3)
+    assert len(target) == 3
+    assert abs(float(target.sum()) - 1.0) < 1e-9
