@@ -48,6 +48,17 @@ class SafetyReport:
     def warnings(self) -> list[Guard]:
         return [g for g in self.guards if not g.ok and not g.blocking]
 
+    @property
+    def buy_advice_safe(self) -> bool:
+        """May the **buy** list render? Everything :attr:`safe_to_advise` requires, plus a fresh
+        watchlist panel — the separate price source the buy side is sized off, which nothing checked
+        before PR-2. Sell/raise-cash deliberately do not consult this: they are priced off the core
+        panel, so a stale watchlist must not silence them.
+        """
+        return self.safe_to_advise and all(
+            g.ok for g in self.guards if g.name == "watchlist prices"
+        )
+
     def render(self) -> str:
         if not self.guards:
             return "✓ No input checks ran."
@@ -113,6 +124,51 @@ def price_completeness_guard(prices_dec: Mapping[str, Decimal], required: Iterab
     return Guard("holding prices", True, True, "every held name has a live price.")
 
 
+def watchlist_freshness_guard(
+    panel: PriceData | None,
+    as_of: date,
+    *,
+    max_weekday_staleness: int = 3,
+    download_ok: bool = True,
+) -> Guard:
+    """Block the **buy** side when the Nifty-100 watchlist panel is stale or failed to download.
+
+    The gap this closes (PR-2 / T1.3): :func:`assess_advice_inputs` validated only the *core* panel —
+    the one that prices names you already own — while the buy list is priced off a completely
+    separate watchlist panel whose freshness nothing checked. Its refresh runs with ``check=False``,
+    so a failed download left the previous panel on disk and the advisor sized a confident
+    recommendation off it with no banner at all.
+
+    Non-blocking by design: a stale *buy* panel must not veto **Sell** or **Raise cash**, which are
+    priced off the core panel and are unaffected. The buy surface gates on
+    :attr:`SafetyReport.buy_advice_safe` instead, which this guard drives.
+    """
+    if not download_ok:
+        return Guard(
+            "watchlist prices",
+            False,
+            False,
+            "the watchlist price download failed — any buy list would be priced off the previous "
+            "panel. Buy suggestions are withheld; selling and raising cash are unaffected.",
+        )
+    if panel is None or len(panel.dates) == 0:
+        return Guard(
+            "watchlist prices", False, False, "no watchlist price panel — buy suggestions withheld."
+        )
+    last = panel.dates[-1].date()
+    stale = _weekdays_between(last, as_of)
+    if stale > max_weekday_staleness:
+        return Guard(
+            "watchlist prices",
+            False,
+            False,
+            f"latest watchlist price is {last} — {stale} weekdays stale "
+            f"(> {max_weekday_staleness}). Buy suggestions are withheld rather than sized off old "
+            "prices; selling and raising cash are unaffected.",
+        )
+    return Guard("watchlist prices", True, False, f"fresh — latest watchlist price {last}.")
+
+
 def broker_session_guard(
     valid: bool, *, expires_at: datetime | None = None, now: datetime | None = None
 ) -> Guard:
@@ -142,12 +198,21 @@ def assess_advice_inputs(
     *,
     max_weekday_staleness: int = 1,
     session: Guard | None = None,
+    watchlist: PriceData | None = None,
+    watchlist_download_ok: bool = True,
+    max_watchlist_staleness: int = 3,
 ) -> SafetyReport:
     """Run every input-integrity guard for an advisory render and combine them.
 
     ``session`` is optional so the paper book (no broker) skips the session check; the live dashboard
     passes :func:`broker_session_guard`. The advisory UI shows :attr:`SafetyReport.render` and only
     computes a recommendation when :attr:`SafetyReport.safe_to_advise`.
+
+    ``watchlist`` is the **separate** panel the buy list is priced off (PR-2). It was outside this
+    report entirely, which is how a buy recommendation could be sized off prices nothing had checked.
+    Pass it — and ``watchlist_download_ok=False`` when its refresh failed — and the buy surface gates
+    on :attr:`SafetyReport.buy_advice_safe`. Omit it and nothing changes: sell/raise-cash callers that
+    never touch the watchlist keep exactly their previous verdict.
     """
     guards = [
         price_freshness_guard(prices, as_of, max_weekday_staleness=max_weekday_staleness),
@@ -155,4 +220,13 @@ def assess_advice_inputs(
     ]
     if session is not None:
         guards.append(session)
+    if watchlist is not None or not watchlist_download_ok:
+        guards.append(
+            watchlist_freshness_guard(
+                watchlist,
+                as_of,
+                max_weekday_staleness=max_watchlist_staleness,
+                download_ok=watchlist_download_ok,
+            )
+        )
     return SafetyReport(guards)

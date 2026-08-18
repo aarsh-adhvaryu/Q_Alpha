@@ -21,16 +21,25 @@ buys):
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
 import pandas as pd
 
+from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.backtest.portfolio import Portfolio, to_decimal_price
 from qalpha.data.prices import PriceData
 from qalpha.live.advisor import DeployAdvice, advise_deploy
+from qalpha.live.position_health import HoldingHealth, position_health
+from qalpha.live.price_integrity import (
+    PriceGap,
+    excluded_from_tilt,
+    gaps_note,
+    rebase_starts,
+    unexplained_gaps,
+)
 from qalpha.live.satellite import SatelliteRegistry, core_view_excluding
 
 _HIGH_WINDOW = 252  # ~1 trading year for the rolling high
@@ -77,26 +86,49 @@ def market_weakness(index_close: pd.Series, as_of: date) -> MarketWeakness:
 
 
 def cheapness_scores(
-    prices: PriceData, tickers: list[str], as_of: date, *, window: int = _HIGH_WINDOW
+    prices: PriceData,
+    tickers: list[str],
+    as_of: date,
+    *,
+    window: int = _HIGH_WINDOW,
+    rebase_from: Mapping[str, date] | None = None,
+    no_tilt: Collection[str] | None = None,
 ) -> dict[str, float]:
     """Per-name 'out of favour' score in [0,1): fractional pullback below its own 1y high.
 
     0 = at/above its rolling high; 0.30 = 30% below it. A *technical* cheapness proxy (pulled back),
     not fundamental valuation. Names without enough history get 0 (no tilt rather than a guess).
+
+    **Price-continuity inputs (PR-2).** ``adj_close`` corrects splits and dividends and nothing else,
+    so a demerger leaves a step-down that this rule would read as a discount for a full year — the
+    defect that put two price artifacts at the top of a real ₹100,000 recommendation. Callers pass
+    :func:`~qalpha.live.price_integrity.rebase_starts` as ``rebase_from`` to measure a flagged name's
+    high only over the window that starts at its gap (the first comparable price), and
+    :func:`~qalpha.live.price_integrity.excluded_from_tilt` as ``no_tilt`` for flagged names with too
+    little post-gap history to read — those score 0. Both default to off, leaving the original
+    behaviour exactly intact for every caller that does not opt in.
     """
     adj = prices.adj_close
     cutoff = pd.Timestamp(as_of)
+    rebase = rebase_from or {}
+    untilted = set(no_tilt or ())
     out: dict[str, float] = {}
     for t in tickers:
-        if t not in adj.columns:
+        if t not in adj.columns or t in untilted:
             out[t] = 0.0
             continue
         series = adj[t].loc[:cutoff].dropna()
         if len(series) < 20:
             out[t] = 0.0
             continue
-        high = float(series.tail(window).max())
         cur = float(series.iloc[-1])
+        start = rebase.get(t)
+        if start is not None:  # discontinuous series — the pre-gap high is a different instrument
+            series = series[series.index >= pd.Timestamp(start)]
+            if series.empty:
+                out[t] = 0.0
+                continue
+        high = float(series.tail(window).max())
         out[t] = max(0.0, 1.0 - cur / high) if high > 0 else 0.0
     return out
 
@@ -116,7 +148,9 @@ def deploy_target(
     pulled-back names get a heavier target; then each sector's total is capped at
     ``max_sector_weight`` and the whole renormalised to sum to 1. ``tilt=0`` → pure equal weight.
     ``max_names`` keeps only the top-N highest-target names (the concentration dial — fewer, bigger
-    positions instead of a thin sliver of everything), renormalised to sum to 1.
+    positions instead of a thin sliver of everything), renormalised to sum to 1 **and re-capped**, so
+    the delivered basket carries the sector constraint rather than a pre-truncation basket that was
+    never handed to anyone (PR-3 / T1.4).
     """
     if not tickers:
         return pd.Series(dtype=float)
@@ -124,11 +158,29 @@ def deploy_target(
         {t: (1.0 + tilt * max(0.0, cheapness.get(t, 0.0))) for t in tickers}, dtype=float
     )
     sectors = pd.Series({t: str(sector_of.get(t, "?")) for t in tickers})
-    all_secs = set(sectors)
 
-    # Water-filling: fix any sector that would exceed the cap at exactly the cap, then re-spread the
-    # remaining budget over the still-free sectors (proportional to raw), repeating until no free
-    # sector violates the cap. Each fixed sector holds the cap; free names share what's left.
+    w = _cap_sectors(raw, sectors, max_sector_weight).sort_values(ascending=False)
+    if max_names is not None and len(w) > max_names:
+        # Concentrate into the top-N, then **re-apply the cap to what actually survives** (PR-3).
+        # Capping before truncation constrained a basket that was never delivered: the top slice of a
+        # cheapness ranking is exactly where one sector clusters (an IT-wide de-rating puts four IT
+        # names in the top 15), so the cap the code advertised could be silently exceeded by the
+        # basket the user was handed.
+        kept = w.head(max_names).index
+        w = _cap_sectors(raw[kept], sectors[kept], max_sector_weight).sort_values(ascending=False)
+    return w
+
+
+def _cap_sectors(raw: pd.Series, sectors: pd.Series, max_sector_weight: float) -> pd.Series:
+    """Normalise ``raw`` to sum to 1 with no sector above ``max_sector_weight``.
+
+    Water-filling: fix any sector that would exceed the cap at exactly the cap, then re-spread the
+    remaining budget over the still-free sectors (proportional to raw), repeating until no free
+    sector violates the cap. Each fixed sector holds the cap; free names share what's left. An
+    infeasible cap (fewer sectors than ``1 / max_sector_weight``) degrades gracefully to the
+    renormalised proportional weights rather than raising.
+    """
+    all_secs = set(sectors)
     capped: set[str] = set()
     while len(capped) < len(all_secs):
         free_names = sectors[~sectors.isin(capped)].index
@@ -152,10 +204,6 @@ def deploy_target(
         w[names] = raw[names] / raw[names].sum() * max_sector_weight
     if float(w.sum()) > 0:  # renormalise (handles an infeasible cap gracefully)
         w = w / w.sum()
-    w = w.sort_values(ascending=False)
-    if max_names is not None and len(w) > max_names:  # concentrate into the top-N, renormalise
-        w = w.head(max_names)
-        w = w / w.sum()
     return w
 
 
@@ -172,6 +220,70 @@ class WeaknessDeployAdvice:
     # advisor saw them, excluded from target sizing. Value is None when no price source covers
     # the name (fail-loud: listed as unpriced rather than silently dropped).
     off_watchlist: tuple[tuple[str, Decimal | None], ...] = ()
+    # Names whose price series has an unexplained one-day step (PR-2). Their cheapness has already
+    # been re-based (or zeroed) before sizing — this is the audit trail, so the UI can say *why* a
+    # name that looks 65% off its high is not being treated as 65% cheap.
+    price_gaps: tuple[PriceGap, ...] = ()
+    # The §4.7 idiosyncratic-breakdown verdict on every name in the delivered basket (PR-3). The
+    # detector already existed and already disagreed with the advisor — it was simply never pointed
+    # at candidates, only at holdings. Advisory: it annotates, it never vetoes a name.
+    candidate_health: tuple[HoldingHealth, ...] = ()
+    # Share of the whole candidate universe the detector rates "breaking", so the basket's own share
+    # can be read against a baseline. Without it a mostly-red table is uninterpretable: a screen that
+    # selects pulled-back names will always overlap a breakdown test, and the only question that
+    # matters is *by how much more than the universe it drew from*.
+    universe_breaking_rate: float | None = None
+
+    def candidate_health_note(self) -> str:
+        """The per-name verdict table — '' when no candidate could be assessed.
+
+        This is the system telling you, beside its own recommendation, which of these names it would
+        flag for *exit* if you already held them. Selection stays deterministic and unchanged: the
+        user asked to see the disagreement, not to have it silently resolved.
+        """
+        if not self.candidate_health:
+            return ""
+        rows = [
+            "**The breakdown detector's verdict on these same names** (§4.7 — the test this system "
+            "runs over your *holdings*, now pointed at what it is recommending):",
+            "",
+            "| | Name | 6-month | vs market | Verdict |",
+            "|---|---|---|---|---|",
+        ]
+        order = {"breaking": 0, "watch": 1, "healthy": 2}
+        for h in sorted(self.candidate_health, key=lambda h: (order[h.level], h.ticker)):
+            rows.append(
+                f"| {h.icon} | {h.ticker} | {h.trailing_return:+.0%} | {h.excess_vs_market:+.0%} | "
+                f"{h.level} |"
+            )
+        breaking = [h.ticker for h in self.candidate_health if h.level == "breaking"]
+        if not breaking:
+            return "\n".join(rows)
+        n = len(self.candidate_health)
+        share = len(breaking) / n
+        rows += [
+            "",
+            f"⚠️ **{len(breaking)} of {n} recommended names are ones this system would flag for "
+            "review-for-exit if you held them.**",
+        ]
+        if self.universe_breaking_rate is not None and self.universe_breaking_rate > 0:
+            ratio = share / self.universe_breaking_rate
+            rows.append(
+                f"For scale: **{self.universe_breaking_rate:.0%} of the whole watchlist** is "
+                f"breaking down right now, so this basket is **{ratio:.1f}× more concentrated** in "
+                "them than the universe it was drawn from."
+            )
+        rows.append(
+            "Some overlap is unavoidable — a pullback screen and a breakdown test look at the same "
+            "price fall. But 🔴 means the fall is **name-specific**, not the market, which is the "
+            "opposite of the 'temporarily out of favour' story the cheapness tilt assumes. These "
+            "are the names to check by hand before you place an order."
+        )
+        return "\n".join(rows)
+
+    def price_gaps_note(self) -> str:
+        """The ⚠️ continuity line — '' when every series in the universe was continuous."""
+        return gaps_note({g.ticker: g for g in self.price_gaps})
 
     def off_watchlist_note(self) -> str:
         """The ℹ️ visibility line — '' when the book is watchlist-only (render unchanged)."""
@@ -196,6 +308,12 @@ class WeaknessDeployAdvice:
             "Most out-of-favour (pulled back from 1y high — technical, not P/E):",
         ]
         lines += [f"  - {t}: {p * 100:.0f}% below 1y high" for t, p in self.cheapest]
+        gaps = self.price_gaps_note()
+        if gaps:
+            lines += ["", gaps]
+        health = self.candidate_health_note()
+        if health:
+            lines += ["", health]
         note = self.off_watchlist_note()
         if note:
             lines += ["", note]
@@ -217,6 +335,7 @@ def advise_deploy_into_weakness(
     max_name_fraction: float = 0.20,
     max_names: int | None = None,
     broker_prices: Mapping[str, Decimal] | None = None,
+    known_actions: Mapping[str, Sequence[CorporateAction]] | None = None,
 ) -> WeaknessDeployAdvice:
     """Recommend deploying ``amount`` of new money across the Nifty-100 watchlist — diversified,
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
@@ -236,6 +355,14 @@ def advise_deploy_into_weakness(
     user knows the advisor saw it, but its capital is treated as withdrawn (the satellite-sleeve
     philosophy) — targets are sized over the core book only, and it is never bought or sold here.
     Watchlist names the user picked himself still steer the gap-fill exactly as before.
+
+    **Price continuity (PR-2).** Every candidate's series is checked for an unexplained one-day step
+    before it is scored. ``adj_close`` corrects splits and dividends but never demergers, so such a
+    step reads as a permanent discount to a 1-year-high rule — the defect that put two artifacts at
+    the top of a real recommendation. A flagged name's high is re-based to its gap rather than the
+    name being dropped, and the flags ride along on the advice so the UI can explain itself.
+    ``known_actions`` optionally supplies splits/dividends so a genuine, already-adjusted action is
+    not reported as a defect.
     """
     adj = prices.adj_close
     cutoff = pd.Timestamp(as_of)
@@ -246,7 +373,14 @@ def advise_deploy_into_weakness(
     affordable = [t for t in priced if last_price[t] <= cap]
     universe = affordable if len(affordable) >= 3 else priced  # don't over-restrict tiny deploys
 
-    cheap = cheapness_scores(prices, universe, as_of)
+    gaps = unexplained_gaps(adj, universe, as_of, actions=known_actions)
+    cheap = cheapness_scores(
+        prices,
+        universe,
+        as_of,
+        rebase_from=rebase_starts(gaps),
+        no_tilt=excluded_from_tilt(gaps),
+    )
     target = deploy_target(
         universe,
         sector_of,
@@ -285,10 +419,29 @@ def advise_deploy_into_weakness(
     deploy = advise_deploy(core, amount, target, price_dec, as_of)
     weakness = market_weakness(index_close, as_of)
     cheapest = sorted(cheap.items(), key=lambda kv: kv[1], reverse=True)[:5]
+
+    # Point the §4.7 breakdown detector at the **candidates** (PR-3 / T1.2). It has always run over
+    # holdings only, so the advisor and the exit test could reach opposite verdicts on the same name
+    # on the same day and neither surface would notice. Assessed over the names actually being
+    # recommended — the ones with buy orders, or the target if nothing fits — against the full
+    # watchlist cross-section, so "vs market" means the same thing it does on the holdings panel.
+    recommended = sorted({o.ticker for o in deploy.buy_orders}) or sorted(target.index)
+    universe_health = position_health(adj, sorted(universe), as_of).holdings
+    by_ticker = {h.ticker: h for h in universe_health}
+    health = [by_ticker[t] for t in recommended if t in by_ticker]
+    breaking_rate = (
+        sum(h.level == "breaking" for h in universe_health) / len(universe_health)
+        if universe_health
+        else None
+    )
+
     return WeaknessDeployAdvice(
         weakness=weakness,
         deploy=deploy,
         target=target,
         cheapest=cheapest,
         off_watchlist=off_watchlist,
+        price_gaps=tuple(gaps[t] for t in sorted(gaps)),
+        candidate_health=tuple(health),
+        universe_breaking_rate=breaking_rate,
     )

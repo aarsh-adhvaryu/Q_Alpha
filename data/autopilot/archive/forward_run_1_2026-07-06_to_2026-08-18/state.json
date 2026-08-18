@@ -1,0 +1,18 @@
+{
+  "seeded": true,
+  "last_deposit_month": "2026-07",
+  "monthly_autodeposit": true,
+  "last_marked": "2026-07-10",
+  "adaptive_last_marked": "2026-07-10",
+  "baseline_seeded": true,
+  "trio_last_deposit_month": "2026-07",
+  "system_last_marked": "2026-08-17",
+  "wallets": {
+    "system": "3747.37",
+    "shadow": "7421.87"
+  },
+  "contributed": {
+    "system": "400000",
+    "shadow": "400000"
+  }
+}

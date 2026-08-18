@@ -45,3 +45,4 @@ secrets/
 
 # Notebooks scratch
 .ipynb_checkpoints/
+pytest.log
