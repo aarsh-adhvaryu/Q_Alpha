@@ -1,7 +1,8 @@
 # Trust repair — the advisor, the page, and the experiment (planned 2026-08-17)
 
-**Status: PR-1 BUILT (branch `trust-repair-pr1`, 321 tests) · PR-2 BUILT (branch `trust-repair-pr2`,
-343 tests). Four gates green on both. PR-3 … PR-8 planned, user-approved scope, not yet implemented.**
+**Status: PR-1 · PR-2 · PR-3 BUILT (branches `trust-repair-pr1/2/3`, 353 tests, four gates green on
+each). Tier 1 is closed — the buy list is back on the real-money surface, guarded. PR-4 … PR-8
+planned, user-approved scope, not yet implemented.**
 
 Companion to [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md) (same day). That audit diagnosed
 the **presentation** incoherence and the **experiment** confound, and its findings hold. This plan
@@ -204,20 +205,62 @@ did not blacklist a name.
   deploys are corrected from here on — while their *existing* holdings still carry the artifacts
   (T4.2). That is precisely the confound the re-seed exists to clear.
 
-### PR-3 · Candidate health flag, and restore the buy surfaces (fixes T1.2, T1.4, T1.5)
+### PR-3 · Candidate health flag, and restore the buy surfaces (fixes T1.2, T1.4, T1.5) — ✅ BUILT
 User's decision: **flag, not veto** — the list still shows the same names, with the system's own
-verdict beside each.
-- Call `position_health()` over **candidates** as well as holdings; carry each name's level on
-  `DeployAdvice`. Render 🔴/🟠/🟢 beside every recommended name with its 6-month return and
-  excess-vs-median.
-- Re-cap sectors *after* `head(max_names)` ([deploy.py:156-158](src/qalpha/live/deploy.py)) so the
-  delivered basket carries the constraint the code claims.
-- Reframe on screen: this is an **unvalidated technical screen, not the 18.2% strategy**. Say it in
-  [README.md](README.md) §7 too — the existing note says "technical, not P/E" but never says "never
-  tested against a baseline".
-- Rewrite [test_deploy.py:66-71](tests/test_deploy.py) so the drawdown ordering is asserted
-  *alongside* the health flag rather than as the sole property.
-- Restore the PR-1 surfaces.
+verdict beside each. Implemented exactly so: a 🔴 name stays in the basket and is still bought, with
+its verdict rendered next to it (asserted by test, so a later "helpful" veto cannot creep in).
+
+**T1.2 — the advisor now consults the detector it ships with.** `position_health()` runs over the
+**candidate universe**, and every recommended name carries its level, 6-month return and
+excess-vs-median into `WeaknessDeployAdvice.candidate_health` → `candidate_health_note()` → `render()`.
+
+**The number is worse than the audit found. On the live panel it is 13 of 15, not 4 of 5.**
+That table would be uninterpretable on its own — a pullback screen and a breakdown test look at the
+same price fall, so *some* overlap is structural. So the note also carries the **universe base rate**:
+
+> 13 of 15 recommended names are ones this system would flag for review-for-exit if you held them.
+> For scale: **27% of the whole watchlist** is breaking down right now, so this basket is
+> **3.2× more concentrated** in them than the universe it was drawn from.
+
+That ratio is the honest statistic, and it is the one worth watching over time. A caveat that belongs
+in the record: with the cross-sectional median at +0.4%, `DefensiveConfig`'s two conditions
+(`abs_drawdown_exit=0.10` **and** `rel_underperf_exit=0.10`) currently collapse into roughly one — "is
+it down more than ~10%". In a market with a median near zero the detector is less discriminating than
+its two-condition design implies. Not a defect introduced here, but do not read 🔴 as a strong
+independent signal until the thresholds get the §6.2 walk-forward calibration they were always
+flagged as needing.
+
+**T1.4 — the sector cap now binds on the basket actually delivered.** The water-filling was factored
+into `_cap_sectors` and is applied **again after `head(max_names)`**. The old order constrained a
+basket nobody was handed, and the top of a cheapness ranking is exactly where one sector clusters.
+Measured on the live watchlist, largest sector before → after:
+
+| names (the user's slider) | before | after |
+|---|---|---|
+| 5 | **80.1% IT** | 50.0% (cap infeasible at 5 names — degrades gracefully) |
+| 8 | **50.7% IT** | 30.0% |
+| 10 | **40.8% IT** | 30.0% |
+| 12 | **34.3% IT** | 30.0% |
+| 15 (default) | 27.7% | 27.7% — unchanged |
+
+The slider runs 5–40 and explicitly invites concentration, so **every setting below ~13 silently broke
+the 30% cap the code advertised.** At the default it was already compliant, which is why nothing
+surfaced it.
+
+**T1.5 — said on screen, every render.** `buy_advice_scope_note()` states what the screen is (a
+deterministic technical screen, ₹0-tax, continuity-checked, health-flagged) and what it is not (never
+backtested, no shared selection code or names with the 18.2% funnel, never measured against a
+baseline). Added to [README.md](README.md) §7 as its own bias bullet — the existing "technical, not
+P/E" line never said "never tested against a baseline".
+
+**Surfaces restored.** `BUY_ADVICE_ON_REAL_MONEY = True`. The tab now has three distinct states:
+switched off at the flag (kill-switch, kept working and tested), allowed but running on prices that
+failed PR-2's guard, or live. The kill-switch notice was rewritten so it no longer cites the two
+now-fixed defects as its reason — a notice that lies about why it is showing is its own trust failure.
+
+**`test_deploy.py`'s drawdown assertion rewritten** per the plan: the ordering still holds (it is the
+deliberate tilt), now paired with a companion test asserting the delivered basket carries the health
+verdict, so "further down ⇒ buy more" can never again be the *whole* specification.
 
 ### PR-4 · Label every number (fixes T2.1–T2.4)
 - Every return gets its **basis and window** on screen. Add `start_date` to `baseline_book.json`;

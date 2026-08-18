@@ -8,6 +8,7 @@ that an advisor button produces advice — the deterministic logic itself is cov
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -80,23 +81,62 @@ _advisor_tabs(
 """
 
 
-def test_buy_list_is_withheld_and_the_sell_side_still_renders() -> None:
-    """PR-1 (PLAN_TRUST_REPAIR.md): no buy list on the real-money surface, sell/raise untouched."""
+def test_the_buy_list_renders_with_its_scope_note() -> None:
+    """PR-3 restored the surface — and the honest framing rides *with* it, on every render."""
     at = AppTest.from_string(_ADVISOR_HARNESS, default_timeout=60).run()
     assert not at.exception
-    # The withheld notice renders in place of the buy list.
-    assert any("buy list is withheld" in w.value for w in at.warning)
-    # Sell / Raise cash are unaffected — both advisor buttons are still on the page, and neither the
-    # buy button nor the AI market read (which only ever framed the buy list) is rendered.
     labels = [b.label for b in at.button]
+    assert any("Suggest what to buy" in lbl for lbl in labels)  # back on the page
+    # The scope note is not optional decoration: T1.5 must be on screen whenever the list is.
+    infos = " ".join(i.value for i in at.info)
+    assert "never been backtested" in infos
+    assert "18.2%" in infos
+    # Sell / Raise cash are untouched throughout.
     assert any("Advise sell" in lbl for lbl in labels)
     assert any("Advise raise-cash" in lbl for lbl in labels)
+
+
+def test_the_kill_switch_still_withholds_every_buy_surface() -> None:
+    """The flag must remain a working one-constant off switch, not a historical artifact.
+
+    ``dashboard_app`` caches in ``sys.modules`` across AppTest runs, so flipping the flag leaks into
+    every later test unless it is put back — restore it in ``finally``, not at the end of the body.
+    """
+    sys.path.insert(0, str(_ROOT / "scripts"))
+    import dashboard_app
+
+    try:
+        dashboard_app.BUY_ADVICE_ON_REAL_MONEY = False
+        at = AppTest.from_string(_ADVISOR_HARNESS, default_timeout=60).run()
+        assert not at.exception
+        assert any("switched off" in w.value for w in at.warning)
+        labels = [b.label for b in at.button]
+        assert not any("Suggest what to buy" in lbl for lbl in labels)
+        assert any("Advise sell" in lbl for lbl in labels)  # sell side never gated on the flag
+    finally:
+        dashboard_app.BUY_ADVICE_ON_REAL_MONEY = True
+
+
+def test_stale_watchlist_prices_withhold_the_buy_list_but_not_the_sell_side() -> None:
+    """PR-2's data guard, seen end-to-end on the surface it protects."""
+    at = AppTest.from_string(
+        _ADVISOR_HARNESS.replace(
+            '    namespace="live",',
+            '    namespace="live",\n'
+            '    buy_blocked_reasons=["latest watchlist price is 2026-07-10 — 27 weekdays stale"],',
+        ),
+        default_timeout=60,
+    ).run()
+    assert not at.exception
+    warnings = " ".join(w.value for w in at.warning)
+    assert "2026-07-10" in warnings
+    labels = [b.label for b in at.button]
     assert not any("Suggest what to buy" in lbl for lbl in labels)
-    assert not any("AI leans" in i.value for i in at.info)
+    assert any("Advise raise-cash" in lbl for lbl in labels)
 
 
 def test_the_sell_advisor_still_computes_on_the_real_money_surface() -> None:
-    """Withholding the buy list must not have disturbed the validated FIFO/tax path beside it."""
+    """Restoring the buy list must not have disturbed the validated FIFO/tax path beside it."""
     at = AppTest.from_string(_ADVISOR_HARNESS, default_timeout=60).run()
     at.button(key="sell_btn_live").click().run()
     assert not at.exception

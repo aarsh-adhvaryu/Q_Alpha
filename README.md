@@ -255,6 +255,16 @@ Every model embeds choices. Here are ours, stated plainly, including the ones th
 - **"Cheapness" is technical, not fundamental.** The deploy-in-weakness lever scores how far a stock
   has pulled back from its high — a *price* proxy, **not** a P/E. True valuation needs a fundamentals
   feed we don't have (Kite doesn't expose it). We label this honestly everywhere it appears.
+- **The buy screen has never been backtested — and that is the bigger caveat.** The 18.2% headline
+  describes the **factor funnel** (`backtest/strategy.py`). The Add-money buy list is a *different*
+  rule (`live/deploy.py:advise_deploy_into_weakness`) that shares **no selection code and, on any
+  given day, typically no names** with it. No script has ever measured it against a baseline — not
+  `run_phase0.py`, not `walkforward.py`, not `holdout_2025.py`. It is a deterministic starting point
+  for the user's own judgement, and the app now says so on every render. Two defects found in it on
+  2026-08-17 are documented and fixed in `PLAN_TRUST_REPAIR.md`: corporate actions were being read as
+  discounts (a demerger step-down is not a sale — `adj_close` never corrects for it), and the advisor
+  never consulted the §4.7 breakdown detector this same system ships with. The screen now carries
+  that detector's verdict beside every name it recommends, **including when the two disagree.**
 - **Broker = Zerodha, not the spec's HDFC.** Chosen for ₹0 delivery brokerage, which changes the
   cost-gate math. A deliberate, documented deviation (`accounting/costs.py`).
 - **The validated edge is 3-factor (price/volume).** The richer 6-factor (with fundamentals) model is
