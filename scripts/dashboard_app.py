@@ -310,8 +310,18 @@ def _advisor_with_safety(
     (live only) drives the zero-typing PM brief + prefills the Add-money field.
     """
     session = broker_session_guard(live_session) if live_session is not None else None
+    # The buy list is priced off the *watchlist* panel, not the core panel — a separate source whose
+    # freshness this report did not cover until PR-2 (T1.3). Pass it so a stale or failed-to-download
+    # panel withholds buy advice; sell/raise-cash are priced off the core panel and stay unaffected.
+    wl = _watchlist()
     report: SafetyReport = assess_advice_inputs(
-        prices, prices_dec, sorted(portfolio.positions()), as_of, session=session
+        prices,
+        prices_dec,
+        sorted(portfolio.positions()),
+        as_of,
+        session=session,
+        watchlist=wl[2] if wl is not None else None,
+        watchlist_download_ok=bool(st.session_state.get("watchlist_download_ok", True)),
     )
     namespace = "live" if live_session is not None else "paper"
     st.subheader("Ask the advisor")
@@ -1140,15 +1150,23 @@ def _unverified_branch_warning(advice: object) -> None:
     )
 
 
-def _download_watchlist_panel() -> None:
+def _download_watchlist_panel() -> bool:
+    """Refresh the watchlist price panel; return whether it actually succeeded.
+
+    Previously this swallowed the exit code (``check=False``) and returned nothing, so a failed
+    download left the *previous* panel on disk and the buy advisor sized a confident recommendation
+    off stale prices with no banner (PR-2 / T1.3). The caller now records the outcome and the safety
+    report withholds buy advice instead.
+    """
     import subprocess
 
     with st.spinner("Loading the Nifty-100 watchlist (one-time price download, ~1–2 min)…"):
-        subprocess.run(
+        result = subprocess.run(
             [sys.executable, "scripts/build_nifty100_watchlist.py", "--prices"],
             check=False,
             cwd=Path.cwd(),
         )
+    return result.returncode == 0
 
 
 @st.cache_resource(ttl=6 * 3600, show_spinner=False)
@@ -1158,17 +1176,25 @@ def _watchlist() -> tuple[list[str], dict[str, str], PriceData] | None:
     The panel is downloaded once and persists on disk, so a bare forever-cache would serve week-old
     prices to the deploy advisor. Two guards: a 6-hour ``ttl`` on the cache, and a
     :func:`watchlist_is_stale` check that re-downloads the panel when its last price date has aged out.
+
+    PR-2: whether that refresh **succeeded** is recorded in ``st.session_state`` and fed to
+    :func:`assess_advice_inputs`, so a failed download withholds buy advice rather than silently
+    serving the previous panel. The cached return value cannot carry it — the cache is shared across
+    reruns while the flag must reflect the most recent attempt.
     """
     from qalpha.data.ingest import load_parquet
 
     csv = Path("data/universes/nifty100_watchlist.csv")
     panel = Path("data/historical/prices_watchlist.parquet")
+    st.session_state["watchlist_download_ok"] = True
     if not csv.exists():
         return None
     if not panel.exists():
-        _download_watchlist_panel()
+        st.session_state["watchlist_download_ok"] = _download_watchlist_panel()
     elif watchlist_is_stale(load_parquet(str(panel)).dates[-1].date(), date.today()):
-        _download_watchlist_panel()  # refresh a stale on-disk panel
+        # Refresh a stale on-disk panel. A failure here is the dangerous case: the old panel is
+        # still there, so without the flag the advisor would price a buy list off aged-out data.
+        st.session_state["watchlist_download_ok"] = _download_watchlist_panel()
     if not panel.exists():
         return None
 

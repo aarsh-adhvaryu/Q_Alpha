@@ -1,7 +1,7 @@
 # Trust repair — the advisor, the page, and the experiment (planned 2026-08-17)
 
-**Status: PR-1 BUILT (branch `trust-repair-pr1`, four gates green, 321 tests). PR-2 … PR-8 planned,
-user-approved scope, not yet implemented.**
+**Status: PR-1 BUILT (branch `trust-repair-pr1`, 321 tests) · PR-2 BUILT (branch `trust-repair-pr2`,
+343 tests). Four gates green on both. PR-3 … PR-8 planned, user-approved scope, not yet implemented.**
 
 Companion to [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md) (same day). That audit diagnosed
 the **presentation** incoherence and the **experiment** confound, and its findings hold. This plan
@@ -163,18 +163,46 @@ renderer stays wired behind it, so PR-3 restores the surfaces by flipping one co
   sell advisor still computes.
 - Restored in PR-3. Nothing is deleted.
 
-### PR-2 · Price-continuity guard (fixes T1.1, T1.3)
+### PR-2 · Price-continuity guard (fixes T1.1, T1.3) — ✅ BUILT
 New `src/qalpha/live/price_integrity.py`:
-- `unexplained_gaps(prices, tickers, as_of, *, threshold=0.25, lookback=365)` → per-ticker one-day
-  returns beyond threshold **not** matched by a split/dividend from
-  `corporate_actions_feed.corporate_actions_from_series` (reused, not reimplemented).
-- A flagged name is excluded from `cheapness_scores` until its 1-year high is re-based to the post-gap
-  window, and is reported on the advice object so the UI can say why.
-- Extend `safety.assess_advice_inputs` ([safety.py:137-158](src/qalpha/live/safety.py)) to take the
-  **watchlist** panel as well as the core panel; make `_download_watchlist_panel` surface a banner on
-  failure instead of silently serving stale prices.
-- Tests: VEDL/TRENT fixtures assert both drop out of the top of the ranking; a genuine −30% slide with
-  no gap must still rank.
+- `unexplained_gaps(prices, tickers, as_of, *, threshold=0.25, lookback=365, actions=None)` →
+  per-ticker one-day returns beyond threshold **not** matched by a split/dividend from
+  `corporate_actions_feed.corporate_actions_from_series` (reused, not reimplemented). The feed is
+  **injected, never fetched** — the guard stays pure and adds no network call to a render. Both
+  directions count (an unexplained *spike* corrupts the 1-year high too); only the **latest** gap per
+  name is reported, since re-basing to it subsumes every earlier one.
+- **Re-base, not veto.** A flagged name's 1-year high is recomputed from its gap day (the first price
+  on the new basis), so it keeps a *correct* cheapness reading. Only when fewer than 20 post-gap
+  marks exist does it fall back to 0 (untilted). `cheapness_scores` gained `rebase_from` / `no_tilt`,
+  both defaulting to off — every existing caller's behaviour is bit-for-bit unchanged.
+- Flags ride on `WeaknessDeployAdvice.price_gaps` and render via `price_gaps_note()`, so the advice
+  explains itself instead of quietly changing its mind.
+- `safety.watchlist_freshness_guard` + `assess_advice_inputs(watchlist=…, watchlist_download_ok=…)` →
+  new `SafetyReport.buy_advice_safe`, a **narrowing** of `safe_to_advise` (never an escape hatch).
+  Non-blocking by design: a stale *buy* panel must not veto Sell/Raise cash, which are priced off the
+  core panel. `_download_watchlist_panel` now returns its exit status and `_watchlist` records it, so
+  a failed refresh withholds buy advice instead of silently serving the previous panel.
+
+**Measured effect on the live watchlist (2026-07-10 panel, ₹100,000, 15 names):**
+
+| | cheapness before | cheapness after |
+|---|---|---|
+| VEDL.NS | 65.4% (rank #1) | **23.1%** |
+| TRENT.NS | 47.4% (rank #2) | **13.2%** |
+
+The top of the ranking becomes TCS · INFY · WIPRO · IRFC · HCLTECH · ITC — genuine decliners.
+**VEDL + TRENT fall from 44.4% of the deploy to 5.8%**, and TRENT leaves the top-15 entirely. VEDL
+stays, at a weight that reflects its *real* post-demerger pullback — the guard corrected a basis, it
+did not blacklist a name.
+
+- Tests (22 new): the ordering property (an artifact must not outrank a genuine decline — a guard
+  that merely dropped volatile names would fail this), a genuine −60% grind is never flagged, a known
+  split is *explained* and not reported, gaps aged out of the lookback are ignored, too-little-history
+  falls back to zero, clean data leaves the delivered target byte-identical, and `buy_advice_safe` is
+  false whenever `safe_to_advise` is.
+- **Note for PR-7:** `scripts/autopilot.py` calls the same advisor, so the System/Shadow books' future
+  deploys are corrected from here on — while their *existing* holdings still carry the artifacts
+  (T4.2). That is precisely the confound the re-seed exists to clear.
 
 ### PR-3 · Candidate health flag, and restore the buy surfaces (fixes T1.2, T1.4, T1.5)
 User's decision: **flag, not veto** — the list still shows the same names, with the system's own
