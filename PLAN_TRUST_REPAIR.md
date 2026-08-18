@@ -1,8 +1,8 @@
 # Trust repair — the advisor, the page, and the experiment (planned 2026-08-17)
 
-**Status: PR-1 … PR-5 BUILT (branches `trust-repair-pr1`…`pr5`, **393 tests, 0 skipped**, four gates
-green on each). Tiers 1 and 2 closed; T3.3 closed. PR-6 … PR-8 planned, user-approved scope, not yet
-implemented.**
+**Status: PR-1 … PR-6 BUILT (branches `trust-repair-pr1`…`pr6`, **404 tests, 0 skipped**, four gates
+green on each). Tiers 1, 2 and 3 closed. PR-7 and PR-8 (re-seed + AI name-verdict) planned,
+user-approved scope, not yet implemented.**
 
 Companion to [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md) (same day). That audit diagnosed
 the **presentation** incoherence and the **experiment** confound, and its findings hold. This plan
@@ -348,13 +348,44 @@ successful numbers indefinitely with nothing on screen saying they were old.
 
 **Result: 393 tests, 0 skipped** (was 316 with a silently-skipped dashboard module).
 
-### PR-6 · Accounting integrity (fixes T3.1, T3.2, T3.4)
-- Reconcile the ₹240,500 log drift: make `manual_injections.json` append-once keyed on the queue
-  entry's id, backfill a correction record, turn `_report_log_drift` from a print into a loud
-  dashboard banner.
-- Close the `pending_injections.json` race: the runner claims entries by id and clears **only what it
-  applied**, rather than truncating the file.
-- Delete the dead files and state keys.
+### PR-6 · Accounting integrity (fixes T3.1, T3.2, T3.4) — ✅ BUILT
+
+**T3.2 — the queue could destroy a deposit, two ways.** `apply_pending` read the queue and truncated
+it to `[]`; the books were persisted ~180 lines later at the end of `cmd_daily`. So:
+1. a deposit queued by the dashboard **between the read and the truncate** was destroyed unread — the
+   same failure family as the ₹50k lost in July; and
+2. **any crash in the deploy/gate/mark pipeline** left the queue empty and the money never credited.
+   That second window is much wider than the race and, as far as the queue is concerned, worse:
+   applying a deposit twice is recoverable, silently dropping one is not.
+
+Fixed by **claiming entries by id**. `entry_id()` derives a stable identity from the entry's own
+fields (legacy entries queued before ids existed resolve to the same hash every time).
+`apply_pending` no longer clears; the runner calls `clear_applied(applied)` **after** `save_state`,
+which re-reads the file and writes back everything it did not claim. Anything queued mid-run survives
+and is applied on the next pass — asserted by test, including the crash case.
+
+**T3.1 — ₹240,500 of drift, reconciled without rewriting history.** Root cause: the cron re-logged
+the same queued deposits on each pass (the duplicate pairs are visible minutes apart in the log).
+`log_manual_injection` is now **append-once, keyed on the entry id**, and returns whether it wrote.
+The repair is an appended **signed correction**, not a deletion — the erroneous rows are the evidence
+of what the runner did, and an audit log you edit is not an audit log.
+**`manual_log_drift(Decimal('200000'))` now returns `0`** (it returned `240500`), which is the plan's
+acceptance criterion. `_report_log_drift` keeps its cron print, and the number now also appears as a
+**dashboard banner** (`injection_drift_markdown`) that leads with *"Your money is fine"* — because it
+was: `state.json` is authoritative and the books always held the right amount.
+
+**T3.4 — archived, not deleted (a deliberate deviation from the plan).**
+`data/autopilot/{track.csv, adaptive_track.csv, books.json}` have no reader or writer, but they are
+the final state and track record of a **pre-registered experiment** frozen on 2026-07-12. This repo's
+own rule is that pre-registered work is archived and published, never quietly removed — deleting a
+superseded study's evidence is how a track record becomes a selection of its good runs. They move to
+`data/autopilot/archive/` with a README explaining what they were. `monthly_autodeposit: true` is
+dropped from `state.json` (feature removed 2026-07-28).
+
+**⚠️ `reports/{paper_dashboard.md, paper_equity.csv}` are NOT dead and were not touched.** The plan
+lists them as "read by nothing in this repo". They are written every run by `scripts/paper.py`,
+committed by `paper.yml`, **read by PR-5's cross-surface tests**, and fetched over HTTP by the
+research repo's mission-control. Deleting them would have broken all three.
 
 ### PR-7 · Re-seed the experiment from today (user's Q3)
 *"what if we start from the ground zero day 1 from today … before window gets removed"* — correct
