@@ -1,20 +1,17 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Sensex dropped 116 bps to open at 77,892.92, Nifty fell 23 bps to 24,343.45—weak start on crude and Middle East jitters.
+**Sentiment:** 🔴 Nifty 50 settled at 24,154.90, down 132.75 points (0.55%), Sensex fell 492.70 points (0.63%) — third consecutive session lower.
 
 **Drivers:**
-1. **Crude oil surge** (~$82–89/bbl, +4.6% WoW) → IT stocks led losses (margin erosion, rupee pressure); Energy & import-heavy sectors face headwinds.
-2. **Geopolitical risk** (Iran, Strait of Hormuz uncertainty) → Caution prevailing due to firm crude oil prices and ongoing geopolitical uncertainties; defensive positioning favors banks, metals over growth.
-3. **IT underperformance** — Infosys (-2.83%), Sun Pharma (-2.54%), HCL (-2.32%) led declines; FMCG also weak.
+1. Crude rose 0.5–0.7% to $91.3 Brent/$85.1 WTI on US-Iran ceasefire expiry & Strait of Hormuz disruption fears → OMCs (BPCL, IOC, ONGC) margin compression; aviation/transport input cost headwind (INDIGO, TATAMOTORS).
+2. Higher US Treasury yields and a weaker rupee → pressure on rate-sensitive sectors, FII outflow risk.
 
-**Watchlist names affected:**
-- **Down pressure:** INFY, HCLTECH, SUNPHARMA, HINDUNILVR (IT/FMCG margin squeeze)
-- **Relative support:** AXISBANK, TATASTEEL, KOTAKBANK (metals & financials benefiting from rebalance)
+**Watchlist names affected:** BPCL, IOC (energy margin squeeze); INDIGO, TATAMOTORS (fuel cost rise); HDFCBANK, ICICIBANK (rate sensitivity); RELIANCE (crude input cost mixed).
 
-**Likely reaction:** Metals and private banks provided some support; Tata Steel advanced 1.5%, Axis Bank rose 1%—suggests a modest stabilization intraday if crude holds, but expect index to trade -0.2–0.5% lower near-term given persistent headwinds. Near-term: slight near-term rebound off opening lows if global sentiment steadies, but IT remains under pressure. Watch AXISBANK/KOTAKBANK for any sharp rally as accumulation zone; INFY/HCLTECH stay under scrutiny for further weakness.
+**Likely reaction:** Index likely consolidates near support with downside bias over next 1–2 sessions. FII selling (₹2,535 cr on Aug 17) offset by DII support creates near-term chop. **Lean: down 0.2–0.6%, confidence: medium.** Most at-risk: INDIGO (fuel cost pinch), BPCL (refinery margins). RELIANCE may stabilise if oil price stabilises.
 
-**Risk note:** Geopolitical tensions between US and Iran, uncertainties regarding supply disruptions, particularly concerning the Strait of Hormuz remain tail risks if escalation triggers sharp crude spike.
+**Risk note:** Geopolitical risk likely to keep crude elevated, remain headwind for Indian equities.
 
-SIGNAL: lean=flat; band=-0.3..0.4; confidence=low
+SIGNAL: lean=down; band=0.2..0.6; confidence=medium
 
-— 🤖 claude-haiku-4-5 · 54,581 in / 864 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 41,321 in / 720 out tokens · ✓ complete
