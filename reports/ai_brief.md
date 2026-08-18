@@ -1,21 +1,20 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment**: 🔴 Nifty 50 declined 78.40 points to around 24,317.45 amid pressure in IT, metal and banking stocks.
+**Sentiment:** 🔴 Sensex dropped 116 bps to open at 77,892.92, Nifty fell 23 bps to 24,343.45—weak start on crude and Middle East jitters.
 
-**Drivers**:
-1. **IT & Tech weakness** – Tech Mahindra and HCLTech declined, while TCS traded lower; profit-taking on valuation concerns after strong rally.
-2. **Metal sector drag** – Tata Steel was among the major Sensex laggards, declining around 1.41%, weighed by crude oil rising to 81.27 USD/Bbl and uncertain demand outlook amid IEA/OPEC demand downgrades.
-3. **FII caution** – FII were net sellers of ₹510.70 Cr in cash segment on August 13, though DII were net buyers of ₹4,353.10 Cr, absorbing most pressure.
+**Drivers:**
+1. **Crude oil surge** (~$82–89/bbl, +4.6% WoW) → IT stocks led losses (margin erosion, rupee pressure); Energy & import-heavy sectors face headwinds.
+2. **Geopolitical risk** (Iran, Strait of Hormuz uncertainty) → Caution prevailing due to firm crude oil prices and ongoing geopolitical uncertainties; defensive positioning favors banks, metals over growth.
+3. **IT underperformance** — Infosys (-2.83%), Sun Pharma (-2.54%), HCL (-2.32%) led declines; FMCG also weak.
 
-**Watchlist names affected**:
-- **TECHM, HCLTECH, TCS** (IT weakness) — down on sector-wide profit-taking.
-- **TATASTEEL, HINDALCO** (Metals) — oil/demand headwinds.
-- **AXISBANK** (Banking) — rotation out of banks.
+**Watchlist names affected:**
+- **Down pressure:** INFY, HCLTECH, SUNPHARMA, HINDUNILVR (IT/FMCG margin squeeze)
+- **Relative support:** AXISBANK, TATASTEEL, KOTAKBANK (metals & financials benefiting from rebalance)
 
-**Likely reaction**: Index likely near-term lean **flat to slightly down** over next 1–2 sessions — **-0.2% to +0.3%** — **low confidence**. Domestic DIIs support prevents free-fall, but FPI reticence (monitoring Hormuz logistics, demand signals) keeps conviction muted. **TECHM & TATASTEEL** most probable to test lower on oversold technicals; limited upside until sentiment stabilizes.
+**Likely reaction:** Metals and private banks provided some support; Tata Steel advanced 1.5%, Axis Bank rose 1%—suggests a modest stabilization intraday if crude holds, but expect index to trade -0.2–0.5% lower near-term given persistent headwinds. Near-term: slight near-term rebound off opening lows if global sentiment steadies, but IT remains under pressure. Watch AXISBANK/KOTAKBANK for any sharp rally as accumulation zone; INFY/HCLTECH stay under scrutiny for further weakness.
 
-**Risk note**: IEA cut global oil demand outlook and OPEC lowered 2026 growth forecast — macro demand shock could cascade into energy/auto/paint/cement input-cost plays if crude resumes structural decline.
+**Risk note:** Geopolitical tensions between US and Iran, uncertainties regarding supply disruptions, particularly concerning the Strait of Hormuz remain tail risks if escalation triggers sharp crude spike.
 
-SIGNAL: lean=flat; band=-0.2..0.3; confidence=low
+SIGNAL: lean=flat; band=-0.3..0.4; confidence=low
 
-— 🤖 claude-haiku-4-5 · 57,627 in / 875 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 54,581 in / 864 out tokens · ✓ complete
