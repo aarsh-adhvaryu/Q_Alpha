@@ -77,6 +77,61 @@ def watchlist_is_stale(last_date: date, today: date, *, max_weekdays: int = 3) -
     return _weekdays_after(last_date, today) - 1 >= max_weekdays
 
 
+@dataclass(frozen=True)
+class SourceFreshness:
+    """How current one committed artifact the dashboard renders is."""
+
+    name: str
+    last_update: date | None
+    weekdays_stale: int
+    is_stale: bool
+    note: str
+
+
+def source_freshness(
+    name: str, last_update: date | None, today: date, *, max_weekdays: int = 1
+) -> SourceFreshness:
+    """Freshness of one cron-written artifact — the same weekday-aware grace as :func:`paper_freshness`.
+
+    T3.3: the System tab renders ``autopilot_dashboard.md``, ``system_track.csv`` and ``ai_brief.md``
+    with **no freshness check at all**. If the weekday cron silently stopped, the page would keep
+    showing the last successful run's numbers, indefinitely, with nothing on screen to say they were
+    old — a stale number the user acts on is the one loss vector this system actually has.
+    """
+    if last_update is None:
+        return SourceFreshness(name, None, 0, True, f"⚠️ **{name}** — never written.")
+    stale = max(0, _weekdays_after(last_update, today) - 1)  # today may not have run yet
+    if stale >= max_weekdays:
+        return SourceFreshness(
+            name,
+            last_update,
+            stale,
+            True,
+            f"⚠️ **{name}** — last updated {last_update}, {stale} weekday(s) missed.",
+        )
+    return SourceFreshness(
+        name, last_update, stale, False, f"✓ **{name}** — up to date ({last_update})."
+    )
+
+
+def sources_freshness_markdown(sources: list[SourceFreshness]) -> str:
+    """One line per source when all are current; a loud block naming each stale one when not."""
+    if not sources:
+        return ""
+    stale = [s for s in sources if s.is_stale]
+    if not stale:
+        newest = max((s.last_update for s in sources if s.last_update), default=None)
+        return f"✓ All {len(sources)} daily sources are up to date (latest {newest})."
+    lines = [
+        f"⚠️ **{len(stale)} of {len(sources)} daily sources are stale — the numbers below may be "
+        "out of date.** The weekday run writes these; if it stopped, everything on this tab is "
+        "frozen at its last successful pass.",
+        "",
+    ]
+    lines += [f"- {s.note}" for s in sources]
+    return "\n".join(lines)
+
+
 #: Is the deterministic buy list allowed on the **real-money** surface?
 #:
 #: ``True`` again since PR-3 (PLAN_TRUST_REPAIR.md). It was switched off on 2026-08-17 because two

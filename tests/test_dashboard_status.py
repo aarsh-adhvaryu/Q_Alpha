@@ -463,3 +463,65 @@ def test_a_missing_brief_changes_nothing_about_name_selection() -> None:
     assert "No AI signal today" in md
     assert "×1.00" in md
     assert "changes nothing about which names" in md
+
+
+# ---- daily-source freshness (PLAN_TRUST_REPAIR.md PR-5 — fixes T3.3) ------------------------------
+
+
+def test_a_source_written_today_is_fresh() -> None:
+    from qalpha.live.dashboard import source_freshness
+
+    s = source_freshness("Track record", date(2026, 6, 18), date(2026, 6, 18))
+    assert not s.is_stale
+    assert "up to date" in s.note
+
+
+def test_a_friday_source_read_on_monday_is_still_fresh() -> None:
+    """Weekday-aware, with one weekday of grace — today's run may not have fired yet."""
+    from qalpha.live.dashboard import source_freshness
+
+    assert not source_freshness("Scoreboard", date(2026, 6, 12), date(2026, 6, 15)).is_stale
+
+
+def test_a_source_that_missed_a_weekday_is_stale() -> None:
+    from qalpha.live.dashboard import source_freshness
+
+    s = source_freshness("Scoreboard", date(2026, 6, 15), date(2026, 6, 18))  # Mon → Thu
+    assert s.is_stale
+    assert s.weekdays_stale == 2
+    assert "weekday(s) missed" in s.note
+
+
+def test_a_source_that_was_never_written_is_stale_not_silent() -> None:
+    from qalpha.live.dashboard import source_freshness
+
+    s = source_freshness("AI brief", None, date(2026, 6, 18))
+    assert s.is_stale
+    assert "never written" in s.note
+
+
+def test_the_summary_names_every_stale_source() -> None:
+    """A stopped cron must be legible, not inferred from numbers that stopped moving."""
+    from qalpha.live.dashboard import source_freshness, sources_freshness_markdown
+
+    today = date(2026, 6, 18)
+    md = sources_freshness_markdown(
+        [
+            source_freshness("Track record", date(2026, 6, 18), today),
+            source_freshness("Scoreboard", date(2026, 6, 10), today),
+            source_freshness("AI brief", None, today),
+        ]
+    )
+    assert "2 of 3 daily sources are stale" in md
+    assert "Scoreboard" in md and "AI brief" in md
+    assert "frozen at its last successful pass" in md
+
+
+def test_the_summary_is_a_single_quiet_line_when_everything_is_current() -> None:
+    from qalpha.live.dashboard import source_freshness, sources_freshness_markdown
+
+    today = date(2026, 6, 18)
+    md = sources_freshness_markdown([source_freshness("Track record", today, today)])
+    assert md.startswith("✓")
+    assert "stale" not in md
+    assert sources_freshness_markdown([]) == ""
