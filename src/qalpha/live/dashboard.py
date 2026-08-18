@@ -79,44 +79,71 @@ def watchlist_is_stale(last_date: date, today: date, *, max_weekdays: int = 3) -
 
 #: Is the deterministic buy list allowed on the **real-money** surface?
 #:
-#: ``False`` since 2026-08-17 — PLAN_TRUST_REPAIR.md PR-1. Two defects make
-#: :func:`qalpha.live.deploy.advise_deploy_into_weakness` untrustworthy for a live account, and both
-#: are visible in today's recommendation (see :func:`buy_advice_withheld_markdown`). Nothing is
-#: deleted: the renderers stay wired behind this flag, so PR-3 — which lands the price-continuity
-#: guard and the per-candidate health flag — restores them by flipping this one constant.
+#: ``True`` again since PR-3 (PLAN_TRUST_REPAIR.md). It was switched off on 2026-08-17 because two
+#: defects made :func:`qalpha.live.deploy.advise_deploy_into_weakness` untrustworthy for a live
+#: account; PR-2 closed the first (corporate actions read as discounts) and PR-3 the second (the
+#: advisor never consulted the breakdown detector it ships with). The flag stays as the kill-switch:
+#: flip it to ``False`` and every buy surface withholds itself again, with no other change.
 #:
-#: Scope: the **buy** side only. Sell and Raise-cash are untouched; they run on the validated
-#: FIFO/tax engine, which none of these defects touch.
-BUY_ADVICE_ON_REAL_MONEY = False
+#: Scope: the **buy** side only. Sell and Raise-cash never consult it — they run on the validated
+#: FIFO/tax engine, which none of this touches.
+BUY_ADVICE_ON_REAL_MONEY = True
 
 
 def buy_advice_withheld_markdown() -> str:
-    """The notice shown in place of the buy list while it is withheld (PR-1).
+    """The notice shown when the buy list is switched off at the flag.
 
-    Names both defects on screen rather than quietly hiding the tab. The user's request was to see
-    *why* the advice went away — an unexplained empty tab is the same trust failure in a smaller
-    package.
+    Kept from PR-1 as a working kill-switch. Deliberately does *not* re-state the two original
+    defects: both are fixed, and a notice that lies about why it is showing would be its own trust
+    failure. Whoever flips the flag says why in the plan.
     """
     return (
-        "🚧 **The buy list is withheld — two defects found 2026-08-17.**\n\n"
-        "**1 · Corporate actions are read as discounts.** Cheapness is measured against each name's "
-        "1-year high on yfinance *Adj Close*, which corrects splits and dividends but **never "
-        "demergers or spinoffs**. Two of the 95 watchlist names have an unexplained one-day collapse "
-        "(VEDL −64.9% on 2026-04-30, TRENT −33.0% on 2026-01-01) and they rank **#1 and #2** on "
-        "cheapness — 44% of a ₹100,000 deploy chased two price artifacts, and the phantom discount "
-        "persists for a full year.\n\n"
-        "**2 · The advisor contradicts this system's own breakdown detector.** The §4.7 "
-        "idiosyncratic-breakdown test rates **4 of the 5 names last recommended** as 🔴 breaking down "
-        "(VEDL, IRFC, HDFCLIFE, ITC). It runs over *holdings* only and was never pointed at "
-        "*candidates* — so the same panel, on the same day, gave opposite verdicts on the same "
-        "stocks.\n\n"
-        "Also worth knowing: this buy rule is an **unvalidated technical screen**. It shares no "
-        "selection code and no names with the funnel the 18.2% backtest headline describes, and it "
-        "has never been tested against a baseline.\n\n"
+        "🚧 **Buy suggestions are switched off.**\n\n"
+        "The deterministic buy list has been withheld from this surface deliberately — see "
+        "`PLAN_TRUST_REPAIR.md` for the current reason. Selection code is unchanged and nothing has "
+        "been deleted; flipping `BUY_ADVICE_ON_REAL_MONEY` restores every buy surface.\n\n"
         "**Still live and unaffected:** *Sell a holding* and *Raise cash* — both run on the "
-        "validated FIFO/cost/tax engine.\n\n"
-        "This returns once the price-continuity guard and the per-candidate health flag are in "
-        "(PLAN_TRUST_REPAIR.md, PR-2 and PR-3). Nothing has been deleted."
+        "validated FIFO/cost/tax engine."
+    )
+
+
+def buy_advice_blocked_markdown(reasons: list[str]) -> str:
+    """The notice shown when the buy list is *allowed* but its inputs failed a safety check.
+
+    Distinct from the kill-switch above: here the rule is trusted and the **data** is not — a stale
+    or failed-to-download watchlist panel (PR-2 / T1.3). Sell and Raise cash are priced off the core
+    panel and stay available, which is why this never blocks the whole advisor.
+    """
+    lines = [
+        "⚠️ **Buy suggestions withheld — the prices behind them are not trustworthy right now.**",
+        "",
+    ]
+    lines += [f"- {r}" for r in reasons]
+    lines += [
+        "",
+        "Sizing a buy list off a panel that failed to refresh is exactly the silent-wrong-number "
+        "failure these guards exist to prevent, so it is withheld rather than shown with a caveat. "
+        "*Sell a holding* and *Raise cash* are priced off a different panel and are unaffected.",
+    ]
+    return "\n".join(lines)
+
+
+def buy_advice_scope_note() -> str:
+    """The permanent framing that rides *with* the buy list — what this screen is, and is not.
+
+    The buy rule has never been backtested. It shares no selection code and no names with the funnel
+    the 18.2% headline describes, and no script has ever measured it against a baseline. That is not
+    a reason to hide it — it is a reason to say so every single time it renders.
+    """
+    return (
+        "**What this is:** a deterministic **technical screen** — names furthest below their own "
+        "1-year high, spread across sectors, bought with whole shares at **₹0 capital-gains tax**. "
+        "Prices are checked for continuity first, and each name carries this system's own "
+        "breakdown verdict.\n\n"
+        "**What this is not:** the validated strategy. This screen has **never been backtested** — "
+        "it shares no selection code and no names with the factor funnel behind the 18.2% headline, "
+        "and it has never been measured against a baseline. It is a starting point for your own "
+        "judgement, not a result. Every order is still placed by you."
     )
 
 
