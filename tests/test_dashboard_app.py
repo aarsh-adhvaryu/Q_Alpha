@@ -1,9 +1,11 @@
-"""Smoke test for the live Streamlit dashboard (scripts/dashboard_app.py).
+"""Smoke + cross-surface tests for the live Streamlit dashboard (scripts/dashboard_app.py).
 
-The dashboard is UI behind the optional ``dashboard`` extra, so this skips when Streamlit is absent
-(CI is dev-only — same pattern as the QAOA test) and when the paper book / price panel aren't on
-disk. It uses Streamlit's in-process ``AppTest`` to confirm the page renders with no exception and
-that an advisor button produces advice — the deterministic logic itself is covered by test_advisor.
+**This module used to skip in CI** (PLAN_TRUST_REPAIR.md T3.3): it was ``skipif``'d on a gitignored
+price panel, so the dashboard — the surface every defect in the plan reached the user through — was
+the least-tested code in the repo. It now runs against the ``dashboard_sandbox`` fixture, which
+copies the committed books and generates the price panels, so it needs no market data and no network.
+
+Streamlit itself is still an optional extra, so the import skip remains — that one is honest.
 """
 
 from __future__ import annotations
@@ -19,12 +21,8 @@ from streamlit.testing.v1 import AppTest
 _ROOT = Path(__file__).resolve().parent.parent
 _APP = _ROOT / "scripts" / "dashboard_app.py"
 _BOOK = _ROOT / "data" / "paper" / "book.json"
-_PRICES = _ROOT / "data" / "historical" / "prices_pit_2026.parquet"
 
-pytestmark = pytest.mark.skipif(
-    not (_BOOK.exists() and _PRICES.exists()),
-    reason="paper book / price panel not on disk (gitignored data)",
-)
+pytestmark = pytest.mark.usefixtures("dashboard_sandbox")
 
 
 def test_dashboard_renders_the_system_view() -> None:
@@ -175,3 +173,17 @@ def test_every_headline_return_arrives_with_a_window() -> None:
     text = " ".join(c.value for c in at.caption) + " ".join(m.value for m in at.markdown)
     assert "→" in text  # a window is printed
     assert "measured against" in text or "Window:" in text
+
+
+def test_the_daily_sources_are_freshness_gated_on_the_page() -> None:
+    """T3.3: the System tab rendered three cron-written files with no freshness check at all.
+
+    The sandbox copies the committed reports, whose mtimes are checkout time, so the panel renders
+    one way or the other — what matters is that a verdict is *reached and shown* rather than the
+    files being trusted silently.
+    """
+    at = AppTest.from_file(str(_APP), default_timeout=90).run()
+    assert not at.exception
+    shown = " ".join(c.value for c in at.caption) + " ".join(w.value for w in at.warning)
+    assert "daily sources" in shown
+    assert "system_track.csv" in shown or "Track record" in shown
