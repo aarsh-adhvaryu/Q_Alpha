@@ -1,8 +1,8 @@
 # Trust repair — the advisor, the page, and the experiment (planned 2026-08-17)
 
-**Status: PR-1 · PR-2 · PR-3 BUILT (branches `trust-repair-pr1/2/3`, 353 tests, four gates green on
-each). Tier 1 is closed — the buy list is back on the real-money surface, guarded. PR-4 … PR-8
-planned, user-approved scope, not yet implemented.**
+**Status: PR-1 · PR-2 · PR-3 · PR-4 BUILT (branches `trust-repair-pr1/2/3/4`, 370 tests, four gates
+green on each). Tier 1 closed and Tier 2 closed. PR-5 … PR-8 planned, user-approved scope, not yet
+implemented.**
 
 Companion to [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md) (same day). That audit diagnosed
 the **presentation** incoherence and the **experiment** confound, and its findings hold. This plan
@@ -262,16 +262,50 @@ now-fixed defects as its reason — a notice that lies about why it is showing i
 deliberate tilt), now paired with a companion test asserting the delivered basket carries the health
 verdict, so "further down ⇒ buy more" can never again be the *whole* specification.
 
-### PR-4 · Label every number (fixes T2.1–T2.4)
-- Every return gets its **basis and window** on screen. Add `start_date` to `baseline_book.json`;
-  print both windows wherever two books appear.
-- Show the System book's +2.03% and +2.73% together, labelled *contributed* and *deployed*, with the
-  gap named as cash drag.
-- The GO book reports **one** headline; the other two bases move behind a "how this is measured" note.
-- Equity tile → "Book value (incl. cash)", or subtract cash. Make the tile and the chart beneath it
-  read the same source (T2.3).
-- Collapse the AI narrative to the `SIGNAL:` line plus the tilt it produced (T2.5) — superseded by
-  PR-8 if the name-verdict experiment ships.
+### PR-4 · Label every number (fixes T2.1–T2.5) — ✅ BUILT
+The fix is **a vocabulary, not new arithmetic** — every number the audit found was correct.
+
+**New `src/qalpha/live/measures.py`.** `ReturnMeasure` cannot render without a **basis** (what the
+denominator is) and a **window** (over which dates); `BASES` names the four this system actually uses
+— *money put in* · *capital actually invested* · *the notional starting capital* · *the book's first
+equity mark*. Before this, the choice of denominator was implicit in whichever function happened to
+compute the number. Plus `measures_table`, `cash_drag_note`, `window_mismatch_note`.
+
+**T2.1 — the window is now in the book.** `Book.start_date`, stamped on first funding and serialised.
+`baseline_book.json` had no such field, so its window was recoverable **only from `system_track.csv`
+row 1** — backfilled to `2026-07-10` from exactly that source. A later top-up does not move it, and a
+legacy book without the key still loads and does not have one invented.
+
+**T2.2 — one headline per book; the rest behind a note.** The GO book's three numbers (+0.95% vs
+starting capital, +1.26% vs the first mark) differ **only by the ₹611.92 of day-one trading cost that
+sits between the denominators**. The headline is now the stricter basis — starting capital, which
+counts that cost against the book — and an "ℹ️ How this is measured" expander carries the other with
+the reason it differs. On the System book, the report names the **+0.70pp** gap between +2.03%
+(contributed) and +2.73% (deployed) as **cash drag**, and says plainly that it is currently larger
+than the System−Shadow difference the study is trying to measure.
+
+**T2.3 — one book, one number.** The tile re-marked equity live against the host panel while the
+chart beneath it, the GO scorecard and the freshness panel all read the cron-committed curve. The
+tile now reads the **committed curve** — the book of record, since it is the criterion-6 evidence —
+and any live drift is shown as a separate, labelled line rather than silently swapped in. Tile
+renamed **"Book value (incl. cash)"**, beside **"of which cash"**.
+
+**T2.4 — chart count was never the problem**, and the clutter it was mistaken for is now labelled.
+
+**T2.5 — the AI narrative leads with what it actually does.** `ai_signal_summary()` renders the
+`SIGNAL:` line and the one multiplier it produces, states that the contract has **no ticker field**,
+and puts the prose behind a nested expander. Paragraphs of per-name analysis rendered under a buy
+list are what made the brief read as *"the AI picked these"* — it cannot.
+
+**Windows printed wherever two books appear.** The core-GO expander lives *inside* the System tab, so
+two books with different funding histories and start dates 28 days apart sat on one screen with
+nothing saying so. `window_mismatch_note` now says it, and adds that they are structurally separate
+books. (A first cut of that helper dropped rows with no end date, which is every live book — it
+rendered a dangling "— ." on the page. Fixed, with a test.)
+
+Tests: 17 new. `test_measures.py` pins the vocabulary and both real confusions (one series/two
+windows; one book/two bases). `test_dashboard_app.py` asserts the headline tile equals the committed
+curve's last mark — a **cross-surface** assertion, the class of test T3.3 says does not exist yet.
 
 ### PR-5 · Cross-surface consistency tests (fixes T3.3)
 The gap that let all of this pass 316 green tests.

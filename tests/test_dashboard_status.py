@@ -430,3 +430,36 @@ def test_each_unverified_branch_is_named() -> None:
     assert len(out) == 4
     assert any("§70" in b for b in out)
     assert any("3 different cost bases" in b for b in out)
+
+
+# ---- the AI's actual output (PLAN_TRUST_REPAIR.md PR-4 — fixes T2.5) ------------------------------
+
+
+def test_ai_summary_leads_with_the_signal_and_says_it_picks_no_stock() -> None:
+    """The whole machine-readable contract is one line with no ticker field — say so where it shows.
+
+    Rendering per-name prose under a buy list is what made the brief read as "the AI chose these".
+    """
+    from qalpha.live.dashboard import ai_signal_summary
+
+    md = ai_signal_summary("up", "medium", 1.25, consumed_by="the 🧠 System book only (fake money)")
+    assert "lean=up" in md and "confidence=medium" in md
+    assert "×1.25" in md and "larger" in md
+    assert "no ticker field" in md
+    assert "System book only" in md
+
+
+def test_ai_summary_reports_a_neutral_tilt_as_no_change() -> None:
+    from qalpha.live.dashboard import ai_signal_summary
+
+    md = ai_signal_summary("flat", "low", 1.0, consumed_by="the System book")
+    assert "no change to deploy size" in md
+
+
+def test_a_missing_brief_changes_nothing_about_name_selection() -> None:
+    from qalpha.live.dashboard import ai_signal_summary
+
+    md = ai_signal_summary(None, None, 1.0, consumed_by="the System book")
+    assert "No AI signal today" in md
+    assert "×1.00" in md
+    assert "changes nothing about which names" in md

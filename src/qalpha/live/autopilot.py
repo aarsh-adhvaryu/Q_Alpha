@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -165,11 +166,22 @@ class Book:
     cash: Decimal = Decimal("0")
     holdings: dict[str, int] = field(default_factory=dict)
     net_contributions: Decimal = Decimal("0")
+    # The day this book started measuring (PR-4 / T2.1). Without it a book's return is a number with
+    # no window, and two books started weeks apart get compared as though they covered the same
+    # period — which is exactly how one NIFTYBEES series came to look like two contradictory
+    # baselines (+0.98% and +3.92%, 28 days apart). Recoverable only from system_track.csv before.
+    start_date: date | None = None
 
-    def inject(self, amount: Decimal) -> None:
-        """Add fake cash (an external contribution, not a gain)."""
+    def inject(self, amount: Decimal, on: date | None = None) -> None:
+        """Add fake cash (an external contribution, not a gain).
+
+        The first injection stamps ``start_date`` when ``on`` is given — the book begins measuring
+        the day it is first funded, not the day the file happens to be created.
+        """
         self.cash += amount
         self.net_contributions += amount
+        if self.start_date is None and on is not None:
+            self.start_date = on
 
     def buy(self, ticker: str, qty: int, price: Decimal) -> None:
         """Buy whole shares with cash (no tax on buys). Raises if it can't afford it."""
@@ -196,20 +208,25 @@ class Book:
         return float(self.profit(prices) / self.net_contributions) * 100.0
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        out: dict[str, object] = {
             "name": self.name,
             "cash": str(self.cash),
             "holdings": dict(self.holdings),
             "net_contributions": str(self.net_contributions),
         }
+        if self.start_date is not None:
+            out["start_date"] = self.start_date.isoformat()
+        return out
 
     @classmethod
     def from_dict(cls, d: dict[str, object]) -> Book:
+        raw_start = d.get("start_date")
         return cls(
             name=str(d["name"]),
             cash=Decimal(str(d["cash"])),
             holdings=_int_map(d.get("holdings")),
             net_contributions=Decimal(str(d["net_contributions"])),
+            start_date=date.fromisoformat(str(raw_start)) if raw_start else None,
         )
 
 
