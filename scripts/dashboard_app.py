@@ -54,6 +54,8 @@ from qalpha.live.dashboard import (
     paper_freshness,
     performance_read,
     plain_summary_markdown,
+    source_freshness,
+    sources_freshness_markdown,
     systemic_risk_markdown,
     today_brief_markdown,
     watchlist_is_stale,
@@ -68,6 +70,7 @@ from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_sessio
 
 AUTOPILOT_DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
 AI_BRIEF_MD = Path("reports/ai_brief.md")
+SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
 
 
 def _queue_injection_to_repo(amount: int, reason: str) -> tuple[bool, str]:
@@ -751,6 +754,7 @@ def _system_tab(
 
     # --- The scoreboard (written by the daily run) + the race chart ---
     st.divider()
+    _tab1_sources_panel(as_of)
     if AUTOPILOT_DASHBOARD_MD.exists():
         st.markdown(AUTOPILOT_DASHBOARD_MD.read_text(encoding="utf-8"))
     else:
@@ -1060,6 +1064,43 @@ def _two_book_window_note(book: PaperBook) -> None:
             + " They are also **separate books**: this one was funded ₹2L once and never topped up; "
             "the System book above is ₹2L plus everything you have added since."
         )
+
+
+def _tab1_sources_panel(as_of: date) -> None:
+    """Gate every artifact this tab renders on its own freshness (T3.3).
+
+    The scoreboard, the race chart and the AI brief are all files written by the weekday cron and
+    were rendered here with **no freshness check whatsoever** — a stopped cron would keep serving its
+    last successful numbers with nothing on screen saying they were old.
+    """
+    import csv as _csv
+
+    def _mtime_date(path: Path) -> date | None:
+        return (
+            date.fromtimestamp(path.stat().st_mtime)
+            if path.exists() and path.stat().st_size
+            else None
+        )
+
+    track_last: date | None = None
+    if SYSTEM_TRACK_CSV.exists():
+        rows = list(_csv.DictReader(SYSTEM_TRACK_CSV.read_text(encoding="utf-8").splitlines()))
+        if rows:
+            track_last = date.fromisoformat(rows[-1]["date"])
+
+    sources = [
+        # The track record dates itself, so it is checked on its content, not the filesystem.
+        source_freshness("Track record (system_track.csv)", track_last, as_of),
+        source_freshness(
+            "Scoreboard (autopilot_dashboard.md)", _mtime_date(AUTOPILOT_DASHBOARD_MD), as_of
+        ),
+        source_freshness("AI brief (ai_brief.md)", _mtime_date(AI_BRIEF_MD), as_of),
+    ]
+    md = sources_freshness_markdown(sources)
+    if any(s.is_stale for s in sources):
+        st.warning(md)
+    else:
+        st.caption(md)
 
 
 TRADEBOOK_GIST_FILE = "tradebook_master.csv"

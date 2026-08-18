@@ -1,7 +1,7 @@
 # Trust repair — the advisor, the page, and the experiment (planned 2026-08-17)
 
-**Status: PR-1 · PR-2 · PR-3 · PR-4 BUILT (branches `trust-repair-pr1/2/3/4`, 370 tests, four gates
-green on each). Tier 1 closed and Tier 2 closed. PR-5 … PR-8 planned, user-approved scope, not yet
+**Status: PR-1 … PR-5 BUILT (branches `trust-repair-pr1`…`pr5`, **393 tests, 0 skipped**, four gates
+green on each). Tiers 1 and 2 closed; T3.3 closed. PR-6 … PR-8 planned, user-approved scope, not yet
 implemented.**
 
 Companion to [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md) (same day). That audit diagnosed
@@ -307,14 +307,46 @@ Tests: 17 new. `test_measures.py` pins the vocabulary and both real confusions (
 windows; one book/two bases). `test_dashboard_app.py` asserts the headline tile equals the committed
 curve's last mark — a **cross-surface** assertion, the class of test T3.3 says does not exist yet.
 
-### PR-5 · Cross-surface consistency tests (fixes T3.3)
+### PR-5 · Cross-surface consistency tests (fixes T3.3) — ✅ BUILT
 The gap that let all of this pass 316 green tests.
-- Assert that any two surfaces reporting the same book agree, or differ only by a named, tested
-  quantity (the ₹611.92 day-one cost; the cash-drag gap).
-- Commit a small fixture price panel so [test_dashboard_app.py](tests/test_dashboard_app.py) **runs in
-  CI** instead of skipping.
-- Add a freshness assertion for the Tab-1 sources (`autopilot_dashboard.md`, `system_track.csv`,
-  `ai_brief.md`) — currently entirely ungated.
+
+**New `tests/test_cross_surface.py` (16 tests).** These assert relationships *between* artifacts, not
+the value of any one of them — every panel was individually correct and the page as a whole
+contradicted itself, which is exactly what per-function coverage cannot see. Two surfaces reporting
+the same book must agree, **or** differ by a named, tested quantity:
+- `book.json` ⇄ `paper_dashboard.md` ⇄ `paper_equity.csv` — same mark, three renderings.
+- The GO book's two bases differ by **exactly** the ₹611.92 day-one cost — one basis is
+  *reconstructed* from the other, so the identity is asserted rather than the numbers memorised.
+- `system_track.csv` ⇄ `autopilot_dashboard.md` for all three books; `profit = value − contributed`;
+  the three books share one contribution history; System−Shadow is the subtraction it claims to be.
+- **The assertion that would have caught the original defect:** not "is +2.03% right" (it was), but
+  "does anything on this page explain why +2.73% appears eleven lines below it" (nothing did). Plus
+  its converse — matching bases must *not* produce a quantified cash-drag claim.
+
+These read only committed files, so they need no market data and no network.
+
+*Design note:* label/window/cash-drag assertions render the report **fresh from committed data**
+rather than reading the committed `.md`, which only regenerates when the cron fires — otherwise the
+test would be measuring how recently the cron ran.
+
+**`test_dashboard_app.py` now runs in CI.** The plan called for committing a fixture price panel;
+generating one in a `dashboard_sandbox` fixture is strictly better — no market data enters the repo,
+the panel cannot go stale relative to "today", and the prices are deterministic. Verified the way it
+matters: **the full suite passes with every `.parquet` moved off disk.**
+
+**⚠️ The plan's diagnosis of T3.3 was incomplete, and the missing half was the bigger one.** The
+gitignored panel was only one blocker. `ci.yml` ran `uv sync --extra dev`, which **does not install
+streamlit**, so `pytest.importorskip("streamlit")` skipped the module in CI *regardless of any
+fixture*. Fixed by installing `--extra dashboard`. And because a skipped test reads as a passing one
+in the summary line, CI now **fails on any skip at all** — the mechanism that hid this is closed, not
+just this instance of it.
+
+**Tab-1 freshness (was entirely ungated).** `source_freshness` / `sources_freshness_markdown` +
+`_tab1_sources_panel`: the scoreboard, the track record and the AI brief are all cron-written files
+that were rendered with no freshness check whatsoever, so a stopped cron would serve its last
+successful numbers indefinitely with nothing on screen saying they were old.
+
+**Result: 393 tests, 0 skipped** (was 316 with a silently-skipped dashboard module).
 
 ### PR-6 · Accounting integrity (fixes T3.1, T3.2, T3.4)
 - Reconcile the ₹240,500 log drift: make `manual_injections.json` append-once keyed on the queue
