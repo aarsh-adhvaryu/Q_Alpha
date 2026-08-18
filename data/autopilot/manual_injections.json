@@ -63,5 +63,11 @@
     "at": "2026-08-03T15:22:28",
     "amount": "50000",
     "reason": "monthly"
+  },
+  {
+    "at": "2026-08-18T06:48:58",
+    "amount": "-240500",
+    "reason": "CORRECTION (PLAN_TRUST_REPAIR PR-6): the daily runner re-logged the same queued deposits on each pass between 2026-07-12 and 2026-08-12, overstating this log by Rs240,500 against the Rs200,000 the books actually received. state.json was and remains authoritative; no money was ever mis-credited. The duplicate rows above are left in place deliberately - they are the evidence of what the runner did. Root cause fixed: log_manual_injection is now append-once, keyed on the queue entry id.",
+    "kind": "correction"
   }
 ]

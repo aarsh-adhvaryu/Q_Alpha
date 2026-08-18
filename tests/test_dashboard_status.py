@@ -525,3 +525,33 @@ def test_the_summary_is_a_single_quiet_line_when_everything_is_current() -> None
     assert md.startswith("✓")
     assert "stale" not in md
     assert sources_freshness_markdown([]) == ""
+
+
+# ---- the Add-money audit banner (PLAN_TRUST_REPAIR.md PR-6 — fixes T3.1) --------------------------
+
+
+def test_the_drift_banner_reports_the_gap_and_reassures_about_the_money() -> None:
+    """₹240,500 of drift sat in a cron log for a month. A print is not a report."""
+    from qalpha.live.dashboard import injection_drift_markdown
+
+    md = injection_drift_markdown(Decimal("440500"), Decimal("200000"))
+    assert "₹240,500" in md
+    assert "₹440,500" in md and "₹200,000" in md
+    assert "Your money is fine" in md  # the books were never wrong; say so before anything else
+    assert "state.json" in md
+    assert "never by deleting entries" in md
+
+
+def test_the_banner_is_silent_when_the_log_reconciles() -> None:
+    from qalpha.live.dashboard import injection_drift_markdown
+
+    assert injection_drift_markdown(Decimal("200000"), Decimal("200000")) == ""
+
+
+def test_the_banner_handles_an_under_counting_log_too() -> None:
+    """Drift in the other direction is just as much a broken audit trail."""
+    from qalpha.live.dashboard import injection_drift_markdown
+
+    md = injection_drift_markdown(Decimal("150000"), Decimal("200000"))
+    assert "₹50,000" in md
+    assert "less than" in md
