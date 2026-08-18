@@ -40,11 +40,13 @@ from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
 from qalpha.data.prices import PriceData
 from qalpha.live.autopilot import (
+    AppliedInjection,
     Book,
     Decision,
     ai_hit_rate,
     basket_value,
     book_deploy_amount,
+    clear_applied,
     clear_pending,
     load_ledger,
     load_pending,
@@ -235,25 +237,36 @@ def _persist_trio_state(
     state["contributed"] = {k: str(v) for k, v in contributed.items()}
 
 
-def _log_applied(applied: list[tuple[Decimal, str]]) -> None:
-    """Write the audit entries for deposits that are now durably saved.
+def _log_applied(applied: list[AppliedInjection]) -> None:
+    """Write the audit entries for deposits that are now durably saved, then release the queue.
 
-    Called **after** ``save_state`` on every exit path, never before: the log is an audit record, so
-    an entry for money the books never received is worse than no entry at all.
+    Called **after** ``save_state`` on every exit path, never before, and in this order:
+    persist → log (append-once, keyed on the entry id) → clear only what was applied. Each step is a
+    lesson: an entry for money the books never received is worse than none; re-logging on a re-run is
+    what drifted the log by ₹240,500; and truncating the queue destroys anything the dashboard
+    queued in the meantime.
     """
-    for amount, reason in applied:
-        log_manual_injection(amount, reason)
+    for item in applied:
+        log_manual_injection(item.amount, item.reason, entry_id=item.entry_id)
+    left = clear_applied(applied)
+    if left:
+        print(f"[system] {left} deposit(s) queued during this run — left for the next pass.")
 
 
 def _report_log_drift(contributed: dict[str, Decimal]) -> None:
-    """Surface (never silently fix) any gap between the audit log and the money actually credited."""
+    """Surface (never silently fix) any gap between the audit log and the money actually credited.
+
+    A print in a cron log is not a report — nobody reads it. The dashboard shows the same number as a
+    banner (``live/dashboard.py:injection_drift_markdown``), which is where the user would actually
+    see it.
+    """
     injected = contributed.get("system", SYSTEM_CAPITAL) - SYSTEM_CAPITAL
     drift = manual_log_drift(injected)
     if drift != 0:
         print(
             f"[system] ⚠️ manual-injection log drift ₹{drift:,.0f} "
             f"(log ₹{manual_log_total():,.0f} vs ₹{injected:,.0f} actually credited) — "
-            "the log over-counts pre-2026-08-12 phantom entries; state.json is the truth."
+            "state.json is the truth; append a correction with `log_correction`."
         )
 
 

@@ -132,6 +132,30 @@ def sources_freshness_markdown(sources: list[SourceFreshness]) -> str:
     return "\n".join(lines)
 
 
+def injection_drift_markdown(log_total: Decimal, credited: Decimal) -> str:
+    """The Add-money audit banner — '' when the log and the books agree (T3.1).
+
+    A print in a cron log is not a report. This drift reached **₹240,500** against ₹200,000 actually
+    credited and sat there for a month, visible only to whoever scrolled a GitHub Actions log. The
+    money was never wrong — ``state.json`` is authoritative and the books hold what they should — but
+    an audit trail that overstates deposits by more than double is not an audit trail.
+    """
+    drift = log_total - credited
+    if drift == 0:
+        return ""
+    direction = "more than" if drift > 0 else "less than"
+    return (
+        f"⚠️ **Add-money audit log disagrees with the books by ₹{abs(drift):,.0f}.** The log claims "
+        f"₹{log_total:,.0f} deposited — {direction} the ₹{credited:,.0f} the books actually "
+        "received.\n\n"
+        "**Your money is fine.** The books and every return on this page are computed from "
+        "`state.json`, which is authoritative; the log is a separate written record that drifted "
+        "(the daily run used to re-log the same queued deposit on each pass). It is repaired by "
+        "appending a signed correction, never by deleting entries — the erroneous rows stay visible, "
+        "which is the point of an audit trail."
+    )
+
+
 #: Is the deterministic buy list allowed on the **real-money** surface?
 #:
 #: ``True`` again since PR-3 (PLAN_TRUST_REPAIR.md). It was switched off on 2026-08-17 because two
