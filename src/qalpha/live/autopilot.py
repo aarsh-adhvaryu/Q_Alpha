@@ -403,6 +403,53 @@ def inject_all(books: dict[str, Book], amount: Decimal) -> None:
         books[n].inject(amount)
 
 
+# ---- fixed-notional baskets: making System − Shadow an ablation (PLAN_TRUST_REPAIR PR-7) ----------
+#
+# The pre-registration says the AI tilt changes deploy **size only**. It did not. Each book called the
+# advisor with its *own* portfolio and its *own* amount, and two mechanisms turned a size difference
+# into a composition difference: ``max_name_fraction`` filters candidates by ``price ≤ amount × 0.20``,
+# so a smaller deploy sees a smaller universe; and whole-share rounding drops different names at
+# different scales. Six weeks of that compounded into two different funds — 32 names vs 28, only 26
+# shared — and a "did the AI help?" signal of ₹1,541 sitting under ₹1,964 of one day's rounding noise.
+#
+# The fix: compute the day's basket **once**, at a fixed reference notional, against an empty book.
+# Both books then execute *that* basket, scaled. Composition is identical by construction, so the only
+# thing System − Shadow can measure is the thing the study is about.
+
+#: The notional the day's basket is computed at. Fixed and arbitrary — it must not track either
+#: book's size, or the amount-dependence this exists to remove creeps straight back in.
+REFERENCE_NOTIONAL = Decimal("100000")
+
+
+def scaled_basket(
+    reference: Mapping[str, int], amount: Decimal, notional: Decimal = REFERENCE_NOTIONAL
+) -> dict[str, int]:
+    """Scale a reference basket's whole-share quantities to ``amount``.
+
+    Truncating (not rounding) keeps the executed value at or below the scaled target, which matters
+    because ``Portfolio.buy`` is cash-capped — a rounded-up order would silently shrink and reintroduce
+    the amount-dependence. Names that scale below one whole share come back as ``0`` rather than being
+    dropped here, so the caller can see them and make a *symmetric* decision about both books.
+    """
+    if notional <= 0 or amount <= 0:
+        return dict.fromkeys(reference, 0)
+    scale = amount / notional
+    return {t: int(Decimal(q) * scale) for t, q in reference.items()}
+
+
+def common_basket(*baskets: Mapping[str, int]) -> set[str]:
+    """The names every book can actually buy at its own size — the executable intersection.
+
+    Dropping a name from *one* book because it rounded to zero there is precisely how composition
+    drifted apart. Deciding it once, across all books, is what makes the difference between them
+    purely a matter of size.
+    """
+    if not baskets:
+        return set()
+    sets = [{t for t, q in b.items() if q > 0} for b in baskets]
+    return set.intersection(*sets) if sets else set()
+
+
 # Pending manual injections queued by the dashboard's Add-money button. Because the dashboard (Streamlit
 # Cloud) and the daily runner (GitHub Actions) are different machines, the button writes here IN THE REPO
 # (via the GitHub API); the runner applies + clears them, staying the sole writer of ``books.json``.

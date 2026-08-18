@@ -6,9 +6,8 @@ Guidance for Claude Code (and humans) working in this repo.
 
 **The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
 right, and the reasons are now documented and scoped. The full plan is
-[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 … PR-6 are BUILT**
-(branches `trust-repair-pr1`…`pr6`) — **Tiers 1, 2 and 3 are closed**; PR-7 (re-seed) and PR-8 (AI
-name-verdict) are not.
+[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 … PR-7 are BUILT**
+(branches `trust-repair-pr1`…`pr7`) — **Tiers 1–4 closed except PR-8** (AI name-verdict), which is not.
 Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
 A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
 
@@ -134,6 +133,25 @@ is authoritative. **T3.4:** the three dead files are **archived, not deleted**
 this repo archives rather than removes those. ⚠️ `reports/{paper_dashboard.md, paper_equity.csv}`
 are **not** dead (paper.py writes them, paper.yml commits them, PR-5's tests read them, research
 mission-control fetches them) — the plan was wrong there; left alone. 404 tests.
+
+
+**PR-7 (done): forward run 1 is VOID and published; run 2 seeded at ground zero 2026-08-18.**
+⚠️ **The System/Shadow/Baseline experiment restarted — do not compare anything to pre-2026-08-18
+numbers.** The **GO book was not touched**: `data/paper/book.json` is byte-identical (md5 unchanged,
+45 marks, start 2026-06-12) and pillar 1 kept accruing. **T4.1 fixed:** the day's basket is computed
+**once at a fixed ₹100,000 notional against an empty book** (`_reference_basket`), scaled per book
+(`scaled_basket`, truncating — `Portfolio.buy` is cash-capped so rounding up would silently shrink),
+and a name is dropped only if it rounds below one share in **both** books (`common_basket`). Verified
+live: System @₹50k → 15 names, Shadow @₹40k → 14, executed intersection **14 identical tickers**,
+quantities differing. **T4.2 fixed:** both books are empty and byte-identical at ground zero; VEDL and
+TRENT (69/57 and 6/5 in run 1) are gone. Run 1 is archived under
+`data/autopilot/archive/forward_run_1_*/` and written up in
+[reports/FORWARD_RUN_1_VOID.md](reports/FORWARD_RUN_1_VOID.md) — its System − Shadow of ₹1,541 sat
+under ₹1,964 of one day's rounding noise, so the honest verdict is *"the instrument could not
+measure it"*, not *"the AI didn't help"*. **Second prereg amendment recorded before run 2 accrued a
+mark**, adding the bar run 1 lacked: a System − Shadow difference is reportable only if it exceeds
+the run's cumulative rounding-noise scale. `scripts/autopilot.py reseed [--as-of DATE]` is the
+command; it also clears the stale scoreboard. 415 tests.
 
 **Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
 the 18.2% headline are untouched by every item in the plan.**

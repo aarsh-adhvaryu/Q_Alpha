@@ -1,8 +1,8 @@
 # Trust repair — the advisor, the page, and the experiment (planned 2026-08-17)
 
-**Status: PR-1 … PR-6 BUILT (branches `trust-repair-pr1`…`pr6`, **404 tests, 0 skipped**, four gates
-green on each). Tiers 1, 2 and 3 closed. PR-7 and PR-8 (re-seed + AI name-verdict) planned,
-user-approved scope, not yet implemented.**
+**Status: PR-1 … PR-7 BUILT (branches `trust-repair-pr1`…`pr7`, **415 tests, 0 skipped**, four gates
+green on each). Tiers 1–4 closed except PR-8. Forward run 1 is VOID and published; run 2 is seeded at
+ground zero on 2026-08-18. PR-8 (AI name-verdict) planned, user-approved scope, not yet implemented.**
 
 Companion to [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md) (same day). That audit diagnosed
 the **presentation** incoherence and the **experiment** confound, and its findings hold. This plan
@@ -387,19 +387,48 @@ lists them as "read by nothing in this repo". They are written every run by `scr
 committed by `paper.yml`, **read by PR-5's cross-surface tests**, and fetched over HTTP by the
 research repo's mission-control. Deleting them would have broken all three.
 
-### PR-7 · Re-seed the experiment from today (user's Q3)
-*"what if we start from the ground zero day 1 from today … before window gets removed"* — correct
-instinct, and cheaper than it sounds: **re-seeding System/Shadow does not touch the GO book's clock.**
-Depends on PR-2 and PR-3 — re-seeding first would rebuy the artifacts.
-- **Archive, don't delete.** Freeze the 2026-07-10 → present run as a disclosed, confounded first
-  result and publish it as a negative, per repo rule. Its data stays committed.
-- Re-seed System / Shadow / Baseline at ground zero on the day this lands, identical cash flows.
-- **Fixed-notional baskets:** compute the basket once at a fixed notional, then scale executed
-  quantities. Composition identical by construction; only size differs. This is what makes
-  System − Shadow an ablation rather than a comparison of two funds.
-- Amendment recorded in [docs/PREREGISTRATION_autopilot.md](docs/PREREGISTRATION_autopilot.md) — the
-  file already carries one amendment block; add a second. Never rewritten.
-- Pillar 1 keeps accruing on the GO book's existing 45 marks.
+### PR-7 · Re-seed the experiment from today (user's Q3) — ✅ BUILT
+*"what if we start from the ground zero day 1 from today"* — and it did not touch the GO book's clock,
+exactly as expected. `data/paper/book.json` is **byte-identical** before and after (md5 unchanged,
+45 marks, start 2026-06-12). Pillar 1 never stopped accruing.
+
+**T4.1 — fixed-notional baskets, so System − Shadow is an ablation.** The pre-registration said the
+tilt changes size only; it did not, because each book called the advisor with its *own* portfolio and
+its *own* amount. `max_name_fraction` filters candidates on `price ≤ amount × 0.20` (a smaller deploy
+sees a smaller universe) and whole-share rounding drops different names at different scales.
+Now: `_reference_basket()` computes the day's basket **once, at ₹100,000, against an empty book**;
+`scaled_basket()` scales quantities per book (truncating — `Portfolio.buy` is cash-capped, so rounding
+up would silently shrink and reintroduce the amount-dependence); `common_basket()` drops a name only
+if it rounds below one share in **both** books, symmetrically. Verified on live data:
+
+| | names | tickers |
+|---|---|---|
+| System @ ₹50,000 | 15 | — |
+| Shadow @ ₹40,000 | 14 | — |
+| **executed (intersection)** | **14** | **identical in both books**, quantities differ |
+
+**T4.2 — re-seeded, with the artifacts gone.** `scripts/autopilot.py reseed` archives everything and
+restarts at ground zero: System and Shadow **byte-identical and empty**, Baseline holding the same
+₹400,000, all three on identical cash flows from 2026-08-18. Neither book holds VEDL or TRENT any
+more (run 1 held 69/57 and 6/5 respectively, bought on phantom discounts).
+
+**Archived, not deleted; published as a negative.**
+[reports/FORWARD_RUN_1_VOID.md](reports/FORWARD_RUN_1_VOID.md) records what run 1 reported
+(System − Shadow **₹1,541**, under one day's **₹1,964** of rounding noise) and why it is void. The
+honest first result is not "the AI didn't help" but **"the instrument could not measure it"**. Books,
+track record, ledger, flows and state are all under `data/autopilot/archive/forward_run_1_*/`.
+
+**Pre-registration amended before run 2 accrued a single mark** — a *second* amendment block in
+[docs/PREREGISTRATION_autopilot.md](docs/PREREGISTRATION_autopilot.md); nothing above it rewritten. It
+adds a pre-committed bar the first run lacked: **a System − Shadow difference is reportable only if it
+exceeds the run's cumulative rounding-noise scale**, otherwise it is reported as "no measurable
+effect". Run 1's real failure was quoting a number smaller than its own error bar.
+
+**The stale scoreboard is cleared too.** `reseed` rewrites `reports/autopilot_dashboard.md` to "run 2
+has not started", because leaving the void run's numbers on the dashboard is the same
+stale-artifact-presented-as-current failure the freshness work exists to prevent. PR-5's cross-surface
+tests now assert *both* run states — with a track record they check agreement, without one they check
+the scoreboard says so — rather than skipping, since CI now fails on any skip.
 
 ### PR-8 · AI name-verdict experiment (user's Q4)
 Same pre-registration amendment as PR-7; ships after it.

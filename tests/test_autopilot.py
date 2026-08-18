@@ -482,3 +482,130 @@ def test_the_stale_autodeposit_state_key_is_gone() -> None:
     root = Path(__file__).resolve().parent.parent
     state = json.loads((root / "data/autopilot/state.json").read_text(encoding="utf-8"))
     assert "monthly_autodeposit" not in state
+
+
+# ---- fixed-notional baskets (PLAN_TRUST_REPAIR.md PR-7 — fixes T4.1) ------------------------------
+
+
+def test_scaling_a_basket_preserves_every_name_at_a_larger_size() -> None:
+    from qalpha.live.autopilot import scaled_basket
+
+    ref = {"AAA.NS": 10, "BBB.NS": 4, "CCC.NS": 1}
+    out = scaled_basket(ref, Decimal("200000"), Decimal("100000"))
+    assert out == {"AAA.NS": 20, "BBB.NS": 8, "CCC.NS": 2}
+
+
+def test_scaling_truncates_rather_than_rounds_up() -> None:
+    """Portfolio.buy is cash-capped, so a rounded-up order would silently shrink — reintroducing the
+    amount-dependence this exists to remove."""
+    from qalpha.live.autopilot import scaled_basket
+
+    ref = {"AAA.NS": 10, "BBB.NS": 3}
+    assert scaled_basket(ref, Decimal("95000"), Decimal("100000")) == {"AAA.NS": 9, "BBB.NS": 2}
+
+
+def test_a_name_that_rounds_below_one_share_is_reported_not_silently_dropped() -> None:
+    """The caller must be able to make a *symmetric* decision about it across every book."""
+    from qalpha.live.autopilot import scaled_basket
+
+    out = scaled_basket({"AAA.NS": 10, "TINY.NS": 1}, Decimal("50000"), Decimal("100000"))
+    assert out == {"AAA.NS": 5, "TINY.NS": 0}
+    assert "TINY.NS" in out  # present with 0, not missing
+
+
+def test_the_common_basket_is_the_executable_intersection() -> None:
+    """T4.1 in one assertion: dropping a name from one book only is how the funds diverged."""
+    from qalpha.live.autopilot import common_basket
+
+    system = {"AAA.NS": 12, "BBB.NS": 3, "CCC.NS": 1}
+    shadow = {"AAA.NS": 9, "BBB.NS": 2, "CCC.NS": 0}  # CCC rounds away at the smaller size
+    assert common_basket(system, shadow) == {"AAA.NS", "BBB.NS"}
+
+
+def test_two_books_at_different_sizes_trade_identical_tickers() -> None:
+    """**The property whose absence voided run 1** — the plan's acceptance criterion for PR-7.
+
+    The AI tilt changes deploy *size*. It must not change *which names* are held, at any size.
+    """
+    from qalpha.live.autopilot import common_basket, scaled_basket
+
+    reference = {f"N{i}.NS": 20 - i for i in range(15)}
+    for system_amt, shadow_amt in (
+        (Decimal("50000"), Decimal("40000")),  # a ×1.25 AI tilt
+        (Decimal("30000"), Decimal("60000")),  # and the other direction
+        (Decimal("100000"), Decimal("100000")),  # neutral
+    ):
+        s = scaled_basket(reference, system_amt)
+        h = scaled_basket(reference, shadow_amt)
+        tradable = common_basket(s, h)
+        system_exec = {t: s[t] for t in tradable}
+        shadow_exec = {t: h[t] for t in tradable}
+        assert set(system_exec) == set(shadow_exec)  # identical composition, always
+        if system_amt != shadow_amt:
+            assert system_exec != shadow_exec  # …and size still differs, or the study measures zero
+
+
+def test_a_zero_or_negative_deploy_yields_an_empty_tradable_set() -> None:
+    from qalpha.live.autopilot import common_basket, scaled_basket
+
+    ref = {"AAA.NS": 10}
+    assert scaled_basket(ref, Decimal("0")) == {"AAA.NS": 0}
+    assert common_basket(scaled_basket(ref, Decimal("0")), ref) == set()
+
+
+# ---- the re-seed (PLAN_TRUST_REPAIR.md PR-7 — fixes T4.2) -----------------------------------------
+
+
+def test_the_reseeded_books_start_identical_and_empty() -> None:
+    """Ground zero means ground zero: same start date, no holdings, no history, nothing inherited."""
+    import json
+
+    root = Path(__file__).resolve().parent.parent
+    system = json.loads((root / "data/paper/adaptive_book.json").read_text(encoding="utf-8"))
+    shadow = json.loads((root / "data/paper/shadow_book.json").read_text(encoding="utf-8"))
+    assert system == shadow
+    assert system["portfolio"]["lots"] == []
+    assert system["equity_curve"] == []
+    assert system["start_date"] == shadow["start_date"]
+
+
+def test_the_reseeded_books_carry_none_of_the_artifact_names() -> None:
+    """T4.2: run 1's books held VEDL 69/57 and TRENT 6/5, bought on phantom discounts."""
+    import json
+
+    root = Path(__file__).resolve().parent.parent
+    for name in ("adaptive_book.json", "shadow_book.json"):
+        book = json.loads((root / "data/paper" / name).read_text(encoding="utf-8"))
+        held = {lot["ticker"] for lot in book["portfolio"]["lots"]}
+        assert "VEDL.NS" not in held and "TRENT.NS" not in held
+
+
+def test_all_three_books_restart_on_identical_cash_flows() -> None:
+    import json
+
+    root = Path(__file__).resolve().parent.parent
+    state = json.loads((root / "data/autopilot/state.json").read_text(encoding="utf-8"))
+    baseline = json.loads((root / "data/autopilot/baseline_book.json").read_text(encoding="utf-8"))
+    contributed = {Decimal(v) for v in state["contributed"].values()}
+    assert len(contributed) == 1  # System and Shadow funded identically
+    assert Decimal(baseline["net_contributions"]) == contributed.pop()  # …and so is the Baseline
+    assert baseline["start_date"] == state["reseeded_on"]
+
+
+def test_the_void_run_is_archived_not_deleted() -> None:
+    """A pre-registered study's data is published, never quietly removed."""
+    root = Path(__file__).resolve().parent.parent
+    archives = list((root / "data/autopilot/archive").glob("forward_run_1_*"))
+    assert archives, "the confounded run must be archived"
+    kept = {p.name for p in archives[0].iterdir()}
+    assert {"adaptive_book.json", "shadow_book.json", "system_track.csv"} <= kept
+
+
+def test_the_go_book_was_not_touched_by_the_reseed() -> None:
+    """Rule (a): the criterion-6 clock keeps running. Pillar 1 accrues on its existing marks."""
+    import json
+
+    root = Path(__file__).resolve().parent.parent
+    go = json.loads((root / "data/paper/book.json").read_text(encoding="utf-8"))
+    assert go["start_date"] == "2026-06-12"  # unchanged since the run began
+    assert len(go["equity_curve"]) >= 45  # the marks that are the criterion-6 evidence
