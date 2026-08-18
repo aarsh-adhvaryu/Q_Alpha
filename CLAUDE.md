@@ -6,8 +6,8 @@ Guidance for Claude Code (and humans) working in this repo.
 
 **The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
 right, and the reasons are now documented and scoped. The full plan is
-[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 … PR-4 are BUILT**
-(branches `trust-repair-pr1/2/3/4`) — **Tiers 1 and 2 are closed**; PR-5 … PR-8 are not.
+[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 … PR-5 are BUILT**
+(branches `trust-repair-pr1`…`pr5`) — **Tiers 1 and 2 closed, T3.3 closed**; PR-6 … PR-8 are not.
 Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
 A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
 
@@ -99,6 +99,22 @@ the System−Shadow effect being measured. **T2.3:** the tile now reads the **cr
 Tile → "Book value (incl. cash)" + "of which cash". **T2.5:** `ai_signal_summary()` leads with the
 `SIGNAL:` line + the multiplier it produced and states the contract has **no ticker field**; prose
 moved behind a nested expander. Two books on one screen now get `window_mismatch_note`. 370 tests.
+
+
+**PR-5 (done): cross-surface tests, and the dashboard module actually runs in CI.**
+`tests/test_cross_surface.py` (16 tests) asserts relationships **between** artifacts — two surfaces
+reporting one book agree, or differ by a *named, tested* quantity (the ₹611.92 day-one cost is
+asserted as an identity: one basis is reconstructed from the other). The load-bearing one is not "is
++2.03% right" but "does anything explain the +2.73% eleven lines below it". They read only committed
+files — no market data, no network. **⚠️ The plan's T3.3 diagnosis was incomplete:** the gitignored
+panel was one blocker, but `ci.yml` ran `uv sync --extra dev` which **never installed streamlit**, so
+`importorskip` skipped the module in CI regardless. Now installs `--extra dashboard`, and **CI fails
+on any skip at all** (a skip reads as a pass in the summary). `test_dashboard_app.py` runs against a
+generated `dashboard_sandbox` fixture rather than a committed market-data panel — verified by passing
+the full suite with every `.parquet` moved off disk. Tab-1's three cron-written sources
+(`system_track.csv`, `autopilot_dashboard.md`, `ai_brief.md`) were rendered with **no freshness check
+whatsoever**; now gated by `source_freshness`. **393 tests, 0 skipped** (was 316 with a silently
+skipped dashboard module).
 
 **Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
 the 18.2% headline are untouched by every item in the plan.**
