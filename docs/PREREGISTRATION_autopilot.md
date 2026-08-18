@@ -12,6 +12,35 @@
 > the §4.6 tax-gated adaptive rebalance (evaluated daily, trades only when worth the tax) and the
 > tax-free hedge readout. This note is the amendment record; nothing below was rewritten.
 
+> **⚠️ AMENDED 2026-08-17 (second amendment) — forward run 1 is VOID; the study RESTARTS at ground
+> zero with fixed-notional baskets.** Registered *before* run 2 accrues a single mark, and recorded
+> here rather than by editing anything above.
+>
+> **Why.** Run 1 (2026-07-10 → 2026-08-14) could not answer its own question. The design above says
+> the AI tilt changes deploy **size only**; in practice `max_name_fraction` (which filters candidates
+> on `price ≤ amount × 0.20`) and whole-share rounding made **composition** amount-dependent, so
+> System and Shadow drifted into different funds — 32 names vs 28, only 26 shared. The reported
+> System − Shadow of **₹1,541** sits below one day of rounding noise (**₹1,964**). Both books also
+> held VEDL and TRENT, bought on phantom discounts created by uncorrected corporate actions. Full
+> write-up: [reports/FORWARD_RUN_1_VOID.md](../reports/FORWARD_RUN_1_VOID.md). Its data is archived,
+> not deleted.
+>
+> **What changes for run 2 — one thing only.** The day's basket is computed **once, at a fixed
+> reference notional (₹100,000), against an empty book**. Both books execute that same ticker set,
+> with quantities scaled to their own deploy amount; a name is dropped only if it rounds below one
+> whole share in **both** books, symmetrically. Composition is therefore identical **by
+> construction**, and System − Shadow measures the AI's effect on sizing and nothing else.
+>
+> **What does not change.** The two questions (System − Baseline = "did the system beat doing
+> nothing?"; System − Shadow = "did the AI help?"), the `signal_tilt` rule (×0.5–1.5, unchanged and
+> untuned), the tranche schedule, the ~20-trading-day per-decision scoring, and every honesty guard
+> below. Cash flows stay identical across all three books. **The validated ₹2L GO book and its
+> criterion-6 clock are untouched — pillar 1 keeps accruing on its existing marks.**
+>
+> **Pre-committed bar for run 2.** A System − Shadow difference is reportable only if it exceeds the
+> run's cumulative rounding-noise scale; below that it is reported as "no measurable effect", not as
+> a small positive. Run 1's failure was reporting a number smaller than its own error bar.
+
 **Registered before running (the repo's iron rule).** This fixes the question, the method, and the
 bar *before* any book accrues, so the answer can't be rationalised after the fact.
 
