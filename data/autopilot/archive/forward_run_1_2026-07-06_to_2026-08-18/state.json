@@ -1,19 +1,18 @@
 {
   "seeded": true,
   "last_deposit_month": "2026-07",
+  "monthly_autodeposit": true,
   "last_marked": "2026-07-10",
   "adaptive_last_marked": "2026-07-10",
   "baseline_seeded": true,
   "trio_last_deposit_month": "2026-07",
-  "system_last_marked": null,
+  "system_last_marked": "2026-08-17",
   "wallets": {
-    "system": "400000",
-    "shadow": "400000"
+    "system": "3747.37",
+    "shadow": "7421.87"
   },
   "contributed": {
     "system": "400000",
     "shadow": "400000"
-  },
-  "reseeded_on": "2026-08-18",
-  "reseed_reason": "PLAN_TRUST_REPAIR.md PR-7 \u2014 run 1 was confounded (divergent composition + corporate-action artifacts in both books); archived as a published negative."
+  }
 }
