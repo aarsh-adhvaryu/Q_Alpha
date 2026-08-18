@@ -275,3 +275,50 @@ def test_manual_log_drift_flags_phantom_entries(tmp_path: Path) -> None:
     assert manual_log_total(p) == Decimal("110000")
     assert manual_log_drift(Decimal("110000"), p) == Decimal("0")  # log matches reality
     assert manual_log_drift(Decimal("50000"), p) == Decimal("60000")  # phantom ₹60k surfaced
+
+
+# ---- the book's own window (PLAN_TRUST_REPAIR.md PR-4 — fixes T2.1) -------------------------------
+
+
+def test_a_book_stamps_its_start_date_on_first_funding() -> None:
+    """Before PR-4 the window was recoverable only from system_track.csv row 1."""
+    from datetime import date
+
+    from qalpha.live.autopilot import Book
+
+    b = Book(name="BASE")
+    assert b.start_date is None
+    b.inject(Decimal("200000"), date(2026, 7, 10))
+    assert b.start_date == date(2026, 7, 10)
+    # A later top-up must not move the start date — the book began measuring when it was first funded.
+    b.inject(Decimal("50000"), date(2026, 8, 3))
+    assert b.start_date == date(2026, 7, 10)
+    assert b.net_contributions == Decimal("250000")
+
+
+def test_the_start_date_survives_a_round_trip() -> None:
+    from datetime import date
+
+    from qalpha.live.autopilot import Book
+
+    b = Book(name="BASE")
+    b.inject(Decimal("1000"), date(2026, 7, 10))
+    assert Book.from_dict(b.to_dict()).start_date == date(2026, 7, 10)
+
+
+def test_a_legacy_book_without_a_start_date_still_loads() -> None:
+    """Books written before PR-4 have no start_date key — they must not fail to load."""
+    from qalpha.live.autopilot import Book
+
+    b = Book.from_dict({"name": "BASE", "cash": "10", "holdings": {}, "net_contributions": "1000"})
+    assert b.start_date is None
+    assert "start_date" not in b.to_dict()  # and it is not invented on the way back out
+
+
+def test_injecting_without_a_date_leaves_the_window_unknown() -> None:
+    """Fail honest: no date in, no date claimed."""
+    from qalpha.live.autopilot import Book
+
+    b = Book(name="BASE")
+    b.inject(Decimal("1000"))
+    assert b.start_date is None
