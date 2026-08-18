@@ -6,8 +6,8 @@ Guidance for Claude Code (and humans) working in this repo.
 
 **The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
 right, and the reasons are now documented and scoped. The full plan is
-[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 … PR-7 are BUILT**
-(branches `trust-repair-pr1`…`pr7`) — **Tiers 1–4 closed except PR-8** (AI name-verdict), which is not.
+[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — **ALL EIGHT PRs BUILT** (branches
+`trust-repair-pr1`…`pr8`). Tiers 1–4 closed. 429 tests, 0 skipped.
 Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
 A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
 
@@ -152,6 +152,22 @@ measure it"*, not *"the AI didn't help"*. **Second prereg amendment recorded bef
 mark**, adding the bar run 1 lacked: a System − Shadow difference is reportable only if it exceeds
 the run's cumulative rounding-noise scale. `scripts/autopilot.py reseed [--as-of DATE]` is the
 command; it also clears the stale scoreboard. 415 tests.
+
+
+**PR-8 (done): the AI is now a per-name SELECTOR — ⚠️ locked discipline #3 changed, fake money only.**
+Math generates candidates → the AI returns keep/drop on a **~1-year horizon** → math sizes and
+executes survivors. **Real money never auto-trades — untouched.** Three guards, enforced in code and
+tested, not prompted: it **cannot add a name** (`parse_verdicts` discards anything outside the
+deterministic universe), **cannot size anything** (`survivors` filters, never rescales — survivors keep
+the fixed-notional quantities Shadow uses), and **cannot fail closed** (no verdict/key/response, a
+refusal, an unparseable line → the name is **kept**, i.e. exactly the Shadow book). New `VERDICT:`
+line-per-name contract; `SIGNAL:` untouched. **The deploy-size tilt is RETIRED** — both books deploy
+the same amount, forced by the acceptance criterion (stubbed keep-everything ⇒ byte-identical
+baskets), so run 3 tests exactly one treatment. **Model stays `claude-haiku-4-5` + `web_search_20250305`
+and is now a pre-registered parameter — do NOT change it mid-run** (a model swap is a second
+treatment; that would be run 4, re-registered). **Third prereg amendment** recorded before run 3
+accrued a mark, adding: if the AI drops no names, the result is *"no verdicts issued"*, not *"the AI
+didn't help"*. Verdict sheet archived daily to `reports/ai_verdicts.md`. 429 tests.
 
 **Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
 the 18.2% headline are untouched by every item in the plan.**

@@ -98,6 +98,164 @@ def build_prompt(watchlist_lines: list[str]) -> str:
     )
 
 
+# ---- the per-name verdict (PLAN_TRUST_REPAIR.md PR-8) --------------------------------------------
+#
+# ⚠️ **This is the one place the LLM selects.** Everywhere else in this system it is context-only
+# (locked discipline #3). Here the deterministic screen produces a candidate list and the model
+# returns a keep/drop verdict per name; the math then sizes and executes whatever survives.
+#
+# Three properties make that safe enough to test with, and each is enforced in code, not by prompt:
+#
+# 1. **The model cannot add a name.** :func:`parse_verdicts` discards any ticker outside the
+#    deterministic universe it was handed. The opportunity set is fixed before the model is asked.
+# 2. **The model cannot size anything.** It returns keep/drop. Quantities come from the fixed-notional
+#    basket (PR-7) and are identical to the no-AI shadow's for every name that survives.
+# 3. **Absence means keep.** No verdict, an unparseable line, a failed call, no API key — the name
+#    stays. The model can therefore only ever *remove* from the deterministic screen, and every
+#    failure mode degrades to exactly the shadow's behaviour rather than to an empty book.
+#
+# **Fake money only.** This reaches the real-money advisor only on a positive System-vs-Shadow
+# verdict, per the endgame contract. Real money never auto-trades — that rule is untouched.
+
+#: One verdict line per candidate. Deliberately *not* folded into the ``SIGNAL:`` line: that line is
+#: one scalar lean for the whole index, has no ticker field, and drives a different (now-retired)
+#: mechanism. A per-name decision needs a per-name row.
+_VERDICT_PREFIX = "VERDICT:"
+_MAX_VERDICT_TOKENS = 2500  # ~15 candidates × a short reason each, plus the search preamble
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """What the deterministic screen hands the model about one name. Facts only, no ask."""
+
+    ticker: str
+    sector: str
+    cheapness: float  # fractional pullback below the (continuity-corrected) 1y high
+    health: str  # the §4.7 breakdown verdict: "breaking" | "watch" | "healthy"
+    trailing_return: float  # 6-month return
+
+
+@dataclass(frozen=True)
+class NameVerdict:
+    """The model's keep/drop call on one candidate, over a ~1-year horizon."""
+
+    ticker: str
+    keep: bool
+    confidence: str  # "low" | "medium" | "high"
+    reason: str
+
+
+def build_verdict_prompt(candidates: list[Candidate]) -> str:
+    """Ask for a **one-year** keep/drop view of each candidate — not tomorrow's session.
+
+    The horizon is the point. The existing brief asks what the index does over 1–2 sessions, which is
+    a question about noise; this asks whether a name that is *already* cheap and *already* flagged as
+    breaking down is likely to still be a poor holding a year out. That is a question where a
+    narrative read might plausibly add something over a price screen, and it is the horizon the
+    verdict is scored on.
+
+    The deterministic facts are supplied so the model does not have to guess them — and so it cannot
+    substitute its own numbers for the engine's. It is told explicitly that it may only remove.
+    """
+    rows = "\n".join(
+        f"- {c.ticker.removesuffix('.NS')} ({c.sector}): {c.cheapness * 100:.0f}% below its 1y high, "
+        f"6-month return {c.trailing_return:+.0%}, breakdown test says {c.health}"
+        for c in candidates
+    )
+    return (
+        "You are screening a fixed shortlist of Indian (NSE) equities for a ~1-YEAR hold.\n\n"
+        "A deterministic price screen has already chosen these names and already sized them. Your "
+        "only job is to say, for each one, whether you would KEEP it in a one-year portfolio or DROP "
+        "it. You cannot add names, change weights, or suggest alternatives — anything outside this "
+        "list is ignored.\n\n"
+        "Use the web-search tool to check for company-specific news that a price screen cannot see: "
+        "governance problems, regulatory or legal action, accounting concerns, demerger or "
+        "restructuring effects, a structurally broken end-market, or a credible turnaround. Ignore "
+        "short-term price moves and today's market noise — those are already in the numbers below, "
+        "and the horizon is a year, not a session.\n\n"
+        "Default to KEEP. Only DROP a name when you found a specific, checkable reason to think the "
+        "next year looks bad for that company in particular. 'It has fallen a lot' is not a reason — "
+        "the screen selected these names *because* they have fallen.\n\n"
+        f"Candidates:\n{rows}\n\n"
+        "First, in ≤900 characters, note only the names you are dropping and why (one line each; "
+        "write 'no drops' if none).\n\n"
+        "Then emit one line per candidate, and nothing else after them, exactly in this form:\n"
+        f"{_VERDICT_PREFIX} ticker=<TICKER>; call=<keep|drop>; confidence=<low|medium|high>; "
+        "reason=<≤12 words>\n"
+        f"(e.g. '{_VERDICT_PREFIX} ticker=VEDL; call=drop; confidence=medium; reason=demerger "
+        "restructuring still unresolved')\n\n"
+        "Every candidate must get exactly one line. A name you say nothing about is kept."
+    )
+
+
+def parse_verdicts(text: str, universe: set[str]) -> dict[str, NameVerdict]:
+    """Parse ``VERDICT:`` lines, **discarding anything outside** ``universe``.
+
+    This function is the enforcement point for "the AI cannot add a name". A ticker the model
+    invented, hallucinated, or carried over from its search results is not in the deterministic
+    universe and is dropped here — before any code can act on it. Matching is suffix-tolerant, since
+    the prompt shows bare tickers while the system trades ``.NS`` symbols.
+
+    Malformed lines are skipped rather than guessed at: a line we cannot read is a name with no
+    verdict, and a name with no verdict is kept.
+    """
+    bare = {t.removesuffix(".NS"): t for t in universe}
+    out: dict[str, NameVerdict] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(_VERDICT_PREFIX):
+            continue
+        fields: dict[str, str] = {}
+        for part in stripped[len(_VERDICT_PREFIX) :].split(";"):
+            key, _, value = part.partition("=")
+            if value:
+                fields[key.strip().lower()] = value.strip()
+        raw_ticker = fields.get("ticker", "").upper().removesuffix(".NS")
+        call = fields.get("call", "").lower()
+        if raw_ticker not in bare or call not in {"keep", "drop"}:
+            continue  # unknown name, or a call we cannot read → no verdict → the name is kept
+        confidence = fields.get("confidence", "low").lower()
+        out[bare[raw_ticker]] = NameVerdict(
+            ticker=bare[raw_ticker],
+            keep=call == "keep",
+            confidence=confidence if confidence in {"low", "medium", "high"} else "low",
+            reason=fields.get("reason", "")[:120],
+        )
+    return out
+
+
+def survivors(basket: dict[str, int], verdicts: dict[str, NameVerdict]) -> dict[str, int]:
+    """Apply verdicts to a sized basket: drop what the model dropped, **keep everything else**.
+
+    Quantities are never touched — a surviving name is bought in exactly the quantity the
+    deterministic basket assigned it, which is the same quantity the no-AI shadow buys. The only
+    difference the experiment can measure is therefore which names are present.
+
+    Absence is keep: a name with no verdict survives. With no verdicts at all this is the identity
+    function, which is what makes the stubbed keep-everything run byte-identical to the shadow.
+    """
+    return {t: q for t, q in basket.items() if verdicts.get(t) is None or verdicts[t].keep}
+
+
+def verdicts_note(verdicts: dict[str, NameVerdict], basket: dict[str, int]) -> str:
+    """The audit line — what the model removed from the deterministic basket, and why."""
+    dropped = [v for t, v in sorted(verdicts.items()) if not v.keep and t in basket]
+    if not dropped:
+        return (
+            f"🤖 AI name-verdict: kept all {len(basket)} deterministic picks "
+            "(no name-specific reason to drop any)."
+        )
+    lines = [
+        f"🤖 AI name-verdict: dropped {len(dropped)} of {len(basket)} deterministic picks "
+        "(it can only remove — never add a name, never change a size):"
+    ]
+    lines += [
+        f"  - {v.ticker}: {v.reason or 'no reason given'} ({v.confidence} confidence)"
+        for v in dropped
+    ]
+    return "\n".join(lines)
+
+
 def anchor_preamble(text: str) -> str:
     """Make the context-only preamble the first line, stripping any pre-amble model narration.
 
@@ -140,9 +298,13 @@ def load_watchlist_lines(csv_path: str) -> list[str]:
     return lines
 
 
-def _default_generate(api_key: str) -> GenerateFn:
+def _default_generate(api_key: str, *, max_tokens: int = _MAX_OUTPUT_TOKENS) -> GenerateFn:
     """Wire the real web-searched Haiku call. Lazy-imports the anthropic SDK so the module (and the
-    pure tests) load without the ``ai`` extra installed."""
+    pure tests) load without the ``ai`` extra installed.
+
+    ``max_tokens`` differs by call: the narrative brief is ~500 tokens, a per-name verdict sheet over
+    ~15 candidates needs more room (:data:`_MAX_VERDICT_TOKENS`).
+    """
 
     def generate(model_id: str, prompt: str) -> tuple[str, dict[str, int]]:
         import anthropic
@@ -150,7 +312,7 @@ def _default_generate(api_key: str) -> GenerateFn:
         client = anthropic.Anthropic(api_key=api_key)
         resp = client.messages.create(
             model=model_id,
-            max_tokens=_MAX_OUTPUT_TOKENS,
+            max_tokens=max_tokens,
             tools=[
                 {
                     "type": "web_search_20250305",
@@ -173,6 +335,44 @@ def _default_generate(api_key: str) -> GenerateFn:
         return text, usage
 
     return generate
+
+
+def generate_verdicts(
+    candidates: list[Candidate],
+    *,
+    generate: GenerateFn | None = None,
+    model: str | None = None,
+) -> tuple[dict[str, NameVerdict], str, dict[str, int]]:
+    """Ask the model for a keep/drop call on each candidate. Returns ``(verdicts, raw, usage)``.
+
+    **Fails to empty, which means fails to keep-everything.** No API key, a refusal, an exception, an
+    empty body — all return ``{}``, and :func:`survivors` treats an empty verdict map as "keep all".
+    The deterministic screen is the floor: the model can subtract from it or be absent, never more.
+    """
+    model = model or os.environ.get("ANTHROPIC_MODEL") or _DEFAULT_MODEL
+    if not candidates:
+        return {}, "", {}
+    if generate is None:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            print("[ai-verdict] ANTHROPIC_API_KEY not set — keeping every deterministic pick.")
+            return {}, "", {}
+        generate = _default_generate(api_key, max_tokens=_MAX_VERDICT_TOKENS)
+    try:
+        raw, usage = generate(model, build_verdict_prompt(candidates))
+    except Exception as exc:  # fail-soft → keep everything; never break the cron
+        print(f"[ai-verdict] generation failed (non-fatal, keeping all picks): {exc}")
+        return {}, "", {}
+    universe = {c.ticker for c in candidates}
+    verdicts = parse_verdicts(raw, universe)
+    unknown = raw.count(_VERDICT_PREFIX) - len(verdicts)
+    if unknown > 0:
+        # Not an error — this is the guard doing its job. Worth printing so a model that keeps
+        # inventing tickers is visible rather than silently filtered forever.
+        print(
+            f"[ai-verdict] discarded {unknown} verdict line(s) outside the deterministic universe."
+        )
+    return verdicts, raw, usage
 
 
 def generate_brief(
