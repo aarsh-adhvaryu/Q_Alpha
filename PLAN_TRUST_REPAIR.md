@@ -1,8 +1,8 @@
 # Trust repair — the advisor, the page, and the experiment (planned 2026-08-17)
 
-**Status: PR-1 … PR-7 BUILT (branches `trust-repair-pr1`…`pr7`, **415 tests, 0 skipped**, four gates
-green on each). Tiers 1–4 closed except PR-8. Forward run 1 is VOID and published; run 2 is seeded at
-ground zero on 2026-08-18. PR-8 (AI name-verdict) planned, user-approved scope, not yet implemented.**
+**Status: ALL EIGHT PRs BUILT (branches `trust-repair-pr1`…`pr8`, **429 tests, 0 skipped**, four gates
+green on each). Tiers 1–4 closed. Forward run 1 is VOID and published; the study is re-seeded at
+ground zero on 2026-08-18 and now tests the AI's per-name verdict as its single treatment.**
 
 Companion to [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md) (same day). That audit diagnosed
 the **presentation** incoherence and the **experiment** confound, and its findings hold. This plan
@@ -430,74 +430,63 @@ stale-artifact-presented-as-current failure the freshness work exists to prevent
 tests now assert *both* run states — with a track record they check agreement, without one they check
 the scoreboard says so — rather than skipping, since CI now fails on any skip.
 
-### PR-8 · AI name-verdict experiment (user's Q4)
-Same pre-registration amendment as PR-7; ships after it.
-
+### PR-8 · AI name-verdict experiment (user's Q4) — ✅ BUILT
 *"the AI recommends, the math runs it, if it is a no- then no, if it is a yes then yes … the watchlist
 it gives should not just be of tomorrow, but based on a window say a year or so."*
 
-The current study tilts deploy *size*, which is why noise swamped it. A per-name verdict is directly
-measurable, and the re-seeded Shadow is the instrument.
-- **Design:** math generates the candidate list (drawdown screen + continuity guard + health flag) →
-  the AI returns a per-name keep/drop verdict on a **~1-year horizon** → math sizes and executes what
-  survives, ₹0-tax, whole shares. The AI never computes a number, never sizes a position, and
-  **cannot add a name outside the deterministic universe** — that keeps the opportunity set fixed and
-  the ablation clean.
-- **Prompt:** rewrite [ai_brief.py:63-98](src/qalpha/live/ai_brief.py) to ask for a one-year view of
-  each candidate, not tomorrow's session. Score `SIGNAL.lean` on the horizon it was asked about.
-- **Contract:** extend the `SIGNAL:` grammar with a per-name field — today it has none
-  (`ai_brief.py:94`, `autopilot.py:36`), which is the mechanical reason the narrative reaches nothing.
-- **Measurement:** System = candidates + AI verdict; Shadow = identical candidates, no verdict.
-  System − Shadow then measures exactly "did the AI's name judgement help", with composition
-  controlled.
-- **⚠️ Scope change, stated plainly:** this makes the LLM a **selector**, which changes locked
-  discipline #3 (AI is informational-only). It runs **fake money only**; it reaches the real-money
-  advisor only on a positive verdict, per the endgame contract. **Real money never auto-trades — that
-  rule is untouched.**
+**⚠️ This changes locked discipline #3** — the LLM now *selects*. It is the one deliberate exception,
+**fake money only**, and its boundaries are enforced in code, not by prompt. Three guards, each tested:
+
+1. **It cannot add a name.** `parse_verdicts` discards any ticker outside the deterministic universe
+   it was handed. A model that invents RELIANCE or NVDA has those rows dropped before any code sees
+   them. The opportunity set is fixed before the model is asked.
+2. **It cannot size anything.** It returns keep/drop; `survivors` filters and never rescales. A
+   surviving name is bought in exactly the quantity the fixed-notional basket assigned it — the same
+   quantity Shadow buys.
+3. **It cannot fail closed.** No verdict, no API key, a refusal, an exception, an unparseable line →
+   the name is **kept**. Every failure mode degrades to exactly the Shadow book, never to an empty
+   one. The deterministic screen is the floor; the model can only subtract from it.
+
+**Contract.** A new `VERDICT:` line per name — `ticker` · `call` · `confidence` · `reason` —
+deliberately *not* folded into `SIGNAL:`, which is one scalar for the whole index and has no ticker
+field (the mechanical reason the narrative reached nothing, T2.5). `SIGNAL:` is untouched.
+
+**The horizon is the change that matters.** The old prompt asked for a lean over the next 1–2 sessions
+— a question about noise, scored against noise. `build_verdict_prompt` asks whether a name that is
+*already* cheap and *already* flagged breaking is still a poor holding **a year out**, and points the
+model at company-specific news a price screen cannot see (governance, regulatory action, accounting,
+demerger effects, a broken end-market). *"It has fallen a lot"* is explicitly ruled out as a drop
+reason — that is the screen's own selection criterion. Each candidate arrives with the deterministic
+facts (re-based cheapness, §4.7 health, 6-month return) so the model reasons about news rather than
+re-deriving numbers the engine owns.
+
+**The deploy-size tilt is RETIRED** — both books now deploy the identical amount. This is *forced* by
+the acceptance criterion: with the AI stubbed to keep everything the two baskets must be
+byte-identical, which cannot hold while a tilt still moves one book's quantities. Run 3 therefore
+tests **exactly one treatment**. Run 1's tilt result stands as published: unmeasurable.
+
+**Model stays Claude Haiku 4.5 + web search** — now a *pre-registered parameter* that must not change
+mid-run, since a model swap would be a second treatment. Haiku keeps the basic `web_search_20250305`
+variant (the `_20260209` dynamic-filtering variant is Opus/Sonnet-tier only); `thinking`/`effort` do
+not apply to Haiku and are correctly omitted.
+
+**Third pre-registration amendment** recorded in
+[docs/PREREGISTRATION_autopilot.md](docs/PREREGISTRATION_autopilot.md) before run 3 accrued a mark;
+nothing above it rewritten. It adds one bar beyond amendment 2's noise floor: **if the AI drops no
+names over the run, the result is "no verdicts issued", not "the AI didn't help"** — an untriggered
+treatment is not a negative result.
+
+Tests: 14 new, all guard-focused and network-free. The acceptance criterion —
+`test_stubbed_to_keep_everything_the_two_baskets_are_identical` — asserts same tickers *and* same
+quantities, which is what makes System − Shadow an ablation of the verdict rather than a comparison
+of two differently-built portfolios.
 
 ## Verification
 
-Four gates on every PR: `ruff check` · `ruff format --check` · `mypy src` (strict) · `pytest -q`
-(316 tests today). `paper.yml` commits `[skip ci]` and runs no tests, so CI must be exercised via PR.
+Four gates on every PR: `ruff check` · `ruff format --check` · `mypy src` (strict) · `pytest -q`.
+**429 tests, 0 skipped** (was 316 with a silently-skipped dashboard module). CI now installs the
+`dashboard` extra and **fails on any skip**.
 
-Reproduce the two headline defects, before and after PR-2/PR-3:
-
-```bash
-# T1.1 — unexplained one-day gaps across the watchlist (expect VEDL, TRENT; expect none after PR-2)
-uv run python -c "
-import pandas as pd
-df=pd.read_parquet('data/historical/prices_watchlist.parquet'); df['date']=pd.to_datetime(df['date'])
-cut=df.date.max()-pd.Timedelta(days=365)
-for t,g in df.groupby('ticker'):
-    s=g.set_index('date')['adj_close'].sort_index(); s=s[s.index>=cut]
-    m=s.pct_change()[lambda r: r<-0.25]
-    if len(m): print(t,[(d.date(),round(100*v,1)) for d,v in m.items()])"
-
-# T1.2 — the system's own verdict on its own buy list (expect 4x breaking today)
-uv run python -c "
-import pandas as pd
-from qalpha.data.prices import PriceData
-from qalpha.live.position_health import position_health
-df=pd.read_parquet('data/historical/prices_watchlist.parquet')
-p=PriceData.from_long(df); a=pd.to_datetime(df['date']).max().date()
-for h in position_health(p.adj_close,['VEDL.NS','TRENT.NS','IRFC.NS','HDFCLIFE.NS','ITC.NS'],a).holdings:
-    print(h.icon,h.ticker,h.level,f'{h.trailing_return:+.1%}',f'{h.excess_vs_market:+.1%}')"
-```
-
-- **PR-1:** `AppTest` smoke asserts the Live tab renders with no auto buy-brief and that Sell / Raise
-  cash still work.
-- **PR-2:** the gap script returns empty; a synthetic genuine slider still ranks; a failed watchlist
-  download produces a banner, not silent stale prices.
-- **PR-3:** the four 🔴 appear beside the names in the rendered advice; the delivered basket respects
-  the sector cap after truncation.
-- **PR-4/PR-5:** new consistency tests fail on `main` and pass after; `test_dashboard_app.py` reports
-  as **run**, not skipped, in the CI log.
-- **PR-6:** `manual_log_drift(Decimal('200000'))` returns `0` (it returns `240500` today); a deposit
-  queued mid-run survives and is applied on the next run.
-- **PR-7:** on the first two marks, System and Shadow hold **identical tickers** — the property whose
-  absence voided the last six weeks.
-- **PR-8:** with the AI stubbed to "keep everything", System and Shadow baskets must be
-  byte-identical — proving the only difference the experiment can measure is the verdict itself.
-
-End-to-end, after PR-3 and again after PR-7: run `scripts/autopilot.py daily` locally against the
-committed state, confirm the idempotent re-run, and diff the rendered `reports/autopilot_dashboard.md`.
+**The GO book is byte-identical throughout all eight PRs** — md5 `ea9a45f4…`, start 2026-06-12, 45
+marks. Rule (a) verified per PR: no backtest or factor path imports `live/deploy.py`,
+`live/position_health.py`, `price_integrity.py`, or `ai_brief.py`.

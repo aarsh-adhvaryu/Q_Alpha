@@ -40,6 +40,13 @@ from qalpha.backtest.portfolio import Portfolio, TradeRecord
 from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
 from qalpha.data.prices import PriceData
+from qalpha.live.ai_brief import (
+    Candidate,
+    NameVerdict,
+    generate_verdicts,
+    survivors,
+    verdicts_note,
+)
 from qalpha.live.autopilot import (
     LEDGER_PATH,
     REFERENCE_NOTIONAL,
@@ -68,9 +75,11 @@ from qalpha.live.autopilot import (
     signal_tilt,
 )
 from qalpha.live.dashboard import watchlist_is_stale
-from qalpha.live.deploy import advise_deploy_into_weakness, market_weakness
+from qalpha.live.deploy import advise_deploy_into_weakness, cheapness_scores, market_weakness
 from qalpha.live.hedge import apply_futures_hedge, hedge_active, stress_gauge
 from qalpha.live.paper import PaperBook, StrategyParams
+from qalpha.live.position_health import position_health
+from qalpha.live.price_integrity import excluded_from_tilt, rebase_starts, unexplained_gaps
 
 sys.path.insert(0, str(Path(__file__).parent))
 from paper import (
@@ -89,6 +98,7 @@ WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
 WATCHLIST_PARQUET = Path("data/historical/prices_watchlist.parquet")
 BRIEF_MD = Path("reports/ai_brief.md")
 DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
+VERDICT_MD = Path("reports/ai_verdicts.md")  # PR-8: the AI's per-name keep/drop sheet (fake money)
 
 # The System book = the former smart-rebalance book, upgraded (same file → its ₹2L history carries
 # over). ADAPTIVE cadence: the funnel is evaluated every run; the §4.6 gate decides if a trade is
@@ -305,6 +315,40 @@ def _record_dict(r: TradeRecord) -> dict[str, str]:
         "cost": str(r.cost),
         "tax": str(r.tax),
     }
+
+
+def _name_verdicts(
+    basket: Mapping[str, int],
+    sectors: Mapping[str, str],
+    prices: PriceData,
+    as_of: date,
+) -> tuple[dict[str, NameVerdict], str, dict[str, int]]:
+    """Ask the AI for a keep/drop call on the deterministic basket (PR-8). Fail-soft to keep-all.
+
+    The candidates carry the *deterministic* facts — cheapness (continuity-corrected), the §4.7
+    breakdown verdict, the 6-month return — so the model reasons about company-specific news rather
+    than re-deriving numbers the engine already owns. The `ai` extra is optional, so the import is
+    lazy: without it (or without a key) this returns no verdicts and every name is kept.
+    """
+    if not basket:
+        return {}, "", {}
+    tickers = sorted(basket)
+    gaps = unexplained_gaps(prices.adj_close, tickers, as_of)
+    cheap = cheapness_scores(
+        prices, tickers, as_of, rebase_from=rebase_starts(gaps), no_tilt=excluded_from_tilt(gaps)
+    )
+    health = {h.ticker: h for h in position_health(prices.adj_close, tickers, as_of).holdings}
+    candidates = [
+        Candidate(
+            ticker=t,
+            sector=str(sectors.get(t, "?")),
+            cheapness=cheap.get(t, 0.0),
+            health=health[t].level if t in health else "unknown",
+            trailing_return=health[t].trailing_return if t in health else 0.0,
+        )
+        for t in tickers
+    ]
+    return generate_verdicts(candidates)
 
 
 def _reference_basket(
@@ -671,21 +715,50 @@ def cmd_daily() -> int:
 
     # 1) Deploy idle wallet cash — the system acting on its own Add-money advice (AI-paced for the
     #    system, neutral for the shadow).
-    # ONE basket for both books (PR-7). Amounts differ — that is the AI tilt, and the whole point —
-    # but the ticker set is decided once, across both books, so a size difference can never become a
-    # composition difference. `common_basket` drops a name only if it rounds below one share in
-    # *either* book, symmetrically; dropping it in one book alone is how the funds diverged.
-    amounts = {
-        key: book_deploy_amount(wallets[key], level, signal, ai=use_ai)
-        for key, use_ai in (("system", True), ("shadow", False))
-    }
+    # ONE basket, ONE size, for both books (PR-7 + PR-8).
+    #
+    # PR-7 fixed composition: the ticker set is decided once, across both books, so a size difference
+    # can never become a composition difference. PR-8 goes further and **retires the AI size tilt**:
+    # both books now deploy the identical amount. That is forced by the experiment, not incidental —
+    # with the AI stubbed to "keep everything" the two baskets must come out byte-identical, which
+    # cannot hold if the tilt is still moving one book's quantities.
+    #
+    # So run 3 tests exactly one treatment: the AI's per-name keep/drop verdict. One knob at a time.
+    neutral = book_deploy_amount(wallets["shadow"], level, None, ai=False)
+    amounts = {"system": neutral, "shadow": neutral}
     if any(a >= DEPLOY_FLOOR for a in amounts.values()):
         ref_qty, ref_prices, rationale = _reference_basket(
             cfg, watchlist, wl_sectors, merged, nifbees, as_of
         )
         scaled = {k: scaled_basket(ref_qty, amounts[k]) for k in amounts}
         tradable = common_basket(*scaled.values())
-        for key, bk, use_ai in (("system", system, True), ("shadow", shadow, False)):
+        deterministic = {t: q for t, q in scaled["shadow"].items() if t in tradable}
+
+        # PR-8 — the AI's ONE lever: a keep/drop verdict per candidate, applied to the System book
+        # only. It cannot add a name (parse_verdicts discards anything outside this universe), cannot
+        # change a quantity (survivors filters, never rescales), and cannot fail closed (no verdict,
+        # no key, no response → the name is kept, i.e. exactly the Shadow book). Fake money only.
+        verdicts, verdict_raw, verdict_usage = _name_verdicts(
+            deterministic, wl_sectors, merged, as_of
+        )
+        kept = survivors(deterministic, verdicts)
+        if verdicts:
+            today_notes.append(verdicts_note(verdicts, deterministic))
+        if verdict_raw:
+            VERDICT_MD.parent.mkdir(parents=True, exist_ok=True)
+            VERDICT_MD.write_text(
+                f"# AI name verdicts — {as_of_str}\n\n"
+                f"_{len(verdicts)} parsed · {len(deterministic) - len(kept)} dropped · "
+                f"model tokens in/out {verdict_usage.get('input', 0)}/"
+                f"{verdict_usage.get('output', 0)}. Fake money only._\n\n"
+                f"{verdict_raw}\n",
+                encoding="utf-8",
+            )
+
+        for key, bk, basket_for_book in (
+            ("system", system, kept),
+            ("shadow", shadow, deterministic),
+        ):
             amt = amounts[key]
             if amt < DEPLOY_FLOOR or not tradable:
                 continue
@@ -695,14 +768,19 @@ def cmd_daily() -> int:
             basket = _execute_basket(
                 bk,
                 amt,
-                {t: q for t, q in scaled[key].items() if t in tradable},
+                basket_for_book,
                 ref_prices,
                 rationale,
                 as_of,
             )
             if basket:
                 book_tag = "SYS" if key == "system" else "SHD"
-                ai_note = sig_desc if use_ai else "n/a (AI off)"
+                dropped = len(deterministic) - len(kept)
+                ai_note = (
+                    f"name-verdict: {dropped} dropped of {len(deterministic)}"
+                    if key == "system"
+                    else "n/a (AI off)"
+                )
                 ledger.append(
                     Decision(as_of_str, book_tag, str(amt), basket, rationale, ai_note, resolve_on)
                 )
