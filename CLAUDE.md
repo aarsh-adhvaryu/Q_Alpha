@@ -6,8 +6,9 @@ Guidance for Claude Code (and humans) working in this repo.
 
 **The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
 right, and the reasons are now documented and scoped. The full plan is
-[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 … PR-5 are BUILT**
-(branches `trust-repair-pr1`…`pr5`) — **Tiers 1 and 2 closed, T3.3 closed**; PR-6 … PR-8 are not.
+[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 … PR-6 are BUILT**
+(branches `trust-repair-pr1`…`pr6`) — **Tiers 1, 2 and 3 are closed**; PR-7 (re-seed) and PR-8 (AI
+name-verdict) are not.
 Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
 A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
 
@@ -115,6 +116,24 @@ the full suite with every `.parquet` moved off disk. Tab-1's three cron-written 
 (`system_track.csv`, `autopilot_dashboard.md`, `ai_brief.md`) were rendered with **no freshness check
 whatsoever**; now gated by `source_freshness`. **393 tests, 0 skipped** (was 316 with a silently
 skipped dashboard module).
+
+
+**PR-6 (done): the Add-money queue can no longer lose a deposit; the log reconciles.**
+**T3.2** had *two* ways to destroy money, not one: `apply_pending` truncated the queue on read (so a
+deposit queued mid-run vanished — the ₹50k-in-July family), **and** it cleared ~180 lines before
+`save_state`, so any crash in the deploy/gate/mark pipeline emptied the queue with the money never
+credited. That second window is far wider. Now entries are **claimed by id** (`entry_id()` hashes
+legacy entries deterministically), `apply_pending` never clears, and the runner calls
+`clear_applied()` **after** persistence — it re-reads and writes back everything it did not claim.
+**T3.1:** `log_manual_injection` is **append-once keyed on the entry id** (the cron re-logging each
+pass was the root cause); the ₹240,500 is repaired by an **appended signed correction**, never a
+deletion — `manual_log_drift(Decimal("200000"))` now returns **0**. Drift also renders as a dashboard
+banner (`injection_drift_markdown`) leading with "Your money is fine" — it always was; `state.json`
+is authoritative. **T3.4:** the three dead files are **archived, not deleted**
+(`data/autopilot/archive/` + README) — they are a frozen pre-registered experiment's evidence, and
+this repo archives rather than removes those. ⚠️ `reports/{paper_dashboard.md, paper_equity.csv}`
+are **not** dead (paper.py writes them, paper.yml commits them, PR-5's tests read them, research
+mission-control fetches them) — the plan was wrong there; left alone. 404 tests.
 
 **Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
 the 18.2% headline are untouched by every item in the plan.**

@@ -17,8 +17,10 @@ measuring whether acting on it helps is the whole point (see ``docs/PREREGISTRAT
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -418,45 +420,127 @@ def load_pending(path: Path = PENDING_PATH) -> list[dict[str, object]]:
     return data if isinstance(data, list) else []
 
 
+def entry_id(item: Mapping[str, object]) -> str:
+    """A stable identity for one queued deposit.
+
+    The queue is written by the Streamlit host and read by the Actions runner — two machines, no
+    lock — so an entry has to be identifiable by *content*, not by its position in a list. Entries
+    queued before ids existed get a deterministic hash of their own fields, so the same legacy entry
+    always resolves to the same id and can still be claimed exactly once.
+    """
+    existing = item.get("id")
+    if existing:
+        return str(existing)
+    raw = f"{item.get('at', '')}|{item.get('amount', '0')}|{item.get('reason', '')}"
+    return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
+
+
+@dataclass(frozen=True)
+class AppliedInjection:
+    """One deposit the runner has credited to the books but not yet durably saved."""
+
+    entry_id: str
+    amount: Decimal
+    reason: str
+
+
 def clear_pending(path: Path = PENDING_PATH) -> None:
-    """Empty the queue after the runner has applied it."""
+    """Empty the whole queue. **Prefer :func:`clear_applied`** — this truncates unconditionally and
+    will destroy anything queued since the runner last read the file. Kept for tests and recovery."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("[]\n", encoding="utf-8")
 
 
+def clear_applied(applied: Sequence[AppliedInjection], path: Path = PENDING_PATH) -> int:
+    """Remove **only** the entries the runner actually applied; return how many survived.
+
+    The bug this closes (T3.2): the runner used to truncate the queue to ``[]`` after reading it, so a
+    deposit queued by the dashboard between the read and the write was **destroyed unread** — the same
+    failure family as the ₹50k lost in July. Re-reading here is what makes that safe: entries that
+    arrived in the meantime are unknown to ``applied``, so they are written back and picked up on the
+    next run instead of vanishing.
+
+    Call this **after** the books are persisted. Clearing first meant a crash anywhere in the long
+    deploy/gate/mark pipeline that follows left the queue empty and the money never credited — a
+    strictly worse outcome than a deposit applied twice.
+    """
+    claimed = {a.entry_id for a in applied}
+    survivors = [item for item in load_pending(path) if entry_id(item) not in claimed]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(survivors, indent=2) + "\n", encoding="utf-8")
+    return len(survivors)
+
+
 def apply_pending(
     books: dict[str, Book], path: Path = PENDING_PATH
-) -> tuple[Decimal, list[tuple[Decimal, str]]]:
-    """Deposit every queued injection into all three books and clear the queue. Returns the total
-    applied (₹0 if the queue was empty) **and** the entries the caller must hand to
-    :func:`log_manual_injection` *after* it has persisted the books.
+) -> tuple[Decimal, list[AppliedInjection]]:
+    """Deposit every queued injection into all three books. Returns the total applied (₹0 if the
+    queue was empty) and the claimed entries.
 
-    Logging deliberately does NOT happen here — see :func:`log_manual_injection` for why the audit
-    entry has to be written after the money is durable, not before.
+    **Does not clear the queue** — the caller must call :func:`clear_applied` once the books are
+    durably saved, and :func:`log_manual_injection` for the audit trail. Both orderings are
+    load-bearing: see those functions for the money that was lost learning it.
     """
-    pending = load_pending(path)
     total = Decimal("0")
-    applied: list[tuple[Decimal, str]] = []
-    for item in pending:
+    applied: list[AppliedInjection] = []
+    for item in load_pending(path):
         amt = Decimal(str(item.get("amount", "0")))
         if amt > 0:
             inject_all(books, amt)
-            applied.append((amt, str(item.get("reason", "(from dashboard)"))))
+            applied.append(
+                AppliedInjection(
+                    entry_id=entry_id(item),
+                    amount=amt,
+                    reason=str(item.get("reason", "(from dashboard)")),
+                )
+            )
             total += amt
-    if pending:
-        clear_pending(path)
     return total, applied
 
 
-def log_manual_injection(amount: Decimal, reason: str, path: Path = MANUAL_LOG_PATH) -> None:
+def log_manual_injection(
+    amount: Decimal,
+    reason: str,
+    path: Path = MANUAL_LOG_PATH,
+    *,
+    entry_id: str | None = None,
+) -> bool:
     """Append a discretionary top-up (amount + the user's stated reason) for honesty/audit.
 
+    Returns whether an entry was written. **Append-once**: given an ``entry_id`` already present in
+    the log, this is a no-op. That is what makes the audit trail idempotent under the re-runs the
+    daily cron actually performs — re-logging the same queue entry on each pass is how the log came
+    to claim ₹440,500 against ₹200,000 truly injected, a drift of ₹240,500 across 2026-07-12 →
+    2026-08-12. The duplicate pairs are still visible in the log, timestamped minutes apart.
+
     **Call this only after the deposit has been persisted** (``save_state``/``save_books``). This
-    file is an audit record, so a phantom entry is worse than a missing one: writing it up-front —
-    as the runner used to, before the deploy/gate/mark pipeline that follows — meant any crash in
-    that pipeline left the log claiming money the books never received. Between 2026-07-12 and
-    2026-08-12 that overstated the log by ₹240,500 against a true ₹200,000 of injections.
-    :func:`manual_log_drift` measures exactly that gap.
+    file is an audit record, so a phantom entry is worse than a missing one: writing it up-front
+    meant any crash in the pipeline that follows left the log claiming money the books never got.
+    """
+    from datetime import datetime
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    log = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    if entry_id is not None and any(str(e.get("id", "")) == entry_id for e in log):
+        return False  # already recorded — the cron re-ran, the money did not arrive twice
+    record: dict[str, str] = {
+        "at": datetime.now().isoformat(timespec="seconds"),
+        "amount": str(amount),
+        "reason": reason,
+    }
+    if entry_id is not None:
+        record["id"] = entry_id
+    log.append(record)
+    path.write_text(json.dumps(log, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
+def log_correction(amount: Decimal, note: str, path: Path = MANUAL_LOG_PATH) -> None:
+    """Append a signed correction to the audit log — never rewrite or delete an existing entry.
+
+    The log over-counted by ₹240,500 and the honest repair is not to quietly drop the duplicate rows:
+    they are evidence of what the runner did. A correction entry brings the *total* back to the truth
+    while leaving the erroneous history legible, which is what an audit trail is for.
     """
     from datetime import datetime
 
@@ -466,7 +550,8 @@ def log_manual_injection(amount: Decimal, reason: str, path: Path = MANUAL_LOG_P
         {
             "at": datetime.now().isoformat(timespec="seconds"),
             "amount": str(amount),
-            "reason": reason,
+            "reason": note,
+            "kind": "correction",
         }
     )
     path.write_text(json.dumps(log, indent=2) + "\n", encoding="utf-8")

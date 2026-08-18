@@ -49,6 +49,7 @@ from qalpha.live.dashboard import (
     buy_advice_withheld_markdown,
     glossary_markdown,
     go_readiness_markdown,
+    injection_drift_markdown,
     live_pm_brief_markdown,
     ltcg_safe_sell_note,
     paper_freshness,
@@ -751,6 +752,22 @@ def _system_tab(
         )
 
     st.caption("Funding is manual — add money above whenever you like (e.g. a monthly top-up).")
+
+    # T3.1 — the audit log vs the books. Loud on the page, not a line in a cron log nobody reads.
+    from autopilot import SYSTEM_CAPITAL  # the runner owns the seed constant
+
+    from qalpha.live.autopilot import manual_log_total
+
+    contributed_map = state.get("contributed")
+    contributed_system = (
+        contributed_map.get("system", SYSTEM_CAPITAL)
+        if isinstance(contributed_map, dict)
+        else SYSTEM_CAPITAL
+    )
+    credited = Decimal(str(contributed_system)) - SYSTEM_CAPITAL
+    drift_note = injection_drift_markdown(manual_log_total(), credited)
+    if drift_note:
+        st.warning(drift_note)
 
     # --- The scoreboard (written by the daily run) + the race chart ---
     st.divider()
