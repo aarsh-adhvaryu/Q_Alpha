@@ -15,12 +15,25 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install deps
-        run: uv sync --extra dev --frozen
+        # `dashboard` (streamlit) is needed so tests/test_dashboard_app.py actually RUNS here.
+        # Without it `pytest.importorskip("streamlit")` skipped the whole module, and the dashboard
+        # — the surface every defect in PLAN_TRUST_REPAIR.md reached the user through — was the
+        # least-tested code in the repo despite a green suite (T3.3).
+        run: uv sync --extra dev --extra dashboard --frozen
       - name: Ruff (lint)
         run: uv run ruff check .
       - name: Ruff (format check)
         run: uv run ruff format --check .
       - name: Mypy (strict)
         run: uv run mypy src
-      - name: Pytest
-        run: uv run pytest -q
+      - name: Pytest (and fail on any silent skip)
+        # A skipped test reads as a passing one in the summary line, which is how the dashboard
+        # module stayed unrun for months behind a gitignored-data guard (T3.3). Run once, then
+        # reject a summary that reports skips.
+        run: |
+          set -o pipefail
+          uv run pytest -q -rs 2>&1 | tee pytest.log
+          if grep -Eq '[0-9]+ skipped' pytest.log; then
+            echo "::error::tests were skipped — a skip is not a pass. See the short summary above."
+            exit 1
+          fi

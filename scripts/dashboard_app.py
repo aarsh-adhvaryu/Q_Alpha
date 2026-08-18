@@ -43,14 +43,20 @@ from qalpha.live.advisor import advise_raise_cash, advise_sell
 from qalpha.live.dashboard import (
     BUY_ADVICE_ON_REAL_MONEY,
     _benchmark_return_pct,
+    ai_signal_summary,
+    buy_advice_blocked_markdown,
+    buy_advice_scope_note,
     buy_advice_withheld_markdown,
     glossary_markdown,
     go_readiness_markdown,
+    injection_drift_markdown,
     live_pm_brief_markdown,
     ltcg_safe_sell_note,
     paper_freshness,
     performance_read,
     plain_summary_markdown,
+    source_freshness,
+    sources_freshness_markdown,
     systemic_risk_markdown,
     today_brief_markdown,
     watchlist_is_stale,
@@ -58,12 +64,14 @@ from qalpha.live.dashboard import (
 from qalpha.live.gist_store import find_gist_id, load_gist_file, save_gist_file
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
+from qalpha.live.measures import ReturnMeasure, measures_table, window_mismatch_note
 from qalpha.live.paper import PaperBook, _prices_on
 from qalpha.live.position_health import position_health
 from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
 
 AUTOPILOT_DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
 AI_BRIEF_MD = Path("reports/ai_brief.md")
+SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
 
 
 def _queue_injection_to_repo(amount: int, reason: str) -> tuple[bool, str]:
@@ -310,8 +318,18 @@ def _advisor_with_safety(
     (live only) drives the zero-typing PM brief + prefills the Add-money field.
     """
     session = broker_session_guard(live_session) if live_session is not None else None
+    # The buy list is priced off the *watchlist* panel, not the core panel — a separate source whose
+    # freshness this report did not cover until PR-2 (T1.3). Pass it so a stale or failed-to-download
+    # panel withholds buy advice; sell/raise-cash are priced off the core panel and stay unaffected.
+    wl = _watchlist()
     report: SafetyReport = assess_advice_inputs(
-        prices, prices_dec, sorted(portfolio.positions()), as_of, session=session
+        prices,
+        prices_dec,
+        sorted(portfolio.positions()),
+        as_of,
+        session=session,
+        watchlist=wl[2] if wl is not None else None,
+        watchlist_download_ok=bool(st.session_state.get("watchlist_download_ok", True)),
     )
     namespace = "live" if live_session is not None else "paper"
     st.subheader("Ask the advisor")
@@ -329,15 +347,24 @@ def _advisor_with_safety(
     cfg = Config()
     floor = cfg.deploy_policy.idle_cash_floor
     default_add = 50000
+    buy_ok = BUY_ADVICE_ON_REAL_MONEY and report.buy_advice_safe
     if available_cash is not None and available_cash >= floor:
-        if BUY_ADVICE_ON_REAL_MONEY:
+        if buy_ok:
             _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg, prices_dec)
         default_add = int(available_cash)
     st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
     if live_session is not None:
-        _next_actions_panel(portfolio, as_of, available_cash, report.safe_to_advise, cfg)
+        _next_actions_panel(portfolio, as_of, available_cash, report.safe_to_advise, cfg, buy_ok)
     _advisor_tabs(
-        portfolio, prices_dec, benchmark, as_of, default_add_amount=default_add, namespace=namespace
+        portfolio,
+        prices_dec,
+        benchmark,
+        as_of,
+        default_add_amount=default_add,
+        namespace=namespace,
+        buy_blocked_reasons=[
+            g.detail for g in report.guards if g.name == "watchlist prices" and not g.ok
+        ],
     )
     _satellite_section(portfolio, prices_dec, as_of)
 
@@ -348,6 +375,7 @@ def _next_actions_panel(
     available_cash: Decimal | None,
     advice_safe: bool,
     cfg: Config,
+    buy_advice_available: bool = True,
 ) -> None:
     """ "What do I do next?" — the operating procedure, resolved against this account's real state.
 
@@ -379,7 +407,7 @@ def _next_actions_panel(
         holdings=len(portfolio.positions()),
         days_to_next_ltcg=min(waits) if waits else None,
         unreconciled_sells=sells,
-        buy_advice_available=BUY_ADVICE_ON_REAL_MONEY,
+        buy_advice_available=buy_advice_available,
     )
     with st.container(border=True):
         st.markdown("#### 🧭 What to do next")
@@ -637,6 +665,8 @@ def _core_go_expander(
             "engine — this page never trades. The real-money GO rides THIS book (its clean annual-"
             "cadence run is the evidence); the System book above is the full system being proven."
         )
+        # Two books, two funding histories, two windows, one screen — the confusion this fixes.
+        _two_book_window_note(book)
         _paper_overview(book, prices, benchmark, universe, sector_of, as_of)
         _go_readiness_view(book, benchmark, as_of)
         with st.expander("🩺 Position health — between-rebalance watch"):
@@ -723,8 +753,25 @@ def _system_tab(
 
     st.caption("Funding is manual — add money above whenever you like (e.g. a monthly top-up).")
 
+    # T3.1 — the audit log vs the books. Loud on the page, not a line in a cron log nobody reads.
+    from autopilot import SYSTEM_CAPITAL  # the runner owns the seed constant
+
+    from qalpha.live.autopilot import manual_log_total
+
+    contributed_map = state.get("contributed")
+    contributed_system = (
+        contributed_map.get("system", SYSTEM_CAPITAL)
+        if isinstance(contributed_map, dict)
+        else SYSTEM_CAPITAL
+    )
+    credited = Decimal(str(contributed_system)) - SYSTEM_CAPITAL
+    drift_note = injection_drift_markdown(manual_log_total(), credited)
+    if drift_note:
+        st.warning(drift_note)
+
     # --- The scoreboard (written by the daily run) + the race chart ---
     st.divider()
+    _tab1_sources_panel(as_of)
     if AUTOPILOT_DASHBOARD_MD.exists():
         st.markdown(AUTOPILOT_DASHBOARD_MD.read_text(encoding="utf-8"))
     else:
@@ -744,15 +791,28 @@ def _system_tab(
 
     # --- Today's AI market brief (context only; the system acts on its SIGNAL via the fixed rule) ---
     st.divider()
-    with st.expander(
-        "🧠 Today's AI market brief (context only — the fixed rule acts on its SIGNAL)"
-    ):
-        if AI_BRIEF_MD.exists() and "No brief generated yet" not in AI_BRIEF_MD.read_text(
-            encoding="utf-8"
-        ):
-            st.markdown(AI_BRIEF_MD.read_text(encoding="utf-8"))
-        else:
-            st.info("No brief yet — the daily run writes it after market close.")
+    st.subheader("🧠 What the AI actually did today")
+    # T2.5 — lead with the one line that has consequences; the narrative goes behind it. Several
+    # paragraphs of per-name prose rendered under a buy list read as "the AI picked these", which is
+    # the opposite of true: its output has no ticker field at all.
+    from qalpha.live.autopilot import parse_ai_signal, signal_tilt
+
+    brief_text = AI_BRIEF_MD.read_text(encoding="utf-8") if AI_BRIEF_MD.exists() else ""
+    has_brief = bool(brief_text) and "No brief generated yet" not in brief_text
+    signal = parse_ai_signal(brief_text, as_of.isoformat()) if has_brief else None
+    st.info(
+        ai_signal_summary(
+            getattr(signal, "lean", None),
+            getattr(signal, "confidence", None),
+            signal_tilt(signal),
+            consumed_by="the 🧠 System book only (fake money)",
+        )
+    )
+    if has_brief:
+        with st.expander("Read the full brief (background reading — nothing consumes this prose)"):
+            st.markdown(brief_text)
+    else:
+        st.caption("No brief yet — the daily run writes it after market close.")
 
     # --- The validated core (the official GO gate) — running untouched underneath ---
     st.divider()
@@ -868,15 +928,53 @@ def _paper_overview(
     as_of: date,
 ) -> None:
     prices_dec = _prices_on(prices, as_of)
-    equity = book.portfolio.market_value(prices_dec)
-    ret = book.total_return_pct(prices, as_of)
+
+    # T2.3 — the tile and the chart beneath it must read the SAME source. This tile used to re-mark
+    # equity live against the host's price panel while the chart, the GO scorecard and the freshness
+    # panel all read the cron-committed curve, so one book showed two different numbers on one
+    # screen. The committed curve is the book of record (it is the criterion-6 evidence), so the tile
+    # reads that; any live drift is shown separately, and labelled as such, rather than silently
+    # replacing it.
+    curve = book.equity_curve
+    marked_on = date.fromisoformat(str(curve[-1]["date"])) if curve else as_of
+    book_value = (
+        Decimal(str(curve[-1]["equity"])) if curve else book.portfolio.market_value(prices_dec)
+    )
+    starting = book.starting_capital
+    ret = float((book_value - starting) / starting * 100) if starting > 0 else 0.0
     bench = _benchmark_return_pct(benchmark, book.start_date, as_of)
+
+    headline = ReturnMeasure(
+        label="Validated ₹2L core",
+        pct=ret,
+        basis="starting_capital",
+        start=book.start_date,
+        end=marked_on,
+        denominator=f"₹{starting:,.0f}",
+    )
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Equity", f"₹{equity:,.0f}", f"{ret:+.2f}%")
+    c1.metric("Book value (incl. cash)", f"₹{book_value:,.0f}", f"{ret:+.2f}%")
     c2.metric("Nifty 50 TRI", f"{bench:+.2f}%" if bench is not None else "—")
-    c3.metric("Cash", f"₹{book.portfolio.cash:,.0f}")
+    c3.metric("of which cash", f"₹{book.portfolio.cash:,.0f}")
     c4.metric("Realized tax to date", f"₹{book.realized_tax():,.0f}")
-    st.caption(performance_read(ret, bench))  # plain good/bad read so the numbers aren't bare
+    st.caption(
+        f"Both figures cover **{book.start_date} → {marked_on}**. "
+        f"Return is measured against {headline.basis_text} ({headline.denominator}); the Nifty 50 "
+        "TRI is the same window. — " + performance_read(ret, bench)
+    )
+
+    # The other bases are real and they disagree; they belong behind a note, not scattered on screen
+    # as bare percentages (T2.2). Exactly one headline above.
+    _how_measured_note(book, curve, marked_on, ret)
+
+    live_value = book.portfolio.market_value(prices_dec)
+    if curve and abs(live_value - book_value) > Decimal("1"):
+        st.caption(
+            f"ℹ️ Re-marked against this host's price panel right now the book would be "
+            f"₹{live_value:,.0f} ({float((live_value - book_value) / book_value * 100):+.2f}% vs the "
+            f"committed mark). The committed mark above is the book of record — this line exists so "
+            "the difference is visible rather than silently swapped in."
+        )
 
     plan = book.plan(prices, universe, sector_of, as_of)
     if plan.has_orders:
@@ -902,6 +1000,124 @@ def _paper_overview(
             _holdings_frame(book.portfolio, prices_dec, as_of), hide_index=True, width="stretch"
         )
         st.caption(_LTCG_SAFE_LEGEND)
+
+
+def _how_measured_note(book: PaperBook, curve: list, marked_on: date, headline_pct: float) -> None:
+    """The "how this is measured" expander — every other basis, named, in one place (T2.2).
+
+    Three numbers existed for this one book (+0.95% vs starting capital, +1.26% and +1.30% vs the
+    first equity mark), differing only by the ₹611.92 of day-one trading cost that sits between the
+    denominators. All three were correct and none was labelled, which is what made them read as a
+    contradiction. One is promoted to the headline; the rest live here with the reason they differ.
+    """
+    if not curve:
+        return
+    first_mark = Decimal(str(curve[0]["equity"]))
+    starting = book.starting_capital
+    last = Decimal(str(curve[-1]["equity"]))
+    measures = [
+        ReturnMeasure(
+            "Headline",
+            headline_pct,
+            "starting_capital",
+            book.start_date,
+            marked_on,
+            f"₹{starting:,.0f}",
+        ),
+        ReturnMeasure(
+            "Since the first mark",
+            float((last - first_mark) / first_mark * 100) if first_mark > 0 else 0.0,
+            "first_mark",
+            date.fromisoformat(str(curve[0]["date"])),
+            marked_on,
+            f"₹{first_mark:,.0f}",
+        ),
+    ]
+    cost = starting - first_mark
+    with st.expander("ℹ️ How this is measured — and why you may see a different number elsewhere"):
+        st.markdown(measures_table(measures))
+        st.markdown(
+            f"Both are right. They differ by the **₹{cost:,.2f}** of trading cost paid on day one: "
+            "the headline counts it against the book (you handed over "
+            f"₹{starting:,.0f} and this is what it is worth now), while the first-mark basis starts "
+            "counting *after* it was spent. The headline is the stricter of the two, which is why it "
+            "is the one on the tile.\n\n"
+            "The hedge overlay report quotes the first-mark basis, so a small difference there is "
+            "this, not a disagreement about the book."
+        )
+
+
+def _two_book_window_note(book: PaperBook) -> None:
+    """Say plainly that the two books on this screen are disjoint and cover different windows (T2.1).
+
+    The System book is ₹2L core + ₹2L of dashboard Add-money and started 2026-07-10; the GO book is
+    ₹2L funded once on 2026-06-12 and never topped up. Structurally disjoint, differently funded,
+    28 days apart — and until now nothing on the page said so, which is why two honest numbers read
+    as a contradiction.
+    """
+    from autopilot import BASELINE_PATH
+
+    from qalpha.live.autopilot import Book
+
+    if not BASELINE_PATH.exists():
+        return
+    import json as _json
+
+    try:
+        other = Book.from_dict(_json.loads(BASELINE_PATH.read_text(encoding="utf-8")))
+    except (ValueError, KeyError, OSError):
+        return
+    if other.start_date is None or other.start_date == book.start_date:
+        return
+    note = window_mismatch_note(
+        [
+            ReturnMeasure("The System book above", 0.0, "contributed", other.start_date, None),
+            ReturnMeasure("This validated core", 0.0, "starting_capital", book.start_date, None),
+        ]
+    )
+    if note:
+        st.caption(
+            note.replace(" — ", " — ", 1)
+            + " They are also **separate books**: this one was funded ₹2L once and never topped up; "
+            "the System book above is ₹2L plus everything you have added since."
+        )
+
+
+def _tab1_sources_panel(as_of: date) -> None:
+    """Gate every artifact this tab renders on its own freshness (T3.3).
+
+    The scoreboard, the race chart and the AI brief are all files written by the weekday cron and
+    were rendered here with **no freshness check whatsoever** — a stopped cron would keep serving its
+    last successful numbers with nothing on screen saying they were old.
+    """
+    import csv as _csv
+
+    def _mtime_date(path: Path) -> date | None:
+        return (
+            date.fromtimestamp(path.stat().st_mtime)
+            if path.exists() and path.stat().st_size
+            else None
+        )
+
+    track_last: date | None = None
+    if SYSTEM_TRACK_CSV.exists():
+        rows = list(_csv.DictReader(SYSTEM_TRACK_CSV.read_text(encoding="utf-8").splitlines()))
+        if rows:
+            track_last = date.fromisoformat(rows[-1]["date"])
+
+    sources = [
+        # The track record dates itself, so it is checked on its content, not the filesystem.
+        source_freshness("Track record (system_track.csv)", track_last, as_of),
+        source_freshness(
+            "Scoreboard (autopilot_dashboard.md)", _mtime_date(AUTOPILOT_DASHBOARD_MD), as_of
+        ),
+        source_freshness("AI brief (ai_brief.md)", _mtime_date(AI_BRIEF_MD), as_of),
+    ]
+    md = sources_freshness_markdown(sources)
+    if any(s.is_stale for s in sources):
+        st.warning(md)
+    else:
+        st.caption(md)
 
 
 TRADEBOOK_GIST_FILE = "tradebook_master.csv"
@@ -1140,15 +1356,23 @@ def _unverified_branch_warning(advice: object) -> None:
     )
 
 
-def _download_watchlist_panel() -> None:
+def _download_watchlist_panel() -> bool:
+    """Refresh the watchlist price panel; return whether it actually succeeded.
+
+    Previously this swallowed the exit code (``check=False``) and returned nothing, so a failed
+    download left the *previous* panel on disk and the buy advisor sized a confident recommendation
+    off stale prices with no banner (PR-2 / T1.3). The caller now records the outcome and the safety
+    report withholds buy advice instead.
+    """
     import subprocess
 
     with st.spinner("Loading the Nifty-100 watchlist (one-time price download, ~1–2 min)…"):
-        subprocess.run(
+        result = subprocess.run(
             [sys.executable, "scripts/build_nifty100_watchlist.py", "--prices"],
             check=False,
             cwd=Path.cwd(),
         )
+    return result.returncode == 0
 
 
 @st.cache_resource(ttl=6 * 3600, show_spinner=False)
@@ -1158,17 +1382,25 @@ def _watchlist() -> tuple[list[str], dict[str, str], PriceData] | None:
     The panel is downloaded once and persists on disk, so a bare forever-cache would serve week-old
     prices to the deploy advisor. Two guards: a 6-hour ``ttl`` on the cache, and a
     :func:`watchlist_is_stale` check that re-downloads the panel when its last price date has aged out.
+
+    PR-2: whether that refresh **succeeded** is recorded in ``st.session_state`` and fed to
+    :func:`assess_advice_inputs`, so a failed download withholds buy advice rather than silently
+    serving the previous panel. The cached return value cannot carry it — the cache is shared across
+    reruns while the flag must reflect the most recent attempt.
     """
     from qalpha.data.ingest import load_parquet
 
     csv = Path("data/universes/nifty100_watchlist.csv")
     panel = Path("data/historical/prices_watchlist.parquet")
+    st.session_state["watchlist_download_ok"] = True
     if not csv.exists():
         return None
     if not panel.exists():
-        _download_watchlist_panel()
+        st.session_state["watchlist_download_ok"] = _download_watchlist_panel()
     elif watchlist_is_stale(load_parquet(str(panel)).dates[-1].date(), date.today()):
-        _download_watchlist_panel()  # refresh a stale on-disk panel
+        # Refresh a stale on-disk panel. A failure here is the dangerous case: the old panel is
+        # still there, so without the flag the advisor would price a buy list off aged-out data.
+        st.session_state["watchlist_download_ok"] = _download_watchlist_panel()
     if not panel.exists():
         return None
 
@@ -1186,6 +1418,7 @@ def _advisor_tabs(
     *,
     default_add_amount: int = 50000,
     namespace: str = "paper",
+    buy_blocked_reasons: list[str] | None = None,
 ) -> None:
     """Interactive sell / raise-cash / add-money tabs.
 
@@ -1231,11 +1464,12 @@ def _advisor_tabs(
             st.markdown(advise_raise_cash(portfolio, Decimal(amount), prices_dec, as_of).render())
 
     with add_tab:
+        # Three states, deliberately distinguished: switched off at the flag (kill-switch), allowed
+        # but running on prices that failed a guard (PR-2 / T1.3), or live.
         if not BUY_ADVICE_ON_REAL_MONEY:
-            # PR-1: the buy list is off the real-money surface until the continuity guard (PR-2) and
-            # the candidate health flag (PR-3) land. The renderer below is untouched — PR-3 restores
-            # it by flipping BUY_ADVICE_ON_REAL_MONEY, not by rewriting anything.
             st.warning(buy_advice_withheld_markdown())
+        elif buy_blocked_reasons:
+            st.warning(buy_advice_blocked_markdown(buy_blocked_reasons))
         else:
             _add_money_advisor(
                 portfolio,
@@ -1261,12 +1495,13 @@ def _add_money_advisor(
     Withheld from the real-money surface by ``BUY_ADVICE_ON_REAL_MONEY`` since 2026-08-17; kept
     intact behind the flag so restoring it in PR-3 is a re-wire, not a rewrite.
     """
+    # The honest framing rides *with* the list, every render — this rule has never been backtested
+    # and shares nothing with the funnel behind the 18.2% headline (PR-3 / T1.5).
+    st.info(buy_advice_scope_note())
     st.caption(
-        "**Idle cash → what to buy.** The **math** picks a diversified, **tax-free (buys-only)** "
-        "spread across Nifty 100 tilted to out-of-favour names, for the **full amount** "
-        "(time-in-market — the evidence-backed default). The AI's market read is shown as "
-        "**context only**: its pacing rule is unproven and trades only fake money in the System "
-        "book until its System-vs-Shadow verdict is in."
+        "The AI's market read below is **context only**: its pacing rule is unproven and trades "
+        "only fake money in the System book until its System-vs-Shadow verdict is in. Deploying "
+        "the full amount (time-in-market) is the evidence-backed default."
     )
     amount = st.number_input(
         "Idle cash to invest (₹)",

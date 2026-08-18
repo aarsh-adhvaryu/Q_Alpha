@@ -1,0 +1,1126 @@
+{
+  "start_date": "2026-07-06",
+  "starting_capital": "200000",
+  "params": {
+    "band": 0.1,
+    "weighting": "shrink",
+    "tax_aware": true,
+    "force_refresh": false,
+    "rebalance_freq": "ADAPTIVE"
+  },
+  "portfolio": {
+    "cash": "103.22",
+    "lots": [
+      {
+        "ticker": "APOLLOHOSP.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "4",
+        "buy_price": "8841.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.30",
+        "other_costs": "1.29",
+        "lot_id": "48a20cb4-9890-4998-9a67-6cf28dbc7926",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "ASIANPAINT.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "14",
+        "buy_price": "2677.80",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.62",
+        "other_costs": "1.36",
+        "lot_id": "e7716168-9587-4416-a623-7af9d74f924e",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "GRASIM.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "12",
+        "buy_price": "3213.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.78",
+        "other_costs": "1.40",
+        "lot_id": "ccb01d53-3c11-4147-929a-4004486e08c0",
+        "broker_trade_id": null,
+        "quantity_remaining": "12"
+      },
+      {
+        "ticker": "SBIN.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "38",
+        "buy_price": "1036.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.91",
+        "other_costs": "1.43",
+        "lot_id": "4684bf89-9698-4b5d-bff2-5e3fdf07c8b6",
+        "broker_trade_id": null,
+        "quantity_remaining": "38"
+      },
+      {
+        "ticker": "SUNPHARMA.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "20",
+        "buy_price": "1935.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.81",
+        "other_costs": "1.40",
+        "lot_id": "cc41cfb5-1424-45a8-a190-e425e39e9bf5",
+        "broker_trade_id": null,
+        "quantity_remaining": "20"
+      },
+      {
+        "ticker": "VEDL.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "69",
+        "buy_price": "272.55",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "2.82",
+        "other_costs": "0.68",
+        "lot_id": "c2fd9988-4fd6-4e77-9a94-8fa08ba58f7b",
+        "broker_trade_id": null,
+        "quantity_remaining": "69"
+      },
+      {
+        "ticker": "TRENT.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "6",
+        "buy_price": "2902.80",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "2.61",
+        "other_costs": "0.64",
+        "lot_id": "1948f80c-baf8-4bd2-8e37-e33bcf5cd3ea",
+        "broker_trade_id": null,
+        "quantity_remaining": "6"
+      },
+      {
+        "ticker": "TCS.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "7",
+        "buy_price": "2069.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "2.17",
+        "other_costs": "0.52",
+        "lot_id": "8cfd87ef-0a6a-4ad3-b16b-19815a2ad50a",
+        "broker_trade_id": null,
+        "quantity_remaining": "7"
+      },
+      {
+        "ticker": "INFY.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "13",
+        "buy_price": "1068.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "2.08",
+        "other_costs": "0.50",
+        "lot_id": "b2ac5ab9-75c3-40d2-9b4c-5aafceef9e03",
+        "broker_trade_id": null,
+        "quantity_remaining": "13"
+      },
+      {
+        "ticker": "WIPRO.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "73",
+        "buy_price": "175.46",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.92",
+        "other_costs": "0.46",
+        "lot_id": "ef0cf5b0-d5d9-4509-9ccf-9419e3d0c866",
+        "broker_trade_id": null,
+        "quantity_remaining": "73"
+      },
+      {
+        "ticker": "HCLTECH.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "11",
+        "buy_price": "1164.10",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.92",
+        "other_costs": "0.46",
+        "lot_id": "61615ff6-c2d6-4927-9416-638ede85ce66",
+        "broker_trade_id": null,
+        "quantity_remaining": "11"
+      },
+      {
+        "ticker": "IRFC.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "141",
+        "buy_price": "89.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.90",
+        "other_costs": "0.46",
+        "lot_id": "32a605a8-7eca-49b6-88a1-f83652af0cb7",
+        "broker_trade_id": null,
+        "quantity_remaining": "141"
+      },
+      {
+        "ticker": "IRFC.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "1",
+        "buy_price": "89.75",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.01",
+        "other_costs": "0.00",
+        "lot_id": "471a0664-e57c-45a8-834c-b1d56a1da590",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
+        "ticker": "AMBUJACEM.NS",
+        "acquisition_date": "2026-07-10",
+        "quantity_original": "1",
+        "buy_price": "436.45",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.07",
+        "other_costs": "0.01",
+        "lot_id": "7c551fe7-19b2-418a-8ff6-7a322165e962",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
+        "ticker": "AMBUJACEM.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "12",
+        "buy_price": "432.15",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.78",
+        "other_costs": "0.19",
+        "lot_id": "bf9cf991-f577-4bd5-9b6e-664aef022574",
+        "broker_trade_id": null,
+        "quantity_remaining": "12"
+      },
+      {
+        "ticker": "HYUNDAI.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "4",
+        "buy_price": "1994.40",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.20",
+        "other_costs": "0.30",
+        "lot_id": "e7afd3ff-8c30-4293-ad6d-4a6aa603bd9b",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "ITC.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "27",
+        "buy_price": "279.65",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.13",
+        "other_costs": "0.27",
+        "lot_id": "1cca1ea6-3825-4920-9d92-f148a82d29d3",
+        "broker_trade_id": null,
+        "quantity_remaining": "27"
+      },
+      {
+        "ticker": "MAZDOCK.NS",
+        "acquisition_date": "2026-07-13",
+        "quantity_original": "3",
+        "buy_price": "2402.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.08",
+        "other_costs": "0.26",
+        "lot_id": "2511b274-fd98-4d40-806c-5c177adb8131",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
+      },
+      {
+        "ticker": "HDFCLIFE.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "7",
+        "buy_price": "555.20",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.58",
+        "other_costs": "0.14",
+        "lot_id": "0d76b579-6f43-48f6-9e25-a061f07ade6c",
+        "broker_trade_id": null,
+        "quantity_remaining": "7"
+      },
+      {
+        "ticker": "HDFCLIFE.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "2",
+        "buy_price": "553.10",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.17",
+        "other_costs": "0.04",
+        "lot_id": "908a8dc2-1387-4542-919a-a4a5e111e9b1",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "JIOFIN.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "15",
+        "buy_price": "235.97",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.53",
+        "other_costs": "0.13",
+        "lot_id": "78705113-e145-490d-b0a0-08d0f24e1ebd",
+        "broker_trade_id": null,
+        "quantity_remaining": "15"
+      },
+      {
+        "ticker": "HINDZINC.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "5",
+        "buy_price": "527.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.40",
+        "other_costs": "0.09",
+        "lot_id": "e2c0fe4f-cb98-4386-8e92-2b0e670d3da0",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
+      },
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-07-14",
+        "quantity_original": "3",
+        "buy_price": "137.05",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.06",
+        "other_costs": "0.01",
+        "lot_id": "ac25a68f-ec2c-4622-b267-c31501a97f1f",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
+      },
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-07-15",
+        "quantity_original": "14",
+        "buy_price": "140.24",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.29",
+        "other_costs": "0.07",
+        "lot_id": "150db5db-9eef-4aed-b012-2b99440b409f",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-07-17",
+        "quantity_original": "1",
+        "buy_price": "141.69",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.02",
+        "other_costs": "0.00",
+        "lot_id": "b02a54bf-be40-44e8-a0e1-3f290f15ae19",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "2",
+        "buy_price": "143.70",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.04",
+        "other_costs": "0.01",
+        "lot_id": "1c2665ab-399f-47d6-be4e-b0de4b03194f",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-08-06",
+        "quantity_original": "14",
+        "buy_price": "142.66",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.30",
+        "other_costs": "0.07",
+        "lot_id": "6ad92faa-0d97-4b5a-94c4-010038c29279",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "LODHA.NS",
+        "acquisition_date": "2026-07-15",
+        "quantity_original": "3",
+        "buy_price": "1162.40",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.52",
+        "other_costs": "0.12",
+        "lot_id": "683df93c-7a9d-4088-9d48-25e561aff8e3",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
+      },
+      {
+        "ticker": "DLF.NS",
+        "acquisition_date": "2026-07-15",
+        "quantity_original": "5",
+        "buy_price": "657.75",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.49",
+        "other_costs": "0.12",
+        "lot_id": "2a32265b-9759-4143-97fa-21f1ca1adb46",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
+      },
+      {
+        "ticker": "JINDALSTEL.NS",
+        "acquisition_date": "2026-07-17",
+        "quantity_original": "2",
+        "buy_price": "1025.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.31",
+        "other_costs": "0.07",
+        "lot_id": "70984faf-cdfe-44cc-a42b-ada17618180c",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "HINDALCO.NS",
+        "acquisition_date": "2026-07-17",
+        "quantity_original": "2",
+        "buy_price": "944.15",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.28",
+        "other_costs": "0.07",
+        "lot_id": "d9db647b-9d07-4a65-a802-7cd863ae48d4",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "ETERNAL.NS",
+        "acquisition_date": "2026-07-17",
+        "quantity_original": "5",
+        "buy_price": "286.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.21",
+        "other_costs": "0.05",
+        "lot_id": "eb43577f-6e98-406c-a9e7-750a4edabf93",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
+      },
+      {
+        "ticker": "MUTHOOTFIN.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "4",
+        "buy_price": "2890.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.73",
+        "other_costs": "0.41",
+        "lot_id": "a0a9fc28-8cee-4034-a373-6dd7c504b1d5",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "HDFCBANK.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "14",
+        "buy_price": "753.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.58",
+        "other_costs": "0.38",
+        "lot_id": "fb632fee-fe45-4d4b-bd59-21dcc98b4ce9",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "BANKBARODA.NS",
+        "acquisition_date": "2026-08-03",
+        "quantity_original": "39",
+        "buy_price": "247.25",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.45",
+        "other_costs": "0.35",
+        "lot_id": "d723a53d-4435-4fb0-9cb7-f5541cc22394",
+        "broker_trade_id": null,
+        "quantity_remaining": "39"
+      },
+      {
+        "ticker": "VBL.NS",
+        "acquisition_date": "2026-08-04",
+        "quantity_original": "10",
+        "buy_price": "439.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.66",
+        "other_costs": "0.15",
+        "lot_id": "a4c5f9a0-1dd5-484a-a796-b4467a7acf16",
+        "broker_trade_id": null,
+        "quantity_remaining": "10"
+      },
+      {
+        "ticker": "ONGC.NS",
+        "acquisition_date": "2026-08-04",
+        "quantity_original": "18",
+        "buy_price": "242.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.65",
+        "other_costs": "0.15",
+        "lot_id": "7ffab769-c727-4fed-8e5b-2f1a9b07e454",
+        "broker_trade_id": null,
+        "quantity_remaining": "18"
+      },
+      {
+        "ticker": "RELIANCE.NS",
+        "acquisition_date": "2026-08-04",
+        "quantity_original": "1",
+        "buy_price": "1290.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.19",
+        "other_costs": "0.05",
+        "lot_id": "878a4c4d-28be-4ad3-aaa6-00d833b09637",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
+        "ticker": "TATAPOWER.NS",
+        "acquisition_date": "2026-08-06",
+        "quantity_original": "11",
+        "buy_price": "378.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.62",
+        "other_costs": "0.14",
+        "lot_id": "6c07bdcf-5cb0-43a3-9d66-4d1ad5d18df2",
+        "broker_trade_id": null,
+        "quantity_remaining": "11"
+      }
+    ],
+    "ltcg_by_fy": {}
+  },
+  "history": [
+    {
+      "as_of": "2026-07-10",
+      "reason": "first deployment of capital",
+      "orders": [
+        {
+          "date": "2026-07-10",
+          "ticker": "APOLLOHOSP.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "8841.00",
+          "cost": "112.68",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "ASIANPAINT.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "2677.80",
+          "cost": "119.45",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "GRASIM.NS",
+          "side": "BUY",
+          "quantity": "12",
+          "price": "3213.60",
+          "cost": "122.87",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "SBIN.NS",
+          "side": "BUY",
+          "quantity": "38",
+          "price": "1036.00",
+          "cost": "125.45",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "SUNPHARMA.NS",
+          "side": "BUY",
+          "quantity": "20",
+          "price": "1935.50",
+          "cost": "123.34",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-07-10",
+      "reason": "deploy: weakness=elevated; deploy \u20b993,750 into: VEDL.NS (\u221265%), TRENT.NS (\u221247%), TCS.NS (\u221237%)",
+      "orders": [
+        {
+          "date": "2026-07-10",
+          "ticker": "VEDL.NS",
+          "side": "BUY",
+          "quantity": "69",
+          "price": "272.55",
+          "cost": "59.92",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "TRENT.NS",
+          "side": "BUY",
+          "quantity": "6",
+          "price": "2902.80",
+          "cost": "55.50",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "TCS.NS",
+          "side": "BUY",
+          "quantity": "7",
+          "price": "2069.00",
+          "cost": "46.14",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "INFY.NS",
+          "side": "BUY",
+          "quantity": "13",
+          "price": "1068.00",
+          "cost": "44.23",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "WIPRO.NS",
+          "side": "BUY",
+          "quantity": "73",
+          "price": "175.46",
+          "cost": "40.81",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "HCLTECH.NS",
+          "side": "BUY",
+          "quantity": "11",
+          "price": "1164.10",
+          "cost": "40.80",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "IRFC.NS",
+          "side": "BUY",
+          "quantity": "141",
+          "price": "89.90",
+          "cost": "40.39",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-10",
+          "ticker": "AMBUJACEM.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "436.45",
+          "cost": "1.39",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-07-10",
+      "reason": "drift 35.3% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-07-13",
+      "reason": "deploy: weakness=elevated; deploy \u20b928,125 into: VEDL.NS (\u221266%), TRENT.NS (\u221247%), IRFC.NS (\u221234%)",
+      "orders": [
+        {
+          "date": "2026-07-13",
+          "ticker": "HYUNDAI.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "1994.40",
+          "cost": "25.44",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-13",
+          "ticker": "ITC.NS",
+          "side": "BUY",
+          "quantity": "27",
+          "price": "279.65",
+          "cost": "24.05",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-13",
+          "ticker": "MAZDOCK.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "2402.60",
+          "cost": "22.97",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-13",
+          "ticker": "AMBUJACEM.NS",
+          "side": "BUY",
+          "quantity": "12",
+          "price": "432.15",
+          "cost": "16.53",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-13",
+          "ticker": "IRFC.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "89.75",
+          "cost": "0.28",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-07-14",
+      "reason": "deploy: weakness=elevated; deploy \u20b910,547 into: VEDL.NS (\u221266%), IRFC.NS (\u221234%), INFY.NS (\u221234%)",
+      "orders": [
+        {
+          "date": "2026-07-14",
+          "ticker": "HDFCLIFE.NS",
+          "side": "BUY",
+          "quantity": "7",
+          "price": "555.20",
+          "cost": "12.38",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-14",
+          "ticker": "JIOFIN.NS",
+          "side": "BUY",
+          "quantity": "15",
+          "price": "235.97",
+          "cost": "11.28",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-14",
+          "ticker": "HINDZINC.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "527.90",
+          "cost": "8.41",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-14",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "137.05",
+          "cost": "1.30",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-07-15",
+      "reason": "deploy: weakness=elevated; deploy \u20b98,789 into: VEDL.NS (\u221267%), INFY.NS (\u221235%), WIPRO.NS (\u221234%)",
+      "orders": [
+        {
+          "date": "2026-07-15",
+          "ticker": "LODHA.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "1162.40",
+          "cost": "11.10",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-15",
+          "ticker": "DLF.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "657.75",
+          "cost": "10.48",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-15",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "140.24",
+          "cost": "6.25",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-07-17",
+      "reason": "deploy: weakness=elevated; deploy \u20b95,493 into: VEDL.NS (\u221268%), WIPRO.NS (\u221234%), INFY.NS (\u221234%)",
+      "orders": [
+        {
+          "date": "2026-07-17",
+          "ticker": "JINDALSTEL.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "1025.00",
+          "cost": "6.53",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-17",
+          "ticker": "HINDALCO.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "944.15",
+          "cost": "6.02",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-17",
+          "ticker": "ETERNAL.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "286.60",
+          "cost": "4.56",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-07-17",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "141.69",
+          "cost": "0.44",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-03",
+      "reason": "deploy: weakness=elevated; deploy \u20b933,310 into: VEDL.NS (\u221266%), TRENT.NS (\u221245%), IRFC.NS (\u221232%)",
+      "orders": [
+        {
+          "date": "2026-08-03",
+          "ticker": "MUTHOOTFIN.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "2890.90",
+          "cost": "36.83",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "HDFCBANK.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "753.00",
+          "cost": "33.58",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "BANKBARODA.NS",
+          "side": "BUY",
+          "quantity": "39",
+          "price": "247.25",
+          "cost": "30.73",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "HDFCLIFE.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "553.10",
+          "cost": "3.53",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-03",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "143.70",
+          "cost": "0.91",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-04",
+      "reason": "deploy: weakness=elevated; deploy \u20b99,993 into: VEDL.NS (\u221266%), HDFCLIFE.NS (\u221232%), IRFC.NS (\u221232%)",
+      "orders": [
+        {
+          "date": "2026-08-04",
+          "ticker": "VBL.NS",
+          "side": "BUY",
+          "quantity": "10",
+          "price": "439.00",
+          "cost": "13.98",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-04",
+          "ticker": "ONGC.NS",
+          "side": "BUY",
+          "quantity": "18",
+          "price": "242.00",
+          "cost": "13.87",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-04",
+          "ticker": "RELIANCE.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "1290.90",
+          "cost": "4.11",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-04",
+      "reason": "drift 71.3% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-08-05",
+      "reason": "drift 71.5% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-08-06",
+      "reason": "deploy: weakness=elevated; deploy \u20b96,246 into: VEDL.NS (\u221265%), IRFC.NS (\u221232%), HDFCLIFE.NS (\u221232%)",
+      "orders": [
+        {
+          "date": "2026-08-06",
+          "ticker": "TATAPOWER.NS",
+          "side": "BUY",
+          "quantity": "11",
+          "price": "378.60",
+          "cost": "13.25",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-06",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "142.66",
+          "cost": "6.36",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-06",
+      "reason": "drift 79.3% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-08-07",
+      "reason": "drift 79.3% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-08-10",
+      "reason": "drift 79.5% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-08-11",
+      "reason": "drift 79.5% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-08-12",
+      "reason": "drift 79.3% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-08-13",
+      "reason": "drift 79.3% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-08-14",
+      "reason": "drift 79.4% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    }
+  ],
+  "last_target": {
+    "NTPC.NS": 0.15867312226374058,
+    "ONGC.NS": 0.17980143182577285,
+    "SUNPHARMA.NS": 0.18333333333333335,
+    "NESTLEIND.NS": 0.17330717611584912,
+    "TITAN.NS": 0.14964853881768386,
+    "SBIN.NS": 0.15523639764362024
+  },
+  "equity_curve": [
+    {
+      "date": "2026-07-10",
+      "equity": "292817.03",
+      "cash": "6.85"
+    },
+    {
+      "date": "2026-07-13",
+      "equity": "321023.82",
+      "cash": "31.08"
+    },
+    {
+      "date": "2026-07-14",
+      "equity": "329522.68",
+      "cash": "67.99"
+    },
+    {
+      "date": "2026-07-15",
+      "equity": "338706.83",
+      "cash": "89.91"
+    },
+    {
+      "date": "2026-07-16",
+      "equity": "338841.50",
+      "cash": "89.91"
+    },
+    {
+      "date": "2026-07-17",
+      "equity": "345241.77",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-20",
+      "equity": "348178.19",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-21",
+      "equity": "348012.21",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-22",
+      "equity": "345287.37",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-23",
+      "equity": "343837.76",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-24",
+      "equity": "343383.99",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-27",
+      "equity": "347975.89",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-28",
+      "equity": "349648.78",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-29",
+      "equity": "353451.55",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-30",
+      "equity": "354201.03",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-07-31",
+      "equity": "353477.89",
+      "cash": "52.53"
+    },
+    {
+      "date": "2026-08-03",
+      "equity": "392579.67",
+      "cash": "114.94"
+    },
+    {
+      "date": "2026-08-04",
+      "equity": "400824.36",
+      "cash": "39.06"
+    },
+    {
+      "date": "2026-08-05",
+      "equity": "401572.33",
+      "cash": "39.06"
+    },
+    {
+      "date": "2026-08-06",
+      "equity": "408792.25",
+      "cash": "103.22"
+    },
+    {
+      "date": "2026-08-07",
+      "equity": "410418.53",
+      "cash": "103.22"
+    },
+    {
+      "date": "2026-08-10",
+      "equity": "410517.38",
+      "cash": "103.22"
+    },
+    {
+      "date": "2026-08-11",
+      "equity": "407404.64",
+      "cash": "103.22"
+    },
+    {
+      "date": "2026-08-12",
+      "equity": "406730.41",
+      "cash": "103.22"
+    },
+    {
+      "date": "2026-08-13",
+      "equity": "405973.42",
+      "cash": "103.22"
+    },
+    {
+      "date": "2026-08-14",
+      "equity": "404387.39",
+      "cash": "103.22"
+    },
+    {
+      "date": "2026-08-17",
+      "equity": "401494.48",
+      "cash": "103.22"
+    }
+  ]
+}

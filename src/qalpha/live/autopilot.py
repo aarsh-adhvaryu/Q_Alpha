@@ -17,9 +17,12 @@ measuring whether acting on it helps is the whole point (see ``docs/PREREGISTRAT
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -165,11 +168,22 @@ class Book:
     cash: Decimal = Decimal("0")
     holdings: dict[str, int] = field(default_factory=dict)
     net_contributions: Decimal = Decimal("0")
+    # The day this book started measuring (PR-4 / T2.1). Without it a book's return is a number with
+    # no window, and two books started weeks apart get compared as though they covered the same
+    # period — which is exactly how one NIFTYBEES series came to look like two contradictory
+    # baselines (+0.98% and +3.92%, 28 days apart). Recoverable only from system_track.csv before.
+    start_date: date | None = None
 
-    def inject(self, amount: Decimal) -> None:
-        """Add fake cash (an external contribution, not a gain)."""
+    def inject(self, amount: Decimal, on: date | None = None) -> None:
+        """Add fake cash (an external contribution, not a gain).
+
+        The first injection stamps ``start_date`` when ``on`` is given — the book begins measuring
+        the day it is first funded, not the day the file happens to be created.
+        """
         self.cash += amount
         self.net_contributions += amount
+        if self.start_date is None and on is not None:
+            self.start_date = on
 
     def buy(self, ticker: str, qty: int, price: Decimal) -> None:
         """Buy whole shares with cash (no tax on buys). Raises if it can't afford it."""
@@ -196,20 +210,25 @@ class Book:
         return float(self.profit(prices) / self.net_contributions) * 100.0
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        out: dict[str, object] = {
             "name": self.name,
             "cash": str(self.cash),
             "holdings": dict(self.holdings),
             "net_contributions": str(self.net_contributions),
         }
+        if self.start_date is not None:
+            out["start_date"] = self.start_date.isoformat()
+        return out
 
     @classmethod
     def from_dict(cls, d: dict[str, object]) -> Book:
+        raw_start = d.get("start_date")
         return cls(
             name=str(d["name"]),
             cash=Decimal(str(d["cash"])),
             holdings=_int_map(d.get("holdings")),
             net_contributions=Decimal(str(d["net_contributions"])),
+            start_date=date.fromisoformat(str(raw_start)) if raw_start else None,
         )
 
 
@@ -384,6 +403,53 @@ def inject_all(books: dict[str, Book], amount: Decimal) -> None:
         books[n].inject(amount)
 
 
+# ---- fixed-notional baskets: making System − Shadow an ablation (PLAN_TRUST_REPAIR PR-7) ----------
+#
+# The pre-registration says the AI tilt changes deploy **size only**. It did not. Each book called the
+# advisor with its *own* portfolio and its *own* amount, and two mechanisms turned a size difference
+# into a composition difference: ``max_name_fraction`` filters candidates by ``price ≤ amount × 0.20``,
+# so a smaller deploy sees a smaller universe; and whole-share rounding drops different names at
+# different scales. Six weeks of that compounded into two different funds — 32 names vs 28, only 26
+# shared — and a "did the AI help?" signal of ₹1,541 sitting under ₹1,964 of one day's rounding noise.
+#
+# The fix: compute the day's basket **once**, at a fixed reference notional, against an empty book.
+# Both books then execute *that* basket, scaled. Composition is identical by construction, so the only
+# thing System − Shadow can measure is the thing the study is about.
+
+#: The notional the day's basket is computed at. Fixed and arbitrary — it must not track either
+#: book's size, or the amount-dependence this exists to remove creeps straight back in.
+REFERENCE_NOTIONAL = Decimal("100000")
+
+
+def scaled_basket(
+    reference: Mapping[str, int], amount: Decimal, notional: Decimal = REFERENCE_NOTIONAL
+) -> dict[str, int]:
+    """Scale a reference basket's whole-share quantities to ``amount``.
+
+    Truncating (not rounding) keeps the executed value at or below the scaled target, which matters
+    because ``Portfolio.buy`` is cash-capped — a rounded-up order would silently shrink and reintroduce
+    the amount-dependence. Names that scale below one whole share come back as ``0`` rather than being
+    dropped here, so the caller can see them and make a *symmetric* decision about both books.
+    """
+    if notional <= 0 or amount <= 0:
+        return dict.fromkeys(reference, 0)
+    scale = amount / notional
+    return {t: int(Decimal(q) * scale) for t, q in reference.items()}
+
+
+def common_basket(*baskets: Mapping[str, int]) -> set[str]:
+    """The names every book can actually buy at its own size — the executable intersection.
+
+    Dropping a name from *one* book because it rounded to zero there is precisely how composition
+    drifted apart. Deciding it once, across all books, is what makes the difference between them
+    purely a matter of size.
+    """
+    if not baskets:
+        return set()
+    sets = [{t for t, q in b.items() if q > 0} for b in baskets]
+    return set.intersection(*sets) if sets else set()
+
+
 # Pending manual injections queued by the dashboard's Add-money button. Because the dashboard (Streamlit
 # Cloud) and the daily runner (GitHub Actions) are different machines, the button writes here IN THE REPO
 # (via the GitHub API); the runner applies + clears them, staying the sole writer of ``books.json``.
@@ -401,45 +467,127 @@ def load_pending(path: Path = PENDING_PATH) -> list[dict[str, object]]:
     return data if isinstance(data, list) else []
 
 
+def entry_id(item: Mapping[str, object]) -> str:
+    """A stable identity for one queued deposit.
+
+    The queue is written by the Streamlit host and read by the Actions runner — two machines, no
+    lock — so an entry has to be identifiable by *content*, not by its position in a list. Entries
+    queued before ids existed get a deterministic hash of their own fields, so the same legacy entry
+    always resolves to the same id and can still be claimed exactly once.
+    """
+    existing = item.get("id")
+    if existing:
+        return str(existing)
+    raw = f"{item.get('at', '')}|{item.get('amount', '0')}|{item.get('reason', '')}"
+    return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
+
+
+@dataclass(frozen=True)
+class AppliedInjection:
+    """One deposit the runner has credited to the books but not yet durably saved."""
+
+    entry_id: str
+    amount: Decimal
+    reason: str
+
+
 def clear_pending(path: Path = PENDING_PATH) -> None:
-    """Empty the queue after the runner has applied it."""
+    """Empty the whole queue. **Prefer :func:`clear_applied`** — this truncates unconditionally and
+    will destroy anything queued since the runner last read the file. Kept for tests and recovery."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("[]\n", encoding="utf-8")
 
 
+def clear_applied(applied: Sequence[AppliedInjection], path: Path = PENDING_PATH) -> int:
+    """Remove **only** the entries the runner actually applied; return how many survived.
+
+    The bug this closes (T3.2): the runner used to truncate the queue to ``[]`` after reading it, so a
+    deposit queued by the dashboard between the read and the write was **destroyed unread** — the same
+    failure family as the ₹50k lost in July. Re-reading here is what makes that safe: entries that
+    arrived in the meantime are unknown to ``applied``, so they are written back and picked up on the
+    next run instead of vanishing.
+
+    Call this **after** the books are persisted. Clearing first meant a crash anywhere in the long
+    deploy/gate/mark pipeline that follows left the queue empty and the money never credited — a
+    strictly worse outcome than a deposit applied twice.
+    """
+    claimed = {a.entry_id for a in applied}
+    survivors = [item for item in load_pending(path) if entry_id(item) not in claimed]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(survivors, indent=2) + "\n", encoding="utf-8")
+    return len(survivors)
+
+
 def apply_pending(
     books: dict[str, Book], path: Path = PENDING_PATH
-) -> tuple[Decimal, list[tuple[Decimal, str]]]:
-    """Deposit every queued injection into all three books and clear the queue. Returns the total
-    applied (₹0 if the queue was empty) **and** the entries the caller must hand to
-    :func:`log_manual_injection` *after* it has persisted the books.
+) -> tuple[Decimal, list[AppliedInjection]]:
+    """Deposit every queued injection into all three books. Returns the total applied (₹0 if the
+    queue was empty) and the claimed entries.
 
-    Logging deliberately does NOT happen here — see :func:`log_manual_injection` for why the audit
-    entry has to be written after the money is durable, not before.
+    **Does not clear the queue** — the caller must call :func:`clear_applied` once the books are
+    durably saved, and :func:`log_manual_injection` for the audit trail. Both orderings are
+    load-bearing: see those functions for the money that was lost learning it.
     """
-    pending = load_pending(path)
     total = Decimal("0")
-    applied: list[tuple[Decimal, str]] = []
-    for item in pending:
+    applied: list[AppliedInjection] = []
+    for item in load_pending(path):
         amt = Decimal(str(item.get("amount", "0")))
         if amt > 0:
             inject_all(books, amt)
-            applied.append((amt, str(item.get("reason", "(from dashboard)"))))
+            applied.append(
+                AppliedInjection(
+                    entry_id=entry_id(item),
+                    amount=amt,
+                    reason=str(item.get("reason", "(from dashboard)")),
+                )
+            )
             total += amt
-    if pending:
-        clear_pending(path)
     return total, applied
 
 
-def log_manual_injection(amount: Decimal, reason: str, path: Path = MANUAL_LOG_PATH) -> None:
+def log_manual_injection(
+    amount: Decimal,
+    reason: str,
+    path: Path = MANUAL_LOG_PATH,
+    *,
+    entry_id: str | None = None,
+) -> bool:
     """Append a discretionary top-up (amount + the user's stated reason) for honesty/audit.
 
+    Returns whether an entry was written. **Append-once**: given an ``entry_id`` already present in
+    the log, this is a no-op. That is what makes the audit trail idempotent under the re-runs the
+    daily cron actually performs — re-logging the same queue entry on each pass is how the log came
+    to claim ₹440,500 against ₹200,000 truly injected, a drift of ₹240,500 across 2026-07-12 →
+    2026-08-12. The duplicate pairs are still visible in the log, timestamped minutes apart.
+
     **Call this only after the deposit has been persisted** (``save_state``/``save_books``). This
-    file is an audit record, so a phantom entry is worse than a missing one: writing it up-front —
-    as the runner used to, before the deploy/gate/mark pipeline that follows — meant any crash in
-    that pipeline left the log claiming money the books never received. Between 2026-07-12 and
-    2026-08-12 that overstated the log by ₹240,500 against a true ₹200,000 of injections.
-    :func:`manual_log_drift` measures exactly that gap.
+    file is an audit record, so a phantom entry is worse than a missing one: writing it up-front
+    meant any crash in the pipeline that follows left the log claiming money the books never got.
+    """
+    from datetime import datetime
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    log = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    if entry_id is not None and any(str(e.get("id", "")) == entry_id for e in log):
+        return False  # already recorded — the cron re-ran, the money did not arrive twice
+    record: dict[str, str] = {
+        "at": datetime.now().isoformat(timespec="seconds"),
+        "amount": str(amount),
+        "reason": reason,
+    }
+    if entry_id is not None:
+        record["id"] = entry_id
+    log.append(record)
+    path.write_text(json.dumps(log, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
+def log_correction(amount: Decimal, note: str, path: Path = MANUAL_LOG_PATH) -> None:
+    """Append a signed correction to the audit log — never rewrite or delete an existing entry.
+
+    The log over-counted by ₹240,500 and the honest repair is not to quietly drop the duplicate rows:
+    they are evidence of what the runner did. A correction entry brings the *total* back to the truth
+    while leaving the erroneous history legible, which is what an audit trail is for.
     """
     from datetime import datetime
 
@@ -449,7 +597,8 @@ def log_manual_injection(amount: Decimal, reason: str, path: Path = MANUAL_LOG_P
         {
             "at": datetime.now().isoformat(timespec="seconds"),
             "amount": str(amount),
-            "reason": reason,
+            "reason": note,
+            "kind": "correction",
         }
     )
     path.write_text(json.dumps(log, indent=2) + "\n", encoding="utf-8")

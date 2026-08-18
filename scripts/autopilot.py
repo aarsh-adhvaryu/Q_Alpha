@@ -29,23 +29,37 @@ import argparse
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
 
-from qalpha.backtest.portfolio import TradeRecord
+from qalpha.backtest.portfolio import Portfolio, TradeRecord
 from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
 from qalpha.data.prices import PriceData
+from qalpha.live.ai_brief import (
+    Candidate,
+    NameVerdict,
+    generate_verdicts,
+    survivors,
+    verdicts_note,
+)
 from qalpha.live.autopilot import (
+    LEDGER_PATH,
+    REFERENCE_NOTIONAL,
+    STATE_PATH,
+    AppliedInjection,
     Book,
     Decision,
     ai_hit_rate,
     basket_value,
     book_deploy_amount,
+    clear_applied,
     clear_pending,
+    common_basket,
     load_ledger,
     load_pending,
     load_state,
@@ -57,12 +71,15 @@ from qalpha.live.autopilot import (
     resolve_decision,
     save_ledger,
     save_state,
+    scaled_basket,
     signal_tilt,
 )
 from qalpha.live.dashboard import watchlist_is_stale
-from qalpha.live.deploy import advise_deploy_into_weakness, market_weakness
+from qalpha.live.deploy import advise_deploy_into_weakness, cheapness_scores, market_weakness
 from qalpha.live.hedge import apply_futures_hedge, hedge_active, stress_gauge
 from qalpha.live.paper import PaperBook, StrategyParams
+from qalpha.live.position_health import position_health
+from qalpha.live.price_integrity import excluded_from_tilt, rebase_starts, unexplained_gaps
 
 sys.path.insert(0, str(Path(__file__).parent))
 from paper import (
@@ -81,6 +98,7 @@ WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
 WATCHLIST_PARQUET = Path("data/historical/prices_watchlist.parquet")
 BRIEF_MD = Path("reports/ai_brief.md")
 DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
+VERDICT_MD = Path("reports/ai_verdicts.md")  # PR-8: the AI's per-name keep/drop sheet (fake money)
 
 # The System book = the former smart-rebalance book, upgraded (same file → its ₹2L history carries
 # over). ADAPTIVE cadence: the funnel is evaluated every run; the §4.6 gate decides if a trade is
@@ -235,25 +253,36 @@ def _persist_trio_state(
     state["contributed"] = {k: str(v) for k, v in contributed.items()}
 
 
-def _log_applied(applied: list[tuple[Decimal, str]]) -> None:
-    """Write the audit entries for deposits that are now durably saved.
+def _log_applied(applied: list[AppliedInjection]) -> None:
+    """Write the audit entries for deposits that are now durably saved, then release the queue.
 
-    Called **after** ``save_state`` on every exit path, never before: the log is an audit record, so
-    an entry for money the books never received is worse than no entry at all.
+    Called **after** ``save_state`` on every exit path, never before, and in this order:
+    persist → log (append-once, keyed on the entry id) → clear only what was applied. Each step is a
+    lesson: an entry for money the books never received is worse than none; re-logging on a re-run is
+    what drifted the log by ₹240,500; and truncating the queue destroys anything the dashboard
+    queued in the meantime.
     """
-    for amount, reason in applied:
-        log_manual_injection(amount, reason)
+    for item in applied:
+        log_manual_injection(item.amount, item.reason, entry_id=item.entry_id)
+    left = clear_applied(applied)
+    if left:
+        print(f"[system] {left} deposit(s) queued during this run — left for the next pass.")
 
 
 def _report_log_drift(contributed: dict[str, Decimal]) -> None:
-    """Surface (never silently fix) any gap between the audit log and the money actually credited."""
+    """Surface (never silently fix) any gap between the audit log and the money actually credited.
+
+    A print in a cron log is not a report — nobody reads it. The dashboard shows the same number as a
+    banner (``live/dashboard.py:injection_drift_markdown``), which is where the user would actually
+    see it.
+    """
     injected = contributed.get("system", SYSTEM_CAPITAL) - SYSTEM_CAPITAL
     drift = manual_log_drift(injected)
     if drift != 0:
         print(
             f"[system] ⚠️ manual-injection log drift ₹{drift:,.0f} "
             f"(log ₹{manual_log_total():,.0f} vs ₹{injected:,.0f} actually credited) — "
-            "the log over-counts pre-2026-08-12 phantom entries; state.json is the truth."
+            "state.json is the truth; append a correction with `log_correction`."
         )
 
 
@@ -262,14 +291,15 @@ def _inject_trio(
     wallets: dict[str, Decimal],
     contributed: dict[str, Decimal],
     baseline: Book,
+    on: date | None = None,
 ) -> None:
     """Deposit the SAME fake cash into all three (system/shadow wallets + baseline) so no top-up can
-    ever bias the relative verdict."""
+    ever bias the relative verdict. ``on`` stamps the baseline's start date on its first funding."""
     wallets["system"] += amount
     wallets["shadow"] += amount
     contributed["system"] += amount
     contributed["shadow"] += amount
-    baseline.inject(amount)
+    baseline.inject(amount, on)
 
 
 # ---- acting on the system's own advice --------------------------------------------------------------
@@ -287,43 +317,108 @@ def _record_dict(r: TradeRecord) -> dict[str, str]:
     }
 
 
-def _deploy_from_wallet(
-    bk: PaperBook,
-    amount: Decimal,
+def _name_verdicts(
+    basket: Mapping[str, int],
+    sectors: Mapping[str, str],
+    prices: PriceData,
+    as_of: date,
+) -> tuple[dict[str, NameVerdict], str, dict[str, int]]:
+    """Ask the AI for a keep/drop call on the deterministic basket (PR-8). Fail-soft to keep-all.
+
+    The candidates carry the *deterministic* facts — cheapness (continuity-corrected), the §4.7
+    breakdown verdict, the 6-month return — so the model reasons about company-specific news rather
+    than re-deriving numbers the engine already owns. The `ai` extra is optional, so the import is
+    lazy: without it (or without a key) this returns no verdicts and every name is kept.
+    """
+    if not basket:
+        return {}, "", {}
+    tickers = sorted(basket)
+    gaps = unexplained_gaps(prices.adj_close, tickers, as_of)
+    cheap = cheapness_scores(
+        prices, tickers, as_of, rebase_from=rebase_starts(gaps), no_tilt=excluded_from_tilt(gaps)
+    )
+    health = {h.ticker: h for h in position_health(prices.adj_close, tickers, as_of).holdings}
+    candidates = [
+        Candidate(
+            ticker=t,
+            sector=str(sectors.get(t, "?")),
+            cheapness=cheap.get(t, 0.0),
+            health=health[t].level if t in health else "unknown",
+            trailing_return=health[t].trailing_return if t in health else 0.0,
+        )
+        for t in tickers
+    ]
+    return generate_verdicts(candidates)
+
+
+def _reference_basket(
+    cfg: Config,
     watchlist: list[str],
     wl_sectors: dict[str, str],
     merged: PriceData,
     nifbees: pd.Series,
     as_of: date,
-) -> tuple[dict[str, int], str]:
-    """Move ``amount`` from the wallet into the book and execute the Add-money advisor's buy list on
-    it — the system acting on its own advice. Whole shares; ``Portfolio.buy`` is cash-capped, so an
-    unaffordable order simply shrinks/skips. Leftover stays as book cash (the §4.6 gate's §2.9
-    idle-cash routing consolidates it at the next worthwhile rebalance)."""
-    bk.portfolio.cash += amount
+) -> tuple[dict[str, int], dict[str, Decimal], str]:
+    """The day's basket, computed **once** at a fixed notional against an **empty** book (PR-7).
+
+    Both the empty book and the fixed notional matter. Computing against each book's own portfolio
+    made the target depend on what that book already held; computing at each book's own amount made
+    the candidate universe depend on how much it was deploying (``max_name_fraction`` filters on
+    ``price ≤ amount × 0.20``). Either one turns a size difference into a composition difference,
+    which is what voided the first six weeks of the study.
+
+    Returns ``(quantities, prices, rationale)`` — the reference share counts, the prices they were
+    struck at, and the human-readable reason, shared by every book.
+    """
+    ref = Portfolio(cfg.cost, cfg.tax, cash=REFERENCE_NOTIONAL)
     advice = advise_deploy_into_weakness(
-        bk.portfolio, amount, watchlist, wl_sectors, merged, nifbees, as_of, max_names=15
+        ref, REFERENCE_NOTIONAL, watchlist, wl_sectors, merged, nifbees, as_of, max_names=15
     )
+    quantities: dict[str, int] = {}
+    prices: dict[str, Decimal] = {}
+    for order in advice.deploy.buy_orders:
+        qty = int(order.quantity)
+        if qty > 0:
+            quantities[order.ticker] = quantities.get(order.ticker, 0) + qty
+            prices[order.ticker] = Decimal(str(order.price))
+    top = ", ".join(f"{t} (−{p * 100:.0f}%)" for t, p in advice.cheapest[:3])
+    return quantities, prices, f"weakness={advice.weakness.level}; basket: {top}"
+
+
+def _execute_basket(
+    bk: PaperBook,
+    amount: Decimal,
+    quantities: Mapping[str, int],
+    prices: Mapping[str, Decimal],
+    rationale: str,
+    as_of: date,
+) -> dict[str, int]:
+    """Move ``amount`` from the wallet into the book and buy exactly ``quantities``.
+
+    The ticker set is decided by the caller across **all** books at once, so it is identical here by
+    construction; only the share counts differ. ``Portfolio.buy`` is cash-capped, so an unaffordable
+    order shrinks or skips rather than overdrawing. Leftover stays as book cash (the §4.6 gate's §2.9
+    idle-cash routing consolidates it at the next worthwhile rebalance).
+    """
+    bk.portfolio.cash += amount
     basket: dict[str, int] = {}
     records: list[TradeRecord] = []
-    for order in advice.deploy.buy_orders:
-        qty = Decimal(int(order.quantity))
+    for ticker in sorted(quantities):
+        qty = int(quantities[ticker])
         if qty <= 0:
             continue
-        rec = bk.portfolio.buy(as_of, order.ticker, qty, Decimal(str(order.price)))
+        rec = bk.portfolio.buy(as_of, ticker, Decimal(qty), prices[ticker])
         if rec is not None:
             records.append(rec)
             basket[rec.ticker] = basket.get(rec.ticker, 0) + int(rec.quantity)
-    top = ", ".join(f"{t} (−{p * 100:.0f}%)" for t, p in advice.cheapest[:3])
-    rationale = f"weakness={advice.weakness.level}; deploy ₹{amount:,.0f} into: {top}"
     bk.history.append(
         {
             "as_of": as_of.isoformat(),
-            "reason": f"deploy: {rationale}",
+            "reason": f"deploy: {rationale} (₹{amount:,.0f})",
             "orders": [_record_dict(r) for r in records],
         }
     )
-    return basket, rationale
+    return basket
 
 
 def _buy_and_hold(book: Book, price: Decimal) -> None:
@@ -428,6 +523,7 @@ def _render_report(
     today_notes: list[str],
     hedge: dict[str, float] | None,
     core_hedge: dict[str, float] | None = None,
+    start_date: date | None = None,
 ) -> str:
     n_days = len(pd.read_csv(SYSTEM_TRACK_CSV)) if SYSTEM_TRACK_CSV.exists() else 0
     worked, total = ai_hit_rate(ledger, book="SYS")
@@ -436,13 +532,20 @@ def _render_report(
         "shadow": "System, AI off (the attribution twin)",
         "baseline": "Everything into NIFTYBEES (do-nothing baseline)",
     }
+    # T2.1/T2.2 — every number on this page carries its basis and its window. All three books run
+    # identical cash flows over the same window, so one window line covers the table.
+    window = f"{start_date} → {as_of}" if start_date else f"through {as_of}"
+    basis_suffix = " (vs money put in)"
     lines = [
         "# The System book — the whole system acting on its own advice",
         "",
         f"_As of **{as_of}** · {n_days} marks · market weakness: **{level}** · AI: {sig} · "
         "**fake money, no real orders**._",
         "",
-        "| Book | What it is | Value | Contributed | Profit | Return |",
+        f"**Window: {window}** — all three books, identical cash flows. Every return below is "
+        "measured **against money put in** unless a line says otherwise.",
+        "",
+        f"| Book | What it is | Value | Contributed | Profit | Return{basis_suffix} |",
         "|---|---|---:|---:|---:|---:|",
     ]
     for key in ("system", "shadow", "baseline"):
@@ -471,6 +574,13 @@ def _render_report(
             "## 🛡 Downside protection — the tax-free hedge overlay",
             "",
         ]
+        lines += [
+            "_These returns use a **different basis** from the table above: they are measured on "
+            "**capital actually invested** (wallet→book transfers are stripped out, since moving "
+            "your own cash is not a gain). A gap between the two is **cash drag** — money waiting in "
+            "the wallet — not a disagreement about what the book is worth._",
+            "",
+        ]
         if hedge is not None:
             hstate = "🛡️ HEDGE ON" if hedge["hedge_on"] else "hedge off (calm)"
             lines += [
@@ -487,6 +597,20 @@ def _render_report(
                 f"**−{float(core_hedge['hedged_dd']):.1f}%** vs "
                 f"**−{float(core_hedge['unhedged_dd']):.1f}%**",
             ]
+        if hedge is not None:
+            contributed_pct = float(rows["system"]["return_pct"])
+            deployed_pct = float(hedge["unhedged_return"])
+            gap = deployed_pct - contributed_pct
+            if abs(gap) >= 0.005:
+                lines += [
+                    "",
+                    f"> **Why the System book shows {contributed_pct:+.2f}% above and "
+                    f"{deployed_pct:+.2f}% here:** both are correct. The first counts every rupee "
+                    f"contributed from the day it arrived; the second counts only what was actually "
+                    f"at work. The **{gap:+.2f}pp** difference is **cash drag** — undeployed cash "
+                    "earning nothing. Worth watching: it is currently larger than the "
+                    "System−Shadow difference this study is trying to measure.",
+                ]
         lines += [
             "",
             "> Keep the shares (₹0 capital-gains tax), short Nifty futures while systemic stress is "
@@ -543,7 +667,7 @@ def cmd_daily() -> int:
 
     # Baseline seeds its ₹2L at its first run (start-offset caveat is disclosed in the report).
     if not state.get("baseline_seeded"):
-        baseline.inject(SYSTEM_CAPITAL)
+        baseline.inject(SYSTEM_CAPITAL, as_of)
         state["baseline_seeded"] = True
 
     # Add-money queued from the dashboard — ALWAYS applied (even on an already-marked day) so a
@@ -591,23 +715,76 @@ def cmd_daily() -> int:
 
     # 1) Deploy idle wallet cash — the system acting on its own Add-money advice (AI-paced for the
     #    system, neutral for the shadow).
-    for key, bk, use_ai in (("system", system, True), ("shadow", shadow, False)):
-        amt = book_deploy_amount(wallets[key], level, signal, ai=use_ai)
-        if amt < DEPLOY_FLOOR:
-            continue
-        wallets[key] -= amt
-        flows.setdefault(key, {})
-        flows[key][as_of_str] = str(Decimal(flows[key].get(as_of_str, "0")) + amt)
-        basket, rationale = _deploy_from_wallet(
-            bk, amt, watchlist, wl_sectors, merged, nifbees, as_of
+    # ONE basket, ONE size, for both books (PR-7 + PR-8).
+    #
+    # PR-7 fixed composition: the ticker set is decided once, across both books, so a size difference
+    # can never become a composition difference. PR-8 goes further and **retires the AI size tilt**:
+    # both books now deploy the identical amount. That is forced by the experiment, not incidental —
+    # with the AI stubbed to "keep everything" the two baskets must come out byte-identical, which
+    # cannot hold if the tilt is still moving one book's quantities.
+    #
+    # So run 3 tests exactly one treatment: the AI's per-name keep/drop verdict. One knob at a time.
+    neutral = book_deploy_amount(wallets["shadow"], level, None, ai=False)
+    amounts = {"system": neutral, "shadow": neutral}
+    if any(a >= DEPLOY_FLOOR for a in amounts.values()):
+        ref_qty, ref_prices, rationale = _reference_basket(
+            cfg, watchlist, wl_sectors, merged, nifbees, as_of
         )
-        if basket:
-            book_tag = "SYS" if key == "system" else "SHD"
-            ai_note = sig_desc if use_ai else "n/a (AI off)"
-            ledger.append(
-                Decision(as_of_str, book_tag, str(amt), basket, rationale, ai_note, resolve_on)
+        scaled = {k: scaled_basket(ref_qty, amounts[k]) for k in amounts}
+        tradable = common_basket(*scaled.values())
+        deterministic = {t: q for t, q in scaled["shadow"].items() if t in tradable}
+
+        # PR-8 — the AI's ONE lever: a keep/drop verdict per candidate, applied to the System book
+        # only. It cannot add a name (parse_verdicts discards anything outside this universe), cannot
+        # change a quantity (survivors filters, never rescales), and cannot fail closed (no verdict,
+        # no key, no response → the name is kept, i.e. exactly the Shadow book). Fake money only.
+        verdicts, verdict_raw, verdict_usage = _name_verdicts(
+            deterministic, wl_sectors, merged, as_of
+        )
+        kept = survivors(deterministic, verdicts)
+        if verdicts:
+            today_notes.append(verdicts_note(verdicts, deterministic))
+        if verdict_raw:
+            VERDICT_MD.parent.mkdir(parents=True, exist_ok=True)
+            VERDICT_MD.write_text(
+                f"# AI name verdicts — {as_of_str}\n\n"
+                f"_{len(verdicts)} parsed · {len(deterministic) - len(kept)} dropped · "
+                f"model tokens in/out {verdict_usage.get('input', 0)}/"
+                f"{verdict_usage.get('output', 0)}. Fake money only._\n\n"
+                f"{verdict_raw}\n",
+                encoding="utf-8",
             )
-            today_notes.append(f"**{key}** deployed ₹{amt:,.0f} — {rationale}")
+
+        for key, bk, basket_for_book in (
+            ("system", system, kept),
+            ("shadow", shadow, deterministic),
+        ):
+            amt = amounts[key]
+            if amt < DEPLOY_FLOOR or not tradable:
+                continue
+            wallets[key] -= amt
+            flows.setdefault(key, {})
+            flows[key][as_of_str] = str(Decimal(flows[key].get(as_of_str, "0")) + amt)
+            basket = _execute_basket(
+                bk,
+                amt,
+                basket_for_book,
+                ref_prices,
+                rationale,
+                as_of,
+            )
+            if basket:
+                book_tag = "SYS" if key == "system" else "SHD"
+                dropped = len(deterministic) - len(kept)
+                ai_note = (
+                    f"name-verdict: {dropped} dropped of {len(deterministic)}"
+                    if key == "system"
+                    else "n/a (AI off)"
+                )
+                ledger.append(
+                    Decision(as_of_str, book_tag, str(amt), basket, rationale, ai_note, resolve_on)
+                )
+                today_notes.append(f"**{key}** deployed ₹{amt:,.0f} — {rationale}")
 
     # 2) Adaptive rebalance — evaluated EVERY run; the §4.6 tax-benefit gate decides. Real-world
     #    responsive, never calendar-forced. May consolidate earlier opportunistic buys into the core
@@ -666,7 +843,17 @@ def cmd_daily() -> int:
     )
     DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_MD.write_text(
-        _render_report(as_of_str, rows, ledger, level, sig_desc, today_notes, hedge, core_hedge),
+        _render_report(
+            as_of_str,
+            rows,
+            ledger,
+            level,
+            sig_desc,
+            today_notes,
+            hedge,
+            core_hedge,
+            start_date=baseline.start_date,
+        ),
         encoding="utf-8",
     )
 
@@ -681,6 +868,118 @@ def cmd_daily() -> int:
     print(
         f"[system] marked {as_of_str}: "
         + " · ".join(f"{k} ₹{rows[k]['value']:,.0f} ({rows[k]['return_pct']:+.2f}%)" for k in rows)
+    )
+    return 0
+
+
+ARCHIVE_DIR = Path("data/autopilot/archive")
+
+
+def cmd_reseed(as_of_str: str | None = None) -> int:
+    """Archive the confounded first run and restart System / Shadow / Baseline at ground zero (PR-7).
+
+    **Why a restart rather than a fallback.** The first run (2026-07-10 →) cannot answer its own
+    question: the two books hold different names (32 vs 28, 26 shared), so System − Shadow compares
+    two funds rather than isolating the AI, and both already hold VEDL and TRENT bought at prices that
+    PR-2 showed were corporate-action artifacts. No amount of later data fixes a contaminated basket.
+
+    **Archived, not deleted.** The run is a pre-registered study and its result is a published
+    negative — the honest first result is "this design could not measure what it set out to". Its data
+    stays committed under ``data/autopilot/archive/``.
+
+    **The GO book is not touched.** ``data/paper/book.json`` and its criterion-6 clock keep running;
+    pillar 1 continues to accrue on the existing marks. Only the fake-money System/Shadow/Baseline
+    experiment restarts.
+    """
+    as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
+    cfg = Config()
+    state = load_state()
+    contributed = _contributed(state)
+    total = max(contributed.values()) if contributed else SYSTEM_CAPITAL
+
+    # 1) Archive everything that carries the old run's history.
+    dest = ARCHIVE_DIR / f"forward_run_1_{FORWARD_START}_to_{as_of.isoformat()}"
+    dest.mkdir(parents=True, exist_ok=True)
+    archived: list[str] = []
+    for src in (
+        SYSTEM_BOOK_PATH,
+        SHADOW_BOOK_PATH,
+        BASELINE_PATH,
+        SYSTEM_TRACK_CSV,
+        FLOWS_PATH,
+        LEDGER_PATH,
+        STATE_PATH,
+    ):
+        if src.exists():
+            (dest / src.name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+            archived.append(src.name)
+    print(f"[reseed] archived {len(archived)} files → {dest}")
+
+    # 2) Ground zero. Identical cash flows by construction: the whole contributed balance sits in
+    #    each wallet on day one, so neither book gets a head start, and the baseline holds the same
+    #    rupees in NIFTYBEES.
+    for path in (SYSTEM_BOOK_PATH, SHADOW_BOOK_PATH):
+        path.unlink(missing_ok=True)
+    PaperBook.init(
+        SYSTEM_BOOK_PATH,
+        cfg,
+        starting_capital=Decimal("0"),  # every rupee arrives as a logged wallet→book flow
+        start_date=as_of,
+        params=StrategyParams(tax_aware=True, force_refresh=False, rebalance_freq="ADAPTIVE"),
+    )
+    SHADOW_BOOK_PATH.write_text(SYSTEM_BOOK_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+
+    baseline = Book(name="BASE")
+    baseline.inject(total, as_of)
+    _save_baseline(baseline)
+
+    SYSTEM_TRACK_CSV.unlink(missing_ok=True)
+    _save_flows({})
+    save_ledger([])
+
+    state["wallets"] = {"system": str(total), "shadow": str(total)}
+    state["contributed"] = {"system": str(total), "shadow": str(total)}
+    state["baseline_seeded"] = True
+    state["system_last_marked"] = None
+    state["reseeded_on"] = as_of.isoformat()
+    state["reseed_reason"] = (
+        "PLAN_TRUST_REPAIR.md PR-7 — run 1 was confounded (divergent composition + "
+        "corporate-action artifacts in both books); archived as a published negative."
+    )
+    save_state(state)
+
+    # The committed scoreboard still renders the VOID run's numbers until the first mark of run 2.
+    # Leaving it would show the dashboard a result the pre-registration has just retracted, which is
+    # the same "stale artifact presented as current" failure the freshness work exists to prevent.
+    DASHBOARD_MD.write_text(
+        "# The System book — **run 2 has not started yet**\n\n"
+        f"_Re-seeded at ground zero on **{as_of}** (PLAN_TRUST_REPAIR.md PR-7). "
+        "The first mark lands on the next weekday run._\n\n"
+        "**Forward run 1 (2026-07-10 → 2026-08-14) is VOID** and is published as a negative: its two "
+        "books drifted into different compositions, so System − Shadow compared two funds instead of "
+        "isolating the AI, and both held names bought on corporate-action price artifacts. Full "
+        "write-up: [`reports/FORWARD_RUN_1_VOID.md`](FORWARD_RUN_1_VOID.md). Its data is archived "
+        "under `data/autopilot/archive/`, not deleted.\n\n"
+        "| Book | What it is | Value | Contributed | Profit | Return (vs money put in) |\n"
+        "|---|---|---:|---:|---:|---:|\n"
+        f"| **system** | 🧠 System — deploys on its own advice (AI-paced) | ₹{total:,.0f} | "
+        f"₹{total:,.0f} | ₹0 | +0.00% |\n"
+        f"| **shadow** | System, AI off (the attribution twin) | ₹{total:,.0f} | "
+        f"₹{total:,.0f} | ₹0 | +0.00% |\n"
+        f"| **baseline** | Everything into NIFTYBEES (do-nothing baseline) | ₹{total:,.0f} | "
+        f"₹{total:,.0f} | ₹0 | +0.00% |\n\n"
+        "- **System − Baseline** (does the whole system beat doing nothing?): **₹0**\n"
+        "- **System − Shadow** (does the AI add value?): **₹0**\n\n"
+        "All three start from identical cash flows. From run 2 on, the day's basket is computed once "
+        "at a fixed notional and **both books trade the identical ticker set** — only size differs, "
+        "which is the only thing the AI is allowed to change.\n\n"
+        "**The validated ₹2L GO book is untouched** — its criterion-6 clock never stopped.\n",
+        encoding="utf-8",
+    )
+
+    print(
+        f"[reseed] ground zero {as_of}: System / Shadow wallets ₹{total:,.0f} each, "
+        f"Baseline ₹{total:,.0f} into NIFTYBEES. GO book untouched."
     )
     return 0
 
@@ -713,6 +1012,11 @@ def main(argv: list[str] | None = None) -> int:
         "daily", help="the cron entry point: fund + deploy + gate-rebalance + mark + report"
     )
     sub.add_parser("status", help="print the recent track record")
+    p_re = sub.add_parser(
+        "reseed",
+        help="archive the current forward run and restart System/Shadow/Baseline at ground zero",
+    )
+    p_re.add_argument("--as-of", default=None, help="restart date (default: today)")
     p_inj = sub.add_parser("inject", help="manual top-up into all three books")
     p_inj.add_argument("amount", type=Decimal)
     p_inj.add_argument("--reason", default="(unspecified)")
@@ -720,6 +1024,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "daily":
         return cmd_daily()
+    if args.cmd == "reseed":
+        return cmd_reseed(args.as_of)
     if args.cmd == "status":
         return cmd_status()
     if args.cmd == "inject":

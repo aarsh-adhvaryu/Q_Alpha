@@ -6,8 +6,8 @@ Guidance for Claude Code (and humans) working in this repo.
 
 **The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
 right, and the reasons are now documented and scoped. The full plan is
-[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 is BUILT** (branch
-`trust-repair-pr1`); PR-2 … PR-8 are not.
+[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — **ALL EIGHT PRs BUILT** (branches
+`trust-repair-pr1`…`pr8`). Tiers 1–4 closed. 429 tests, 0 skipped.
 Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
 A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
 
@@ -18,6 +18,20 @@ naming both defects. Every renderer stays wired behind the flag, so **PR-3 resto
 flipping one constant, not by rewriting anything.** Sell / Raise cash are untouched (validated
 FIFO/tax engine). Four gates green, 321 tests. **Do not flip the flag back until PR-2 (price
 continuity guard) and PR-3 (candidate health flag) are both merged.**
+
+**PR-2 (done): corporate actions no longer read as discounts.** New `live/price_integrity.py` —
+`unexplained_gaps` finds one-day steps that no split/dividend explains (the feed is *injected*, never
+fetched, so the guard is pure and costs no network call). The fix is a **re-base, not a veto**: a
+flagged name's 1-year high is measured from its gap day, so it keeps a correct reading.
+`cheapness_scores` gained `rebase_from`/`no_tilt`, both **default-off** — existing callers are
+bit-for-bit unchanged. Measured on the live watchlist: VEDL 65.4%→**23.1%**, TRENT 47.4%→**13.2%**,
+their combined share of a ₹100k deploy **44.4%→5.8%**. Also closes T1.3: `watchlist_freshness_guard` +
+`SafetyReport.buy_advice_safe` (a narrowing of `safe_to_advise`, non-blocking so it never silences
+Sell/Raise cash), and `_download_watchlist_panel` now reports failure instead of silently serving the
+previous panel. 343 tests. **Rule (a) verified: no backtest path imports `live/deploy.py` or
+`price_integrity.py` — the validated funnel is untouched.** ⚠️ `scripts/autopilot.py` uses the same
+advisor, so System/Shadow *future* deploys are corrected while their existing lots still hold the
+artifacts — the confound PR-7's re-seed clears.
 
 **Two defects in the buy recommendation, both new this session, both real-money-facing:**
 1. **Corporate actions read as discounts.** `cheapness_scores` (`live/deploy.py:100`) uses yfinance
@@ -50,6 +64,110 @@ reporting the same book** — which is why none of this was caught.
   on a **~1-year horizon**, math sizes and executes. ⚠️ This makes the LLM a **selector**, changing
   locked discipline #3 — it is **fake-money only** until a positive verdict, is pre-registered, and
   the AI can never add a name outside the deterministic universe. **Real money never auto-trades.**
+
+
+**PR-3 (done): the advisor now consults the detector it ships with; buy surfaces restored.**
+`position_health()` runs over **candidates**, and every recommended name carries its verdict into
+`WeaknessDeployAdvice.candidate_health` → `candidate_health_note()` → `render()`. **Flag, not veto** —
+a 🔴 name stays in the basket and is still bought, asserted by test so a later "helpful" veto cannot
+creep in. **On the live panel it is 13 of 15, not the 4 of 5 the audit found**, so the note carries the
+**universe base rate** (27% of the watchlist is breaking → the basket is **3.2× more concentrated**)
+— that ratio, not the raw count, is the interpretable number. ⚠️ Caveat for a future session: with the
+cross-sectional median at +0.4%, `DefensiveConfig`'s two conditions collapse into roughly one ("down
+more than ~10%"), so 🔴 is weaker evidence than its two-condition design implies until the §6.2
+walk-forward threshold calibration happens. **T1.4 fixed:** `_cap_sectors` is re-applied after
+`head(max_names)` — the old order let the delivered basket breach the cap it advertised at **every
+slider setting below ~13** (at 5 names: **80.1% IT**; at 8: 50.7%; at 12: 34.3% — all now ≤30%). At the
+default 15 it was already compliant, which is why nothing caught it. **T1.5 on screen:**
+`buy_advice_scope_note()` says "never backtested, shares nothing with the 18.2% funnel" on every
+render, and README §7 gained a matching bias bullet. `BUY_ADVICE_ON_REAL_MONEY = True`; the tab has
+three states (kill-switch off / prices failed PR-2's guard / live) and the kill-switch notice no
+longer cites the fixed defects as its reason. 353 tests.
+
+
+**PR-4 (done): every number carries its basis and its window.** The fix is **a vocabulary, not new
+arithmetic** — every number the audit found was correct, just unlabelled. New `live/measures.py`:
+`ReturnMeasure` cannot render without a basis and a window; `BASES` names the four denominators in
+use (contributed · deployed · starting capital · first mark). **T2.1:** `Book.start_date` stamped on
+first funding + serialised; `baseline_book.json` backfilled to `2026-07-10` (its window was
+recoverable only from `system_track.csv` row 1). **T2.2:** one headline per book — the GO book leads
+with the **stricter** basis (vs ₹200,000 starting capital, which counts the ₹611.92 day-one cost
+against it); the first-mark basis moved behind an "ℹ️ How this is measured" expander. The System
+report names the **+0.70pp** contributed-vs-deployed gap as **cash drag** and notes it is larger than
+the System−Shadow effect being measured. **T2.3:** the tile now reads the **cron-committed curve**
+(same source as the chart/scorecard/freshness panel); live drift shows as a separate labelled line.
+Tile → "Book value (incl. cash)" + "of which cash". **T2.5:** `ai_signal_summary()` leads with the
+`SIGNAL:` line + the multiplier it produced and states the contract has **no ticker field**; prose
+moved behind a nested expander. Two books on one screen now get `window_mismatch_note`. 370 tests.
+
+
+**PR-5 (done): cross-surface tests, and the dashboard module actually runs in CI.**
+`tests/test_cross_surface.py` (16 tests) asserts relationships **between** artifacts — two surfaces
+reporting one book agree, or differ by a *named, tested* quantity (the ₹611.92 day-one cost is
+asserted as an identity: one basis is reconstructed from the other). The load-bearing one is not "is
++2.03% right" but "does anything explain the +2.73% eleven lines below it". They read only committed
+files — no market data, no network. **⚠️ The plan's T3.3 diagnosis was incomplete:** the gitignored
+panel was one blocker, but `ci.yml` ran `uv sync --extra dev` which **never installed streamlit**, so
+`importorskip` skipped the module in CI regardless. Now installs `--extra dashboard`, and **CI fails
+on any skip at all** (a skip reads as a pass in the summary). `test_dashboard_app.py` runs against a
+generated `dashboard_sandbox` fixture rather than a committed market-data panel — verified by passing
+the full suite with every `.parquet` moved off disk. Tab-1's three cron-written sources
+(`system_track.csv`, `autopilot_dashboard.md`, `ai_brief.md`) were rendered with **no freshness check
+whatsoever**; now gated by `source_freshness`. **393 tests, 0 skipped** (was 316 with a silently
+skipped dashboard module).
+
+
+**PR-6 (done): the Add-money queue can no longer lose a deposit; the log reconciles.**
+**T3.2** had *two* ways to destroy money, not one: `apply_pending` truncated the queue on read (so a
+deposit queued mid-run vanished — the ₹50k-in-July family), **and** it cleared ~180 lines before
+`save_state`, so any crash in the deploy/gate/mark pipeline emptied the queue with the money never
+credited. That second window is far wider. Now entries are **claimed by id** (`entry_id()` hashes
+legacy entries deterministically), `apply_pending` never clears, and the runner calls
+`clear_applied()` **after** persistence — it re-reads and writes back everything it did not claim.
+**T3.1:** `log_manual_injection` is **append-once keyed on the entry id** (the cron re-logging each
+pass was the root cause); the ₹240,500 is repaired by an **appended signed correction**, never a
+deletion — `manual_log_drift(Decimal("200000"))` now returns **0**. Drift also renders as a dashboard
+banner (`injection_drift_markdown`) leading with "Your money is fine" — it always was; `state.json`
+is authoritative. **T3.4:** the three dead files are **archived, not deleted**
+(`data/autopilot/archive/` + README) — they are a frozen pre-registered experiment's evidence, and
+this repo archives rather than removes those. ⚠️ `reports/{paper_dashboard.md, paper_equity.csv}`
+are **not** dead (paper.py writes them, paper.yml commits them, PR-5's tests read them, research
+mission-control fetches them) — the plan was wrong there; left alone. 404 tests.
+
+
+**PR-7 (done): forward run 1 is VOID and published; run 2 seeded at ground zero 2026-08-18.**
+⚠️ **The System/Shadow/Baseline experiment restarted — do not compare anything to pre-2026-08-18
+numbers.** The **GO book was not touched**: `data/paper/book.json` is byte-identical (md5 unchanged,
+45 marks, start 2026-06-12) and pillar 1 kept accruing. **T4.1 fixed:** the day's basket is computed
+**once at a fixed ₹100,000 notional against an empty book** (`_reference_basket`), scaled per book
+(`scaled_basket`, truncating — `Portfolio.buy` is cash-capped so rounding up would silently shrink),
+and a name is dropped only if it rounds below one share in **both** books (`common_basket`). Verified
+live: System @₹50k → 15 names, Shadow @₹40k → 14, executed intersection **14 identical tickers**,
+quantities differing. **T4.2 fixed:** both books are empty and byte-identical at ground zero; VEDL and
+TRENT (69/57 and 6/5 in run 1) are gone. Run 1 is archived under
+`data/autopilot/archive/forward_run_1_*/` and written up in
+[reports/FORWARD_RUN_1_VOID.md](reports/FORWARD_RUN_1_VOID.md) — its System − Shadow of ₹1,541 sat
+under ₹1,964 of one day's rounding noise, so the honest verdict is *"the instrument could not
+measure it"*, not *"the AI didn't help"*. **Second prereg amendment recorded before run 2 accrued a
+mark**, adding the bar run 1 lacked: a System − Shadow difference is reportable only if it exceeds
+the run's cumulative rounding-noise scale. `scripts/autopilot.py reseed [--as-of DATE]` is the
+command; it also clears the stale scoreboard. 415 tests.
+
+
+**PR-8 (done): the AI is now a per-name SELECTOR — ⚠️ locked discipline #3 changed, fake money only.**
+Math generates candidates → the AI returns keep/drop on a **~1-year horizon** → math sizes and
+executes survivors. **Real money never auto-trades — untouched.** Three guards, enforced in code and
+tested, not prompted: it **cannot add a name** (`parse_verdicts` discards anything outside the
+deterministic universe), **cannot size anything** (`survivors` filters, never rescales — survivors keep
+the fixed-notional quantities Shadow uses), and **cannot fail closed** (no verdict/key/response, a
+refusal, an unparseable line → the name is **kept**, i.e. exactly the Shadow book). New `VERDICT:`
+line-per-name contract; `SIGNAL:` untouched. **The deploy-size tilt is RETIRED** — both books deploy
+the same amount, forced by the acceptance criterion (stubbed keep-everything ⇒ byte-identical
+baskets), so run 3 tests exactly one treatment. **Model stays `claude-haiku-4-5` + `web_search_20250305`
+and is now a pre-registered parameter — do NOT change it mid-run** (a model swap is a second
+treatment; that would be run 4, re-registered). **Third prereg amendment** recorded before run 3
+accrued a mark, adding: if the AI drops no names, the result is *"no verdicts issued"*, not *"the AI
+didn't help"*. Verdict sheet archived daily to `reports/ai_verdicts.md`. 429 tests.
 
 **Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
 the 18.2% headline are untouched by every item in the plan.**

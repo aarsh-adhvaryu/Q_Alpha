@@ -229,36 +229,49 @@ def test_live_pm_brief_suppressed_below_floor() -> None:
     assert live_pm_brief_markdown(Decimal("4999"), advice, floor=Decimal("5000")) == ""
 
 
-# ---- the withheld buy list (PLAN_TRUST_REPAIR.md PR-1) -------------------------------------------
+# ---- the buy-advice gate (PLAN_TRUST_REPAIR.md PR-1 → PR-3) --------------------------------------
 
 
-def test_buy_advice_is_off_the_real_money_surface() -> None:
-    """The flag IS the gate — a green test here is what proves the buy list cannot render live.
+def test_buy_advice_is_back_on_the_real_money_surface() -> None:
+    """PR-1 switched it off; PR-3 restores it once both defects are actually fixed.
 
-    PR-3 flips this to True once the price-continuity guard and the candidate health flag are in;
-    until then this test failing means the defective buy list is back on a real-money screen.
+    The flag survives as a working kill-switch, which is the point: turning the buy list off must
+    stay a one-constant change, not a revert.
     """
     from qalpha.live.dashboard import BUY_ADVICE_ON_REAL_MONEY
 
-    assert BUY_ADVICE_ON_REAL_MONEY is False
+    assert BUY_ADVICE_ON_REAL_MONEY is True
 
 
-def test_withheld_notice_names_both_defects_and_what_still_works() -> None:
-    """An unexplained empty tab is the same trust failure in a smaller package — say why."""
+def test_the_kill_switch_notice_does_not_claim_a_fixed_defect_as_the_reason() -> None:
+    """A notice that lies about why it is showing would be its own trust failure."""
     from qalpha.live.dashboard import buy_advice_withheld_markdown
 
     md = buy_advice_withheld_markdown()
-    # Defect 1 — corporate actions read as discounts, with the two names and their gap dates.
-    assert "VEDL" in md and "2026-04-30" in md
-    assert "TRENT" in md and "2026-01-01" in md
-    assert "demerger" in md.lower()
-    # Defect 2 — the advisor contradicts the §4.7 breakdown detector on its own recommendations.
-    assert "breaking down" in md
-    assert "IRFC" in md and "HDFCLIFE" in md and "ITC" in md
-    # And the honest framing: this rule is not the validated 18.2% strategy.
+    assert "switched off" in md
+    assert "VEDL" not in md and "demerger" not in md  # PR-1's reasons; both fixed
+    assert "Sell a holding" in md and "Raise cash" in md  # what stays live, always stated
+
+
+def test_blocked_notice_names_the_failing_guard_and_spares_the_sell_side() -> None:
+    """The *data* case, distinct from the kill switch: the rule is fine, the prices are not."""
+    from qalpha.live.dashboard import buy_advice_blocked_markdown
+
+    md = buy_advice_blocked_markdown(["latest watchlist price is 2026-07-10 — 27 weekdays stale"])
+    assert "2026-07-10" in md
+    assert "withheld" in md
+    assert "Raise cash" in md
+
+
+def test_the_scope_note_states_the_screen_was_never_backtested() -> None:
+    """T1.5 on screen: the buy rule is not the 18.2% strategy, and must say so on every render."""
+    from qalpha.live.dashboard import buy_advice_scope_note
+
+    md = buy_advice_scope_note()
+    assert "never been backtested" in md
     assert "18.2%" in md
-    # What is NOT withheld — sell/raise-cash run on the validated FIFO/tax engine.
-    assert "Sell a holding" in md and "Raise cash" in md
+    assert "no selection code" in md
+    assert "₹0 capital-gains tax" in md  # what it *is* still gets said plainly
 
 
 # --- plain-English clarity layer (dashboard follow-up) ------------------------------------------
@@ -366,7 +379,11 @@ def test_checklist_prompts_to_deploy_only_above_the_floor() -> None:
 
 
 def test_checklist_does_not_route_to_a_withheld_buy_list() -> None:
-    """PR-1: with the buy list withheld, 'use Add money for the buy plan' is a dead pointer."""
+    """With the buy list unavailable, 'use Add money for the buy plan' is a dead pointer.
+
+    Since PR-3 this fires on the *data* path too — a stale watchlist panel makes buy advice
+    unavailable even though the flag is on.
+    """
     item = _actions(idle_cash=Decimal("50000"), buy_advice_available=False)[2]
     assert item.state == "blocked"
     assert "withheld" in item.detail
@@ -413,3 +430,128 @@ def test_each_unverified_branch_is_named() -> None:
     assert len(out) == 4
     assert any("§70" in b for b in out)
     assert any("3 different cost bases" in b for b in out)
+
+
+# ---- the AI's actual output (PLAN_TRUST_REPAIR.md PR-4 — fixes T2.5) ------------------------------
+
+
+def test_ai_summary_leads_with_the_signal_and_says_it_picks_no_stock() -> None:
+    """The whole machine-readable contract is one line with no ticker field — say so where it shows.
+
+    Rendering per-name prose under a buy list is what made the brief read as "the AI chose these".
+    """
+    from qalpha.live.dashboard import ai_signal_summary
+
+    md = ai_signal_summary("up", "medium", 1.25, consumed_by="the 🧠 System book only (fake money)")
+    assert "lean=up" in md and "confidence=medium" in md
+    assert "×1.25" in md and "larger" in md
+    assert "no ticker field" in md
+    assert "System book only" in md
+
+
+def test_ai_summary_reports_a_neutral_tilt_as_no_change() -> None:
+    from qalpha.live.dashboard import ai_signal_summary
+
+    md = ai_signal_summary("flat", "low", 1.0, consumed_by="the System book")
+    assert "no change to deploy size" in md
+
+
+def test_a_missing_brief_changes_nothing_about_name_selection() -> None:
+    from qalpha.live.dashboard import ai_signal_summary
+
+    md = ai_signal_summary(None, None, 1.0, consumed_by="the System book")
+    assert "No AI signal today" in md
+    assert "×1.00" in md
+    assert "changes nothing about which names" in md
+
+
+# ---- daily-source freshness (PLAN_TRUST_REPAIR.md PR-5 — fixes T3.3) ------------------------------
+
+
+def test_a_source_written_today_is_fresh() -> None:
+    from qalpha.live.dashboard import source_freshness
+
+    s = source_freshness("Track record", date(2026, 6, 18), date(2026, 6, 18))
+    assert not s.is_stale
+    assert "up to date" in s.note
+
+
+def test_a_friday_source_read_on_monday_is_still_fresh() -> None:
+    """Weekday-aware, with one weekday of grace — today's run may not have fired yet."""
+    from qalpha.live.dashboard import source_freshness
+
+    assert not source_freshness("Scoreboard", date(2026, 6, 12), date(2026, 6, 15)).is_stale
+
+
+def test_a_source_that_missed_a_weekday_is_stale() -> None:
+    from qalpha.live.dashboard import source_freshness
+
+    s = source_freshness("Scoreboard", date(2026, 6, 15), date(2026, 6, 18))  # Mon → Thu
+    assert s.is_stale
+    assert s.weekdays_stale == 2
+    assert "weekday(s) missed" in s.note
+
+
+def test_a_source_that_was_never_written_is_stale_not_silent() -> None:
+    from qalpha.live.dashboard import source_freshness
+
+    s = source_freshness("AI brief", None, date(2026, 6, 18))
+    assert s.is_stale
+    assert "never written" in s.note
+
+
+def test_the_summary_names_every_stale_source() -> None:
+    """A stopped cron must be legible, not inferred from numbers that stopped moving."""
+    from qalpha.live.dashboard import source_freshness, sources_freshness_markdown
+
+    today = date(2026, 6, 18)
+    md = sources_freshness_markdown(
+        [
+            source_freshness("Track record", date(2026, 6, 18), today),
+            source_freshness("Scoreboard", date(2026, 6, 10), today),
+            source_freshness("AI brief", None, today),
+        ]
+    )
+    assert "2 of 3 daily sources are stale" in md
+    assert "Scoreboard" in md and "AI brief" in md
+    assert "frozen at its last successful pass" in md
+
+
+def test_the_summary_is_a_single_quiet_line_when_everything_is_current() -> None:
+    from qalpha.live.dashboard import source_freshness, sources_freshness_markdown
+
+    today = date(2026, 6, 18)
+    md = sources_freshness_markdown([source_freshness("Track record", today, today)])
+    assert md.startswith("✓")
+    assert "stale" not in md
+    assert sources_freshness_markdown([]) == ""
+
+
+# ---- the Add-money audit banner (PLAN_TRUST_REPAIR.md PR-6 — fixes T3.1) --------------------------
+
+
+def test_the_drift_banner_reports_the_gap_and_reassures_about_the_money() -> None:
+    """₹240,500 of drift sat in a cron log for a month. A print is not a report."""
+    from qalpha.live.dashboard import injection_drift_markdown
+
+    md = injection_drift_markdown(Decimal("440500"), Decimal("200000"))
+    assert "₹240,500" in md
+    assert "₹440,500" in md and "₹200,000" in md
+    assert "Your money is fine" in md  # the books were never wrong; say so before anything else
+    assert "state.json" in md
+    assert "never by deleting entries" in md
+
+
+def test_the_banner_is_silent_when_the_log_reconciles() -> None:
+    from qalpha.live.dashboard import injection_drift_markdown
+
+    assert injection_drift_markdown(Decimal("200000"), Decimal("200000")) == ""
+
+
+def test_the_banner_handles_an_under_counting_log_too() -> None:
+    """Drift in the other direction is just as much a broken audit trail."""
+    from qalpha.live.dashboard import injection_drift_markdown
+
+    md = injection_drift_markdown(Decimal("150000"), Decimal("200000"))
+    assert "₹50,000" in md
+    assert "less than" in md

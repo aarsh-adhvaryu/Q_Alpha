@@ -17,6 +17,7 @@ from qalpha.live.safety import (
     broker_session_guard,
     price_completeness_guard,
     price_freshness_guard,
+    watchlist_freshness_guard,
 )
 
 
@@ -92,3 +93,80 @@ def test_report_safe_when_clean() -> None:
     )
     assert report.safe_to_advise
     assert not report.blocks
+
+
+# ---- the watchlist panel (PLAN_TRUST_REPAIR.md PR-2 — fixes T1.3) --------------------------------
+#
+# The buy list is priced off a *different* panel than the one that prices your holdings, and that
+# panel's freshness was in no SafetyReport at all. Its refresh ran with check=False, so a failed
+# download left the previous panel in place and the advisor sized a confident recommendation off it.
+
+
+def test_fresh_watchlist_panel_passes() -> None:
+    g = watchlist_freshness_guard(_prices("2026-06-18"), date(2026, 6, 19))
+    assert g.ok
+    assert not g.blocking  # never vetoes sell / raise-cash
+
+
+def test_stale_watchlist_panel_withholds_buy_advice_only() -> None:
+    report = assess_advice_inputs(
+        _prices("2026-06-18"),  # core panel fresh — holdings price fine
+        {"AAA": Decimal("100"), "BBB": Decimal("200")},
+        ["AAA", "BBB"],
+        date(2026, 6, 19),
+        watchlist=_prices("2026-05-11"),  # ~28 weekdays behind
+    )
+    assert report.safe_to_advise  # sell / raise cash run on the core panel — unaffected
+    assert not report.buy_advice_safe  # the buy list does not
+    assert any("watchlist prices" in g.name for g in report.warnings)
+
+
+def test_a_failed_watchlist_download_withholds_buy_advice() -> None:
+    """The dangerous case: the download fails, the *old* panel is still on disk and looks usable."""
+    report = assess_advice_inputs(
+        _prices("2026-06-18"),
+        {"AAA": Decimal("100"), "BBB": Decimal("200")},
+        ["AAA", "BBB"],
+        date(2026, 6, 19),
+        watchlist=_prices("2026-06-18"),  # fresh-looking, but it is the previous panel
+        watchlist_download_ok=False,
+    )
+    assert report.safe_to_advise
+    assert not report.buy_advice_safe
+    assert "download failed" in " ".join(g.detail for g in report.warnings)
+
+
+def test_fresh_watchlist_leaves_buy_advice_available() -> None:
+    report = assess_advice_inputs(
+        _prices("2026-06-18"),
+        {"AAA": Decimal("100"), "BBB": Decimal("200")},
+        ["AAA", "BBB"],
+        date(2026, 6, 19),
+        watchlist=_prices("2026-06-18"),
+    )
+    assert report.buy_advice_safe
+
+
+def test_buy_advice_is_unsafe_whenever_the_core_inputs_are() -> None:
+    """buy_advice_safe is a *narrowing* of safe_to_advise, never an escape hatch around it."""
+    report = assess_advice_inputs(
+        _prices("2026-06-01"),  # stale core panel → blocks everything
+        {"AAA": Decimal("100"), "BBB": Decimal("200")},
+        ["AAA", "BBB"],
+        date(2026, 6, 19),
+        watchlist=_prices("2026-06-18"),  # a perfectly fresh watchlist cannot rescue it
+    )
+    assert not report.safe_to_advise
+    assert not report.buy_advice_safe
+
+
+def test_omitting_the_watchlist_preserves_the_previous_verdict() -> None:
+    """Callers that never touch the buy side must see exactly their pre-PR-2 report."""
+    report = assess_advice_inputs(
+        _prices("2026-06-18"),
+        {"AAA": Decimal("100"), "BBB": Decimal("200")},
+        ["AAA", "BBB"],
+        date(2026, 6, 19),
+    )
+    assert [g.name for g in report.guards] == ["price feed", "holding prices"]
+    assert report.buy_advice_safe

@@ -246,10 +246,24 @@ def test_books_state_round_trip_and_inject(tmp_path: Path) -> None:
     assert load_state(tmp_path / "s.json")["seeded"] is True
 
 
-def test_apply_pending_injects_all_books_and_clears(tmp_path: Path) -> None:
+def test_apply_pending_injects_all_books_and_leaves_the_queue_for_the_caller(
+    tmp_path: Path,
+) -> None:
+    """apply_pending credits the books; releasing the queue is a **separate, later** step.
+
+    This test previously asserted that ``apply_pending`` cleared the queue itself — which is the T3.2
+    bug written down as a specification. Clearing on read destroys anything queued in the meantime,
+    and clearing before the books are persisted loses the deposit outright if the run then dies.
+    """
     import json
 
-    from qalpha.live.autopilot import BOOK_NAMES, Book, apply_pending, load_pending
+    from qalpha.live.autopilot import (
+        BOOK_NAMES,
+        Book,
+        apply_pending,
+        clear_applied,
+        load_pending,
+    )
 
     p = tmp_path / "pending.json"
     p.write_text(json.dumps([{"amount": "50000", "reason": "IPO"}, {"amount": "10000"}]))
@@ -258,8 +272,13 @@ def test_apply_pending_injects_all_books_and_clears(tmp_path: Path) -> None:
     assert total == Decimal("60000")
     assert all(books[n].cash == Decimal("60000") for n in BOOK_NAMES)  # equal into all three
     # The entries come back for the caller to log AFTER persisting — apply_pending never logs.
-    assert applied == [(Decimal("50000"), "IPO"), (Decimal("10000"), "(from dashboard)")]
-    assert load_pending(p) == []  # queue cleared
+    assert [(a.amount, a.reason) for a in applied] == [
+        (Decimal("50000"), "IPO"),
+        (Decimal("10000"), "(from dashboard)"),
+    ]
+    assert len(load_pending(p)) == 2  # still queued: nothing is durable yet
+    assert clear_applied(applied, p) == 0  # …released only once the caller says so
+    assert load_pending(p) == []
     assert apply_pending(books, p) == (Decimal("0"), [])  # nothing left to apply
 
 
@@ -275,3 +294,318 @@ def test_manual_log_drift_flags_phantom_entries(tmp_path: Path) -> None:
     assert manual_log_total(p) == Decimal("110000")
     assert manual_log_drift(Decimal("110000"), p) == Decimal("0")  # log matches reality
     assert manual_log_drift(Decimal("50000"), p) == Decimal("60000")  # phantom ₹60k surfaced
+
+
+# ---- the book's own window (PLAN_TRUST_REPAIR.md PR-4 — fixes T2.1) -------------------------------
+
+
+def test_a_book_stamps_its_start_date_on_first_funding() -> None:
+    """Before PR-4 the window was recoverable only from system_track.csv row 1."""
+    from datetime import date
+
+    from qalpha.live.autopilot import Book
+
+    b = Book(name="BASE")
+    assert b.start_date is None
+    b.inject(Decimal("200000"), date(2026, 7, 10))
+    assert b.start_date == date(2026, 7, 10)
+    # A later top-up must not move the start date — the book began measuring when it was first funded.
+    b.inject(Decimal("50000"), date(2026, 8, 3))
+    assert b.start_date == date(2026, 7, 10)
+    assert b.net_contributions == Decimal("250000")
+
+
+def test_the_start_date_survives_a_round_trip() -> None:
+    from datetime import date
+
+    from qalpha.live.autopilot import Book
+
+    b = Book(name="BASE")
+    b.inject(Decimal("1000"), date(2026, 7, 10))
+    assert Book.from_dict(b.to_dict()).start_date == date(2026, 7, 10)
+
+
+def test_a_legacy_book_without_a_start_date_still_loads() -> None:
+    """Books written before PR-4 have no start_date key — they must not fail to load."""
+    from qalpha.live.autopilot import Book
+
+    b = Book.from_dict({"name": "BASE", "cash": "10", "holdings": {}, "net_contributions": "1000"})
+    assert b.start_date is None
+    assert "start_date" not in b.to_dict()  # and it is not invented on the way back out
+
+
+def test_injecting_without_a_date_leaves_the_window_unknown() -> None:
+    """Fail honest: no date in, no date claimed."""
+    from qalpha.live.autopilot import Book
+
+    b = Book(name="BASE")
+    b.inject(Decimal("1000"))
+    assert b.start_date is None
+
+
+# ---- accounting integrity (PLAN_TRUST_REPAIR.md PR-6 — fixes T3.1, T3.2) --------------------------
+
+
+def _queue(path: Path, *items: dict[str, str]) -> None:
+    import json
+
+    path.write_text(json.dumps(list(items), indent=2) + "\n", encoding="utf-8")
+
+
+def _books() -> dict[str, Book]:
+    from qalpha.live.autopilot import BOOK_NAMES
+
+    return {n: Book(name=n) for n in BOOK_NAMES}
+
+
+def test_a_deposit_queued_mid_run_survives_and_is_applied_next_time() -> None:
+    """T3.2, the money-losing bug. Same failure family as the ₹50k lost in July.
+
+    The runner used to truncate the queue to `[]` after reading it, so anything the dashboard wrote
+    between the read and the write was destroyed unread.
+    """
+    import json
+    import tempfile
+
+    from qalpha.live.autopilot import apply_pending, clear_applied, load_pending
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "pending.json"
+        _queue(path, {"amount": "50000", "reason": "first", "at": "2026-08-01T10:00:00"})
+
+        books = _books()
+        total, applied = apply_pending(books, path)
+        assert total == Decimal("50000")
+
+        # …the dashboard queues another deposit while the long daily pipeline is still running.
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        existing.append({"amount": "25000", "reason": "mid-run", "at": "2026-08-01T10:00:30"})
+        path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+
+        left = clear_applied(applied, path)
+        assert left == 1
+        survivors = load_pending(path)
+        assert [s["reason"] for s in survivors] == ["mid-run"]
+
+        # The next run picks it up — nothing was lost.
+        total2, applied2 = apply_pending(_books(), path)
+        assert total2 == Decimal("25000")
+        assert clear_applied(applied2, path) == 0
+
+
+def test_a_crash_before_persistence_leaves_the_deposit_queued() -> None:
+    """Clearing on read meant a crash mid-pipeline emptied the queue with the money never credited.
+
+    Applying twice is recoverable; a silently dropped deposit is not.
+    """
+    import tempfile
+
+    from qalpha.live.autopilot import apply_pending, load_pending
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "pending.json"
+        _queue(path, {"amount": "50000", "reason": "ipo", "at": "2026-08-01T10:00:00"})
+        apply_pending(_books(), path)  # …and the run dies here, before save_state/clear_applied
+        assert len(load_pending(path)) == 1
+
+
+def test_entry_ids_are_stable_for_legacy_entries_without_one() -> None:
+    """Entries queued before ids existed must still be claimable exactly once."""
+    from qalpha.live.autopilot import entry_id
+
+    legacy = {"amount": "50000", "reason": "ipo", "at": "2026-07-12T09:25:03"}
+    assert entry_id(legacy) == entry_id(dict(legacy))
+    assert entry_id(legacy) != entry_id({**legacy, "at": "2026-07-12T10:00:58"})
+    assert entry_id({"id": "abc123", "amount": "1"}) == "abc123"  # an explicit id always wins
+
+
+def test_the_audit_log_is_append_once_on_the_entry_id() -> None:
+    """T3.1's root cause: the cron re-logged the same queued deposit on every pass."""
+    import tempfile
+
+    from qalpha.live.autopilot import log_manual_injection, manual_log_total
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "log.json"
+        assert log_manual_injection(Decimal("50000"), "ipo", path, entry_id="e1") is True
+        assert log_manual_injection(Decimal("50000"), "ipo", path, entry_id="e1") is False
+        assert manual_log_total(path) == Decimal("50000")
+        # A genuinely different deposit still lands.
+        assert log_manual_injection(Decimal("10000"), "second", path, entry_id="e2") is True
+        assert manual_log_total(path) == Decimal("60000")
+
+
+def test_a_correction_reconciles_the_total_without_erasing_history() -> None:
+    """The repair is a signed correction, not a rewrite: the erroneous rows are the evidence."""
+    import json
+    import tempfile
+
+    from qalpha.live.autopilot import log_correction, log_manual_injection, manual_log_drift
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "log.json"
+        for _ in range(3):  # the same deposit, logged three times by three cron passes
+            log_manual_injection(Decimal("50000"), "ipo", path)
+        assert manual_log_drift(Decimal("50000"), path) == Decimal("100000")
+
+        log_correction(Decimal("-100000"), "duplicate cron entries", path)
+        assert manual_log_drift(Decimal("50000"), path) == Decimal("0")
+        entries = json.loads(path.read_text(encoding="utf-8"))
+        assert len(entries) == 4  # nothing deleted
+        assert sum(1 for e in entries if e.get("kind") == "correction") == 1
+
+
+def test_the_committed_log_now_reconciles_against_the_books() -> None:
+    """The plan's acceptance criterion: manual_log_drift(₹200,000) returns 0 (it returned 240500)."""
+    from qalpha.live.autopilot import manual_log_drift
+
+    assert manual_log_drift(Decimal("200000")) == Decimal("0")
+
+
+def test_zero_and_negative_queue_entries_are_ignored_not_credited() -> None:
+    import tempfile
+
+    from qalpha.live.autopilot import apply_pending
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "pending.json"
+        _queue(path, {"amount": "0", "reason": "noop"}, {"amount": "-5000", "reason": "bad"})
+        total, applied = apply_pending(_books(), path)
+        assert total == Decimal("0")
+        assert applied == []
+
+
+def test_the_stale_autodeposit_state_key_is_gone() -> None:
+    """T3.4: the feature was removed 2026-07-28; the key lingered in committed state."""
+    import json
+
+    root = Path(__file__).resolve().parent.parent
+    state = json.loads((root / "data/autopilot/state.json").read_text(encoding="utf-8"))
+    assert "monthly_autodeposit" not in state
+
+
+# ---- fixed-notional baskets (PLAN_TRUST_REPAIR.md PR-7 — fixes T4.1) ------------------------------
+
+
+def test_scaling_a_basket_preserves_every_name_at_a_larger_size() -> None:
+    from qalpha.live.autopilot import scaled_basket
+
+    ref = {"AAA.NS": 10, "BBB.NS": 4, "CCC.NS": 1}
+    out = scaled_basket(ref, Decimal("200000"), Decimal("100000"))
+    assert out == {"AAA.NS": 20, "BBB.NS": 8, "CCC.NS": 2}
+
+
+def test_scaling_truncates_rather_than_rounds_up() -> None:
+    """Portfolio.buy is cash-capped, so a rounded-up order would silently shrink — reintroducing the
+    amount-dependence this exists to remove."""
+    from qalpha.live.autopilot import scaled_basket
+
+    ref = {"AAA.NS": 10, "BBB.NS": 3}
+    assert scaled_basket(ref, Decimal("95000"), Decimal("100000")) == {"AAA.NS": 9, "BBB.NS": 2}
+
+
+def test_a_name_that_rounds_below_one_share_is_reported_not_silently_dropped() -> None:
+    """The caller must be able to make a *symmetric* decision about it across every book."""
+    from qalpha.live.autopilot import scaled_basket
+
+    out = scaled_basket({"AAA.NS": 10, "TINY.NS": 1}, Decimal("50000"), Decimal("100000"))
+    assert out == {"AAA.NS": 5, "TINY.NS": 0}
+    assert "TINY.NS" in out  # present with 0, not missing
+
+
+def test_the_common_basket_is_the_executable_intersection() -> None:
+    """T4.1 in one assertion: dropping a name from one book only is how the funds diverged."""
+    from qalpha.live.autopilot import common_basket
+
+    system = {"AAA.NS": 12, "BBB.NS": 3, "CCC.NS": 1}
+    shadow = {"AAA.NS": 9, "BBB.NS": 2, "CCC.NS": 0}  # CCC rounds away at the smaller size
+    assert common_basket(system, shadow) == {"AAA.NS", "BBB.NS"}
+
+
+def test_two_books_at_different_sizes_trade_identical_tickers() -> None:
+    """**The property whose absence voided run 1** — the plan's acceptance criterion for PR-7.
+
+    The AI tilt changes deploy *size*. It must not change *which names* are held, at any size.
+    """
+    from qalpha.live.autopilot import common_basket, scaled_basket
+
+    reference = {f"N{i}.NS": 20 - i for i in range(15)}
+    for system_amt, shadow_amt in (
+        (Decimal("50000"), Decimal("40000")),  # a ×1.25 AI tilt
+        (Decimal("30000"), Decimal("60000")),  # and the other direction
+        (Decimal("100000"), Decimal("100000")),  # neutral
+    ):
+        s = scaled_basket(reference, system_amt)
+        h = scaled_basket(reference, shadow_amt)
+        tradable = common_basket(s, h)
+        system_exec = {t: s[t] for t in tradable}
+        shadow_exec = {t: h[t] for t in tradable}
+        assert set(system_exec) == set(shadow_exec)  # identical composition, always
+        if system_amt != shadow_amt:
+            assert system_exec != shadow_exec  # …and size still differs, or the study measures zero
+
+
+def test_a_zero_or_negative_deploy_yields_an_empty_tradable_set() -> None:
+    from qalpha.live.autopilot import common_basket, scaled_basket
+
+    ref = {"AAA.NS": 10}
+    assert scaled_basket(ref, Decimal("0")) == {"AAA.NS": 0}
+    assert common_basket(scaled_basket(ref, Decimal("0")), ref) == set()
+
+
+# ---- the re-seed (PLAN_TRUST_REPAIR.md PR-7 — fixes T4.2) -----------------------------------------
+
+
+def test_the_reseeded_books_start_identical_and_empty() -> None:
+    """Ground zero means ground zero: same start date, no holdings, no history, nothing inherited."""
+    import json
+
+    root = Path(__file__).resolve().parent.parent
+    system = json.loads((root / "data/paper/adaptive_book.json").read_text(encoding="utf-8"))
+    shadow = json.loads((root / "data/paper/shadow_book.json").read_text(encoding="utf-8"))
+    assert system == shadow
+    assert system["portfolio"]["lots"] == []
+    assert system["equity_curve"] == []
+    assert system["start_date"] == shadow["start_date"]
+
+
+def test_the_reseeded_books_carry_none_of_the_artifact_names() -> None:
+    """T4.2: run 1's books held VEDL 69/57 and TRENT 6/5, bought on phantom discounts."""
+    import json
+
+    root = Path(__file__).resolve().parent.parent
+    for name in ("adaptive_book.json", "shadow_book.json"):
+        book = json.loads((root / "data/paper" / name).read_text(encoding="utf-8"))
+        held = {lot["ticker"] for lot in book["portfolio"]["lots"]}
+        assert "VEDL.NS" not in held and "TRENT.NS" not in held
+
+
+def test_all_three_books_restart_on_identical_cash_flows() -> None:
+    import json
+
+    root = Path(__file__).resolve().parent.parent
+    state = json.loads((root / "data/autopilot/state.json").read_text(encoding="utf-8"))
+    baseline = json.loads((root / "data/autopilot/baseline_book.json").read_text(encoding="utf-8"))
+    contributed = {Decimal(v) for v in state["contributed"].values()}
+    assert len(contributed) == 1  # System and Shadow funded identically
+    assert Decimal(baseline["net_contributions"]) == contributed.pop()  # …and so is the Baseline
+    assert baseline["start_date"] == state["reseeded_on"]
+
+
+def test_the_void_run_is_archived_not_deleted() -> None:
+    """A pre-registered study's data is published, never quietly removed."""
+    root = Path(__file__).resolve().parent.parent
+    archives = list((root / "data/autopilot/archive").glob("forward_run_1_*"))
+    assert archives, "the confounded run must be archived"
+    kept = {p.name for p in archives[0].iterdir()}
+    assert {"adaptive_book.json", "shadow_book.json", "system_track.csv"} <= kept
+
+
+def test_the_go_book_was_not_touched_by_the_reseed() -> None:
+    """Rule (a): the criterion-6 clock keeps running. Pillar 1 accrues on its existing marks."""
+    import json
+
+    root = Path(__file__).resolve().parent.parent
+    go = json.loads((root / "data/paper/book.json").read_text(encoding="utf-8"))
+    assert go["start_date"] == "2026-06-12"  # unchanged since the run began
+    assert len(go["equity_curve"]) >= 45  # the marks that are the criterion-6 evidence
