@@ -262,14 +262,15 @@ def _inject_trio(
     wallets: dict[str, Decimal],
     contributed: dict[str, Decimal],
     baseline: Book,
+    on: date | None = None,
 ) -> None:
     """Deposit the SAME fake cash into all three (system/shadow wallets + baseline) so no top-up can
-    ever bias the relative verdict."""
+    ever bias the relative verdict. ``on`` stamps the baseline's start date on its first funding."""
     wallets["system"] += amount
     wallets["shadow"] += amount
     contributed["system"] += amount
     contributed["shadow"] += amount
-    baseline.inject(amount)
+    baseline.inject(amount, on)
 
 
 # ---- acting on the system's own advice --------------------------------------------------------------
@@ -428,6 +429,7 @@ def _render_report(
     today_notes: list[str],
     hedge: dict[str, float] | None,
     core_hedge: dict[str, float] | None = None,
+    start_date: date | None = None,
 ) -> str:
     n_days = len(pd.read_csv(SYSTEM_TRACK_CSV)) if SYSTEM_TRACK_CSV.exists() else 0
     worked, total = ai_hit_rate(ledger, book="SYS")
@@ -436,13 +438,20 @@ def _render_report(
         "shadow": "System, AI off (the attribution twin)",
         "baseline": "Everything into NIFTYBEES (do-nothing baseline)",
     }
+    # T2.1/T2.2 — every number on this page carries its basis and its window. All three books run
+    # identical cash flows over the same window, so one window line covers the table.
+    window = f"{start_date} → {as_of}" if start_date else f"through {as_of}"
+    basis_suffix = " (vs money put in)"
     lines = [
         "# The System book — the whole system acting on its own advice",
         "",
         f"_As of **{as_of}** · {n_days} marks · market weakness: **{level}** · AI: {sig} · "
         "**fake money, no real orders**._",
         "",
-        "| Book | What it is | Value | Contributed | Profit | Return |",
+        f"**Window: {window}** — all three books, identical cash flows. Every return below is "
+        "measured **against money put in** unless a line says otherwise.",
+        "",
+        f"| Book | What it is | Value | Contributed | Profit | Return{basis_suffix} |",
         "|---|---|---:|---:|---:|---:|",
     ]
     for key in ("system", "shadow", "baseline"):
@@ -471,6 +480,13 @@ def _render_report(
             "## 🛡 Downside protection — the tax-free hedge overlay",
             "",
         ]
+        lines += [
+            "_These returns use a **different basis** from the table above: they are measured on "
+            "**capital actually invested** (wallet→book transfers are stripped out, since moving "
+            "your own cash is not a gain). A gap between the two is **cash drag** — money waiting in "
+            "the wallet — not a disagreement about what the book is worth._",
+            "",
+        ]
         if hedge is not None:
             hstate = "🛡️ HEDGE ON" if hedge["hedge_on"] else "hedge off (calm)"
             lines += [
@@ -487,6 +503,20 @@ def _render_report(
                 f"**−{float(core_hedge['hedged_dd']):.1f}%** vs "
                 f"**−{float(core_hedge['unhedged_dd']):.1f}%**",
             ]
+        if hedge is not None:
+            contributed_pct = float(rows["system"]["return_pct"])
+            deployed_pct = float(hedge["unhedged_return"])
+            gap = deployed_pct - contributed_pct
+            if abs(gap) >= 0.005:
+                lines += [
+                    "",
+                    f"> **Why the System book shows {contributed_pct:+.2f}% above and "
+                    f"{deployed_pct:+.2f}% here:** both are correct. The first counts every rupee "
+                    f"contributed from the day it arrived; the second counts only what was actually "
+                    f"at work. The **{gap:+.2f}pp** difference is **cash drag** — undeployed cash "
+                    "earning nothing. Worth watching: it is currently larger than the "
+                    "System−Shadow difference this study is trying to measure.",
+                ]
         lines += [
             "",
             "> Keep the shares (₹0 capital-gains tax), short Nifty futures while systemic stress is "
@@ -543,7 +573,7 @@ def cmd_daily() -> int:
 
     # Baseline seeds its ₹2L at its first run (start-offset caveat is disclosed in the report).
     if not state.get("baseline_seeded"):
-        baseline.inject(SYSTEM_CAPITAL)
+        baseline.inject(SYSTEM_CAPITAL, as_of)
         state["baseline_seeded"] = True
 
     # Add-money queued from the dashboard — ALWAYS applied (even on an already-marked day) so a
@@ -666,7 +696,17 @@ def cmd_daily() -> int:
     )
     DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_MD.write_text(
-        _render_report(as_of_str, rows, ledger, level, sig_desc, today_notes, hedge, core_hedge),
+        _render_report(
+            as_of_str,
+            rows,
+            ledger,
+            level,
+            sig_desc,
+            today_notes,
+            hedge,
+            core_hedge,
+            start_date=baseline.start_date,
+        ),
         encoding="utf-8",
     )
 

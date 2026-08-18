@@ -147,6 +147,37 @@ def buy_advice_scope_note() -> str:
     )
 
 
+def ai_signal_summary(
+    lean: str | None, confidence: str | None, tilt: float, *, consumed_by: str
+) -> str:
+    """What the AI brief actually *did* — the machine-readable line and the one number it produced.
+
+    T2.5: the brief asks for per-name analysis and costs ~57.6k input tokens a day, but its machine
+    contract is a single ``SIGNAL:`` line with **no ticker field**, so the only thing any code can
+    consume is a lean and a confidence, collapsed into one multiplier on deploy *size*. Rendering
+    several paragraphs of per-name narrative directly under an unrelated buy list invited exactly the
+    reading the user made — that the AI had picked those stocks. It hadn't; it cannot.
+
+    So the summary leads with the part with consequences, and the prose moves behind it.
+    """
+    if lean is None:
+        return (
+            "**No AI signal today** — the deploy size runs at its neutral ×1.00. "
+            "A missing brief changes nothing about which names are chosen."
+        )
+    effect = (
+        "no change to deploy size"
+        if abs(tilt - 1.0) < 1e-9
+        else f"deploy size ×{tilt:.2f} ({'larger' if tilt > 1 else 'smaller'} tranche)"
+    )
+    return (
+        f"**SIGNAL: lean={lean} · confidence={confidence}** → **{effect}**, in {consumed_by}.\n\n"
+        "That single line is the *entire* machine-readable output. It carries **no ticker field**, "
+        "so the AI cannot and does not choose a stock — it only nudges *how much* of the available "
+        "cash is deployed now versus held back. Every name comes from the deterministic screen."
+    )
+
+
 def live_pm_brief_markdown(
     available_cash: Decimal, advice: WeaknessDeployAdvice, *, floor: Decimal
 ) -> str:

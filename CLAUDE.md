@@ -6,8 +6,8 @@ Guidance for Claude Code (and humans) working in this repo.
 
 **The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
 right, and the reasons are now documented and scoped. The full plan is
-[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1, PR-2 and PR-3 are
-BUILT** (branches `trust-repair-pr1/2/3`) — **Tier 1 is closed**; PR-4 … PR-8 are not.
+[PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — 8 PRs, user-approved scope. **PR-1 … PR-4 are BUILT**
+(branches `trust-repair-pr1/2/3/4`) — **Tiers 1 and 2 are closed**; PR-5 … PR-8 are not.
 Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
 A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
 
@@ -83,6 +83,22 @@ default 15 it was already compliant, which is why nothing caught it. **T1.5 on s
 render, and README §7 gained a matching bias bullet. `BUY_ADVICE_ON_REAL_MONEY = True`; the tab has
 three states (kill-switch off / prices failed PR-2's guard / live) and the kill-switch notice no
 longer cites the fixed defects as its reason. 353 tests.
+
+
+**PR-4 (done): every number carries its basis and its window.** The fix is **a vocabulary, not new
+arithmetic** — every number the audit found was correct, just unlabelled. New `live/measures.py`:
+`ReturnMeasure` cannot render without a basis and a window; `BASES` names the four denominators in
+use (contributed · deployed · starting capital · first mark). **T2.1:** `Book.start_date` stamped on
+first funding + serialised; `baseline_book.json` backfilled to `2026-07-10` (its window was
+recoverable only from `system_track.csv` row 1). **T2.2:** one headline per book — the GO book leads
+with the **stricter** basis (vs ₹200,000 starting capital, which counts the ₹611.92 day-one cost
+against it); the first-mark basis moved behind an "ℹ️ How this is measured" expander. The System
+report names the **+0.70pp** contributed-vs-deployed gap as **cash drag** and notes it is larger than
+the System−Shadow effect being measured. **T2.3:** the tile now reads the **cron-committed curve**
+(same source as the chart/scorecard/freshness panel); live drift shows as a separate labelled line.
+Tile → "Book value (incl. cash)" + "of which cash". **T2.5:** `ai_signal_summary()` leads with the
+`SIGNAL:` line + the multiplier it produced and states the contract has **no ticker field**; prose
+moved behind a nested expander. Two books on one screen now get `window_mismatch_note`. 370 tests.
 
 **Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
 the 18.2% headline are untouched by every item in the plan.**
