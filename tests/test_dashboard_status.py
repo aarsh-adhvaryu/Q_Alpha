@@ -272,6 +272,9 @@ def test_the_scope_note_states_the_screen_was_never_backtested() -> None:
     assert "18.2%" in md
     assert "no selection code" in md
     assert "₹0 capital-gains tax" in md  # what it *is* still gets said plainly
+    # …and since 2026-08-19 it states that the screen decides rather than deferring.
+    assert "removes any that its §4.7 breakdown test says" in md
+    assert "bought, not adjudicated" in md
 
 
 # --- plain-English clarity layer (dashboard follow-up) ------------------------------------------
