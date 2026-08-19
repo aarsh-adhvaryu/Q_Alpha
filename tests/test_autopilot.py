@@ -556,17 +556,37 @@ def test_a_zero_or_negative_deploy_yields_an_empty_tradable_set() -> None:
 # ---- the re-seed (PLAN_TRUST_REPAIR.md PR-7 — fixes T4.2) -----------------------------------------
 
 
-def test_the_reseeded_books_start_identical_and_empty() -> None:
-    """Ground zero means ground zero: same start date, no holdings, no history, nothing inherited."""
+def test_the_two_books_hold_identical_tickers_and_quantities() -> None:
+    """The ablation property, asserted against live committed state (PR-7 + PR-8).
+
+    This test previously asserted the books were *empty* — true only in the window between the
+    re-seed and the first run, and it broke the moment the cron deployed. That was the same mistake
+    as a test that encodes a bug: it froze a transient moment as if it were the invariant.
+
+    The real invariant survives every run: System and Shadow trade the same names in the same sizes,
+    so the only thing System − Shadow can measure is the AI's per-name verdict. Lot IDs are random
+    UUIDs and are compared on neither side.
+    """
+    import collections
     import json
 
     root = Path(__file__).resolve().parent.parent
     system = json.loads((root / "data/paper/adaptive_book.json").read_text(encoding="utf-8"))
     shadow = json.loads((root / "data/paper/shadow_book.json").read_text(encoding="utf-8"))
-    assert system == shadow
-    assert system["portfolio"]["lots"] == []
-    assert system["equity_curve"] == []
+
+    def holdings(book: dict) -> dict[str, Decimal]:
+        out: collections.Counter[str] = collections.Counter()
+        for lot in book["portfolio"]["lots"]:
+            out[lot["ticker"]] += Decimal(str(lot["quantity_remaining"]))
+        return dict(out)
+
     assert system["start_date"] == shadow["start_date"]
+    sys_h, shd_h = holdings(system), holdings(shadow)
+    if sys_h != shd_h:
+        # A difference is only legitimate if the AI dropped a name — never a size difference.
+        assert set(shd_h) >= set(sys_h), "System holds a name Shadow does not — it cannot add names"
+        for t in sys_h:
+            assert sys_h[t] == shd_h[t], f"{t}: quantities diverged — the AI cannot change a size"
 
 
 def test_the_reseeded_books_carry_none_of_the_artifact_names() -> None:

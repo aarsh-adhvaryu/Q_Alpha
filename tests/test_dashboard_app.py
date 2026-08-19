@@ -185,5 +185,9 @@ def test_the_daily_sources_are_freshness_gated_on_the_page() -> None:
     at = AppTest.from_file(str(_APP), default_timeout=90).run()
     assert not at.exception
     shown = " ".join(c.value for c in at.caption) + " ".join(w.value for w in at.warning)
-    assert "daily sources" in shown
-    assert "system_track.csv" in shown or "Track record" in shown
+    # Branch-agnostic on purpose. The panel renders one of two shapes — a one-line "all up to date"
+    # summary, or a block naming each stale source. An earlier version of this test asserted the
+    # source names, which only appear in the stale branch, so it passed only while the cron was
+    # behind and broke the moment it caught up. What must hold either way is that a freshness
+    # verdict is *reached and shown* rather than the files being trusted silently.
+    assert "daily sources are up to date" in shown or "daily sources are stale" in shown
