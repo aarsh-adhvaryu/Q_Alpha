@@ -1,1 +1,92 @@
-[]
+[
+  {
+    "as_of": "2026-08-18",
+    "book": "SYS",
+    "amount": "200000.00",
+    "basket": {
+      "AMBUJACEM.NS": 64,
+      "GODREJCP.NS": 28,
+      "HCLTECH.NS": 20,
+      "HDFCBANK.NS": 36,
+      "HDFCLIFE.NS": 50,
+      "HINDUNILVR.NS": 14,
+      "INFY.NS": 24,
+      "IOC.NS": 92
+    },
+    "model_rationale": "weakness=elevated; basket: IRFC.NS (\u221235%), ITC.NS (\u221233%), INFY.NS (\u221233%)",
+    "ai_insight": "name-verdict: 0 dropped of 15",
+    "resolve_on": "2026-09-15",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-08-18",
+    "book": "SHD",
+    "amount": "200000.00",
+    "basket": {
+      "AMBUJACEM.NS": 64,
+      "GODREJCP.NS": 28,
+      "HCLTECH.NS": 20,
+      "HDFCBANK.NS": 36,
+      "HDFCLIFE.NS": 50,
+      "HINDUNILVR.NS": 14,
+      "INFY.NS": 24,
+      "IOC.NS": 92
+    },
+    "model_rationale": "weakness=elevated; basket: IRFC.NS (\u221235%), ITC.NS (\u221233%), INFY.NS (\u221233%)",
+    "ai_insight": "n/a (AI off)",
+    "resolve_on": "2026-09-15",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-08-19",
+    "book": "SYS",
+    "amount": "100000.00",
+    "basket": {
+      "AMBUJACEM.NS": 33,
+      "BANKBARODA.NS": 50,
+      "GODREJCP.NS": 14,
+      "HDFCBANK.NS": 18,
+      "HDFCLIFE.NS": 25,
+      "HINDUNILVR.NS": 7,
+      "INFY.NS": 12,
+      "IOC.NS": 73,
+      "IRFC.NS": 1
+    },
+    "model_rationale": "weakness=elevated; basket: IRFC.NS (\u221236%), ITC.NS (\u221234%), HDFCLIFE.NS (\u221232%)",
+    "ai_insight": "name-verdict: 0 dropped of 15",
+    "resolve_on": "2026-09-16",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-08-19",
+    "book": "SHD",
+    "amount": "100000.00",
+    "basket": {
+      "AMBUJACEM.NS": 33,
+      "BANKBARODA.NS": 50,
+      "GODREJCP.NS": 14,
+      "HDFCBANK.NS": 18,
+      "HDFCLIFE.NS": 25,
+      "HINDUNILVR.NS": 7,
+      "INFY.NS": 12,
+      "IOC.NS": 73,
+      "IRFC.NS": 1
+    },
+    "model_rationale": "weakness=elevated; basket: IRFC.NS (\u221236%), ITC.NS (\u221234%), HDFCLIFE.NS (\u221232%)",
+    "ai_insight": "n/a (AI off)",
+    "resolve_on": "2026-09-16",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  }
+]

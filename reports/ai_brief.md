@@ -1,20 +1,26 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Sensex dropped 116 bps to open at 77,892.92, Nifty fell 23 bps to 24,343.45—weak start on crude and Middle East jitters.
+**Sentiment**: 🔴 Nifty extended losing streak to 7th day as elevated crude oil prices and weak global cues continue to weigh on investor sentiment.
 
-**Drivers:**
-1. **Crude oil surge** (~$82–89/bbl, +4.6% WoW) → IT stocks led losses (margin erosion, rupee pressure); Energy & import-heavy sectors face headwinds.
-2. **Geopolitical risk** (Iran, Strait of Hormuz uncertainty) → Caution prevailing due to firm crude oil prices and ongoing geopolitical uncertainties; defensive positioning favors banks, metals over growth.
-3. **IT underperformance** — Infosys (-2.83%), Sun Pharma (-2.54%), HCL (-2.32%) led declines; FMCG also weak.
+**Drivers**:  
+1. **Crude at cycle highs** (oil 4-day rally): Oil prices remain higher amid absent discussions between US and Iran regarding reopening of the Strait of Hormuz → compresses OMC margins (BPCL, IOC), inputs for aviation/paints/chemicals rise.  
+2. **Weak global tech sentiment**: Asian stocks slipped as AI stocks resumed decline → drags HCLTECH, INFY, TECHM, TCS downsides.  
+3. **Rupee depreciation pressure**: INR remains vulnerable near two-week low around 95.75 on higher crude costs increasing demand for dollars among importers → softer earnings translation for exporters; banks face FX headwinds.
 
-**Watchlist names affected:**
-- **Down pressure:** INFY, HCLTECH, SUNPHARMA, HINDUNILVR (IT/FMCG margin squeeze)
-- **Relative support:** AXISBANK, TATASTEEL, KOTAKBANK (metals & financials benefiting from rebalance)
+**Watchlist names affected**:  
+Energy drag: **BPCL, IOC, ONGC** (margin compression).  
+IT weakness: **HCLTECH, INFY, TCS, TECHM** (global selloff overhang).  
+Currency-sensitive exporters: **MARUTI, TATAMOTORS** (FX loss accrual).  
+Defensive picks—consumer/pharma hold slight edge: **SUNPHARMA, APOLLOHOSP** gainers vs. heavyweights.
 
-**Likely reaction:** Metals and private banks provided some support; Tata Steel advanced 1.5%, Axis Bank rose 1%—suggests a modest stabilization intraday if crude holds, but expect index to trade -0.2–0.5% lower near-term given persistent headwinds. Near-term: slight near-term rebound off opening lows if global sentiment steadies, but IT remains under pressure. Watch AXISBANK/KOTAKBANK for any sharp rally as accumulation zone; INFY/HCLTECH stay under scrutiny for further weakness.
+**Likely reaction**:  
+Index lean **down**, band **−0.4% to −0.8%**, confidence **medium**. Sixth consecutive loss day → technical exhaustion near, but crude/geopolitical tail-risk remains heavy. **BPCL, IOC** likely pressured into day 7; **HCLTECH** at risk of re-test lows if IT rotation persists. Watch intraday for FII flow; modest institutional bid on dips possible by close.
 
-**Risk note:** Geopolitical tensions between US and Iran, uncertainties regarding supply disruptions, particularly concerning the Strait of Hormuz remain tail risks if escalation triggers sharp crude spike.
+**Discretionary ideas**:  
+— **SUNPHARMA** (pharma defensive, mild gain today) — satellite sleeve rules apply if crude stays sticky +90-day; earnings resilience.
 
-SIGNAL: lean=flat; band=-0.3..0.4; confidence=low
+**Risk note**: Strait of Hormuz escalation (Iran rhetoric) could spike crude 5–8% intraday; rupee hits could exceed 1% if fast move happens.
 
-— 🤖 claude-haiku-4-5 · 54,581 in / 864 out tokens · ✓ complete
+SIGNAL: lean=down; band=-0.4..-0.8; confidence=medium
+
+— 🤖 claude-haiku-4-5 · 54,740 in / 911 out tokens · ✓ complete
