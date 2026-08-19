@@ -504,3 +504,113 @@ def test_an_infeasible_cap_after_truncation_degrades_gracefully() -> None:
     target = deploy_target(names, sector_of, cheap, tilt=1.0, max_sector_weight=0.30, max_names=3)
     assert len(target) == 3
     assert abs(float(target.sum()) - 1.0) < 1e-9
+
+
+# ---- the screen decides rather than defers (2026-08-19) -----------------------------------------
+#
+# User's verdict on the flag-don't-veto build: "the task was simple, i provide the amount, it
+# suggests the shares i buy it… if i wanted to do it at my own risk, why would i have created the
+# system". He is right — a basket the system will not stand behind, shipped with a warning, is work
+# handed back. The §4.7 breakdown test is now a filter, not a label.
+
+
+def _wide_prices() -> tuple[PriceData, dict[str, str]]:
+    """8 names: 2 in idiosyncratic decline, 6 merely pulled back or flat.
+
+    The 3-name fixture above deliberately trips the don't-starve guard (2 survivors < 3), so the
+    filter itself needs a universe wide enough to still build a basket after removing the breakers —
+    which is also the realistic case: on the live watchlist ~26% of names are breaking.
+    """
+    paths = {
+        "BREAK1.NS": _series(100, 55),  # deep, idiosyncratic → must be filtered
+        "BREAK2.NS": _series(100, 58),  # deep, idiosyncratic → must be filtered
+        "MILD1.NS": _series(100, 88),
+        "MILD2.NS": _series(100, 90),
+        "MILD3.NS": _series(100, 92),
+        "FLAT1.NS": _series(100, 99),
+        "FLAT2.NS": _series(100, 100),
+        "FLAT3.NS": _series(100, 101),
+    }
+    rows = []
+    for t, vals in paths.items():
+        for d, v in zip(_DATES, vals, strict=True):
+            rows.append({"date": d, "ticker": t, "close": v, "adj_close": v, "volume": 1000})
+    sectors = {t: f"SEC{i}" for i, t in enumerate(paths)}  # one sector each → cap never binds
+    return PriceData.from_long(pd.DataFrame(rows)), sectors
+
+
+def _wide_advice(**kwargs):  # type: ignore[no-untyped-def]
+    prices, sectors = _wide_prices()
+    cfg = Config()
+    return advise_deploy_into_weakness(
+        Portfolio(cfg.cost, cfg.tax, cash=Decimal("0")),
+        Decimal("100000"),
+        list(sectors),
+        sectors,
+        prices,
+        prices.adj_close.mean(axis=1),
+        _DATES[-1].date(),
+        max_sector_weight=1.0,
+        **kwargs,
+    )
+
+
+def test_a_breaking_name_is_removed_before_ranking_not_merely_flagged() -> None:
+    """DEEP falls hardest and is idiosyncratic, so it is exactly what the screen must NOT pick."""
+    advice = _wide_advice()
+    assert set(advice.filtered_out) == {"BREAK1.NS", "BREAK2.NS"}
+    assert "BREAK1.NS" not in advice.target.index
+    assert "BREAK2.NS" not in advice.target.index
+    assert not any(h.level == "breaking" for h in advice.candidate_health)
+
+
+def test_the_delivered_basket_carries_no_breaking_name() -> None:
+    """The property the user actually asked for: what comes out is buyable without adjudication."""
+    advice = _wide_advice()
+    bought = {o.ticker for o in advice.deploy.buy_orders}
+    assert bought  # a basket was still delivered
+    assert not (bought & {"BREAK1.NS", "BREAK2.NS"})
+    assert not any(h.level == "breaking" for h in advice.candidate_health)
+
+
+def test_the_filter_fails_open_rather_than_returning_nothing() -> None:
+    """If filtering would starve the basket, keep the full universe — some deploy beats none.
+
+    Guards the failure mode that would make this change worse than the problem it fixes: a market
+    where most names are breaking must not produce an empty recommendation.
+    """
+    prices = _prices()
+    as_of = _DATES[-1].date()
+    sector_of = {"ATHIGH.NS": "IT", "MILD.NS": "FIN", "DEEP.NS": "AUTO"}
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    # Only 3 names exist, so demanding 3 survivors after removing DEEP is unsatisfiable.
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sector_of),
+        sector_of,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_names=3,
+        max_sector_weight=1.0,
+    )
+    assert advice.filtered_out == ()  # filter stood down
+    assert len(advice.deploy.buy_orders) > 0  # …and a basket was still delivered
+
+
+def test_the_old_behaviour_is_still_reachable_for_comparison() -> None:
+    """`exclude_breaking=False` restores the label-only screen, so the change is measurable."""
+    advice = _wide_advice(exclude_breaking=False)
+    assert advice.filtered_out == ()
+    assert "BREAK1.NS" in advice.target.index  # the label-only screen still ranks it top
+
+
+def test_the_removal_is_reported_not_silent() -> None:
+    """The screen decides, but it says what it decided — a silent filter is its own trust problem."""
+    note = _wide_advice().filtered_note()
+    assert "removed 2 names" in note
+    assert "BREAK1" in note and "BREAK2" in note
+    assert note in _wide_advice().render()

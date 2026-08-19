@@ -228,11 +228,28 @@ class WeaknessDeployAdvice:
     # detector already existed and already disagreed with the advisor — it was simply never pointed
     # at candidates, only at holdings. Advisory: it annotates, it never vetoes a name.
     candidate_health: tuple[HoldingHealth, ...] = ()
+    # Names the breakdown filter removed before ranking (2026-08-19). Reported so the screen's
+    # decision is visible and auditable, not silent.
+    filtered_out: tuple[str, ...] = ()
     # Share of the whole candidate universe the detector rates "breaking", so the basket's own share
     # can be read against a baseline. Without it a mostly-red table is uninterpretable: a screen that
     # selects pulled-back names will always overlap a breakdown test, and the only question that
     # matters is *by how much more than the universe it drew from*.
     universe_breaking_rate: float | None = None
+
+    def filtered_note(self) -> str:
+        """The ✅ line — what the screen removed on your behalf, and on what test."""
+        if not self.filtered_out:
+            return ""
+        n = len(self.filtered_out)
+        shown = ", ".join(t.removesuffix(".NS") for t in self.filtered_out[:8])
+        more = f" and {n - 8} more" if n > 8 else ""
+        return (
+            f"✅ **The screen removed {n} name{'s' if n != 1 else ''} before choosing** — each one "
+            "is in a sustained, *name-specific* decline on this system's §4.7 breakdown test, which "
+            "is the opposite of the 'temporarily out of favour' story a pullback screen assumes. "
+            f"Excluded: {shown}{more}."
+        )
 
     def candidate_health_note(self) -> str:
         """The per-name verdict table — '' when no candidate could be assessed.
@@ -308,6 +325,9 @@ class WeaknessDeployAdvice:
             "Most out-of-favour (pulled back from 1y high — technical, not P/E):",
         ]
         lines += [f"  - {t}: {p * 100:.0f}% below 1y high" for t, p in self.cheapest]
+        filtered = self.filtered_note()
+        if filtered:
+            lines += ["", filtered]
         gaps = self.price_gaps_note()
         if gaps:
             lines += ["", gaps]
@@ -336,6 +356,7 @@ def advise_deploy_into_weakness(
     max_names: int | None = None,
     broker_prices: Mapping[str, Decimal] | None = None,
     known_actions: Mapping[str, Sequence[CorporateAction]] | None = None,
+    exclude_breaking: bool = True,
 ) -> WeaknessDeployAdvice:
     """Recommend deploying ``amount`` of new money across the Nifty-100 watchlist — diversified,
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
@@ -372,6 +393,32 @@ def advise_deploy_into_weakness(
     cap = float(amount) * max_name_fraction
     affordable = [t for t in priced if last_price[t] <= cap]
     universe = affordable if len(affordable) >= 3 else priced  # don't over-restrict tiny deploys
+
+    # The screen decides, rather than deferring (2026-08-19). `cheapness` alone ranks on "furthest
+    # below its 1-year high", which is very nearly the same list as "falling apart" — that is why the
+    # delivered basket came back 7-of-7 flagged by this system's own §4.7 breakdown test, at 5× the
+    # watchlist's base rate. Annotating that was honest but useless: it handed the user a basket the
+    # system would not stand behind and asked them to adjudicate.
+    #
+    # So the breakdown test is now a **filter, not a label**. A name in a sustained, idiosyncratic
+    # decline is not a discount, and the screen removes it before ranking rather than shipping it
+    # with a warning. The result is a shallower average discount and a naturally sector-diversified
+    # basket (7 sectors instead of 4-of-7 in IT), with zero names the system would flag for exit.
+    #
+    # Fails open, deliberately: too little history to judge, or too few survivors to build a basket,
+    # and the filter stands down rather than returning nothing. `exclude_breaking=False` restores the
+    # pre-2026-08-19 behaviour for comparison.
+    breaking: set[str] = set()
+    if exclude_breaking:
+        report = position_health(adj, universe, as_of)
+        breaking = {h.ticker for h in report.holdings if h.level == "breaking"}
+        healthy = [t for t in universe if t not in breaking]
+        # Never starve the basket: if the filter would leave too little to diversify across, keep the
+        # full universe. Some deploy on flagged names beats no deploy at all.
+        if len(healthy) >= max(3, max_names or 0):
+            universe = healthy
+        else:
+            breaking = set()
 
     gaps = unexplained_gaps(adj, universe, as_of, actions=known_actions)
     cheap = cheapness_scores(
@@ -426,6 +473,8 @@ def advise_deploy_into_weakness(
     # recommended — the ones with buy orders, or the target if nothing fits — against the full
     # watchlist cross-section, so "vs market" means the same thing it does on the holdings panel.
     recommended = sorted({o.ticker for o in deploy.buy_orders}) or sorted(target.index)
+    # Health is still reported on the delivered basket — the filter should make this boring, and a
+    # 🔴 appearing here again is the signal that it stopped working.
     universe_health = position_health(adj, sorted(universe), as_of).holdings
     by_ticker = {h.ticker: h for h in universe_health}
     health = [by_ticker[t] for t in recommended if t in by_ticker]
@@ -444,4 +493,5 @@ def advise_deploy_into_weakness(
         price_gaps=tuple(gaps[t] for t in sorted(gaps)),
         candidate_health=tuple(health),
         universe_breaking_rate=breaking_rate,
+        filtered_out=tuple(sorted(breaking)),
     )

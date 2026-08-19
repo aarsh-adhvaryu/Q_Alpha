@@ -215,14 +215,15 @@ def buy_advice_scope_note() -> str:
     a reason to hide it — it is a reason to say so every single time it renders.
     """
     return (
-        "**What this is:** a deterministic **technical screen** — names furthest below their own "
-        "1-year high, spread across sectors, bought with whole shares at **₹0 capital-gains tax**. "
-        "Prices are checked for continuity first, and each name carries this system's own "
-        "breakdown verdict.\n\n"
+        "**What this is:** a deterministic screen you can act on. It takes names that have pulled "
+        "back from their own 1-year high, **removes any that its §4.7 breakdown test says are in a "
+        "name-specific decline** (a falling knife is not a discount), checks the survivors' prices "
+        "for continuity, spreads them across sectors, and buys whole shares at **₹0 capital-gains "
+        "tax**. What comes out is meant to be bought, not adjudicated.\n\n"
         "**What this is not:** the validated strategy. This screen has **never been backtested** — "
-        "it shares no selection code and no names with the factor funnel behind the 18.2% headline, "
-        "and it has never been measured against a baseline. It is a starting point for your own "
-        "judgement, not a result. Every order is still placed by you."
+        "it shares no selection code and no names with the factor funnel behind the 18.2% headline. "
+        "That is a real limit on how much confidence it has earned, not a reason for it to hedge: "
+        "it makes the call, shows its working, and you place the order."
     )
 
 
