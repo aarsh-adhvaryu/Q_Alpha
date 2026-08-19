@@ -57,6 +57,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/paper/book.json data/paper/run_log.jsonl data/paper/alert_state.json reports/paper_dashboard.md reports/paper_equity.csv
           git add reports/ai_brief.md data/autopilot/state.json data/autopilot/ledger.json reports/autopilot_dashboard.md 2>/dev/null || true
+          git add reports/ai_verdicts.md 2>/dev/null || true  # PR-8: the AI's per-name keep/drop sheet — written but never committed, so nobody could see what it decided
           # The System book trio (system = the former adaptive book; shadow = no-AI twin; baseline = NIFTYBEES)
           git add data/paper/adaptive_book.json 2>/dev/null || true
           git add data/paper/shadow_book.json 2>/dev/null || true
