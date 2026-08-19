@@ -9,11 +9,509 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "0",
-    "lots": [],
+    "cash": "52.51",
+    "lots": [
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-08-18",
+        "quantity_original": "92",
+        "buy_price": "137.80",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.90",
+        "other_costs": "0.46",
+        "lot_id": "01ef94cd-9754-4642-8234-e8b7271094a6",
+        "broker_trade_id": null,
+        "quantity_remaining": "92"
+      },
+      {
+        "ticker": "IOC.NS",
+        "acquisition_date": "2026-08-19",
+        "quantity_original": "73",
+        "buy_price": "136.30",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.49",
+        "other_costs": "0.37",
+        "lot_id": "8e3ad755-b8fc-4b35-bc2b-fd2bbff1f649",
+        "broker_trade_id": null,
+        "quantity_remaining": "73"
+      },
+      {
+        "ticker": "NTPC.NS",
+        "acquisition_date": "2026-08-18",
+        "quantity_original": "118",
+        "buy_price": "337.10",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.97",
+        "other_costs": "1.44",
+        "lot_id": "6ddf7c9e-885c-4100-9506-4ca8a9189518",
+        "broker_trade_id": null,
+        "quantity_remaining": "118"
+      },
+      {
+        "ticker": "ONGC.NS",
+        "acquisition_date": "2026-08-18",
+        "quantity_original": "166",
+        "buy_price": "239.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.96",
+        "other_costs": "1.44",
+        "lot_id": "5e4f4425-4f3a-4ce6-80f7-8c4340e12327",
+        "broker_trade_id": null,
+        "quantity_remaining": "166"
+      },
+      {
+        "ticker": "SUNPHARMA.NS",
+        "acquisition_date": "2026-08-18",
+        "quantity_original": "21",
+        "buy_price": "1875.10",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.91",
+        "other_costs": "1.43",
+        "lot_id": "f129b761-5382-4658-aeba-f4b60625b7e7",
+        "broker_trade_id": null,
+        "quantity_remaining": "21"
+      },
+      {
+        "ticker": "TECHM.NS",
+        "acquisition_date": "2026-08-18",
+        "quantity_original": "24",
+        "buy_price": "1592.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.73",
+        "other_costs": "1.38",
+        "lot_id": "7a28e886-9cb3-42a3-a604-a40766610954",
+        "broker_trade_id": null,
+        "quantity_remaining": "24"
+      },
+      {
+        "ticker": "TITAN.NS",
+        "acquisition_date": "2026-08-18",
+        "quantity_original": "5",
+        "buy_price": "5048.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "3.79",
+        "other_costs": "0.92",
+        "lot_id": "bcdc0de5-f3ce-41e0-b65f-c7b7c812760a",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
+      },
+      {
+        "ticker": "AMBUJACEM.NS",
+        "acquisition_date": "2026-08-19",
+        "quantity_original": "33",
+        "buy_price": "407.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "2.02",
+        "other_costs": "0.48",
+        "lot_id": "28894ba4-f697-4711-83f2-c3644bbba3fb",
+        "broker_trade_id": null,
+        "quantity_remaining": "33"
+      },
+      {
+        "ticker": "BANKBARODA.NS",
+        "acquisition_date": "2026-08-19",
+        "quantity_original": "50",
+        "buy_price": "245.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.84",
+        "other_costs": "0.44",
+        "lot_id": "1f6a0706-92ab-46f5-be95-d6ab90530554",
+        "broker_trade_id": null,
+        "quantity_remaining": "50"
+      },
+      {
+        "ticker": "GODREJCP.NS",
+        "acquisition_date": "2026-08-19",
+        "quantity_original": "14",
+        "buy_price": "930.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.95",
+        "other_costs": "0.47",
+        "lot_id": "1d177cc8-5d8a-4849-92bd-323facf138ed",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "HDFCBANK.NS",
+        "acquisition_date": "2026-08-19",
+        "quantity_original": "18",
+        "buy_price": "720.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.94",
+        "other_costs": "0.46",
+        "lot_id": "6edd7816-f3e5-434b-a1be-edd443bd073b",
+        "broker_trade_id": null,
+        "quantity_remaining": "18"
+      },
+      {
+        "ticker": "HDFCLIFE.NS",
+        "acquisition_date": "2026-08-19",
+        "quantity_original": "25",
+        "buy_price": "536.30",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "2.01",
+        "other_costs": "0.48",
+        "lot_id": "abcf1376-64b0-44ad-a2dd-2d97bb6dbad1",
+        "broker_trade_id": null,
+        "quantity_remaining": "25"
+      },
+      {
+        "ticker": "HINDUNILVR.NS",
+        "acquisition_date": "2026-08-19",
+        "quantity_original": "7",
+        "buy_price": "2020.70",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "2.12",
+        "other_costs": "0.51",
+        "lot_id": "7dda2be1-368c-4376-9fff-248e4b89f7af",
+        "broker_trade_id": null,
+        "quantity_remaining": "7"
+      },
+      {
+        "ticker": "INFY.NS",
+        "acquisition_date": "2026-08-19",
+        "quantity_original": "12",
+        "buy_price": "1119.80",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "2.02",
+        "other_costs": "0.48",
+        "lot_id": "161e6f91-d0a0-48eb-8892-a763b421dc3d",
+        "broker_trade_id": null,
+        "quantity_remaining": "12"
+      },
+      {
+        "ticker": "IRFC.NS",
+        "acquisition_date": "2026-08-19",
+        "quantity_original": "1",
+        "buy_price": "85.18",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.01",
+        "other_costs": "0.00",
+        "lot_id": "7fd015e4-51d6-418b-abf6-8f4a76a6e076",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      }
+    ],
     "ltcg_by_fy": {}
   },
-  "history": [],
-  "last_target": null,
-  "equity_curve": []
+  "history": [
+    {
+      "as_of": "2026-08-18",
+      "reason": "deploy: weakness=elevated; basket: IRFC.NS (\u221235%), ITC.NS (\u221233%), INFY.NS (\u221233%) (\u20b9200,000)",
+      "orders": [
+        {
+          "date": "2026-08-18",
+          "ticker": "AMBUJACEM.NS",
+          "side": "BUY",
+          "quantity": "64",
+          "price": "412.40",
+          "cost": "84.10",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "GODREJCP.NS",
+          "side": "BUY",
+          "quantity": "28",
+          "price": "931.00",
+          "cost": "83.06",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "HCLTECH.NS",
+          "side": "BUY",
+          "quantity": "20",
+          "price": "1298.00",
+          "cost": "82.71",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "HDFCBANK.NS",
+          "side": "BUY",
+          "quantity": "36",
+          "price": "723.00",
+          "cost": "82.93",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "HDFCLIFE.NS",
+          "side": "BUY",
+          "quantity": "50",
+          "price": "538.25",
+          "cost": "85.76",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "HINDUNILVR.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "2035.00",
+          "cost": "90.78",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "INFY.NS",
+          "side": "BUY",
+          "quantity": "24",
+          "price": "1115.00",
+          "cost": "85.26",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "92",
+          "price": "137.80",
+          "cost": "40.40",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-18",
+      "reason": "first deployment of capital",
+      "orders": [
+        {
+          "date": "2026-08-18",
+          "ticker": "AMBUJACEM.NS",
+          "side": "SELL",
+          "quantity": "64",
+          "price": "412.40",
+          "cost": "93.64",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "GODREJCP.NS",
+          "side": "SELL",
+          "quantity": "28",
+          "price": "931.00",
+          "cost": "92.65",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "HCLTECH.NS",
+          "side": "SELL",
+          "quantity": "20",
+          "price": "1298.00",
+          "cost": "92.32",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "HDFCBANK.NS",
+          "side": "SELL",
+          "quantity": "36",
+          "price": "723.00",
+          "cost": "92.53",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "HDFCLIFE.NS",
+          "side": "SELL",
+          "quantity": "50",
+          "price": "538.25",
+          "cost": "95.22",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "HINDUNILVR.NS",
+          "side": "SELL",
+          "quantity": "14",
+          "price": "2035.00",
+          "cost": "100.01",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "INFY.NS",
+          "side": "SELL",
+          "quantity": "24",
+          "price": "1115.00",
+          "cost": "94.75",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "NTPC.NS",
+          "side": "BUY",
+          "quantity": "118",
+          "price": "337.10",
+          "cost": "126.75",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "ONGC.NS",
+          "side": "BUY",
+          "quantity": "166",
+          "price": "239.50",
+          "cost": "126.67",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "SUNPHARMA.NS",
+          "side": "BUY",
+          "quantity": "21",
+          "price": "1875.10",
+          "cost": "125.47",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "TECHM.NS",
+          "side": "BUY",
+          "quantity": "24",
+          "price": "1592.00",
+          "cost": "121.74",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-18",
+          "ticker": "TITAN.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "5048.60",
+          "cost": "80.44",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-19",
+      "reason": "deploy: weakness=elevated; basket: IRFC.NS (\u221236%), ITC.NS (\u221234%), HDFCLIFE.NS (\u221232%) (\u20b9100,000)",
+      "orders": [
+        {
+          "date": "2026-08-19",
+          "ticker": "AMBUJACEM.NS",
+          "side": "BUY",
+          "quantity": "33",
+          "price": "407.50",
+          "cost": "42.85",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-19",
+          "ticker": "BANKBARODA.NS",
+          "side": "BUY",
+          "quantity": "50",
+          "price": "245.00",
+          "cost": "39.03",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-19",
+          "ticker": "GODREJCP.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "930.00",
+          "cost": "41.48",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-19",
+          "ticker": "HDFCBANK.NS",
+          "side": "BUY",
+          "quantity": "18",
+          "price": "720.00",
+          "cost": "41.28",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-19",
+          "ticker": "HDFCLIFE.NS",
+          "side": "BUY",
+          "quantity": "25",
+          "price": "536.30",
+          "cost": "42.72",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-19",
+          "ticker": "HINDUNILVR.NS",
+          "side": "BUY",
+          "quantity": "7",
+          "price": "2020.70",
+          "cost": "45.06",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-19",
+          "ticker": "INFY.NS",
+          "side": "BUY",
+          "quantity": "12",
+          "price": "1119.80",
+          "cost": "42.82",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-19",
+          "ticker": "IOC.NS",
+          "side": "BUY",
+          "quantity": "73",
+          "price": "136.30",
+          "cost": "31.71",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-19",
+          "ticker": "IRFC.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "85.18",
+          "cost": "0.27",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-19",
+      "reason": "drift 38.7% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    }
+  ],
+  "last_target": {
+    "NTPC.NS": 0.2,
+    "TITAN.NS": 0.20122376017906596,
+    "SUNPHARMA.NS": 0.2,
+    "ONGC.NS": 0.2,
+    "TECHM.NS": 0.19877623982093406
+  },
+  "equity_curve": [
+    {
+      "date": "2026-08-18",
+      "equity": "198122.81",
+      "cash": "3082.31"
+    },
+    {
+      "date": "2026-08-19",
+      "equity": "297910.79",
+      "cash": "52.51"
+    }
+  ]
 }

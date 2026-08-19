@@ -5,10 +5,10 @@
   "adaptive_last_marked": "2026-07-10",
   "baseline_seeded": true,
   "trio_last_deposit_month": "2026-07",
-  "system_last_marked": null,
+  "system_last_marked": "2026-08-19",
   "wallets": {
-    "system": "400000",
-    "shadow": "400000"
+    "system": "100000.00",
+    "shadow": "100000.00"
   },
   "contributed": {
     "system": "400000",
