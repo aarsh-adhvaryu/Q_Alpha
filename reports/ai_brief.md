@@ -1,17 +1,26 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Nifty 50 settled at 24,154.90, down 132.75 points (0.55%), Sensex fell 492.70 points (0.63%) — third consecutive session lower.
+**Sentiment**: 🔴 Nifty extended losing streak to 7th day as elevated crude oil prices and weak global cues continue to weigh on investor sentiment.
 
-**Drivers:**
-1. Crude rose 0.5–0.7% to $91.3 Brent/$85.1 WTI on US-Iran ceasefire expiry & Strait of Hormuz disruption fears → OMCs (BPCL, IOC, ONGC) margin compression; aviation/transport input cost headwind (INDIGO, TATAMOTORS).
-2. Higher US Treasury yields and a weaker rupee → pressure on rate-sensitive sectors, FII outflow risk.
+**Drivers**:  
+1. **Crude at cycle highs** (oil 4-day rally): Oil prices remain higher amid absent discussions between US and Iran regarding reopening of the Strait of Hormuz → compresses OMC margins (BPCL, IOC), inputs for aviation/paints/chemicals rise.  
+2. **Weak global tech sentiment**: Asian stocks slipped as AI stocks resumed decline → drags HCLTECH, INFY, TECHM, TCS downsides.  
+3. **Rupee depreciation pressure**: INR remains vulnerable near two-week low around 95.75 on higher crude costs increasing demand for dollars among importers → softer earnings translation for exporters; banks face FX headwinds.
 
-**Watchlist names affected:** BPCL, IOC (energy margin squeeze); INDIGO, TATAMOTORS (fuel cost rise); HDFCBANK, ICICIBANK (rate sensitivity); RELIANCE (crude input cost mixed).
+**Watchlist names affected**:  
+Energy drag: **BPCL, IOC, ONGC** (margin compression).  
+IT weakness: **HCLTECH, INFY, TCS, TECHM** (global selloff overhang).  
+Currency-sensitive exporters: **MARUTI, TATAMOTORS** (FX loss accrual).  
+Defensive picks—consumer/pharma hold slight edge: **SUNPHARMA, APOLLOHOSP** gainers vs. heavyweights.
 
-**Likely reaction:** Index likely consolidates near support with downside bias over next 1–2 sessions. FII selling (₹2,535 cr on Aug 17) offset by DII support creates near-term chop. **Lean: down 0.2–0.6%, confidence: medium.** Most at-risk: INDIGO (fuel cost pinch), BPCL (refinery margins). RELIANCE may stabilise if oil price stabilises.
+**Likely reaction**:  
+Index lean **down**, band **−0.4% to −0.8%**, confidence **medium**. Sixth consecutive loss day → technical exhaustion near, but crude/geopolitical tail-risk remains heavy. **BPCL, IOC** likely pressured into day 7; **HCLTECH** at risk of re-test lows if IT rotation persists. Watch intraday for FII flow; modest institutional bid on dips possible by close.
 
-**Risk note:** Geopolitical risk likely to keep crude elevated, remain headwind for Indian equities.
+**Discretionary ideas**:  
+— **SUNPHARMA** (pharma defensive, mild gain today) — satellite sleeve rules apply if crude stays sticky +90-day; earnings resilience.
 
-SIGNAL: lean=down; band=0.2..0.6; confidence=medium
+**Risk note**: Strait of Hormuz escalation (Iran rhetoric) could spike crude 5–8% intraday; rupee hits could exceed 1% if fast move happens.
 
-— 🤖 claude-haiku-4-5 · 41,321 in / 720 out tokens · ✓ complete
+SIGNAL: lean=down; band=-0.4..-0.8; confidence=medium
+
+— 🤖 claude-haiku-4-5 · 54,740 in / 911 out tokens · ✓ complete
