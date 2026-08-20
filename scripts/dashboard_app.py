@@ -75,6 +75,85 @@ AI_BRIEF_MD = Path("reports/ai_brief.md")
 SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
 
 
+def _write_repo_json(path: str, payload: object, message: str) -> tuple[bool, str]:
+    """Write a small JSON file into the repo via the GitHub Contents API. Returns ``(ok, note)``.
+
+    The Streamlit host is a different machine from the cron runner and its container is disposable,
+    so anything the user records here has to reach the repo or it is gone on the next redeploy —
+    the same lesson as the ₹50k Add-money top-up that never landed. Fail-soft, and loud on failure:
+    a silently unsaved decision is worse than a refused one.
+    """
+    import base64
+    import json
+    import urllib.error
+    import urllib.request
+
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if not token:
+        return False, "no GITHUB_TOKEN configured"
+    repo = os.environ.get("GITHUB_REPO", "aarsh-adhvaryu/Q_Alpha")
+    api = f"https://api.github.com/repos/{repo}/contents/{path}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "qalpha-dashboard",
+    }
+    try:
+        sha: str | None = None
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(api, headers=headers), timeout=10
+            ) as r:
+                sha = str(json.load(r)["sha"])
+        except urllib.error.HTTPError as e:
+            if e.code != 404:  # 404 = file doesn't exist yet → create it
+                raise
+        body: dict[str, object] = {
+            "message": message,
+            "content": base64.b64encode((json.dumps(payload, indent=2) + "\n").encode()).decode(),
+        }
+        if sha is not None:
+            body["sha"] = sha
+        put = urllib.request.Request(
+            api,
+            data=json.dumps(body).encode(),
+            headers={**headers, "Content-Type": "application/json"},
+            method="PUT",
+        )
+        with urllib.request.urlopen(put, timeout=10):
+            return True, "saved to the repo"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _cooling_off_exits() -> list:
+    """The user's recorded exits — repo copy is authoritative, local file is the fallback."""
+    from qalpha.live.cooling_off import COOLING_OFF_PATH, Exit, load_exits
+
+    cached = st.session_state.get("cooling_off")
+    if cached is not None:
+        return [Exit.from_dict(r) for r in cached]
+    return load_exits(COOLING_OFF_PATH)
+
+
+def _save_cooling_off(exits: list) -> tuple[bool, str]:
+    from qalpha.live.cooling_off import COOLING_OFF_PATH, save_exits
+
+    payload = [e.to_dict() for e in exits]
+    st.session_state["cooling_off"] = payload  # so the page reflects it immediately
+    ok, note = _write_repo_json(
+        str(COOLING_OFF_PATH), payload, "advisor: update cooling-off list [skip ci]"
+    )
+    if not ok:
+        import contextlib
+
+        with contextlib.suppress(
+            OSError
+        ):  # local dev / no token — persist on this machine at least
+            save_exits(exits, COOLING_OFF_PATH)
+    return ok, note
+
+
 def _queue_injection_to_repo(amount: int, reason: str) -> tuple[bool, str]:
     """Queue an Add-money deposit into the repo's ``pending_injections.json`` via the GitHub API, so
     the daily cron (a different machine than this Streamlit app) actually picks it up. Needs a
@@ -1437,6 +1516,61 @@ def _watchlist() -> tuple[list[str], dict[str, str], PriceData] | None:
     return tickers, sector_of, load_parquet(str(panel))
 
 
+def _exit_switch(ticker: str, as_of: date, namespace: str) -> None:
+    """Record (or clear) a deliberate exit — the one thing the system cannot infer for itself.
+
+    Selling for cash and selling to leave a company look identical in a tradebook, and guessing
+    wrong either way is worse than asking. So this is a box the user ticks, never an inference.
+    """
+    from qalpha.live.cooling_off import DEFAULT_MONTHS, clear_exit, record_exit
+
+    exits = _cooling_off_exits()
+    already = next((e for e in exits if e.ticker == ticker and e.active_on(as_of)), None)
+    short = ticker.removesuffix(".NS")
+
+    if already is not None:
+        st.info(
+            f"🚫 **{short} is on your cooling-off list until {already.until}** — the buy screen "
+            "will not re-enter it. Selling costs tax, buying does not, so re-buying a name you "
+            "deliberately left is money spent for nothing."
+        )
+        if st.button(f"Make {short} buyable again", key=f"clear_exit_{namespace}"):
+            ok, note = _save_cooling_off(clear_exit(ticker, exits))
+            (st.success if ok else st.error)(
+                f"{short} removed from cooling-off — {note}."
+                if ok
+                else f"❌ NOT saved: {note}. Set a GITHUB_TOKEN with contents:write."
+            )
+        return
+
+    with st.expander(f"Leaving {short} for good?"):
+        st.caption(
+            "Tick this only if you are exiting the **company**, not just raising cash. The buy "
+            f"screen will then skip {short} for the next few months instead of re-buying it on the "
+            "next deploy. It lapses on its own — this is not a permanent blacklist."
+        )
+        months = st.slider(
+            "Skip it for how long (months)?",
+            1,
+            24,
+            DEFAULT_MONTHS,
+            key=f"exit_months_{namespace}",
+        )
+        reason = st.text_input(
+            "Why (optional — you'll want this in 6 months)", key=f"exit_why_{namespace}"
+        )
+        if st.button(f"Don't buy {short} back", key=f"exit_btn_{namespace}"):
+            ok, note = _save_cooling_off(
+                record_exit(ticker, as_of, months=months, reason=reason, exits=exits)
+            )
+            (st.success if ok else st.error)(
+                f"✓ {short} will not be bought back before "
+                f"{record_exit(ticker, as_of, months=months, exits=[])[0].until} — {note}."
+                if ok
+                else f"❌ NOT saved: {note}. Set a GITHUB_TOKEN with contents:write."
+            )
+
+
 def _advisor_tabs(
     portfolio: Portfolio,
     prices_dec: dict[str, Decimal],
@@ -1482,6 +1616,7 @@ def _advisor_tabs(
                 )
                 st.markdown(advice.render())
                 _unverified_branch_warning(advice)
+            _exit_switch(ticker, as_of, namespace)
 
     with raise_tab:
         amount = st.number_input(

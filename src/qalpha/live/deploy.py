@@ -231,11 +231,25 @@ class WeaknessDeployAdvice:
     # Names the breakdown filter removed before ranking (2026-08-19). Reported so the screen's
     # decision is visible and auditable, not silent.
     filtered_out: tuple[str, ...] = ()
+    # Names removed because the user said to leave them alone, not because the market did.
+    cooling_off: tuple[str, ...] = ()
     # Share of the whole candidate universe the detector rates "breaking", so the basket's own share
     # can be read against a baseline. Without it a mostly-red table is uninterpretable: a screen that
     # selects pulled-back names will always overlap a breakdown test, and the only question that
     # matters is *by how much more than the universe it drew from*.
     universe_breaking_rate: float | None = None
+
+    def cooling_off_note(self) -> str:
+        """What was skipped because *you* said so — never silent, however long ago you said it."""
+        if not self.cooling_off:
+            return ""
+        names = ", ".join(t.removesuffix(".NS") for t in self.cooling_off)
+        return (
+            f"🚫 **Skipped {len(self.cooling_off)} name(s) you chose to exit:** {names}. "
+            "Selling costs tax and buying does not, so re-entering a name you deliberately left "
+            "would be real money spent for nothing. Clear it on the Sell tab to make it buyable "
+            "again; it lapses on its own otherwise."
+        )
 
     def filtered_note(self) -> str:
         """The ✅ line — what the screen removed on your behalf, and on what test."""
@@ -325,6 +339,9 @@ class WeaknessDeployAdvice:
             "Most out-of-favour (pulled back from 1y high — technical, not P/E):",
         ]
         lines += [f"  - {t}: {p * 100:.0f}% below 1y high" for t, p in self.cheapest]
+        cooling = self.cooling_off_note()
+        if cooling:
+            lines += ["", cooling]
         filtered = self.filtered_note()
         if filtered:
             lines += ["", filtered]
@@ -357,6 +374,7 @@ def advise_deploy_into_weakness(
     broker_prices: Mapping[str, Decimal] | None = None,
     known_actions: Mapping[str, Sequence[CorporateAction]] | None = None,
     exclude_breaking: bool = True,
+    do_not_buy: Collection[str] = (),
 ) -> WeaknessDeployAdvice:
     """Recommend deploying ``amount`` of new money across the Nifty-100 watchlist — diversified,
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
@@ -419,6 +437,15 @@ def advise_deploy_into_weakness(
             universe = healthy
         else:
             breaking = set()
+
+    # Names the user deliberately exited (``live/cooling_off.py``). Removed *before* ranking, so a
+    # name on cooling-off cannot be re-bought — the point being that selling is taxed and buying is
+    # not, so a silent re-entry means real money paid for nothing. This is the only filter in the
+    # screen that encodes the user's stated intent rather than a measurement, which is exactly why it
+    # is reported on the advice rather than applied quietly.
+    on_cooling_off = sorted(set(do_not_buy) & set(universe))
+    if on_cooling_off:
+        universe = [t for t in universe if t not in set(do_not_buy)]
 
     gaps = unexplained_gaps(adj, universe, as_of, actions=known_actions)
     cheap = cheapness_scores(
@@ -527,4 +554,5 @@ def advise_deploy_into_weakness(
         candidate_health=tuple(health),
         universe_breaking_rate=breaking_rate,
         filtered_out=tuple(sorted(breaking)),
+        cooling_off=tuple(on_cooling_off),
     )
