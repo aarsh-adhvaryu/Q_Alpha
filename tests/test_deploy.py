@@ -614,3 +614,131 @@ def test_the_removal_is_reported_not_silent() -> None:
     assert "removed 2 names" in note
     assert "BREAK1" in note and "BREAK2" in note
     assert note in _wide_advice().render()
+
+
+# ---- held names keep their slots (2026-08-20) ----------------------------------------------------
+#
+# User: "always investing new works but not always, if a company is good, and getting a good deal
+# than why not". Correct — and without this the monthly deploy sprawls, because advise_deploy funds
+# whatever is furthest below target and a name you hold zero of is always furthest below.
+
+
+def _hold(portfolio: Portfolio, ticker: str, qty: int, price: float, on) -> None:  # type: ignore[no-untyped-def]
+    from qalpha.accounting.tax_lots import TaxLot
+
+    portfolio.ledger.add_lot(
+        TaxLot(
+            ticker=ticker,
+            acquisition_date=on,
+            quantity_original=Decimal(qty),
+            buy_price=Decimal(str(price)),
+        )
+    )
+
+
+def test_a_still_healthy_holding_keeps_its_slot_against_a_cheaper_newcomer() -> None:
+    """The rule in one test: add to what is still good rather than buying a fresher name."""
+    prices, sectors = _wide_prices()
+    as_of = _DATES[-1].date()
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    # Hold the *least* discounted healthy name — on cheapness alone it would rank last.
+    _hold(pf, "FLAT3.NS", 10, 101.0, _DATES[0].date())
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sectors),
+        sectors,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_names=2,
+        max_sector_weight=1.0,
+    )
+    assert "FLAT3.NS" in advice.target.index, (
+        "a healthy holding was displaced by a cheaper newcomer"
+    )
+    assert len(advice.target) == 2  # …and the roster stays capped
+
+
+def test_a_holding_that_breaks_down_loses_its_slot() -> None:
+    """Stickiness is not loyalty: the slot is held only while the name still passes the screen."""
+    prices, sectors = _wide_prices()
+    as_of = _DATES[-1].date()
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    _hold(pf, "BREAK1.NS", 10, 55.0, _DATES[0].date())  # in idiosyncratic decline
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sectors),
+        sectors,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_names=2,
+        max_sector_weight=1.0,
+    )
+    assert "BREAK1.NS" in advice.filtered_out
+    assert "BREAK1.NS" not in advice.target.index  # replaced, not topped up
+    assert len(advice.target) == 2
+
+
+def test_spare_slots_still_go_to_new_names() -> None:
+    """Holding one name must not stop the screen diversifying into the remaining slots."""
+    prices, sectors = _wide_prices()
+    as_of = _DATES[-1].date()
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    _hold(pf, "FLAT3.NS", 10, 101.0, _DATES[0].date())
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sectors),
+        sectors,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_names=4,
+        max_sector_weight=1.0,
+    )
+    assert len(advice.target) == 4
+    assert len(set(advice.target.index) - {"FLAT3.NS"}) == 3  # 3 newcomers filled the rest
+
+
+def test_repeated_deploys_do_not_grow_the_portfolio_without_bound() -> None:
+    """The sprawl property, asserted directly.
+
+    Simulated on real price history, five monthly deploys previously produced 19–20 distinct names
+    (~40 in a year), each a stranded lot that never got topped up again. The roster must instead
+    stay at the size the user asked for.
+    """
+    prices, sectors = _wide_prices()
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    index = prices.adj_close.mean(axis=1)
+    held: set[str] = set()
+
+    for offset in (60, 40, 20, 0):  # four deploys spread across the window
+        as_of = _DATES[len(_DATES) - 1 - offset].date()
+        advice = advise_deploy_into_weakness(
+            pf,
+            Decimal("50000"),
+            list(sectors),
+            sectors,
+            prices,
+            index,
+            as_of,
+            max_names=3,
+            max_sector_weight=1.0,
+        )
+        for o in advice.deploy.buy_orders:
+            _hold(pf, o.ticker, int(o.quantity), float(o.price), as_of)
+            held.add(o.ticker)
+
+    # Without stickiness this drifts well past the cap as each deploy re-ranks. A little churn is
+    # legitimate (a name breaking down frees its slot), so allow one replacement, not unbounded growth.
+    assert len(held) <= 4, f"portfolio sprawled to {len(held)} names on a 3-name roster: {held}"
