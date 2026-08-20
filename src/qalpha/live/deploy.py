@@ -428,17 +428,44 @@ def advise_deploy_into_weakness(
         rebase_from=rebase_starts(gaps),
         no_tilt=excluded_from_tilt(gaps),
     )
+    # Keep building the positions you already own (2026-08-20). User's framing, and it is the right
+    # one: "if a company is good, and getting a good deal, why not add to it?"
+    #
+    # Without this, a monthly SIP sprawls. `advise_deploy` funds whatever is furthest below target,
+    # and a name you hold *zero* of is always furthest below — so each month's freshly-ranked
+    # newcomers outrank every position you already hold. Simulated over five monthly deploys on real
+    # price history that produced **19 names in five months** (~40 in a year), each a stranded
+    # ~₹10,000 lot that never gets topped up again. Nothing is sold, so there is no tax damage; it
+    # simply never builds a position in anything.
+    #
+    # So the slots go to held names first. A holding keeps its slot for exactly as long as it still
+    # earns it — it must still clear the breakdown filter, the continuity guard and the affordability
+    # cap, since `universe` is the already-screened list. A name that breaks down loses its slot and a
+    # fresh candidate takes it. That is the whole rule: **add to what is still good, replace only what
+    # stopped being good.**
+    held_still_screened = [t for t in universe if t in portfolio.positions()]
+    preselected = max_names is not None and len(universe) > max_names
+    if preselected:
+        keep = held_still_screened[: max_names or 0]
+        slots = (max_names or 0) - len(keep)
+        fresh = [t for t in sorted(universe, key=lambda x: -cheap.get(x, 0.0)) if t not in keep]
+        selected = keep + fresh[: max(0, slots)]
+    else:
+        selected = list(universe)
+
     target = deploy_target(
-        universe,
+        selected,
         sector_of,
         cheap,
         tilt=tilt,
         max_sector_weight=max_sector_weight,
-        max_names=max_names,
+        # When we have already chosen the roster, a second truncation would undo the stickiness by
+        # re-ranking held names out on cheapness alone.
+        max_names=None if preselected else max_names,
     )
 
     price_dec: dict[str, Decimal] = {}
-    for t in set(universe) | set(portfolio.positions()):
+    for t in set(selected) | set(universe) | set(portfolio.positions()):
         if t in adj.columns:
             series = adj[t].loc[:cutoff].dropna()
             if not series.empty:
