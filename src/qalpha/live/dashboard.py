@@ -25,6 +25,7 @@ from qalpha.live.runlog import RunLogEntry, health_markdown
 
 if TYPE_CHECKING:
     from qalpha.live.deploy import WeaknessDeployAdvice
+    from qalpha.live.position_health import PositionHealthReport
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,40 @@ def sources_freshness_markdown(sources: list[SourceFreshness]) -> str:
     ]
     lines += [f"- {s.note}" for s in sources]
     return "\n".join(lines)
+
+
+def health_panel_markdown(report: PositionHealthReport) -> str:
+    """The between-rebalance health watch, rendered **once**.
+
+    The dashboard used to print every holding's line and then call ``report.render()``, which prints
+    the breaking/watch names *again* — so a weak name appeared twice on one screen and the panel read
+    as twice as complicated as it is. One list, worst first, with a single headline.
+    """
+    holdings = sorted(report.holdings, key=lambda h: h.trailing_return)
+    if not holdings:
+        return "No holdings to watch yet."
+    breaking = [h for h in holdings if h.level == "breaking"]
+    watch = [h for h in holdings if h.level == "watch"]
+    if breaking:
+        head = (
+            f"🔴 **{len(breaking)} of {len(holdings)} holdings look broken** — "
+            f"{', '.join(h.ticker.removesuffix('.NS') for h in breaking)}. "
+            "Worth a look; the Sell tab prices the exact tax if you act."
+        )
+    elif watch:
+        head = (
+            f"🟠 **{len(watch)} of {len(holdings)} holdings are weak, none broken.** "
+            "Nothing to do — this is a watch, not an alert."
+        )
+    else:
+        head = f"🟢 **All {len(holdings)} holdings healthy.** Nothing to do."
+    rows = [head, "", "| | Holding | 6-month | vs market |", "|---|---|---:|---:|"]
+    rows += [
+        f"| {h.icon} | {h.ticker.removesuffix('.NS')} | {h.trailing_return:+.0%} | "
+        f"{h.excess_vs_market:+.0%} |"
+        for h in holdings
+    ]
+    return "\n".join(rows)
 
 
 def injection_drift_markdown(log_total: Decimal, credited: Decimal) -> str:
