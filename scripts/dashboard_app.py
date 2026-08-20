@@ -49,6 +49,7 @@ from qalpha.live.dashboard import (
     buy_advice_withheld_markdown,
     glossary_markdown,
     go_readiness_markdown,
+    health_panel_markdown,
     injection_drift_markdown,
     live_pm_brief_markdown,
     ltcg_safe_sell_note,
@@ -352,6 +353,8 @@ def _advisor_with_safety(
         if buy_ok:
             _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg, prices_dec)
         default_add = int(available_cash)
+    if live_session is not None:
+        _live_health_view(portfolio, prices, wl[2] if wl is not None else None, as_of)
     st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
     if live_session is not None:
         _next_actions_panel(portfolio, as_of, available_cash, report.safe_to_advise, cfg, buy_ok)
@@ -512,6 +515,34 @@ def _go_readiness_view(book: PaperBook, benchmark: pd.Series, as_of: date) -> No
     st.markdown(go_readiness_markdown(book, benchmark, as_of))
 
 
+def _live_health_view(
+    portfolio: Portfolio, prices: PriceData, wl_prices: PriceData | None, as_of: date
+) -> None:
+    """The §4.7 breakdown watch, on the **real** account.
+
+    It ran only over the paper book, so a stock you actually own could fall apart with nothing on the
+    Live tab saying so — the one surface where it matters. Your holdings may sit outside the core
+    Nifty-50 panel (anything bought from the Nifty-100 screen does), so the two panels are merged,
+    ffilled and causal, exactly as the auto-pilot values its books: a holding must never silently
+    lose its mark and drop out of the assessment.
+    """
+    held = sorted(portfolio.positions())
+    if not held:
+        return
+    adj = prices.adj_close
+    if wl_prices is not None:
+        idx = adj.index.union(wl_prices.adj_close.index)
+        extra = [c for c in wl_prices.adj_close.columns if c not in adj.columns]
+        adj = adj.reindex(idx).ffill()
+        adj[extra] = wl_prices.adj_close[extra].reindex(idx).ffill()
+    with st.expander("🩺 Are any of my holdings breaking down?", expanded=False):
+        st.markdown(health_panel_markdown(position_health(adj, held, as_of)))
+        st.caption(
+            "Advisory only — this never sells, and a 🟠 is not a reason to act. It exists so a "
+            "holding cannot quietly fall apart between the times you look."
+        )
+
+
 def _position_health_view(book: PaperBook, prices: PriceData, as_of: date) -> None:
     """Mid-cycle watch — flags a holding breaking down between the slow rebalances. Advisory only."""
     st.header("🩺 Position health (between rebalances)")
@@ -523,11 +554,7 @@ def _position_health_view(book: PaperBook, prices: PriceData, as_of: date) -> No
     if not held:
         st.info("No holdings yet — nothing to watch.")
         return
-    rep = position_health(prices.adj_close, held, as_of)
-    for h in sorted(rep.holdings, key=lambda x: x.trailing_return):
-        st.markdown(f"{h.icon} {h.note}")
-    st.divider()
-    st.markdown(rep.render())
+    st.markdown(health_panel_markdown(position_health(prices.adj_close, held, as_of)))
 
 
 def _plain_summary(
