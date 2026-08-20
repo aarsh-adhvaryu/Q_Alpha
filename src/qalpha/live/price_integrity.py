@@ -150,6 +150,49 @@ def unexplained_gaps(
     return out
 
 
+def repair_price_spikes(
+    series: pd.Series, *, threshold: float = DEFAULT_GAP_THRESHOLD, window: int = 5
+) -> tuple[pd.Series, list[date]]:
+    """Repair round-trip data artifacts in a single price series. Returns ``(clean, repaired_dates)``.
+
+    A *round trip* is a move past ``threshold`` that reverses within ``window`` sessions — the
+    signature of a bad print rather than a real event. Prices do not fall 90% and fully recover three
+    days later; index levels especially do not. Found in the NIFTYBEES benchmark, which carried two
+    days at ₹13.02 against a true level near ₹129 (2019-12-19/20) before snapping back.
+
+    That series is not decorative: it drives :func:`~qalpha.live.deploy.market_weakness`, which sizes
+    every deploy. On those two days the index would have read as ~90% below its 1-year high — "deep"
+    weakness — and the rule would have deployed the entire wallet on a typo.
+
+    Deliberately narrow. Only a move that **reverses** is repaired; a genuine crash that persists is
+    left completely alone, because that is exactly the signal the system must not be blind to. The
+    repaired points are forward-filled from the last good price (causal — never interpolated from the
+    future), and every repair is returned so the caller can disclose rather than silently clean.
+    """
+    clean = series.copy()
+    repaired: list[date] = []
+    values = series.to_numpy(dtype=float).copy()  # to_numpy may return a read-only view
+    n = len(values)
+    i = 1
+    while i < n:
+        prev = values[i - 1]
+        if prev > 0 and abs(values[i] / prev - 1.0) >= threshold:
+            # Does it come back to the pre-move level within `window` sessions?
+            end = min(i + window + 1, n)
+            back = next(
+                (j for j in range(i + 1, end) if abs(values[j] / prev - 1.0) < threshold), None
+            )
+            if back is not None:
+                for j in range(i, back):
+                    clean.iloc[j] = prev
+                    repaired.append(pd.Timestamp(str(series.index[j])).date())
+                    values[j] = prev
+                i = back
+                continue
+        i += 1
+    return clean, repaired
+
+
 def rebase_starts(gaps: Mapping[str, PriceGap]) -> dict[str, date]:
     """Per-ticker date the 1-year high must be measured from — the gap day itself.
 

@@ -67,10 +67,24 @@ def _refresh_benchmark() -> None:
 
 
 def _load_benchmark_series() -> pd.Series:
+    """The Nifty TRI proxy, with corrupt prints repaired.
+
+    This series is not decorative: ``market_weakness`` reads it to decide how much of the wallet to
+    deploy, and every "vs Nifty" figure on the dashboard is measured against it. It carried two bad
+    prints (₹13.02 against a true ~₹129 on 2019-12-19/20) that would read as the index sitting 90%
+    below its 1-year high. Only round trips are repaired — a real crash that persists is untouched,
+    which is exactly the signal the system must never be blind to.
+    """
+    from qalpha.live.price_integrity import repair_price_spikes
+
     df = pd.read_parquet(BENCHMARK_PARQUET)
-    return pd.Series(
+    series = pd.Series(
         df["adj_close"].to_numpy(), index=pd.DatetimeIndex(df["date"]), name="nifty_tri"
     )
+    clean, repaired = repair_price_spikes(series)
+    if repaired:
+        print(f"[paper] repaired {len(repaired)} corrupt benchmark print(s): {repaired}")
+    return clean
 
 
 def _generate_dashboard(
