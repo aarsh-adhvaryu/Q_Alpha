@@ -33,12 +33,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from qalpha.backtest.portfolio import Portfolio
+from qalpha.backtest.portfolio import Portfolio, to_decimal_price
 from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.live.deploy import advise_deploy_into_weakness
+from qalpha.live.position_health import position_health
 from qalpha.live.price_integrity import repair_price_spikes
 
 WATCHLIST_PRICES = Path("data/historical/prices_watchlist.parquet")
@@ -59,6 +60,7 @@ class Result:
     names_held: int = 0
     trades: int = 0
     costs: Decimal = Decimal("0")
+    tax_paid: Decimal = Decimal("0")  # real capital-gains tax — the price of every optimiser sell
 
     @property
     def final(self) -> float:
@@ -121,8 +123,21 @@ def run_screen(
     sip: Decimal,
     max_names: int,
     label: str,
+    maintain: str = "none",
 ) -> Result:
-    """Simulate the plan through the live advisor, one deploy per month."""
+    """Simulate the plan through the live advisor, one deploy per month.
+
+    ``maintain`` decides whether anything is ever *sold* — the question of whether an optimizer
+    earns its keep on a real, taxable account:
+
+    * ``"none"``   — buy and hold. New money is the only lever. (What the live advisor does today.)
+    * ``"prune"``  — each month, sell any holding the §4.7 test now calls broken and recycle the
+      proceeds into the next deploy. This is "optimise on the falls" in its most direct form.
+    * ``"annual"`` — once a year, trim back toward equal weight across the current roster.
+
+    Both selling modes run through the same validated FIFO/cost/tax engine, so the capital-gains bill
+    is real and lands where it actually would: STCG at 20% inside a year, LTCG at 12.5% after.
+    """
     cfg = Config()
     pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
     res = Result(label=label)
@@ -144,6 +159,38 @@ def run_screen(
             if rec is not None:
                 res.trades += 1
                 res.costs += rec.cost
+
+        # --- maintenance: the only place this simulation ever sells -------------------------------
+        if maintain != "none":
+            live = sorted(t for t, q in pf.positions().items() if q > 0)
+            px = {
+                t: to_decimal_price(float(adj[t].loc[: pd.Timestamp(d)].dropna().iloc[-1]))
+                for t in live
+                if t in adj.columns and not adj[t].loc[: pd.Timestamp(d)].dropna().empty
+            }
+            to_sell: dict[str, Decimal] = {}
+            if maintain == "prune":
+                report = position_health(adj, live, d)
+                to_sell = {
+                    h.ticker: pf.positions()[h.ticker]
+                    for h in report.holdings
+                    if h.level == "breaking" and h.ticker in px
+                }
+            elif maintain == "annual" and d.month == 1 and live:
+                value = sum(px[t] * pf.positions()[t] for t in live if t in px)
+                fair = value / len(live) if live else Decimal("0")
+                for t in live:
+                    if t not in px:
+                        continue
+                    excess = px[t] * pf.positions()[t] - fair
+                    trim = int(excess / px[t]) if excess > 0 else 0
+                    if trim > 0:
+                        to_sell[t] = Decimal(trim)
+            for t, qty in to_sell.items():
+                rec = pf.sell(d, t, qty, px[t])
+                res.trades += 1
+                res.costs += rec.cost
+                res.tax_paid += rec.tax
 
         held = {t: int(q) for t, q in pf.positions().items() if q > 0}
         end = pd.Timestamp(schedule[i + 1]) if i + 1 < len(schedule) else adj.index[-1]
@@ -193,14 +240,14 @@ def run_index(
 
 def _report(results: list[Result]) -> str:
     rows = [
-        "| Plan | Put in | Ended at | Profit | Return | Worst fall | Names | Trades | Costs |",
+        "| Plan | Put in | Ended at | Return | Worst fall | Names | Trades | Costs | CG tax |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for r in results:
         rows.append(
             f"| {r.label} | ₹{float(r.contributed):,.0f} | ₹{r.final:,.0f} | "
-            f"₹{r.profit:,.0f} | {r.total_return_pct:+.1f}% | {r.max_drawdown_pct():.1f}% | "
-            f"{r.names_held} | {r.trades} | ₹{float(r.costs):,.0f} |"
+            f"{r.total_return_pct:+.1f}% | {r.max_drawdown_pct():.1f}% | "
+            f"{r.names_held} | {r.trades} | ₹{float(r.costs):,.0f} | ₹{float(r.tax_paid):,.0f} |"
         )
     return "\n".join(rows)
 
