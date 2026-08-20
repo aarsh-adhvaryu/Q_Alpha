@@ -558,3 +558,67 @@ def test_the_banner_handles_an_under_counting_log_too() -> None:
     md = injection_drift_markdown(Decimal("150000"), Decimal("200000"))
     assert "₹50,000" in md
     assert "less than" in md
+
+
+# ---- the health panel renders once, and reads for a human (2026-08-19) ---------------------------
+
+
+def _report(*rows: tuple[str, float, float, str]):  # type: ignore[no-untyped-def]
+    from qalpha.live.position_health import HoldingHealth, PositionHealthReport
+
+    return PositionHealthReport(
+        date(2026, 8, 19),
+        [HoldingHealth(t, ret, exc, 0.0, lvl, f"{t}: note") for t, ret, exc, lvl in rows],
+    )
+
+
+def test_a_weak_name_is_listed_exactly_once() -> None:
+    """The bug the user hit: every holding printed, then the weak ones printed *again* below.
+
+    One weak name appeared twice on one screen, which is what made the panel read as twice as
+    complicated as it is.
+    """
+    from qalpha.live.dashboard import health_panel_markdown
+
+    md = health_panel_markdown(
+        _report(("NTPC.NS", -0.09, -0.07, "watch"), ("BEL.NS", -0.08, -0.06, "watch"))
+    )
+    assert md.count("| NTPC |") == 1
+    assert md.count("| BEL |") == 1
+
+
+def test_the_headline_says_whether_anything_needs_doing() -> None:
+    from qalpha.live.dashboard import health_panel_markdown
+
+    healthy = health_panel_markdown(_report(("ITC.NS", 0.10, 0.09, "healthy")))
+    assert "All 1 holdings healthy" in healthy and "Nothing to do" in healthy
+
+    watching = health_panel_markdown(
+        _report(("NTPC.NS", -0.09, -0.07, "watch"), ("ITC.NS", 0.10, 0.09, "healthy"))
+    )
+    assert "weak, none broken" in watching
+    assert "this is a watch, not an alert" in watching  # a 🟠 is not a call to action
+
+    broken = health_panel_markdown(
+        _report(("VEDL.NS", -0.55, -0.56, "breaking"), ("ITC.NS", 0.10, 0.09, "healthy"))
+    )
+    assert "1 of 2 holdings look broken" in broken
+    assert "VEDL" in broken.splitlines()[0]  # named in the headline, not buried in the table
+
+
+def test_the_worst_holding_is_listed_first() -> None:
+    from qalpha.live.dashboard import health_panel_markdown
+
+    md = health_panel_markdown(
+        _report(("GOOD.NS", 0.20, 0.19, "healthy"), ("BAD.NS", -0.40, -0.41, "breaking"))
+    )
+    # The header row contains "6-month" and the separator starts with "|-", so both are already out.
+    rows = [ln for ln in md.splitlines() if ln.startswith("| ") and "6-month" not in ln]
+    assert "BAD" in rows[0]
+    assert "GOOD" in rows[1]
+
+
+def test_no_holdings_says_so_rather_than_rendering_an_empty_table() -> None:
+    from qalpha.live.dashboard import health_panel_markdown
+
+    assert health_panel_markdown(_report()) == "No holdings to watch yet."
