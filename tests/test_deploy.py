@@ -775,3 +775,67 @@ def test_every_healthy_holding_stays_eligible_for_new_money() -> None:
         assert t in advice.target.index, f"{t} was stranded — healthy holdings must stay fundable"
     # …and a name that broke down is still evicted, cap or no cap.
     assert not ({"BREAK1.NS", "BREAK2.NS"} & set(advice.target.index))
+
+
+def test_a_name_on_cooling_off_is_never_bought_back() -> None:
+    """The trap this closes: selling is taxed, buying is not, and the screen has no memory.
+
+    Sell out of a name and the next deploy may re-buy it because it still ranks — real tax paid to
+    exit something the system re-entered weeks later.
+    """
+    prices, sectors = _wide_prices()
+    as_of = _DATES[-1].date()
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    open_advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sectors),
+        sectors,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_sector_weight=1.0,
+    )
+    wanted = sorted(open_advice.target.index)[0]  # a name the screen would happily buy
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sectors),
+        sectors,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_sector_weight=1.0,
+        do_not_buy={wanted},
+    )
+    assert wanted not in advice.target.index
+    assert wanted not in {o.ticker for o in advice.deploy.buy_orders}
+    assert advice.cooling_off == (wanted,)
+    # Never silent — a filter encoding *your own* past instruction has to stay visible.
+    note = advice.cooling_off_note()
+    assert wanted.removesuffix(".NS") in note
+    assert note in advice.render()
+
+
+def test_cooling_off_never_starves_the_deploy_of_everything_else() -> None:
+    """It removes candidates, so the worst case is idle cash for one deploy — never an empty basket."""
+    prices, sectors = _wide_prices()
+    as_of = _DATES[-1].date()
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sectors),
+        sectors,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_sector_weight=1.0,
+        do_not_buy={"FLAT1.NS", "FLAT2.NS"},
+    )
+    assert advice.deploy.buy_orders  # the rest of the screen still funds a basket
+    assert not ({"FLAT1.NS", "FLAT2.NS"} & {o.ticker for o in advice.deploy.buy_orders})
