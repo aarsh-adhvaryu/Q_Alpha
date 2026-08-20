@@ -48,6 +48,37 @@ It **costs about 11 points of return and removes 13 points of drawdown.** It is 
 return enhancer, and it should be described that way. Anyone optimising for the headline number would
 switch it off; anyone who has to live through the drawdown probably should not.
 
+## Does an optimizer earn its keep? No — and this is the most useful result here
+
+Same plan, same dates, same money. The only change is whether anything is ever **sold**, with the
+real capital-gains bill applied through the validated FIFO/tax engine.
+
+| Plan | Return | Worst fall | Trades | CG tax paid |
+|---|---:|---:|---:|---:|
+| NIFTYBEES (do nothing) | +126.3% | −35.2% | 156 | ₹0 |
+| **Buy & hold + SIP** *(what the advisor does today)* | **+209.7%** | **−34.9%** | 299 | **₹0** |
+| + sell what breaks down | +149.5% | −42.4% | 455 | ₹997,724 |
+| + annual rebalance to equal weight | +206.3% | −37.0% | 489 | ₹930,456 |
+
+**Selling the broken names costs 60 points of return and makes the drawdown worse** (−34.9% →
+−42.4%). It is the intuitive move and it is wrong twice over: ₹9.98 lakh goes to capital-gains tax,
+and selling after a fall realises the loss and forfeits the recovery. Annual rebalancing is
+near-neutral before tax and clearly negative after it — ₹9.3 lakh to move money between names that
+were already fine.
+
+This reproduces, on a different strategy, the finding the research repo already reached with the HMM
+defensive overlay: **in a taxable Indian account, selling to manage risk loses to the tax.**
+
+The distinction that matters, because it is easy to get backwards:
+
+* Using the breakdown test **to decide what to buy** — worth it. Cuts drawdown 48% → 35%.
+* Using the same test **to decide what to sell** — costs 60 points of return.
+
+So the right answer for the real-money account is the one already implemented: **new money is the
+only lever.** Route each contribution to what is underweight and healthy, and never sell to fix
+anything. Not selling *is* the optimiser. The advisor's Sell and Raise-cash tabs remain for when the
+user needs the money — which is a different question from optimisation, and is priced exactly.
+
 ## What this does not establish
 
 - **Five merged names have no price data** — CAIRN, HDFC, IDFC, LTIM, STER (all absorbed into other
