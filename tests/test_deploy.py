@@ -742,3 +742,36 @@ def test_repeated_deploys_do_not_grow_the_portfolio_without_bound() -> None:
     # Without stickiness this drifts well past the cap as each deploy re-ranks. A little churn is
     # legitimate (a name breaking down frees its slot), so allow one replacement, not unbounded growth.
     assert len(held) <= 4, f"portfolio sprawled to {len(held)} names on a 3-name roster: {held}"
+
+
+def test_every_healthy_holding_stays_eligible_for_new_money() -> None:
+    """User's idea: balance the book with the inflow rather than the sell button (2026-08-20).
+
+    ``max_names`` caps how many *new* names may be opened, not how many existing positions may be
+    topped up. Without that, a holding which slips out of the fresh ranking is stranded forever at
+    whatever weight it happened to reach — measured on 13 years of history, that tail was three
+    positions under 2%, the smallest at 0.7%.
+    """
+    prices, sectors = _wide_prices()
+    as_of = _DATES[-1].date()
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    # Hold four healthy names while the roster only has room to open one.
+    for t in ("FLAT1.NS", "FLAT2.NS", "FLAT3.NS", "MILD3.NS"):
+        _hold(pf, t, 10, 100.0, _DATES[0].date())
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sectors),
+        sectors,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_names=1,
+        max_sector_weight=1.0,
+    )
+    for t in ("FLAT1.NS", "FLAT2.NS", "FLAT3.NS", "MILD3.NS"):
+        assert t in advice.target.index, f"{t} was stranded — healthy holdings must stay fundable"
+    # …and a name that broke down is still evicted, cap or no cap.
+    assert not ({"BREAK1.NS", "BREAK2.NS"} & set(advice.target.index))

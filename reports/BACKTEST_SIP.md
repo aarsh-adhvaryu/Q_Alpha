@@ -79,6 +79,32 @@ only lever.** Route each contribution to what is underweight and healthy, and ne
 anything. Not selling *is* the optimiser. The advisor's Sell and Raise-cash tabs remain for when the
 user needs the money — which is a different question from optimisation, and is priced exactly.
 
+## Rebalancing with the inflow instead of the sell button
+
+The user's follow-up, and the right one: *"it knows the distribution of the portfolio — instead of
+selling it, it balances it in the next buy."* That is rebalancing with a ₹0 tax bill, which is the
+only kind the table above says is affordable.
+
+The routing already did some of this — the largest position reached 10.8%, not 30%. The gap was the
+**tail**: a holding that slipped out of the fresh `max_names` ranking was stranded at whatever weight
+it happened to reach and never topped up again. So `max_names` now caps how many *new* names may be
+opened, while every healthy holding stays eligible for the inflow.
+
+| | before | after |
+|---|---:|---:|
+| largest position | 10.8% | **7.8%** |
+| smallest | 0.7% | **1.9%** |
+| top-3 concentration | 29.4% | **22.1%** |
+| positions under 2% | 3 | **1** |
+
+**On return it is a wash, and that should be stated plainly** — +215.6% / +185.1% / +131.4% / +59.6%
+from 2013 / 2015 / 2018 / 2021, against +209.7% / +190.7% / +131.5% / +62.4% before. Mixed in both
+directions by about three points, which is noise, not evidence.
+
+So this is a **portfolio-quality** change, not an alpha change: better balanced, no dust positions,
+less single-name concentration, zero tax, no extra selling. Worth having on those grounds alone, and
+not worth claiming anything more for.
+
 ## What this does not establish
 
 - **Five merged names have no price data** — CAIRN, HDFC, IDFC, LTIM, STER (all absorbed into other
