@@ -105,6 +105,44 @@ So this is a **portfolio-quality** change, not an alpha change: better balanced,
 less single-name concentration, zero tax, no extra selling. Worth having on those grounds alone, and
 not worth claiming anything more for.
 
+## How many names per deploy, and should you hold cash back?
+
+Two user questions, both answered by simulation rather than opinion.
+
+**Concentration.** The slider's floor of 5 was arbitrary and wrong for small amounts — ₹10,000 across
+five names is ₹2,000 each, barely one share of anything. It is also the wrong instinct for a SIP:
+diversification accumulates *across months*, not within one deploy. Deploying into a single name each
+month still ended up holding six.
+
+| Names per deploy | Return | Worst fall | Ended holding |
+|---:|---:|---:|---:|
+| 1 | +262.8% | −45.3% | 6 |
+| 2 | +259.5% | −38.0% | 7 |
+| 3 | +232.8% | −41.8% | 10 |
+| 5 | +224.0% | −34.4% | 12 |
+| 8 | +215.6% | −38.1% | 19 |
+| 15 | +213.0% | −35.0% | 33 |
+
+Concentration earns more and hurts more, monotonically enough to be believable. That is a risk
+appetite question, not a correctness question, so the floor is now 1 and the numbers are in the
+slider's help text.
+
+**Holding cash back for dips.** The instinct is right, but only when the holdback *responds to the
+market*. Deploying 25% / 50% / 100% by weakness level, from four start dates:
+
+| Start | Deploy all | Tranche on weakness |
+|---|---|---|
+| 2013-07 | +215.6% (dd −38.1%) | +231.2% (dd **−35.7%**) |
+| 2015-01 | +185.1% (dd −37.8%) | +183.2% (dd **−35.4%**) |
+| 2018-01 | +131.4% (dd −31.3%) | +138.4% (dd **−29.7%**) |
+| 2021-01 | +59.6% (dd −14.8%) | +54.8% (dd **−11.1%**) |
+
+Returns split two-and-two — a wash. **Drawdown improved in all four.** So it is a risk control, and
+should be offered as one rather than sold as an edge. Holding back a flat 50% regardless was worse on
+*both* counts (+206.6%, dd −43.3%): the responsiveness is what works, not the hoarding.
+
+Both are now user choices on the Add-money tab, defaulted to the middle (8 names, tranche off).
+
 ## What this does not establish
 
 - **Five merged names have no price data** — CAIRN, HDFC, IDFC, LTIM, STER (all absorbed into other

@@ -1672,14 +1672,34 @@ def _add_money_advisor(
         step=1000,
         key=f"add_amt_{namespace}",
     )
+    # The floor was 5, which made no sense for a small deploy: ₹10,000 across 5 names is ₹2,000 each,
+    # barely one share of anything, and the per-share affordability cap already excludes a third of
+    # the universe at that size. It is also the wrong instinct for a monthly SIP — diversification
+    # accumulates *across months*, not within one deploy. Backtested 2013–2026 (₹1L + ₹50k/month),
+    # deploying into 1–2 names a month still ended up holding 6–7 names, and returned more:
+    #   1 name +262.8% (worst -45.3%) · 2 +259.5% (-38.0%) · 5 +224.0% (-34.4%) · 15 +213.0% (-35.0%)
+    # More concentration earns more and hurts more. That trade is a judgement call, so it is the
+    # user's to make rather than a floor imposed on him.
     n_stocks = st.slider(
-        "Spread across how many stocks?",
-        min_value=5,
+        "Spread this deploy across how many stocks?",
+        min_value=1,
         max_value=40,
-        value=15,
-        help="Fewer = bigger, more concentrated positions (more risk, fewer orders). "
-        "More = broader & thinner. ~12–25 is the usual sweet spot.",
+        value=8,
+        help="Per deploy, not your whole portfolio — a monthly SIP diversifies over time either "
+        "way. Backtested 2013–2026: 1–2 names per deploy returned ~+260% but fell ~40–45% at "
+        "worst; 5–8 returned ~+215–225% and fell ~34–38%. Fewer = more return, rougher ride. For "
+        "a small amount (₹10–25k) pick 1–3, or you are buying dust.",
         key=f"add_names_{namespace}",
+    )
+    hold_back = st.checkbox(
+        "Hold some back for dips (deploy more when the market has fallen)",
+        value=False,
+        help="Deploys 25% in a normal market, 50% when the index is >5% off its high, 100% when "
+        ">12% off. Backtested from four start dates: it did NOT reliably raise returns (two better, "
+        "two worse) but it lowered the worst drawdown every single time (-38→-36, -38→-35, -31→-30, "
+        "-15→-11). Holding back a flat 50% regardless was worse on both counts — responding to the "
+        "market is the part that works, not hoarding cash.",
+        key=f"add_tranche_{namespace}",
     )
 
     # The AI read — INFORMATIONAL ONLY on the real-money surface. The AI-paced tranche rule is
@@ -1712,6 +1732,21 @@ def _add_money_advisor(
 
     # Persist the last suggestion across the 30s live auto-refresh — the fragment rerun would
     # otherwise wipe it the moment the button state resets.
+    deploy_now = Decimal(amount)
+    if hold_back:
+        from qalpha.live.autopilot import deploy_fraction
+
+        deploy_now = (Decimal(amount) * Decimal(str(deploy_fraction(wk.level)))).quantize(
+            Decimal("0.01")
+        )
+        st.info(
+            f"🪣 **Deploy ₹{deploy_now:,.0f} now, keep ₹{Decimal(amount) - deploy_now:,.0f} back** — "
+            f"the market is **{wk.level}** ({wk.drawdown * 100:.0f}% off its 1-year high). The rest "
+            "stays in your account for the next deploy, or for a sharper fall. This is a risk "
+            "control, not a return booster: it lowered the worst drawdown in every backtested "
+            "window and did not reliably raise returns."
+        )
+
     advice_key = f"add_advice_{namespace}"
     if st.button("Suggest what to buy", key=f"add_btn_{namespace}"):
         wl = _watchlist()
@@ -1723,7 +1758,7 @@ def _add_money_advisor(
             tickers, sector_of, wl_prices = wl
             st.session_state[advice_key] = advise_deploy_into_weakness(
                 portfolio,
-                Decimal(amount),
+                deploy_now,
                 tickers,
                 sector_of,
                 wl_prices,
