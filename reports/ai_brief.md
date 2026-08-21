@@ -1,24 +1,21 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🟢 Market staged sharp recovery ending seven-session losing streak, backed by easing US bond yields, stronger rupee, and positive global sentiment.
+**Sentiment**: 🟠 Nifty50 closed 20.15 points or 0.08% higher at 24,252, while Sensex eked out a 3.11-point gain to 77,540.83 as global equities retreated after bond yields rebounded and oil prices surged amid US-Iran tension.
 
-**Drivers:**
-1. **US Treasury yields ease** — Rebound supported by easing US Treasury yields and stronger global market sentiment; reduces refinancing pressure on India, lifts rate-sensitive segments (Banks, NBFCs).
-2. **Crude stable but geopolitically fragile** — Crude oil rose to 86.15 USD/bbl on Aug 19, up 1.42%; elevated levels persist despite today's reprieve, compressing OMC margins and feeding into auto/paint input costs.
-3. **FII buying revives** — FIIs purchased equities worth Rs 407.99 crore on Aug 19, short covering + foreign flow relief.
+**Drivers**:  
+1. **Crude surge on geopolitical risk** — Brent crude traded above $93/bbl, on track for a second consecutive weekly gain of 5%+ as US-Iran conflict showed no signs of abating, with the two sides locked in a dispute over the Strait of Hormuz. Impact: OMC refining margins compress, aviation/paints/fertiliser input costs spike, automakers & logistics pressure.
 
-**Watchlist names affected:** 
-- **Banks** (AXISBANK, HDFCBANK, ICICIBANK, KOTAKBANK): yield-sensitive, rally-tail-winds.
-- **NBFCs** (BAJFINANCE, SHRIRAMFIN, MUTHOOTFIN): relief from funding cost reprieve.
-- **Energy** (BPCL, IOC, RELIANCE): crude still elevated, margins compressed.
-- **Auto** (MARUTI, BAJAJ-AUTO, M&M): input cost headwind lingers.
+2. **Global bond yield rebound & equity de-rating** — Sector-wise, Nifty FMCG, Auto, and IT underperformed, while Nifty Metal and Private Bank outperformed. High-beta discretionary & IT caught in selloff; defensive & hard assets hold ground.
 
-**Likely reaction:** **🟢 up; band 0.4–0.8%; confidence medium** — near-term upside momentum from yield relief and FII re-entry likely sustains 1–2 sessions; however, crude above $84 and geopolitical tail-risk cap the rally. **HDFCBANK, AXISBANK** most likely to push higher on rate-sensitive thesis. **BPCL** faces headwinds on energy margin squeeze.
+**Watchlist names affected**:  
+**Headwinds**: BPCL, IOC, RELIANCE (fuel margin compression); MARUTI, M&M, BAJAJ-AUTO (margin squeeze + demand caution); INFY, TCS, HCLTECH (yield-driven outflow). **Upside**: TATASTEEL, HINDALCO, JINDALSTEL (metal strength on geopolitical premium); KOTAKBANK, HDFCBANK (private banking resilience).
 
-**Discretionary ideas:** None stand out with high conviction in this narrow range-bound context.
+**Likely reaction** (MEDIUM confidence): Near-term flat-to-slightly-down bias (−0.2% to +0.3%) over the next 1–2 sessions. Oil holding $93+ acts as a cap on cyclicals; IT/FMCG weakness persists, but metal shorts are squeezed. **BPCL** and **IOC** likely pressured; **TATASTEEL** likely defended / higher.
 
-**Risk note:** Geopolitical escalation or crude spike above $90 could reverse the day's gains; watch for US yield reversal.
+**Discretionary ideas**: None stand out on intraday technicals given lack of clear catalyst. Geopolitical premia in energy remain priced in.
 
-SIGNAL: lean=up; band=0.4..0.8; confidence=medium
+**Risk note**: The US is moving to isolate Iran's economy with details of the initiative expected Monday—binary event risk; new sanctions could reignite oil volatility and reverse today's flat close sharply.
 
-— 🤖 claude-haiku-4-5 · 44,070 in / 831 out tokens · ✓ complete
+SIGNAL: lean=flat; band=-0.2..0.3; confidence=medium
+
+— 🤖 claude-haiku-4-5 · 44,879 in / 889 out tokens · ✓ complete
