@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "52.51",
+    "cash": "182.85",
     "lots": [
       {
         "ticker": "IOC.NS",
@@ -49,6 +49,32 @@
         "lot_id": "d7e098d7-e2be-4401-b95b-ab67ddb94515",
         "broker_trade_id": null,
         "quantity_remaining": "118"
+      },
+      {
+        "ticker": "NTPC.NS",
+        "acquisition_date": "2026-08-20",
+        "quantity_original": "2",
+        "buy_price": "337.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.10",
+        "other_costs": "0.02",
+        "lot_id": "772778aa-b52c-41be-b4db-93f913ba1920",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "NTPC.NS",
+        "acquisition_date": "2026-08-21",
+        "quantity_original": "9",
+        "buy_price": "340.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.46",
+        "other_costs": "0.11",
+        "lot_id": "19ac522c-8673-40c3-933b-a65bc774f0af",
+        "broker_trade_id": null,
+        "quantity_remaining": "9"
       },
       {
         "ticker": "ONGC.NS",
@@ -205,6 +231,214 @@
         "lot_id": "ea7b8214-9fa1-4449-a06c-8776de184433",
         "broker_trade_id": null,
         "quantity_remaining": "1"
+      },
+      {
+        "ticker": "ADANIGREEN.NS",
+        "acquisition_date": "2026-08-20",
+        "quantity_original": "5",
+        "buy_price": "1301.80",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.98",
+        "other_costs": "0.24",
+        "lot_id": "e0880c27-7b54-4782-bfab-1fda20f82d74",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
+      },
+      {
+        "ticker": "ADANIGREEN.NS",
+        "acquisition_date": "2026-08-21",
+        "quantity_original": "2",
+        "buy_price": "1320.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.40",
+        "other_costs": "0.09",
+        "lot_id": "bdfac73e-3933-477f-af37-ce4d374d87dd",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "ADANIPOWER.NS",
+        "acquisition_date": "2026-08-20",
+        "quantity_original": "31",
+        "buy_price": "204.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.95",
+        "other_costs": "0.24",
+        "lot_id": "102adba7-f6f7-456a-8fe1-362f8c29546a",
+        "broker_trade_id": null,
+        "quantity_remaining": "31"
+      },
+      {
+        "ticker": "ADANIPOWER.NS",
+        "acquisition_date": "2026-08-21",
+        "quantity_original": "15",
+        "buy_price": "205.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.46",
+        "other_costs": "0.11",
+        "lot_id": "b8bc198d-5c9f-4b26-8bbc-1143af061a12",
+        "broker_trade_id": null,
+        "quantity_remaining": "15"
+      },
+      {
+        "ticker": "DMART.NS",
+        "acquisition_date": "2026-08-20",
+        "quantity_original": "2",
+        "buy_price": "3960.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.19",
+        "other_costs": "0.30",
+        "lot_id": "82162276-6455-414e-aef8-889ffdf94295",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "DMART.NS",
+        "acquisition_date": "2026-08-21",
+        "quantity_original": "1",
+        "buy_price": "3906.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.59",
+        "other_costs": "0.14",
+        "lot_id": "1a2b54ee-418e-4fc1-a279-cad76d4d4bbc",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
+        "ticker": "HCLTECH.NS",
+        "acquisition_date": "2026-08-20",
+        "quantity_original": "5",
+        "buy_price": "1318.40",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.99",
+        "other_costs": "0.25",
+        "lot_id": "78759bf8-f82e-4eb5-8d44-c29299f0f094",
+        "broker_trade_id": null,
+        "quantity_remaining": "5"
+      },
+      {
+        "ticker": "HCLTECH.NS",
+        "acquisition_date": "2026-08-21",
+        "quantity_original": "2",
+        "buy_price": "1302.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.39",
+        "other_costs": "0.09",
+        "lot_id": "c7a1b000-ddf0-4398-a9b1-71e425b92031",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "HINDZINC.NS",
+        "acquisition_date": "2026-08-20",
+        "quantity_original": "11",
+        "buy_price": "573.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.95",
+        "other_costs": "0.24",
+        "lot_id": "3aabc148-43fd-40f6-9890-2adca1ef8a13",
+        "broker_trade_id": null,
+        "quantity_remaining": "11"
+      },
+      {
+        "ticker": "HYUNDAI.NS",
+        "acquisition_date": "2026-08-20",
+        "quantity_original": "3",
+        "buy_price": "2227.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.00",
+        "other_costs": "0.25",
+        "lot_id": "1c6926b7-4f45-4780-a2b8-943192be6c66",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
+      },
+      {
+        "ticker": "HYUNDAI.NS",
+        "acquisition_date": "2026-08-21",
+        "quantity_original": "1",
+        "buy_price": "2218.80",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.33",
+        "other_costs": "0.08",
+        "lot_id": "59a42ac4-ab32-4ecc-a16e-aa27d50ef4b0",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
+        "ticker": "JIOFIN.NS",
+        "acquisition_date": "2026-08-20",
+        "quantity_original": "28",
+        "buy_price": "244.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "1.03",
+        "other_costs": "0.25",
+        "lot_id": "21f75762-5e3c-45fa-bcef-1b4ca9b34ea2",
+        "broker_trade_id": null,
+        "quantity_remaining": "28"
+      },
+      {
+        "ticker": "JIOFIN.NS",
+        "acquisition_date": "2026-08-21",
+        "quantity_original": "13",
+        "buy_price": "244.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.48",
+        "other_costs": "0.11",
+        "lot_id": "304eb2d5-3dc2-4383-9fc1-2c9e56c269c4",
+        "broker_trade_id": null,
+        "quantity_remaining": "13"
+      },
+      {
+        "ticker": "MAXHEALTH.NS",
+        "acquisition_date": "2026-08-20",
+        "quantity_original": "2",
+        "buy_price": "997.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.30",
+        "other_costs": "0.07",
+        "lot_id": "dec7fd10-7a4f-4bb2-9e55-13f374c1ee8b",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
+        "ticker": "MAXHEALTH.NS",
+        "acquisition_date": "2026-08-21",
+        "quantity_original": "3",
+        "buy_price": "1000.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.45",
+        "other_costs": "0.11",
+        "lot_id": "4adabc14-be61-47c2-92c3-7ddfd05180c4",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
+      },
+      {
+        "ticker": "PFC.NS",
+        "acquisition_date": "2026-08-21",
+        "quantity_original": "3",
+        "buy_price": "363.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.16",
+        "other_costs": "0.04",
+        "lot_id": "74f20ea6-fc76-48fc-9aec-f356a40e62cb",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
       }
     ],
     "ltcg_by_fy": {}
@@ -493,14 +727,198 @@
       "as_of": "2026-08-19",
       "reason": "drift 38.7% > threshold and \u00a74.6 net-benefit gate cleared",
       "orders": []
+    },
+    {
+      "as_of": "2026-08-20",
+      "reason": "deploy: weakness=elevated; basket: JIOFIN.NS (\u221226%), HCLTECH.NS (\u221222%), ONGC.NS (\u221221%) (\u20b950,000)",
+      "orders": [
+        {
+          "date": "2026-08-20",
+          "ticker": "ADANIGREEN.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "1301.80",
+          "cost": "20.75",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-20",
+          "ticker": "ADANIPOWER.NS",
+          "side": "BUY",
+          "quantity": "31",
+          "price": "204.00",
+          "cost": "20.16",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-20",
+          "ticker": "DMART.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "3960.00",
+          "cost": "25.25",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-20",
+          "ticker": "HCLTECH.NS",
+          "side": "BUY",
+          "quantity": "5",
+          "price": "1318.40",
+          "cost": "21.01",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-20",
+          "ticker": "HINDZINC.NS",
+          "side": "BUY",
+          "quantity": "11",
+          "price": "573.90",
+          "cost": "20.13",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-20",
+          "ticker": "HYUNDAI.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "2227.00",
+          "cost": "21.29",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-20",
+          "ticker": "JIOFIN.NS",
+          "side": "BUY",
+          "quantity": "28",
+          "price": "244.60",
+          "cost": "21.83",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-20",
+          "ticker": "MAXHEALTH.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "997.90",
+          "cost": "6.36",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-20",
+          "ticker": "NTPC.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "337.50",
+          "cost": "2.15",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-20",
+      "reason": "drift 47.3% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
+    },
+    {
+      "as_of": "2026-08-21",
+      "reason": "deploy: weakness=elevated; basket: JIOFIN.NS (\u221226%), PFC.NS (\u221224%), HCLTECH.NS (\u221222%) (\u20b925,000)",
+      "orders": [
+        {
+          "date": "2026-08-21",
+          "ticker": "ADANIGREEN.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "1320.00",
+          "cost": "8.41",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-21",
+          "ticker": "ADANIPOWER.NS",
+          "side": "BUY",
+          "quantity": "15",
+          "price": "205.50",
+          "cost": "9.82",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-21",
+          "ticker": "DMART.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "3906.00",
+          "cost": "12.45",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-21",
+          "ticker": "HCLTECH.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "1302.50",
+          "cost": "8.30",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-21",
+          "ticker": "HYUNDAI.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "2218.80",
+          "cost": "7.07",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-21",
+          "ticker": "JIOFIN.NS",
+          "side": "BUY",
+          "quantity": "13",
+          "price": "244.00",
+          "cost": "10.10",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-21",
+          "ticker": "MAXHEALTH.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "1000.00",
+          "cost": "9.56",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-21",
+          "ticker": "NTPC.NS",
+          "side": "BUY",
+          "quantity": "9",
+          "price": "340.00",
+          "cost": "9.75",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-21",
+          "ticker": "PFC.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "363.00",
+          "cost": "3.47",
+          "tax": "0.00"
+        }
+      ]
+    },
+    {
+      "as_of": "2026-08-21",
+      "reason": "drift 50.1% > threshold and \u00a74.6 net-benefit gate cleared",
+      "orders": []
     }
   ],
   "last_target": {
     "NTPC.NS": 0.2,
-    "TITAN.NS": 0.20122376017906596,
     "SUNPHARMA.NS": 0.2,
+    "TITAN.NS": 0.20121225587843156,
     "ONGC.NS": 0.2,
-    "TECHM.NS": 0.19877623982093406
+    "TECHM.NS": 0.19878774412156844
   },
   "equity_curve": [
     {
@@ -512,6 +930,16 @@
       "date": "2026-08-19",
       "equity": "297910.79",
       "cash": "52.51"
+    },
+    {
+      "date": "2026-08-20",
+      "equity": "348756.85",
+      "cash": "35.08"
+    },
+    {
+      "date": "2026-08-21",
+      "equity": "373835.25",
+      "cash": "182.85"
     }
   ]
 }
