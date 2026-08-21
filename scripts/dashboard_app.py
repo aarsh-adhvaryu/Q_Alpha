@@ -75,6 +75,85 @@ AI_BRIEF_MD = Path("reports/ai_brief.md")
 SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
 
 
+def _write_repo_json(path: str, payload: object, message: str) -> tuple[bool, str]:
+    """Write a small JSON file into the repo via the GitHub Contents API. Returns ``(ok, note)``.
+
+    The Streamlit host is a different machine from the cron runner and its container is disposable,
+    so anything the user records here has to reach the repo or it is gone on the next redeploy —
+    the same lesson as the ₹50k Add-money top-up that never landed. Fail-soft, and loud on failure:
+    a silently unsaved decision is worse than a refused one.
+    """
+    import base64
+    import json
+    import urllib.error
+    import urllib.request
+
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if not token:
+        return False, "no GITHUB_TOKEN configured"
+    repo = os.environ.get("GITHUB_REPO", "aarsh-adhvaryu/Q_Alpha")
+    api = f"https://api.github.com/repos/{repo}/contents/{path}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "qalpha-dashboard",
+    }
+    try:
+        sha: str | None = None
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(api, headers=headers), timeout=10
+            ) as r:
+                sha = str(json.load(r)["sha"])
+        except urllib.error.HTTPError as e:
+            if e.code != 404:  # 404 = file doesn't exist yet → create it
+                raise
+        body: dict[str, object] = {
+            "message": message,
+            "content": base64.b64encode((json.dumps(payload, indent=2) + "\n").encode()).decode(),
+        }
+        if sha is not None:
+            body["sha"] = sha
+        put = urllib.request.Request(
+            api,
+            data=json.dumps(body).encode(),
+            headers={**headers, "Content-Type": "application/json"},
+            method="PUT",
+        )
+        with urllib.request.urlopen(put, timeout=10):
+            return True, "saved to the repo"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _cooling_off_exits() -> list:
+    """The user's recorded exits — repo copy is authoritative, local file is the fallback."""
+    from qalpha.live.cooling_off import COOLING_OFF_PATH, Exit, load_exits
+
+    cached = st.session_state.get("cooling_off")
+    if cached is not None:
+        return [Exit.from_dict(r) for r in cached]
+    return load_exits(COOLING_OFF_PATH)
+
+
+def _save_cooling_off(exits: list) -> tuple[bool, str]:
+    from qalpha.live.cooling_off import COOLING_OFF_PATH, save_exits
+
+    payload = [e.to_dict() for e in exits]
+    st.session_state["cooling_off"] = payload  # so the page reflects it immediately
+    ok, note = _write_repo_json(
+        str(COOLING_OFF_PATH), payload, "advisor: update cooling-off list [skip ci]"
+    )
+    if not ok:
+        import contextlib
+
+        with contextlib.suppress(
+            OSError
+        ):  # local dev / no token — persist on this machine at least
+            save_exits(exits, COOLING_OFF_PATH)
+    return ok, note
+
+
 def _queue_injection_to_repo(amount: int, reason: str) -> tuple[bool, str]:
     """Queue an Add-money deposit into the repo's ``pending_injections.json`` via the GitHub API, so
     the daily cron (a different machine than this Streamlit app) actually picks it up. Needs a
@@ -1437,6 +1516,61 @@ def _watchlist() -> tuple[list[str], dict[str, str], PriceData] | None:
     return tickers, sector_of, load_parquet(str(panel))
 
 
+def _exit_switch(ticker: str, as_of: date, namespace: str) -> None:
+    """Record (or clear) a deliberate exit — the one thing the system cannot infer for itself.
+
+    Selling for cash and selling to leave a company look identical in a tradebook, and guessing
+    wrong either way is worse than asking. So this is a box the user ticks, never an inference.
+    """
+    from qalpha.live.cooling_off import DEFAULT_MONTHS, clear_exit, record_exit
+
+    exits = _cooling_off_exits()
+    already = next((e for e in exits if e.ticker == ticker and e.active_on(as_of)), None)
+    short = ticker.removesuffix(".NS")
+
+    if already is not None:
+        st.info(
+            f"🚫 **{short} is on your cooling-off list until {already.until}** — the buy screen "
+            "will not re-enter it. Selling costs tax, buying does not, so re-buying a name you "
+            "deliberately left is money spent for nothing."
+        )
+        if st.button(f"Make {short} buyable again", key=f"clear_exit_{namespace}"):
+            ok, note = _save_cooling_off(clear_exit(ticker, exits))
+            (st.success if ok else st.error)(
+                f"{short} removed from cooling-off — {note}."
+                if ok
+                else f"❌ NOT saved: {note}. Set a GITHUB_TOKEN with contents:write."
+            )
+        return
+
+    with st.expander(f"Leaving {short} for good?"):
+        st.caption(
+            "Tick this only if you are exiting the **company**, not just raising cash. The buy "
+            f"screen will then skip {short} for the next few months instead of re-buying it on the "
+            "next deploy. It lapses on its own — this is not a permanent blacklist."
+        )
+        months = st.slider(
+            "Skip it for how long (months)?",
+            1,
+            24,
+            DEFAULT_MONTHS,
+            key=f"exit_months_{namespace}",
+        )
+        reason = st.text_input(
+            "Why (optional — you'll want this in 6 months)", key=f"exit_why_{namespace}"
+        )
+        if st.button(f"Don't buy {short} back", key=f"exit_btn_{namespace}"):
+            ok, note = _save_cooling_off(
+                record_exit(ticker, as_of, months=months, reason=reason, exits=exits)
+            )
+            (st.success if ok else st.error)(
+                f"✓ {short} will not be bought back before "
+                f"{record_exit(ticker, as_of, months=months, exits=[])[0].until} — {note}."
+                if ok
+                else f"❌ NOT saved: {note}. Set a GITHUB_TOKEN with contents:write."
+            )
+
+
 def _advisor_tabs(
     portfolio: Portfolio,
     prices_dec: dict[str, Decimal],
@@ -1482,6 +1616,7 @@ def _advisor_tabs(
                 )
                 st.markdown(advice.render())
                 _unverified_branch_warning(advice)
+            _exit_switch(ticker, as_of, namespace)
 
     with raise_tab:
         amount = st.number_input(
@@ -1537,14 +1672,34 @@ def _add_money_advisor(
         step=1000,
         key=f"add_amt_{namespace}",
     )
+    # The floor was 5, which made no sense for a small deploy: ₹10,000 across 5 names is ₹2,000 each,
+    # barely one share of anything, and the per-share affordability cap already excludes a third of
+    # the universe at that size. It is also the wrong instinct for a monthly SIP — diversification
+    # accumulates *across months*, not within one deploy. Backtested 2013–2026 (₹1L + ₹50k/month),
+    # deploying into 1–2 names a month still ended up holding 6–7 names, and returned more:
+    #   1 name +262.8% (worst -45.3%) · 2 +259.5% (-38.0%) · 5 +224.0% (-34.4%) · 15 +213.0% (-35.0%)
+    # More concentration earns more and hurts more. That trade is a judgement call, so it is the
+    # user's to make rather than a floor imposed on him.
     n_stocks = st.slider(
-        "Spread across how many stocks?",
-        min_value=5,
+        "Spread this deploy across how many stocks?",
+        min_value=1,
         max_value=40,
-        value=15,
-        help="Fewer = bigger, more concentrated positions (more risk, fewer orders). "
-        "More = broader & thinner. ~12–25 is the usual sweet spot.",
+        value=8,
+        help="Per deploy, not your whole portfolio — a monthly SIP diversifies over time either "
+        "way. Backtested 2013–2026: 1–2 names per deploy returned ~+260% but fell ~40–45% at "
+        "worst; 5–8 returned ~+215–225% and fell ~34–38%. Fewer = more return, rougher ride. For "
+        "a small amount (₹10–25k) pick 1–3, or you are buying dust.",
         key=f"add_names_{namespace}",
+    )
+    hold_back = st.checkbox(
+        "Hold some back for dips (deploy more when the market has fallen)",
+        value=False,
+        help="Deploys 25% in a normal market, 50% when the index is >5% off its high, 100% when "
+        ">12% off. Backtested from four start dates: it did NOT reliably raise returns (two better, "
+        "two worse) but it lowered the worst drawdown every single time (-38→-36, -38→-35, -31→-30, "
+        "-15→-11). Holding back a flat 50% regardless was worse on both counts — responding to the "
+        "market is the part that works, not hoarding cash.",
+        key=f"add_tranche_{namespace}",
     )
 
     # The AI read — INFORMATIONAL ONLY on the real-money surface. The AI-paced tranche rule is
@@ -1577,6 +1732,21 @@ def _add_money_advisor(
 
     # Persist the last suggestion across the 30s live auto-refresh — the fragment rerun would
     # otherwise wipe it the moment the button state resets.
+    deploy_now = Decimal(amount)
+    if hold_back:
+        from qalpha.live.autopilot import deploy_fraction
+
+        deploy_now = (Decimal(amount) * Decimal(str(deploy_fraction(wk.level)))).quantize(
+            Decimal("0.01")
+        )
+        st.info(
+            f"🪣 **Deploy ₹{deploy_now:,.0f} now, keep ₹{Decimal(amount) - deploy_now:,.0f} back** — "
+            f"the market is **{wk.level}** ({wk.drawdown * 100:.0f}% off its 1-year high). The rest "
+            "stays in your account for the next deploy, or for a sharper fall. This is a risk "
+            "control, not a return booster: it lowered the worst drawdown in every backtested "
+            "window and did not reliably raise returns."
+        )
+
     advice_key = f"add_advice_{namespace}"
     if st.button("Suggest what to buy", key=f"add_btn_{namespace}"):
         wl = _watchlist()
@@ -1588,7 +1758,7 @@ def _add_money_advisor(
             tickers, sector_of, wl_prices = wl
             st.session_state[advice_key] = advise_deploy_into_weakness(
                 portfolio,
-                Decimal(amount),
+                deploy_now,
                 tickers,
                 sector_of,
                 wl_prices,

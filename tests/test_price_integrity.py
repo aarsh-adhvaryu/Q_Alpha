@@ -167,3 +167,57 @@ def test_the_note_explains_itself_and_is_empty_when_clean() -> None:
     assert "re-based" in note
     assert "-65.0%" in note
     assert gaps_note({}) == ""
+
+
+# ---- repairing corrupt prints (2026-08-20) -------------------------------------------------------
+#
+# Found in the NIFTYBEES benchmark: two days at ₹13.02 against a true level near ₹129, then a snap
+# back. That series drives market_weakness, which sizes every deploy — so on those days the rule
+# would have read the index as 90% below its 1-year high and deployed the whole wallet on a typo.
+
+
+def test_a_round_trip_spike_is_repaired() -> None:
+    from qalpha.live.price_integrity import repair_price_spikes
+
+    s = pd.Series([129.0, 129.3, 13.0, 13.0, 129.9, 130.1], index=_index(6))
+    clean, repaired = repair_price_spikes(s)
+    assert [d.day for d in repaired] == [_index(6)[2].day, _index(6)[3].day]
+    assert list(clean) == [129.0, 129.3, 129.3, 129.3, 129.9, 130.1]  # ffilled, never interpolated
+    assert (clean.pct_change().dropna().abs() < 0.25).all()
+
+
+def test_a_real_crash_is_left_completely_alone() -> None:
+    """The property that makes this safe: a fall that *persists* is the signal, not an artifact.
+
+    Repairing it would blind the system to exactly the event it exists to react to.
+    """
+    from qalpha.live.price_integrity import repair_price_spikes
+
+    crash = pd.Series([100.0, 99.0, 60.0, 58.0, 61.0, 63.0], index=_index(6))
+    clean, repaired = repair_price_spikes(crash)
+    assert repaired == []
+    assert list(clean) == list(crash)
+
+
+def test_the_repair_is_causal_never_forward_looking() -> None:
+    """Bad points take the last *good* price, so no future information enters the series."""
+    from qalpha.live.price_integrity import repair_price_spikes
+
+    # A genuine round trip: the recovery must land near the pre-spike level, else it is not an
+    # artifact at all (100 → 10 → 200 is two real moves, and is correctly left alone).
+    s = pd.Series([100.0, 10.0, 105.0], index=_index(3))
+    clean, repaired = repair_price_spikes(s)
+    assert len(repaired) == 1
+    assert clean.iloc[1] == 100.0  # the prior price — never the (higher) recovery price ahead of it
+
+    not_a_round_trip = pd.Series([100.0, 10.0, 200.0], index=_index(3))
+    assert repair_price_spikes(not_a_round_trip)[1] == []
+
+
+def test_a_clean_series_is_returned_untouched() -> None:
+    from qalpha.live.price_integrity import repair_price_spikes
+
+    s = pd.Series([100.0, 101.0, 99.5, 102.0], index=_index(4))
+    clean, repaired = repair_price_spikes(s)
+    assert repaired == []
+    assert list(clean) == list(s)
