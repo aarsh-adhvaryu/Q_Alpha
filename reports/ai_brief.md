@@ -1,26 +1,21 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment**: 🔴 Nifty extended losing streak to 7th day as elevated crude oil prices and weak global cues continue to weigh on investor sentiment.
+**Sentiment**: 🟠 Nifty50 closed 20.15 points or 0.08% higher at 24,252, while Sensex eked out a 3.11-point gain to 77,540.83 as global equities retreated after bond yields rebounded and oil prices surged amid US-Iran tension.
 
 **Drivers**:  
-1. **Crude at cycle highs** (oil 4-day rally): Oil prices remain higher amid absent discussions between US and Iran regarding reopening of the Strait of Hormuz → compresses OMC margins (BPCL, IOC), inputs for aviation/paints/chemicals rise.  
-2. **Weak global tech sentiment**: Asian stocks slipped as AI stocks resumed decline → drags HCLTECH, INFY, TECHM, TCS downsides.  
-3. **Rupee depreciation pressure**: INR remains vulnerable near two-week low around 95.75 on higher crude costs increasing demand for dollars among importers → softer earnings translation for exporters; banks face FX headwinds.
+1. **Crude surge on geopolitical risk** — Brent crude traded above $93/bbl, on track for a second consecutive weekly gain of 5%+ as US-Iran conflict showed no signs of abating, with the two sides locked in a dispute over the Strait of Hormuz. Impact: OMC refining margins compress, aviation/paints/fertiliser input costs spike, automakers & logistics pressure.
+
+2. **Global bond yield rebound & equity de-rating** — Sector-wise, Nifty FMCG, Auto, and IT underperformed, while Nifty Metal and Private Bank outperformed. High-beta discretionary & IT caught in selloff; defensive & hard assets hold ground.
 
 **Watchlist names affected**:  
-Energy drag: **BPCL, IOC, ONGC** (margin compression).  
-IT weakness: **HCLTECH, INFY, TCS, TECHM** (global selloff overhang).  
-Currency-sensitive exporters: **MARUTI, TATAMOTORS** (FX loss accrual).  
-Defensive picks—consumer/pharma hold slight edge: **SUNPHARMA, APOLLOHOSP** gainers vs. heavyweights.
+**Headwinds**: BPCL, IOC, RELIANCE (fuel margin compression); MARUTI, M&M, BAJAJ-AUTO (margin squeeze + demand caution); INFY, TCS, HCLTECH (yield-driven outflow). **Upside**: TATASTEEL, HINDALCO, JINDALSTEL (metal strength on geopolitical premium); KOTAKBANK, HDFCBANK (private banking resilience).
 
-**Likely reaction**:  
-Index lean **down**, band **−0.4% to −0.8%**, confidence **medium**. Sixth consecutive loss day → technical exhaustion near, but crude/geopolitical tail-risk remains heavy. **BPCL, IOC** likely pressured into day 7; **HCLTECH** at risk of re-test lows if IT rotation persists. Watch intraday for FII flow; modest institutional bid on dips possible by close.
+**Likely reaction** (MEDIUM confidence): Near-term flat-to-slightly-down bias (−0.2% to +0.3%) over the next 1–2 sessions. Oil holding $93+ acts as a cap on cyclicals; IT/FMCG weakness persists, but metal shorts are squeezed. **BPCL** and **IOC** likely pressured; **TATASTEEL** likely defended / higher.
 
-**Discretionary ideas**:  
-— **SUNPHARMA** (pharma defensive, mild gain today) — satellite sleeve rules apply if crude stays sticky +90-day; earnings resilience.
+**Discretionary ideas**: None stand out on intraday technicals given lack of clear catalyst. Geopolitical premia in energy remain priced in.
 
-**Risk note**: Strait of Hormuz escalation (Iran rhetoric) could spike crude 5–8% intraday; rupee hits could exceed 1% if fast move happens.
+**Risk note**: The US is moving to isolate Iran's economy with details of the initiative expected Monday—binary event risk; new sanctions could reignite oil volatility and reverse today's flat close sharply.
 
-SIGNAL: lean=down; band=-0.4..-0.8; confidence=medium
+SIGNAL: lean=flat; band=-0.2..0.3; confidence=medium
 
-— 🤖 claude-haiku-4-5 · 54,740 in / 911 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 44,879 in / 889 out tokens · ✓ complete
