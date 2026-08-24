@@ -180,5 +180,53 @@
     "outcome_return_pct": null,
     "benchmark_return_pct": null,
     "verdict": ""
+  },
+  {
+    "as_of": "2026-08-24",
+    "book": "SYS",
+    "amount": "12500.00",
+    "basket": {
+      "ADANIGREEN.NS": 1,
+      "ADANIPOWER.NS": 7,
+      "HCLTECH.NS": 1,
+      "JIOFIN.NS": 6,
+      "MAXHEALTH.NS": 1,
+      "NTPC.NS": 4,
+      "PFC.NS": 4,
+      "RELIANCE.NS": 1,
+      "TATAPOWER.NS": 4,
+      "VBL.NS": 1
+    },
+    "model_rationale": "weakness=elevated; basket: JIOFIN.NS (\u221225%), PFC.NS (\u221224%), HCLTECH.NS (\u221221%)",
+    "ai_insight": "name-verdict: 0 dropped of 10",
+    "resolve_on": "2026-09-21",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
+  },
+  {
+    "as_of": "2026-08-24",
+    "book": "SHD",
+    "amount": "12500.00",
+    "basket": {
+      "ADANIGREEN.NS": 1,
+      "ADANIPOWER.NS": 7,
+      "HCLTECH.NS": 1,
+      "JIOFIN.NS": 6,
+      "MAXHEALTH.NS": 1,
+      "NTPC.NS": 4,
+      "PFC.NS": 4,
+      "RELIANCE.NS": 1,
+      "TATAPOWER.NS": 4,
+      "VBL.NS": 1
+    },
+    "model_rationale": "weakness=elevated; basket: JIOFIN.NS (\u221225%), PFC.NS (\u221224%), HCLTECH.NS (\u221221%)",
+    "ai_insight": "n/a (AI off)",
+    "resolve_on": "2026-09-21",
+    "resolved": false,
+    "outcome_return_pct": null,
+    "benchmark_return_pct": null,
+    "verdict": ""
   }
 ]
