@@ -191,3 +191,33 @@ def test_the_daily_sources_are_freshness_gated_on_the_page() -> None:
     # behind and broke the moment it caught up. What must hold either way is that a freshness
     # verdict is *reached and shown* rather than the files being trusted silently.
     assert "daily sources are up to date" in shown or "daily sources are stale" in shown
+
+
+def test_the_track_record_is_on_the_real_money_page() -> None:
+    """The Live tab must carry the forward comparison, not just today's snapshot (PR-71).
+
+    The tab reported equity, cash, holdings and tax paid — every one of them a *state*, none of them
+    a *result*. Asserted at the source because the Live tab is behind a Kite login that AppTest
+    cannot pass; the panel's own behaviour is covered in ``tests/test_track_record.py``.
+    """
+    import inspect
+
+    import dashboard_app
+
+    live_view = inspect.getsource(dashboard_app.main)
+    assert "_track_record_panel(" in live_view, "the track record is not wired into the live view"
+    panel = inspect.getsource(dashboard_app._track_record_panel)
+    # It must mark against the prices the page is actually showing, and against the same benchmark
+    # every other "vs Nifty" number on the dashboard uses — not a second, privately-loaded series.
+    assert "track_record(trades, portfolio.market_value(prices), benchmark, as_of)" in panel
+
+
+def test_the_track_record_never_takes_the_page_down_with_it() -> None:
+    """A missing tradebook, a short benchmark or a bad replay must not break the account view."""
+    import inspect
+
+    import dashboard_app
+
+    panel = inspect.getsource(dashboard_app._track_record_panel)
+    assert "except Exception" in panel
+    assert "if not trades:\n        return" in panel
