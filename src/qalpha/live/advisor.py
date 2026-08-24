@@ -443,10 +443,37 @@ class DeployAdvice:
     naive_tax: Decimal
     naive_cost: Decimal
     tax_saved: Decimal
+    #: Idle cash already sitting in the account that this basket **also** spends. The advisor has
+    #: always deployed ``portfolio.cash + amount`` (see ``advise_deploy`` — putting idle cash to work
+    #: is the point), but the heading named only ``amount``. Recorded so the heading can state the
+    #: number the orders actually add up to.
+    idle_cash: Decimal = Decimal("0")
+
+    @property
+    def total_deployed(self) -> Decimal:
+        """What the listed orders actually cost — new money **plus** idle cash already in the account."""
+        return sum((o.quantity * o.price for o in self.buy_orders), Decimal("0"))
 
     def render(self) -> str:
+        # The heading must name what the orders below add up to, not just the amount typed in.
+        # Found live on 2026-08-24, on the real-money buy surface, with real money in the account:
+        # a ₹5,00,000 broker balance and ₹1,00,000 typed in produced a ₹5,97,418 basket under a
+        # heading that read "Deploy ₹100,000.00 of new money", and the user was seconds from placing
+        # a 64-share order that should have been 11. The arithmetic was right and documented; the
+        # label was wrong, which on this surface is the same thing as being wrong.
+        if self.idle_cash > 0:
+            head = (
+                f"### Deploy {_rupees(self.total_deployed)}  (as of {self.as_of})\n\n"
+                f"⚠️ **This spends {_rupees(self.amount)} of new money plus "
+                f"{_rupees(self.idle_cash)} of idle cash already in your account.** The advisor puts "
+                "*all* uninvested cash to work by design. If some of that balance is earmarked for "
+                "later — a future SIP instalment, money you want held back — move it out of the "
+                "broker account first, or the orders below will spend it today."
+            )
+        else:
+            head = f"### Deploy {_rupees(self.amount)} of new money  (as of {self.as_of})"
         lines = [
-            f"### Deploy {_rupees(self.amount)} of new money  (as of {self.as_of})",
+            head,
             "",
             "**Tax-smart: buy the underweight names only — no sells, so ₹0 capital-gains tax.**",
             "",
@@ -457,7 +484,8 @@ class DeployAdvice:
             lines.append(f"| {o.ticker} | {o.quantity} | {_rupees(o.price)} |")
         lines += [
             "",
-            f"- Transaction cost: {_rupees(self.buy_cost)} · leftover cash: "
+            f"- Orders total {_rupees(self.total_deployed)} · transaction cost: "
+            f"{_rupees(self.buy_cost)} · leftover cash: "
             f"{_rupees(self.leftover_cash)}.",
             f"- A full rebalance to target would instead realize {_rupees(self.naive_tax)} tax "
             f"(cost {_rupees(self.naive_cost)}).",
@@ -535,4 +563,5 @@ def advise_deploy(
         naive_tax=naive_tax,
         naive_cost=naive_cost,
         tax_saved=naive_tax,
+        idle_cash=portfolio.cash,
     )
