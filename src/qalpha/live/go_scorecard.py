@@ -233,6 +233,43 @@ def _integrity(s: pd.Series) -> Criterion:
     )
 
 
+#: How far the benchmark may lag the equity curve before the comparison stops being measurable. A
+#: weekend plus a holiday is normal; beyond that the series is not describing the same window.
+MAX_BENCHMARK_LAG_DAYS = 5
+
+
+def _benchmark_covers(benchmark: pd.Series, end: date) -> Criterion | None:
+    """Refuse to grade against a benchmark that does not reach the end of the window.
+
+    Found in the pre-flight audit (2026-08-24). The parquet is gitignored and rebuilt per machine by
+    ``paper.py daily``; ``paper.py refresh`` rebuilds prices but **not** the benchmark. A box whose
+    copy had gone stale by 70 days graded the run with no warning whatsoever, and every number moved:
+    the worst in-window Nifty pullback read **0.0%** instead of −2.2% (so the hard volatility-event
+    gate reported "the market has been calm" when the truth was "we have no data"), and the benchmark
+    return read **+1.0%** instead of +3.3% — flattering the strategy by 2.3 points.
+
+    That is the exact failure mode this system is built to refuse: it never auto-trades, so the only
+    way it can cost money is by showing a wrong number confidently. Silence is the bug. When the
+    series does not cover the window, the affected criteria say *cannot assess* instead of grading.
+    """
+    usable = benchmark.dropna()
+    if usable.empty:
+        return Criterion(
+            "Benchmark data", "yellow", "no benchmark history loaded — cannot compare."
+        )
+    last = usable.index[-1].date()
+    lag = (end - last).days
+    if lag > MAX_BENCHMARK_LAG_DAYS:
+        return Criterion(
+            "Benchmark data",
+            "yellow",
+            f"benchmark series ends {last}, {lag} days before the track record does ({end}) — "
+            "every 'vs Nifty' figure and the volatility-event gate would be measured over a window "
+            "the data does not cover. Refresh it (`paper.py daily`) before reading a verdict.",
+        )
+    return None
+
+
 def build_scorecard(
     equity_curve: list[dict[str, str]], benchmark: pd.Series, as_of: date
 ) -> GoScorecard:
@@ -245,6 +282,11 @@ def build_scorecard(
     if s.empty:
         return GoScorecard(as_of, [Criterion("Track length", "yellow", "no marks recorded yet.")])
     start, end = s.index[0].date(), s.index[-1].date()
+    # A stale benchmark makes three of the five criteria silently wrong rather than absent, so it is
+    # checked before any of them is graded (see _benchmark_covers).
+    stale = _benchmark_covers(benchmark, end)
+    if stale is not None:
+        return GoScorecard(as_of, [_track_length(s), stale, _integrity(s)])
     criteria = [
         _track_length(s),
         _vol_event(benchmark, start, end),
