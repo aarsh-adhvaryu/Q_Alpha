@@ -268,9 +268,14 @@ def test_the_heading_names_the_total_the_orders_actually_cost() -> None:
 
 
 def test_it_says_what_to_do_about_earmarked_money() -> None:
-    """Naming the number is not enough — the user needs the action that changes it."""
+    """Naming the number is not enough — the user needs the control that changes it.
+
+    The first version of this warning told the user to move the money out of the broker account.
+    That is a chore the software should absorb, not hand back — so it now points at the switch.
+    """
     head = _deploy_advice(cash="400000", amount="50000").render()
-    assert "move it out of the broker account first" in head
+    assert "deploy idle cash too" in head
+    assert "earmarked for later" in head
 
 
 def test_an_account_with_no_idle_cash_keeps_the_plain_heading() -> None:
@@ -284,3 +289,50 @@ def test_an_account_with_no_idle_cash_keeps_the_plain_heading() -> None:
 def test_the_order_total_is_stated_beside_the_transaction_cost() -> None:
     body = _deploy_advice(cash="0", amount="50000", price="100", qty=5).render()
     assert "Orders total ₹500.00" in body
+
+
+def test_the_typed_amount_can_be_a_hard_budget() -> None:
+    """A broker balance is not self-describing — the SIP instalment must be spendable-by-choice.
+
+    Cash parked for next month and cash waiting to be deployed look identical from inside the
+    advisor; only the person who put it there knows which is which. So this is a switch, not a
+    smarter guess.
+    """
+    cfg = Config()
+    portfolio = Portfolio(cfg.cost, cfg.tax, cash=Decimal("500000"))
+    target = pd.Series({"A.NS": 0.5, "B.NS": 0.5})
+    prices = {"A.NS": Decimal("100"), "B.NS": Decimal("100")}
+
+    capped = advise_deploy(
+        portfolio, Decimal("100000"), target, prices, date(2026, 8, 24), spend_idle_cash=False
+    )
+    assert capped.total_deployed <= Decimal("100000")
+    assert capped.held_back == Decimal("500000")
+    assert "left untouched" in capped.render()
+
+
+def test_the_default_still_puts_idle_cash_to_work() -> None:
+    """Unchanged contract for every existing caller — the autopilot depends on it."""
+    cfg = Config()
+    portfolio = Portfolio(cfg.cost, cfg.tax, cash=Decimal("500000"))
+    target = pd.Series({"A.NS": 0.5, "B.NS": 0.5})
+    prices = {"A.NS": Decimal("100"), "B.NS": Decimal("100")}
+
+    full = advise_deploy(portfolio, Decimal("100000"), target, prices, date(2026, 8, 24))
+    assert full.total_deployed > Decimal("500000")
+    assert full.held_back == Decimal("0")
+
+
+def test_a_capped_deploy_sizes_names_against_the_money_actually_being_spent() -> None:
+    """Targets computed on cash the user ruled out spending would skew every position."""
+    cfg = Config()
+    rich = Portfolio(cfg.cost, cfg.tax, cash=Decimal("900000"))
+    poor = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    target = pd.Series({"A.NS": 0.5, "B.NS": 0.5})
+    prices = {"A.NS": Decimal("100"), "B.NS": Decimal("100")}
+    on = date(2026, 8, 24)
+    a = advise_deploy(rich, Decimal("100000"), target, prices, on, spend_idle_cash=False)
+    b = advise_deploy(poor, Decimal("100000"), target, prices, on, spend_idle_cash=False)
+    assert {o.ticker: o.quantity for o in a.buy_orders} == {
+        o.ticker: o.quantity for o in b.buy_orders
+    }

@@ -448,6 +448,8 @@ class DeployAdvice:
     #: is the point), but the heading named only ``amount``. Recorded so the heading can state the
     #: number the orders actually add up to.
     idle_cash: Decimal = Decimal("0")
+    #: Idle cash deliberately left alone because ``amount`` was treated as a hard budget.
+    held_back: Decimal = Decimal("0")
 
     @property
     def total_deployed(self) -> Decimal:
@@ -461,14 +463,20 @@ class DeployAdvice:
         # heading that read "Deploy ₹100,000.00 of new money", and the user was seconds from placing
         # a 64-share order that should have been 11. The arithmetic was right and documented; the
         # label was wrong, which on this surface is the same thing as being wrong.
-        if self.idle_cash > 0:
+        if self.held_back > 0:
+            head = (
+                f"### Deploy {_rupees(self.total_deployed)}  (as of {self.as_of})\n\n"
+                f"✅ **{_rupees(self.held_back)} of your broker balance is left untouched.** This "
+                "basket spends the amount you asked for and nothing else — the rest stays as cash in "
+                "your account for whenever you want it."
+            )
+        elif self.idle_cash > 0:
             head = (
                 f"### Deploy {_rupees(self.total_deployed)}  (as of {self.as_of})\n\n"
                 f"⚠️ **This spends {_rupees(self.amount)} of new money plus "
-                f"{_rupees(self.idle_cash)} of idle cash already in your account.** The advisor puts "
-                "*all* uninvested cash to work by design. If some of that balance is earmarked for "
-                "later — a future SIP instalment, money you want held back — move it out of the "
-                "broker account first, or the orders below will spend it today."
+                f"{_rupees(self.idle_cash)} of idle cash already in your account.** If some of that "
+                "balance is earmarked for later — a future SIP instalment, money you want held back "
+                "— untick *deploy idle cash too* and only the amount you typed will be spent."
             )
         else:
             head = f"### Deploy {_rupees(self.amount)} of new money  (as of {self.as_of})"
@@ -494,16 +502,34 @@ class DeployAdvice:
         return "\n".join(lines)
 
 
+def _spent(orders: list[TradeRecord]) -> Decimal:
+    """Rupees of stock the listed orders buy, excluding charges."""
+    return sum((o.quantity * o.price for o in orders), _ZERO)
+
+
 def advise_deploy(
     portfolio: Portfolio,
     amount: Decimal,
     target: pd.Series,
     prices: Mapping[str, Decimal],
     as_of: date,
+    *,
+    spend_idle_cash: bool = True,
 ) -> DeployAdvice:
     """Advise deploying ``amount`` of fresh capital toward ``target`` weights with zero tax.
 
-    Smart path: spend the idle cash + new money buying whole shares toward ``target``, always topping
+    ``spend_idle_cash`` decides what the budget is. Default ``True`` keeps the original contract —
+    idle cash is a drag and the advisor's job is to put it to work. Pass ``False`` to make ``amount``
+    a **hard budget**, leaving whatever else sits in the account untouched.
+
+    That switch exists because a broker balance is not self-describing. Cash parked for next month's
+    SIP instalment and cash waiting to be deployed look identical from here; only the person who put
+    it there knows which is which. Deploying all of it by default turned a ₹1,00,000 opening position
+    into a ₹5,97,418 basket on a live account (2026-08-24) — and the alternative advice, "keep the
+    other ₹4,00,000 in your bank and transfer monthly", is a chore the software should absorb rather
+    than hand back to the user.
+
+    Smart path: spend the budget buying whole shares toward ``target``, always topping
     up the **most underweight** name that is still affordable, until no further share fits — pure
     buys, so no capital-gains tax is realized (§2.9 fresh-capital routing). Buying whole shares one at
     a time toward the largest shortfall both tracks target weights and drives idle cash down to less
@@ -511,19 +537,23 @@ def advise_deploy(
     Naive path: a full rebalance to ``target`` on the same post-injection book, which sells the
     overweights and realizes capital-gains tax. ``tax_saved`` is that avoided tax.
     """
-    total_after = portfolio.market_value(prices) + amount
+    # The target book: everything already held, plus the money actually being put to work. When idle
+    # cash is held back it is deliberately NOT part of the book being sized — counting it would size
+    # every name against capital the user has ruled out spending.
+    budget = portfolio.cash + amount if spend_idle_cash else amount
+    total_after = portfolio.holdings_value(prices) + budget
     desired_value = {
         str(t): Decimal(str(w)) * total_after
         for t, w in target.items()
         if float(w) > 0 and str(t) in prices
     }
 
-    # Allocate whole-share buys greedily against the available cash (idle + new), leaving a small
+    # Allocate whole-share buys greedily against the budget, leaving a small
     # buffer for the ~0.3% buy cost so the executed orders below don't get affordability-capped.
     held = portfolio.positions()
     buffered = {t: prices[t] * Decimal("1.004") for t in desired_value}
     shares: dict[str, Decimal] = dict.fromkeys(desired_value, _ZERO)
-    available = portfolio.cash + amount
+    available = budget
     for _ in range(_MAX_DEPLOY_SHARES):
         best, best_shortfall = None, _ZERO
         for t in desired_value:
@@ -559,7 +589,8 @@ def advise_deploy(
         amount=amount,
         buy_orders=buy_orders,
         buy_cost=sum((o.cost for o in buy_orders), _ZERO),
-        leftover_cash=smart.cash,
+        leftover_cash=budget - _spent(buy_orders) - sum((o.cost for o in buy_orders), _ZERO),
+        held_back=portfolio.cash if not spend_idle_cash else _ZERO,
         naive_tax=naive_tax,
         naive_cost=naive_cost,
         tax_saved=naive_tax,
