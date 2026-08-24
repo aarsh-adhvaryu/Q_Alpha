@@ -1780,6 +1780,28 @@ def _add_money_advisor(
             "window and did not reliably raise returns."
         )
 
+    # What the typed amount MEANS. Default: exactly that amount and nothing more.
+    #
+    # The advisor's own default is to spend idle cash too — putting uninvested cash to work is its
+    # job, and on a book whose cash arrived from a sell that is right. But a broker balance is not
+    # self-describing: money parked for next month's SIP instalment looks identical to money waiting
+    # to be deployed. On 2026-08-24 a ₹5,00,000 balance and ₹1,00,000 typed here produced a
+    # ₹5,97,418 basket, and the user came within one click of a 64-share order that should have been
+    # 11. So on the real-money surface the typed number is a hard budget unless explicitly widened.
+    idle = portfolio.cash
+    spend_idle = False
+    if idle > Decimal("1000"):
+        spend_idle = st.checkbox(
+            f"Also deploy the ₹{idle:,.0f} already sitting in the account",
+            value=False,
+            key=f"add_idle_{namespace}",
+            help=(
+                "Off: you buy exactly the amount typed above and the rest stays as cash. "
+                "On: the whole balance is put to work as well. Leave it off if any of that money "
+                "is earmarked for a future instalment."
+            ),
+        )
+
     advice_key = f"add_advice_{namespace}"
     if st.button("Suggest what to buy", key=f"add_btn_{namespace}"):
         wl = _watchlist()
@@ -1799,6 +1821,7 @@ def _add_money_advisor(
                 as_of,
                 max_names=n_stocks,
                 broker_prices=prices_dec,  # marks holdings the watchlist panel can't price
+                spend_idle_cash=spend_idle,
             ).render()
     if st.session_state.get(advice_key):
         st.markdown(st.session_state[advice_key])
