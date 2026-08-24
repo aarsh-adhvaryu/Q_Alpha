@@ -128,3 +128,48 @@ def test_idiosyncratic_drawdown_in_calm_market_is_no_go() -> None:
     dd = next(c for c in sc.criteria if c.name == "Drawdown behaviour")
     assert dd.status == "red"
     assert sc.verdict == "NO-GO"
+
+
+# ---- pre-flight audit, 2026-08-24 ---------------------------------------------------------------
+
+
+def _flat_curve(days: int, start: str = "2026-06-12") -> list[dict[str, str]]:
+    idx = pd.bdate_range(start, periods=days)
+    return [{"date": str(d.date()), "equity": "200000", "cash": "0"} for d in idx]
+
+
+def _short_bench(days: int, start: str = "2026-06-12") -> pd.Series:
+    idx = pd.bdate_range(start, periods=days)
+    return pd.Series([100.0] * days, index=idx)
+
+
+def test_a_stale_benchmark_refuses_to_grade_instead_of_grading_wrong() -> None:
+    """A benchmark that stops short of the window made every 'vs Nifty' number quietly wrong.
+
+    Measured on the real book the day money was transferred: with a 70-day-stale series the worst
+    in-window Nifty pullback read **0.0%** (so the hard volatility-event gate reported a calm market
+    when the truth was "no data") and the benchmark return read +1.0% instead of +3.3%, flattering
+    the strategy by 2.3 points. Nothing warned. This system never auto-trades, so a confidently
+    wrong number is the *only* way it can cost money — silence is the bug.
+    """
+    card = build_scorecard(_flat_curve(60), _short_bench(10), date(2026, 9, 1))
+    names = [c.name for c in card.criteria]
+    assert "Benchmark data" in names
+    assert "Volatility event withstood" not in names  # not graded on data that cannot support it
+    assert "Forward vs benchmark" not in names
+    assert card.verdict != "GO"
+
+
+def test_a_benchmark_lagging_by_a_long_weekend_still_grades_normally() -> None:
+    """Refusing on every holiday would make the scorecard useless — the guard must be narrow."""
+    card = build_scorecard(_flat_curve(60), _short_bench(59), date(2026, 9, 1))
+    names = [c.name for c in card.criteria]
+    assert "Benchmark data" not in names
+    assert "Volatility event withstood" in names
+
+
+def test_the_stale_message_names_the_dates_and_the_fix() -> None:
+    card = build_scorecard(_flat_curve(60), _short_bench(10), date(2026, 9, 1))
+    detail = next(c.detail for c in card.criteria if c.name == "Benchmark data")
+    assert "paper.py daily" in detail
+    assert "days before" in detail

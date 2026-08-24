@@ -29,7 +29,7 @@ from decimal import Decimal
 import pandas as pd
 
 from qalpha.accounting.corporate_actions import CorporateAction
-from qalpha.backtest.portfolio import Portfolio, to_decimal_price
+from qalpha.backtest.portfolio import Portfolio, TradeRecord, to_decimal_price
 from qalpha.data.prices import PriceData
 from qalpha.live.advisor import DeployAdvice, advise_deploy
 from qalpha.live.position_health import HoldingHealth, position_health
@@ -233,11 +233,47 @@ class WeaknessDeployAdvice:
     filtered_out: tuple[str, ...] = ()
     # Names removed because the user said to leave them alone, not because the market did.
     cooling_off: tuple[str, ...] = ()
+    # The sector mix of the basket **as actually delivered**, and the cap it was sized against. The
+    # cap is enforced on target *weights*; whole shares cannot always honour it, so what the user
+    # buys can exceed what the screen advertised. Reported, per PR-4: the number on screen is the
+    # delivered one, not the intended one.
+    sector_mix: tuple[tuple[str, float], ...] = ()
+    max_sector_weight: float = 0.3
     # Share of the whole candidate universe the detector rates "breaking", so the basket's own share
     # can be read against a baseline. Without it a mostly-red table is uninterpretable: a screen that
     # selects pulled-back names will always overlap a breakdown test, and the only question that
     # matters is *by how much more than the universe it drew from*.
     universe_breaking_rate: float | None = None
+
+    def sector_note(self) -> str:
+        """The delivered sector mix, and an explicit flag when it exceeds the cap it was sized to.
+
+        Found in the pre-flight audit (2026-08-24). ``_cap_sectors`` caps *target weights* correctly,
+        but the basket is bought in whole shares and the leftover is water-filled, so the delivered
+        mix drifts above the target. Measured on the live watchlist at a ₹1,00,000 deploy: at 6+
+        names the cap holds (23–29%), but at 5 names NBFC lands at **33.9%**, at 4 names 33.6%, and
+        at 3 names **50.0%** — against an advertised 30%.
+
+        Below roughly six names the cap is not merely missed, it is *arithmetically unreachable*: at
+        five equal-weight names one name is already 20%, so any two in the same sector is 40%. The
+        honest fix is therefore disclosure, not a tighter clamp — a clamp that cannot be satisfied
+        would either fail silently or return an empty basket. So the delivered figure is shown, and
+        the reason a small basket cannot be diversified is stated where the user chooses the number.
+        """
+        if not self.sector_mix:
+            return ""
+        top, share = max(self.sector_mix, key=lambda kv: kv[1])
+        mix = " · ".join(f"{name} {pct:.0%}" for name, pct in self.sector_mix)
+        if share <= self.max_sector_weight + 0.005:
+            return f"**Sector mix (as delivered):** {mix} — within the {self.max_sector_weight:.0%} cap."
+        return (
+            f"⚠️ **Sector mix (as delivered): {mix}** — **{top} is {share:.0%}, above the "
+            f"{self.max_sector_weight:.0%} cap** this basket was sized against. The cap is applied "
+            "to target weights, but shares are bought whole, and a basket this small cannot honour "
+            "it: at five names one name is already 20%, so any two in a sector exceeds 30%. "
+            "**Spreading across more names is the only thing that fixes it** — the cap holds from "
+            "about six names up."
+        )
 
     def cooling_off_note(self) -> str:
         """What was skipped because *you* said so — never silent, however long ago you said it."""
@@ -354,8 +390,28 @@ class WeaknessDeployAdvice:
         note = self.off_watchlist_note()
         if note:
             lines += ["", note]
+        sectors = self.sector_note()
+        if sectors:
+            lines += ["", sectors]
         lines += ["", self.deploy.render()]
         return "\n".join(lines)
+
+
+def _delivered_sector_mix(
+    orders: Sequence[TradeRecord], sector_of: Mapping[str, str]
+) -> tuple[tuple[str, float], ...]:
+    """Sector shares of the basket actually bought, largest first — whole shares, not target weights."""
+    by_sector: dict[str, Decimal] = {}
+    for order in orders:
+        value = order.quantity * order.price
+        sector = sector_of.get(order.ticker, "OTHER")
+        by_sector[sector] = by_sector.get(sector, Decimal("0")) + value
+    total = sum(by_sector.values(), Decimal("0"))
+    if total <= 0:
+        return ()
+    return tuple(
+        sorted(((s, float(v / total)) for s, v in by_sector.items()), key=lambda kv: -kv[1])
+    )
 
 
 def advise_deploy_into_weakness(
@@ -427,6 +483,7 @@ def advise_deploy_into_weakness(
     # and the filter stands down rather than returning nothing. `exclude_breaking=False` restores the
     # pre-2026-08-19 behaviour for comparison.
     breaking: set[str] = set()
+    pre_filter_universe = list(universe)
     if exclude_breaking:
         report = position_health(adj, universe, as_of)
         breaking = {h.ticker for h in report.holdings if h.level == "breaking"}
@@ -535,7 +592,13 @@ def advise_deploy_into_weakness(
     recommended = sorted({o.ticker for o in deploy.buy_orders}) or sorted(target.index)
     # Health is still reported on the delivered basket — the filter should make this boring, and a
     # 🔴 appearing here again is the signal that it stopped working.
-    universe_health = position_health(adj, sorted(universe), as_of).holdings
+    # Measured over the universe **as it stood before the breakdown filter ran** (pre-flight audit,
+    # 2026-08-24). It used to read `universe`, which by this point has had every breaking name
+    # removed — so the rate was 0.0 by construction and the one sentence that makes the health table
+    # interpretable ("the basket is N× more concentrated in them than the universe it was drawn
+    # from") never rendered. It went missing in exactly the case it exists for: the filter failing
+    # open and a 🔴 reaching the basket anyway.
+    universe_health = position_health(adj, sorted(pre_filter_universe), as_of).holdings
     by_ticker = {h.ticker: h for h in universe_health}
     health = [by_ticker[t] for t in recommended if t in by_ticker]
     breaking_rate = (
@@ -550,6 +613,8 @@ def advise_deploy_into_weakness(
         target=target,
         cheapest=cheapest,
         off_watchlist=off_watchlist,
+        sector_mix=_delivered_sector_mix(deploy.buy_orders, sector_of),
+        max_sector_weight=max_sector_weight,
         price_gaps=tuple(gaps[t] for t in sorted(gaps)),
         candidate_health=tuple(health),
         universe_breaking_rate=breaking_rate,
