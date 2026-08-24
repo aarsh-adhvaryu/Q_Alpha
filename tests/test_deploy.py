@@ -839,3 +839,56 @@ def test_cooling_off_never_starves_the_deploy_of_everything_else() -> None:
     )
     assert advice.deploy.buy_orders  # the rest of the screen still funds a basket
     assert not ({"FLAT1.NS", "FLAT2.NS"} & {o.ticker for o in advice.deploy.buy_orders})
+
+
+# ---- pre-flight audit, 2026-08-24 ---------------------------------------------------------------
+#
+# Three defects found by auditing the live surfaces the day real money was transferred in. None was
+# caught by 481 existing tests, because each is a *number reported about the screen* rather than the
+# screen's selection — the same blind spot the whole trust-repair plan exists to close.
+
+
+def test_the_breakdown_base_rate_is_measured_before_the_filter_removes_those_names() -> None:
+    """The base rate counted the universe *after* every breaking name was filtered out of it.
+
+    So it was 0.0 by construction, and the one sentence that makes the health table readable — "this
+    basket is N× more concentrated in breaking names than the universe it was drawn from" — is gated
+    on ``> 0`` and therefore never rendered. It went missing in exactly the case it exists for.
+    """
+    advice = _wide_advice(max_names=3)
+    assert advice.filtered_out, "the fixture must actually have breaking names to count"
+    assert advice.universe_breaking_rate is not None
+    assert advice.universe_breaking_rate > 0, "the rate is being measured post-filter again"
+
+
+def test_the_delivered_sector_mix_is_reported_not_the_intended_one() -> None:
+    """Whole shares cannot always honour a cap set on target weights — so report what was bought."""
+    advice = _wide_advice(max_names=6)
+    assert advice.sector_mix, "the delivered mix must be reported"
+    assert abs(sum(share for _, share in advice.sector_mix) - 1.0) < 1e-6
+    assert advice.sector_mix == tuple(sorted(advice.sector_mix, key=lambda kv: -kv[1]))
+    # Every rupee bought is attributed to some sector — nothing silently vanishes from the mix.
+    assert {t for t, _ in advice.sector_mix} <= set(_wide_prices()[1].values()) | {"OTHER"}
+
+
+def test_a_breached_cap_says_so_and_says_what_fixes_it() -> None:
+    from qalpha.live.deploy import WeaknessDeployAdvice
+
+    breached = WeaknessDeployAdvice.__new__(WeaknessDeployAdvice)
+    object.__setattr__(breached, "sector_mix", (("NBFC", 0.50), ("IT", 0.50)))
+    object.__setattr__(breached, "max_sector_weight", 0.30)
+    note = breached.sector_note()
+    assert "NBFC is 50%" in note
+    assert "above the 30% cap" in note
+    assert "more names" in note  # it must say what the user can actually do about it
+
+
+def test_a_mix_inside_the_cap_is_stated_without_an_alarm() -> None:
+    from qalpha.live.deploy import WeaknessDeployAdvice
+
+    ok = WeaknessDeployAdvice.__new__(WeaknessDeployAdvice)
+    object.__setattr__(ok, "sector_mix", (("NBFC", 0.28), ("IT", 0.25), ("AUTO", 0.47 / 2)))
+    object.__setattr__(ok, "max_sector_weight", 0.30)
+    note = ok.sector_note()
+    assert "within the 30% cap" in note
+    assert "⚠️" not in note
