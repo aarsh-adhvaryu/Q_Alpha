@@ -217,3 +217,70 @@ def test_deploy_routes_new_money_to_underweights_tax_free() -> None:
     # The greedy whole-share fill drives idle cash below one share of the cheapest name (BBB ₹100),
     # not a share's worth stranded per name.
     assert adv.leftover_cash < Decimal("200")
+
+
+# ---- the heading must name what the orders cost (2026-08-24, found live) ------------------------
+
+
+def _deploy_advice(cash: str, amount: str, price: str = "100", qty: int = 5):
+    from qalpha.accounting.costs import Side
+    from qalpha.backtest.portfolio import TradeRecord
+    from qalpha.live.advisor import DeployAdvice
+
+    orders = [
+        TradeRecord(
+            date=date(2026, 8, 24),
+            ticker="A.NS",
+            side=Side.BUY,
+            quantity=Decimal(qty),
+            price=Decimal(price),
+            cost=Decimal("1"),
+            tax=Decimal("0"),
+            pool="core",
+        )
+    ]
+    return DeployAdvice(
+        as_of=date(2026, 8, 24),
+        amount=Decimal(amount),
+        buy_orders=orders,
+        buy_cost=Decimal("1"),
+        leftover_cash=Decimal("0"),
+        naive_tax=Decimal("0"),
+        naive_cost=Decimal("0"),
+        tax_saved=Decimal("0"),
+        idle_cash=Decimal(cash),
+    )
+
+
+def test_the_heading_names_the_total_the_orders_actually_cost() -> None:
+    """A ₹1,00,000 heading over a ₹5,97,418 basket is how a 64-share order gets placed.
+
+    The advisor has always deployed ``portfolio.cash + amount`` — putting idle cash to work is its
+    documented job. The heading named only ``amount``. On a real account with a ₹5,00,000 balance
+    that understated the basket by 6×, on the one surface where the number becomes an order.
+    """
+    advice = _deploy_advice(cash="500000", amount="100000", price="1000", qty=600)
+    head = advice.render()
+    assert advice.total_deployed == Decimal("600000")
+    assert "₹600,000" in head
+    assert "of idle cash already in your account" in head
+    assert "₹100,000.00 of new money" in head
+
+
+def test_it_says_what_to_do_about_earmarked_money() -> None:
+    """Naming the number is not enough — the user needs the action that changes it."""
+    head = _deploy_advice(cash="400000", amount="50000").render()
+    assert "move it out of the broker account first" in head
+
+
+def test_an_account_with_no_idle_cash_keeps_the_plain_heading() -> None:
+    """The warning must not cry wolf on the ordinary case, or it stops being read."""
+    head = _deploy_advice(cash="0", amount="50000").render()
+    assert "of new money" in head
+    assert "idle cash already in your account" not in head
+    assert "⚠️" not in head
+
+
+def test_the_order_total_is_stated_beside_the_transaction_cost() -> None:
+    body = _deploy_advice(cash="0", amount="50000", price="100", qty=5).render()
+    assert "Orders total ₹500.00" in body
