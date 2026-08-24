@@ -431,6 +431,7 @@ def advise_deploy_into_weakness(
     known_actions: Mapping[str, Sequence[CorporateAction]] | None = None,
     exclude_breaking: bool = True,
     do_not_buy: Collection[str] = (),
+    spend_idle_cash: bool = True,
 ) -> WeaknessDeployAdvice:
     """Recommend deploying ``amount`` of new money across the Nifty-100 watchlist — diversified,
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
@@ -580,7 +581,7 @@ def advise_deploy_into_weakness(
 
         off_watchlist = tuple((t, _mark(t)) for t in sorted(excluded))
 
-    deploy = advise_deploy(core, amount, target, price_dec, as_of)
+    deploy = advise_deploy(core, amount, target, price_dec, as_of, spend_idle_cash=spend_idle_cash)
     weakness = market_weakness(index_close, as_of)
     cheapest = sorted(cheap.items(), key=lambda kv: kv[1], reverse=True)[:5]
 
