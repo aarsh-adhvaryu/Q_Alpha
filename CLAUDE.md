@@ -169,6 +169,28 @@ treatment; that would be run 4, re-registered). **Third prereg amendment** recor
 accrued a mark, adding: if the AI drops no names, the result is *"no verdicts issued"*, not *"the AI
 didn't help"*. Verdict sheet archived daily to `reports/ai_verdicts.md`. 429 tests.
 
+**PR-71 (branch `track-record`): the system can now be caught failing — on the user's own money.**
+The Live tab reported equity, cash, holdings and realized tax: four *states*, not one *result*. It
+could not say whether any of it was working. The backtest cannot answer that either — it measures a
+strategy over 2013–2026, never *your* holdings on *your* dates. New `live/track_record.py` closes
+that: your Zerodha tradebook becomes dated cash flows, the **same rupees on the same days** are
+replayed into NIFTYBEES, and both legs are marked today and reported side by side with an **XIRR**
+(money-weighted — a ₹50k SIP is not present for the whole window, so a start-to-end percentage is
+not a rate). Rendered in a Live-tab expander, read-only, fail-soft.
+
+**The honesty properties are the tests, not the arithmetic:** the panel must be able to say
+**"behind by ₹X"** (asserted — a surface that can only report good news is marketing); under
+`MIN_MONTHS_FOR_A_VERDICT = 12` it says the gap is *entry timing, not selection* and refuses a
+verdict (the same bar that voided forward run 1); the index leg is priced **at or before** each trade
+so no future price enters; a sell larger than the index sleeve floors units at zero and **flags**
+rather than silently going short. Both columns carry a basis and a window via PR-4's `ReturnMeasure`.
+Charges (~0.1%) are in neither column and the panel says so. **481 tests, 0 skipped.**
+
+**⚠️ The backtest is NOT wired into any cron, deliberately.** Re-running it monthly adds one month to
+thirteen years and answers the same question. What runs forward is this panel plus the existing daily
+cron. **The 16.4% backtest figure is not a forecast** — plan at the index's ~11–12% and treat the
+excess as unproven upside until this panel has a year of real data.
+
 **Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
 the 18.2% headline are untouched by every item in the plan.**
 
