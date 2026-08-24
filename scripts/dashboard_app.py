@@ -966,6 +966,7 @@ def main() -> None:
             portfolio, prices_dec = _live_section(live, cfg)
             # Session-scoped realtime ticks (true KiteTicker push while open); 30s polling is fallback.
             prices_dec, stream_label = _streamed_prices(prices_dec, sorted(portfolio.positions()))
+            _track_record_panel(portfolio, prices_dec, benchmark, as_of)
             st.caption(
                 f"Live Zerodha · {stream_label} · page rendered {datetime.now():%H:%M:%S} · "
                 "read-only — this page never trades."
@@ -1429,6 +1430,38 @@ def _live_overview(portfolio: Portfolio, prices: dict[str, Decimal], *, caveat: 
         width="stretch",
     )
     st.caption(_LTCG_SAFE_LEGEND)
+
+
+def _track_record_panel(
+    portfolio: Portfolio,
+    prices: dict[str, Decimal],
+    benchmark: pd.Series,
+    as_of: date,
+) -> None:
+    """Your real returns against the same money in an index fund (PR-71).
+
+    The Live tab reported equity, cash, holdings and tax paid — everything except whether any of it
+    was *working*. A backtest cannot answer that: it measures a strategy over history, not your
+    holdings bought on your dates. This is the only surface that can, and it is the one that would
+    catch the system failing for you long before another backtest re-ran.
+
+    Read-only and fail-soft — a missing tradebook, a short benchmark or a bad replay leaves the rest
+    of the page untouched. It is deliberately allowed to say you are *behind*.
+    """
+    from qalpha.live.track_record import track_record, track_record_markdown
+
+    trades = _load_tradebook_master()
+    if not trades:
+        return
+    try:
+        record = track_record(trades, portfolio.market_value(prices), benchmark, as_of)
+    except Exception as exc:  # never let the track record break the account page
+        st.caption(f"Track record unavailable: {exc}")
+        return
+    if record is None:
+        return
+    with st.expander("📈 Your track record vs the index", expanded=not record.too_early):
+        st.markdown(track_record_markdown(record))
 
 
 def _unverified_branch_warning(advice: object) -> None:
