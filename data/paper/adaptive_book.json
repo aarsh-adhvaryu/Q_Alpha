@@ -9,7 +9,7 @@
     "rebalance_freq": "ADAPTIVE"
   },
   "portfolio": {
-    "cash": "98.68",
+    "cash": "1800.32",
     "lots": [
       {
         "ticker": "IOC.NS",
@@ -88,6 +88,19 @@
         "lot_id": "095c8cec-f3ab-4ca2-9255-225fbb557730",
         "broker_trade_id": null,
         "quantity_remaining": "4"
+      },
+      {
+        "ticker": "NTPC.NS",
+        "acquisition_date": "2026-08-25",
+        "quantity_original": "2",
+        "buy_price": "339.85",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.10",
+        "other_costs": "0.02",
+        "lot_id": "5100708a-c660-4236-a46f-f72f6f7dbca9",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
       },
       {
         "ticker": "ONGC.NS",
@@ -324,6 +337,19 @@
         "quantity_remaining": "7"
       },
       {
+        "ticker": "ADANIPOWER.NS",
+        "acquisition_date": "2026-08-25",
+        "quantity_original": "3",
+        "buy_price": "206.33",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.09",
+        "other_costs": "0.02",
+        "lot_id": "555ea94c-bfa6-4bce-a90b-1370b80f43c0",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
+      },
+      {
         "ticker": "DMART.NS",
         "acquisition_date": "2026-08-20",
         "quantity_original": "2",
@@ -402,6 +428,19 @@
         "quantity_remaining": "11"
       },
       {
+        "ticker": "HINDZINC.NS",
+        "acquisition_date": "2026-08-25",
+        "quantity_original": "1",
+        "buy_price": "592.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.09",
+        "other_costs": "0.02",
+        "lot_id": "e0d4dc8d-90a8-431d-a0c8-01b36fee0df9",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
         "ticker": "HYUNDAI.NS",
         "acquisition_date": "2026-08-20",
         "quantity_original": "3",
@@ -465,6 +504,19 @@
         "lot_id": "0938e684-d1c2-4bc0-a788-a28e893d95a6",
         "broker_trade_id": null,
         "quantity_remaining": "6"
+      },
+      {
+        "ticker": "JIOFIN.NS",
+        "acquisition_date": "2026-08-25",
+        "quantity_original": "3",
+        "buy_price": "243.15",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.11",
+        "other_costs": "0.02",
+        "lot_id": "f9456c10-f779-4e1f-a55f-c45369769eb8",
+        "broker_trade_id": null,
+        "quantity_remaining": "3"
       },
       {
         "ticker": "MAXHEALTH.NS",
@@ -532,6 +584,19 @@
         "quantity_remaining": "4"
       },
       {
+        "ticker": "PFC.NS",
+        "acquisition_date": "2026-08-25",
+        "quantity_original": "2",
+        "buy_price": "367.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.11",
+        "other_costs": "0.02",
+        "lot_id": "5607db1f-1380-4a28-acdd-f6e1c26098ba",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
         "ticker": "RELIANCE.NS",
         "acquisition_date": "2026-08-24",
         "quantity_original": "1",
@@ -558,6 +623,19 @@
         "quantity_remaining": "4"
       },
       {
+        "ticker": "TATAPOWER.NS",
+        "acquisition_date": "2026-08-25",
+        "quantity_original": "2",
+        "buy_price": "370.60",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.11",
+        "other_costs": "0.02",
+        "lot_id": "40bc31c3-d58f-44e6-9339-71bf5e303d50",
+        "broker_trade_id": null,
+        "quantity_remaining": "2"
+      },
+      {
         "ticker": "VBL.NS",
         "acquisition_date": "2026-08-24",
         "quantity_original": "1",
@@ -567,6 +645,19 @@
         "stamp_duty": "0.06",
         "other_costs": "0.01",
         "lot_id": "1fd962e3-d0d1-4a6b-b176-3763a569177c",
+        "broker_trade_id": null,
+        "quantity_remaining": "1"
+      },
+      {
+        "ticker": "VBL.NS",
+        "acquisition_date": "2026-08-25",
+        "quantity_original": "1",
+        "buy_price": "438.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "0.07",
+        "other_costs": "0.01",
+        "lot_id": "2b4f4267-cca0-4fa4-bef2-e2a79de8880b",
         "broker_trade_id": null,
         "quantity_remaining": "1"
       }
@@ -1142,6 +1233,75 @@
       "as_of": "2026-08-24",
       "reason": "drift 51.4% > threshold and \u00a74.6 net-benefit gate cleared",
       "orders": []
+    },
+    {
+      "as_of": "2026-08-25",
+      "reason": "deploy: weakness=elevated; basket: JIOFIN.NS (\u221224%), PFC.NS (\u221223%), HCLTECH.NS (\u221222%) (\u20b96,250)",
+      "orders": [
+        {
+          "date": "2026-08-25",
+          "ticker": "ADANIPOWER.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "206.33",
+          "cost": "1.97",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-25",
+          "ticker": "HINDZINC.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "592.60",
+          "cost": "1.89",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-25",
+          "ticker": "JIOFIN.NS",
+          "side": "BUY",
+          "quantity": "3",
+          "price": "243.15",
+          "cost": "2.32",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-25",
+          "ticker": "NTPC.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "339.85",
+          "cost": "2.16",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-25",
+          "ticker": "PFC.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "367.00",
+          "cost": "2.33",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-25",
+          "ticker": "TATAPOWER.NS",
+          "side": "BUY",
+          "quantity": "2",
+          "price": "370.60",
+          "cost": "2.35",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-08-25",
+          "ticker": "VBL.NS",
+          "side": "BUY",
+          "quantity": "1",
+          "price": "438.00",
+          "cost": "1.40",
+          "tax": "0.00"
+        }
+      ]
     }
   ],
   "last_target": {
@@ -1176,6 +1336,11 @@
       "date": "2026-08-24",
       "equity": "386487.97",
       "cash": "98.68"
+    },
+    {
+      "date": "2026-08-25",
+      "equity": "393743.10",
+      "cash": "1800.32"
     }
   ]
 }

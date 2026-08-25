@@ -1,23 +1,22 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment**: 🟠 Indices ended flat, sentiment cautious ahead of technical resistance.
+**Sentiment:** 🔴 Sensex opened down 73.62 points (−0.09%), Nifty at 24,175.75, amid mixed global cues and persistent geopolitical headwinds.
 
-**Drivers**:
-1. **Crude oil near 1-month highs (~$93–94/bbl)** → Pressure on OMCs (BPCL, IOC, RELIANCE), aviation costs rising; paint/chemicals margin squeeze (PIDILITIND, SOLARINDS).
-2. **Global bond yield elevation & FII caution** → Defensive flows favoring utilities (POWERGRID +2.7%, NTPC +0.6%); tech/consumer sell pressure (HCL, INFY, MARUTI, TRENT –0.9 to –1.5%).
-3. **Banking tailwinds (Goldman Sachs 14-bank initiation)** → KOTAKBANK +1.1%, ICICIBANK +0.5%; financial services steady.
+**Drivers:**
+1. **Tech selloff & Asia weakness.** Asian markets lower following overnight tech sell-off on Wall Street; U.S.–Iran sanctions and Nvidia earnings remain risk factors. IT names likely under pressure.
+2. **Crude holding ~$91/bbl; geopolitical premium.** Brent crude remains around USD 92; fresh US sanctions on Iran and ongoing geopolitical uncertainty are key factors in market sentiment. OMCs (BPCL, IOC) face margin compression; inputs for aviation/logistics/paint rise.
+3. **Monthly F&O expiry volatility.** Markets bracing for increased volatility as Tuesday marks the first monthly Nifty derivatives expiry under new closing-auction system. Expect option-driven chop.
 
-**Watchlist names affected**:
-- **Under pressure**: MARUTI, TRENT, HCL, INFY (tech/discretionary weakness on global caution).
-- **Outperformers**: KOTAKBANK, ICICIBANK, POWERGRID, NTPC (financials & utilities defensive bid).
-- **Risk plays**: BPCL, IOC, RELIANCE (crude margin compression awaiting clarity).
+**Watchlist names affected:** 
+- **TCS, INFY, HCLTECH** (tech pullback from global selloff)  
+- **BPCL, IOC** (crude pressure on OMC margins)  
+- **INDIGO** (aviation input-cost headwind)  
+- **ASIANPAINT** (crude-dependent inputs)
 
-**Likely reaction** (1–2 sessions ahead): **Flat to slightly down, -0.2–0.5%** with **low confidence**. Index consolidating near 24,250–24,300 range; breakout above 24,400 needed to sustain recovery. Tech (HCLTECH, INFY) likely to remain range-bound; banks (KOTAKBANK, ICICIBANK) may hold support on earnings optimism.
+**Likely reaction:** 🔴 **down; band −0.4..−0.1%; confidence medium.** Market breadth is nearly even; DII support (₹2,493 cr yesterday) offsets modest FII inflows. However, the monthly expiry, weak Asian setup, and crude overhang suggest a drift lower through close. **TCS, INFY** likely to underperform sector; **BPCL** could extend losses on margin anxiety.
 
-**Discretionary ideas**: None standing out; rally requires either crude relief or FII reversal.
+**Risk note:** Global sentiment subdued ahead of Nvidia earnings and amid renewed U.S.–Iran tensions. Any escalation in Strait of Hormuz could spike crude past $92 fast.
 
-**Risk note**: Elevated crude oil prices remain a key concern given their potential impact on inflation, corporate costs, and the country's import bill.
+SIGNAL: lean=down; band=-0.4..-0.1; confidence=medium
 
-SIGNAL: lean=flat; band=-0.2..0.5; confidence=low
-
-— 🤖 claude-haiku-4-5 · 43,455 in / 778 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 24,982 in / 782 out tokens · ✓ complete
