@@ -1,22 +1,22 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Sensex opened down 73.62 points (−0.09%), Nifty at 24,175.75, amid mixed global cues and persistent geopolitical headwinds.
+**Sentiment:** 🟠 Nifty down 0.52%, Sensex down 0.24% — early gains fizzled on divergent sectoral flows.
 
 **Drivers:**
-1. **Tech selloff & Asia weakness.** Asian markets lower following overnight tech sell-off on Wall Street; U.S.–Iran sanctions and Nvidia earnings remain risk factors. IT names likely under pressure.
-2. **Crude holding ~$91/bbl; geopolitical premium.** Brent crude remains around USD 92; fresh US sanctions on Iran and ongoing geopolitical uncertainty are key factors in market sentiment. OMCs (BPCL, IOC) face margin compression; inputs for aviation/logistics/paint rise.
-3. **Monthly F&O expiry volatility.** Markets bracing for increased volatility as Tuesday marks the first monthly Nifty derivatives expiry under new closing-auction system. Expect option-driven chop.
+1. US visa appointment pause amid immigration crackdown rekindled IT margin pressure → Nifty IT fell 1.47%
+2. Inflation concerns receded on tempered US Iran sanctions, easing bond yields and lifting banks; metals gained on better realization → Metal +1.27%, Pvt Bank +1%, PSU Bank +0.77%
 
-**Watchlist names affected:** 
-- **TCS, INFY, HCLTECH** (tech pullback from global selloff)  
-- **BPCL, IOC** (crude pressure on OMC margins)  
-- **INDIGO** (aviation input-cost headwind)  
-- **ASIANPAINT** (crude-dependent inputs)
+**Watchlist names affected:**
+*Headwinds:* INFY, TCS, TECHM, WIPRO (IT pain) | ASIANPAINT, BRITANNIA, GODREJCP, HINDUNILVR (FMCG -0.95%) | MARUTI, TATAMOTORS, EICHERMOT (Auto -0.74%)
+*Tailwinds:* TATASTEEL, JSWSTEEL, HINDALCO (Metal strength) | HDFCBANK, KOTAKBANK, ICICIBANK (Bond-led rally)
 
-**Likely reaction:** 🔴 **down; band −0.4..−0.1%; confidence medium.** Market breadth is nearly even; DII support (₹2,493 cr yesterday) offsets modest FII inflows. However, the monthly expiry, weak Asian setup, and crude overhang suggest a drift lower through close. **TCS, INFY** likely to underperform sector; **BPCL** could extend losses on margin anxiety.
+**Likely reaction:** 🔴 **Flat to down -0.2–0.6%; low confidence.** 
+Near-term hung between visa/IT headwind and oil-relief bid — small cap resilience (+0.81% Smallcap) offers some cushion, but IT is too heavy to offset without a macro shift. INFY, WIPRO likely to trail further *if* US earnings disappoint; TATASTEEL could continue benefiting if metal tailwind persists.
 
-**Risk note:** Global sentiment subdued ahead of Nvidia earnings and amid renewed U.S.–Iran tensions. Any escalation in Strait of Hormuz could spike crude past $92 fast.
+**Discretionary ideas:** None — breadth mixed, thesis unclear intra-session.
 
-SIGNAL: lean=down; band=-0.4..-0.1; confidence=medium
+**Risk note:** Nvidia earnings and US inflation data awaited; West Asia developments tracked — both could reprice IT/oil in either direction overnight.
 
-— 🤖 claude-haiku-4-5 · 24,982 in / 782 out tokens · ✓ complete
+SIGNAL: lean=down; band=-0.2..0.6; confidence=low
+
+— 🤖 claude-haiku-4-5 · 54,533 in / 807 out tokens · ✓ complete
