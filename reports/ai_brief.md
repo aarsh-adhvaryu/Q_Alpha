@@ -1,22 +1,22 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🟠 Nifty down 0.52%, Sensex down 0.24% — early gains fizzled on divergent sectoral flows.
+**Sentiment:** 🔴 Sensex fell 539.35 points or 0.7% to 76,933.59 and Nifty50 was down 116.90 points or 0.48% at 24,090.85, extending losses to a second consecutive session.
 
 **Drivers:**
-1. US visa appointment pause amid immigration crackdown rekindled IT margin pressure → Nifty IT fell 1.47%
-2. Inflation concerns receded on tempered US Iran sanctions, easing bond yields and lifting banks; metals gained on better realization → Metal +1.27%, Pvt Bank +1%, PSU Bank +0.77%
+1. **Metal & PSU Bank selling:** Hindalco Industries, HDFC Bank, and Mahindra & Mahindra were the top losers in the Nifty50 index — cyclical downdraft amid growth concerns and margin pressure.
+2. **FPI outflows dominate:** FII were net sellers of ₹298.30 Cr in the cash segment on August 27, 2026, though DII were net buyers of ₹4,977.20 Cr, showing domestic support insufficient to offset foreign exit.
+3. **Geopolitical premium in crude:** West Asia developments central to outlook for oil prices, though easing crude oil prices continue to improve near-term macro backdrop — net positive for OMCs, input costs for paint/aviation still under review.
 
 **Watchlist names affected:**
-*Headwinds:* INFY, TCS, TECHM, WIPRO (IT pain) | ASIANPAINT, BRITANNIA, GODREJCP, HINDUNILVR (FMCG -0.95%) | MARUTI, TATAMOTORS, EICHERMOT (Auto -0.74%)
-*Tailwinds:* TATASTEEL, JSWSTEEL, HINDALCO (Metal strength) | HDFCBANK, KOTAKBANK, ICICIBANK (Bond-led rally)
+- **HINDALCO, VEDL** (metals) — down-cycle selling; cyclical weakness.
+- **HDFCBANK, ICICIBANK** (banks) — FPI exits on NIM concerns.
+- **AMBUJACEM, SHREECEM** (cement) — margin compression if input costs stay elevated.
 
-**Likely reaction:** 🔴 **Flat to down -0.2–0.6%; low confidence.** 
-Near-term hung between visa/IT headwind and oil-relief bid — small cap resilience (+0.81% Smallcap) offers some cushion, but IT is too heavy to offset without a macro shift. INFY, WIPRO likely to trail further *if* US earnings disappoint; TATASTEEL could continue benefiting if metal tailwind persists.
+**Likely reaction** (qualitative read, not a recommendation):
+**Lean: down; band: -0.2..0.5%; confidence: low.** Market is range-bound on competing flows: DII buying provides a floor, but broad FPI exit + metal/bank weakness suggests near-term drift lower into resistance. Watch for late-session stabilization if DIIs accelerate. **Most likely movers: HINDALCO (further down), HDFCBANK (down), BAJFINANCE/JIOFIN (NBFC resilience, marginally up).**
 
-**Discretionary ideas:** None — breadth mixed, thesis unclear intra-session.
+**Risk note:** Geopolitical clarity, rupee trajectory, and tariff-related global headwinds remain key volatility drivers; liquidity still skewed toward select large-cap names.
 
-**Risk note:** Nvidia earnings and US inflation data awaited; West Asia developments tracked — both could reprice IT/oil in either direction overnight.
+SIGNAL: lean=down; band=-0.2..0.5; confidence=low
 
-SIGNAL: lean=down; band=-0.2..0.6; confidence=low
-
-— 🤖 claude-haiku-4-5 · 54,533 in / 807 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 56,221 in / 916 out tokens · ✓ complete
