@@ -2,14 +2,152 @@
 
 Guidance for Claude Code (and humans) working in this repo.
 
-## 🛑 READ FIRST — TRUST REPAIR IS UNDERWAY (2026-08-17)
+## 🛑 READ FIRST — REAL MONEY IS IN THE ACCOUNT (2026-08-27)
+
+**₹5,00,000 has been transferred to the user's real Zerodha account.** The plan he decided on:
+**₹1,00,000 opening basket across 8 names, then ₹50,000/month SIP.** He places every order himself;
+nothing here has ever auto-traded and nothing ever will.
+
+**He is investing BEFORE the system's own gate opened, knowingly.** The deterministic GO scorecard
+read **NOT YET** on audit day — 3 of 5 criteria amber:
+
+| Criterion | Reading (2026-08-24) |
+|---|---|
+| Track length | 50 of 63 trading days |
+| **Volatility event withstood** | **never** — worst in-window Nifty pullback −2.2%, gate needs ≤ −10% |
+| Forward vs benchmark | paper book **+0.3% vs Nifty +3.3%** — trailing by 3.1pp |
+| Drawdown behaviour | 🟢 market-driven, within tolerance |
+| Data integrity | 🟢 dense, largest gap 4 days |
+
+The System book also sat **behind** plain NIFTYBEES buy-and-hold on its (very short) run. **Do not
+re-litigate his decision** — it was made with all of the above in front of him, and the honest framing
+he was given is: *plan at the index's ~11–12%, treat the backtest's 16.4% as unproven upside, and
+size the first year as tuition.* **The gate has not opened. Never describe the system as validated
+for real money, and never soften the scorecard to make him feel better about money already committed.**
+
+### The pre-flight audit found FIVE defects, and they are all one defect
+
+**Full write-up: [reports/PREFLIGHT_AUDIT.md](reports/PREFLIGHT_AUDIT.md)** — findings with reproduced
+numbers, the process lesson, and the recommendation given.
+
+Every one was a **number labelled as something it is not**, on a surface where the label becomes an
+order. None was caught by 481 passing tests, because each is a figure reported *about* the machinery
+rather than the machinery's own arithmetic. **This is the failure mode of this codebase — a resuming
+session should hunt for exactly this shape.**
+
+1. **A stale benchmark graded the GO scorecard, silently** (#72). `paper.py daily` refreshes the
+   benchmark; `paper.py refresh` refreshes prices and **not** the benchmark. A 70-day-stale copy read
+   the worst Nifty pullback as **0.0%** instead of −2.2% (so the hard volatility gate reported a calm
+   market when the truth was *no data*) and flattered the strategy by 2.3 points. Now
+   `_benchmark_covers` refuses to grade and names the fix.
+2. **`universe_breaking_rate` was 0.0 by construction** (#72) — measured over the universe *after* the
+   breakdown filter removed the very names it counts, so the sentence that makes the health table
+   interpretable never rendered. Real rate on the live watchlist: **20.4%**.
+3. **The 30% sector cap breaches below six names** (#72) — 33.9% at five, **50.0% at three**. Below ~6
+   names the cap is *arithmetically unreachable* (five equal names ⇒ one is 20% ⇒ any two in a sector
+   is 40%). Unfixable by clamping, so it is **disclosed**: the delivered mix is shown and flagged.
+4. **The deploy heading named `amount` while the basket spent `cash + amount`** (#73). A ₹5,00,000
+   broker balance and ₹1,00,000 typed produced a **₹5,97,418** basket under a "Deploy ₹100,000.00"
+   heading. **The user was one click from a 64-share HCLTECH order that should have been 11** — 84% of
+   his opening position in one stock. The arithmetic was right and documented; the label was not.
+5. **The Equity tile was `market_value`, which includes cash** (#74). With the SIP money parked, it
+   read **₹5,00,000 of "Equity" against ₹0 of stock**; after the opening basket, ₹6,00,877 where the
+   shares are worth ₹1,00,693.
+
+**⚠️ A process lesson worth more than the fixes.** Defect 4 was hit *during the audit itself* — a test
+run produced a ₹1.99 lakh basket on a ₹1 lakh deploy, it was written off as a harness mistake, and the
+session moved on. It was both. **When a number looks wrong in your own scratch run, chase it before
+explaining it away.**
+
+### What shipped (all merged, 503 tests, 0 skipped)
+
+- **#71 `live/track_record.py`** — the forward instrument. Your tradebook → dated cash flows → the
+  **same rupees on the same days** replayed into NIFTYBEES → both legs marked today, with an **XIRR**
+  (money-weighted; a monthly SIP is not present for the whole window, so a start-to-end percentage is
+  not a rate). Honesty properties are the tests: it **must be able to say "behind by ₹X"**; under
+  `MIN_MONTHS_FOR_A_VERDICT = 12` it refuses a verdict and says the gap is entry timing; the index leg
+  is priced **at or before** each trade; a sell larger than the index sleeve floors at zero and flags.
+- **#72** the three audit fixes above.
+- **#73 `advise_deploy(..., spend_idle_cash=)`** — the typed amount is now a **hard budget** on the
+  real-money surface, with a checkbox to opt back in. **Library default stays `True`** (the autopilot
+  depends on idle cash being deployed). Targets size on `holdings_value + budget`, so a large parked
+  balance cannot skew positions. *Why a switch and not a smarter default:* **a broker balance is not
+  self-describing** — cash for next month's instalment and cash awaiting deployment are
+  indistinguishable from inside the advisor. Only the user knows.
+- **#74 `live/dashboard.py:account_overview`** — Equity (shares only) · Cash / available margin (% of
+  account, explicitly *not* Equity) · Unrealised P&L against what was actually paid. Imported from the
+  user's Claude Design project, whose own figures state the contract (₹1,91,312 + ₹7,335 = ₹1,98,647).
+  A day's move is **withheld unless every holding has a previous close**; an unpriced holding is
+  **named in a banner**, never valued at zero.
+
+### Standing limitations — true on the first order, not fixable by more code
+
+- **Nobody has watched this system fall.** Every live day so far has been calm.
+- **The buy screen has one backtest behind it** (16.4% vs 11.8%, 13y SIP), its concentrated variants
+  lean on a survivorship-flattered watchlist, and **every guard protecting that result was written in
+  the month before the money went in**.
+- **Most of the tax engine has never met a broker statement.** Exactly one sell reconciled: single-lot,
+  all-STCG, no loss (₹25.25, Δ ₹0.00). Multi-lot / LTCG / loss set-off / exemption are unit-tested and
+  unconfirmed. The page warns when a sale touches them — **that sale must be reconciled afterwards**.
+- **No corporate action has ever been reconciled live** (criterion 5).
+
+### The operating contract the user actually runs
+
+Open dashboard → Kite login (daily) → **Add money, type the amount** (it is now a hard budget) →
+**slider 8 for the opening ₹1,00,000; 3–4 for the monthly ₹50,000** (stickiness dominates the SIP — at
+sliders 3, 4 and 6 the top-ups are *identical* and add zero new names; 12 sprawls to 13 names) → place
+every order himself in Kite, **CNC/delivery, no stop-loss, no target** → **upload the tradebook after
+every batch** (Console → Reports → Tradebook; de-duped on Zerodha trade IDs, so overlapping ranges are
+safe). Money for future instalments **stays in the broker account** — he explicitly refused a
+transfer-in/transfer-out chore, which is why #73 exists.
+
+**No stop-loss, and this is load-bearing:** the screen buys names that are *down*, so a stop sells
+exactly what it just bought, realizes a loss, triggers tax, and fires constantly on normal volatility.
+The exit rule is the §4.7 breakdown test, which distinguishes a name-specific fall from the market
+falling. A stop-loss cannot.
+
+## 🔍 NEXT SESSION — THE FINAL AUDIT (this is the job)
+
+**Brief: audit every remaining real-money surface the way the pre-flight audit did, then report.**
+
+The method that found all five defects, in order:
+
+1. **Refresh the data first.** `uv run python scripts/paper.py refresh` does **not** refresh the
+   benchmark — call `_refresh_benchmark()` too, or you will audit against a stale series (defect 1
+   was found this way, by being bitten by it).
+2. **Instantiate the real account shape**, not a clean fixture: a `Portfolio` with **idle cash *and*
+   holdings**. Four of five defects only appear when cash is non-zero. A zeroed test portfolio hides
+   them, which is exactly why the suite did not catch them.
+3. **Render the surface and reconcile every number against its source.** Not "is this value right"
+   but *"does the label describe the thing that was computed, and do the figures on screen add up to
+   each other"*. Every defect was an internal inconsistency visible on one screen.
+4. **Chase anything surprising in your own scratch output.** See the process lesson above.
+
+**Surfaces already audited (2026-08-24 / 08-27):** the buy screen (`advise_deploy_into_weakness`), the
+deploy heading, the GO scorecard, the Live tile row.
+
+**Surfaces NOT yet audited — start here:** the **Sell tab** (`advise_sell` — quoted tax, set-off,
+LTCG-safe dates, the unverified-branch warning), the **Raise cash tab** (`advise_raise_cash` — least-tax
+ordering), the **holdings table** (`_holdings_frame`), **position health**, the **System tab's** book
+comparison and per-book holdings, the **tradebook reconciliation** panel, and the **track record panel**
+(#71) once real trades exist to drive it.
+
+Then produce a written verdict the user can act on: what is trustworthy, what is not, what he should
+do differently. The previous audit's deliverable is the shape to match — findings with reproduced
+numbers, fixes shipped as a PR, standing limitations stated plainly, and a runbook.
+
+**Do NOT:** re-run the SIP backtest (adding a month to thirteen years restates the same answer, and it
+is deliberately not on any cron), tune anything toward a GO, or soften a red.
+
+## ✅ CLOSED — TRUST REPAIR (2026-08-17, all eight PRs merged)
 
 **The user audited the live dashboard and said: *"i am unable to trust the advisor for now."* He is
 right, and the reasons are now documented and scoped. The full plan is
 [PLAN_TRUST_REPAIR.md](PLAN_TRUST_REPAIR.md) — **ALL EIGHT PRs BUILT** (branches
 `trust-repair-pr1`…`pr8`). Tiers 1–4 closed. 429 tests, 0 skipped.
 Companion audit (same day, presentation + experiment side): [PLAN_INTEGRATION_AUDIT.md](PLAN_INTEGRATION_AUDIT.md).
-A resuming session executes PLAN_TRUST_REPAIR.md PR-by-PR, in order — the order is load-bearing.**
+All eight merged; nothing here is queued.** The *method* is what still matters: every defect was a
+number the user could see, reconciled against the code that produced it.**
 
 **PR-1 (done): the buy list is OFF the real-money surface.** One flag —
 `live/dashboard.py:BUY_ADVICE_ON_REAL_MONEY = False` — gates the Add-money buy list, the zero-typing
@@ -194,7 +332,12 @@ excess as unproven upside until this panel has a year of real data.
 **Rule (a) is intact and stays intact: the GO book (`data/paper/book.json`), the validated engine and
 the 18.2% headline are untouched by every item in the plan.**
 
-## 🚦 SESSION HANDOFF — a NEW session starts HERE (written 2026-07-21)
+## 📜 HISTORY — the July 2026 handoff (SUPERSEDED — see the top of this file)
+
+> ⚠️ **Written 2026-07-21, when the user was going hands-off for ~6 months on fake money. That is no
+> longer the situation: real money went in on 2026-08-27 and he is operating the system weekly.** The
+> mechanics below (cron, secrets, Kite reality, cost facts) are still accurate and useful. The framing
+> — "hands-off", "silence means healthy", "the GO ping" — is not. Do not take instructions from it.
 
 **The system is live, autonomous, and mid-test. The user is hands-off for ~6 months** (Telegram pings
 him; silence = healthy). If you are a fresh session, this block is your orientation — read it, then
@@ -293,7 +436,9 @@ self-merges — the user clicks merge).
 **When the GO ping comes:** verdict = ALL FOUR pillars of the ENDGAME CONTRACT below, then the
 integration step it defines. If any pillar fails, report honestly; never integrate around a red.
 
-## 🧭 CURRENT STATE — read this FIRST (2026-07-11, unification)
+## 📜 HISTORY — unification (2026-07-11)
+
+> ⚠️ Not current state; kept for *why* the system is one product with three engines.
 
 **The live system is now ONE system in this product repo.** The user's audit verdict: the pieces felt
 fragmented (two repos, an invisible wallet, a fetched "Research" tab). Decision (his call): **unify the
@@ -420,7 +565,7 @@ decision, and auto-invest remaining fake-only unless he explicitly decides other
 money never auto-trades; he places every order — that rule outlives the GO.** If any pillar fails
 (NO-GO, System < Baseline, hedge never tested), report it honestly and do NOT integrate around it.
 
-## 🧭 CURRENT STATE — (2026-07-11, Ops Layer)
+## 📜 HISTORY — the Ops Layer (2026-07-11)
 
 **Everything below this block is the older working log; this block is what's true now.** The
 **"Daily-Driver Ops Layer"** in [PLAN_OPS_LAYER.md](PLAN_OPS_LAYER.md) is **built and its product half
@@ -463,7 +608,7 @@ trust); the LLM is **context-only, never the calculator or the validator of the 
 validated 18.2% headline provably unchanged. §14 scorecard unchanged (crit-6 forward paper run + a
 volatility event remain the calendar blockers).
 
-## 🧭 CURRENT STATE — (2026-06-19)
+## 📜 HISTORY — hardening + deployment (2026-06-19)
 
 **⏭️ QUEUED NEXT BUILD (2026-07-08, planned + user-approved scope, NOT yet implemented):** the
 **"Daily-Driver Ops Layer"** — full plan in [PLAN_OPS_LAYER.md](PLAN_OPS_LAYER.md) (execute it
@@ -549,7 +694,9 @@ on the holdout (8.1 vs 7.1), AND across rolling 3y holds** (dominates every perc
 the out-of-time holdout. So the edge is BOTH the tax engine AND a modest robust 1/N-anchored return
 tilt — not pure index-tracking after all. No DB / broker / dashboard yet. CI green.
 
-## ⏯️ NEXT SESSION — START HERE (a brainstorm; build is paused here)
+## 📜 HISTORY — the June 2026 hardening/autonomy sprints
+
+> ⚠️ Not a queued build. The work described here shipped long ago; kept for the reasoning.
 
 **✅ HARDENING SPRINT (2026-06-19) — every *code-fixable* GO blocker closed; what remains is calendar
 time + a couple of real trades, not engineering.** The user's brief: "solve every problem so the only
@@ -932,6 +1079,42 @@ uv run python scripts/advisor.py deploy 50000      # tax-smart advice (sell / ra
 uv run --extra dashboard streamlit run scripts/dashboard_app.py   # the live web dashboard
 ```
 
+**The audit recipe** — how the pre-flight audit reproduced every live surface offline, no Kite login
+and no Streamlit server. Copy this shape; the account state is the part that matters.
+
+```python
+import sys; sys.path.insert(0, "scripts")
+from datetime import date
+from decimal import Decimal
+import pandas as pd
+from paper import _load_benchmark_series, _refresh_benchmark   # refresh() does NOT do the benchmark
+from qalpha.config import Config
+from qalpha.data.prices import PriceData
+from qalpha.backtest.portfolio import Portfolio
+from qalpha.live.deploy import advise_deploy_into_weakness
+
+cfg = Config()
+prices = PriceData.from_long(pd.read_parquet("data/historical/prices_watchlist.parquet"))
+wl = pd.read_csv("data/universes/nifty100_watchlist.csv")
+sector_of = dict(zip(wl["ticker"], wl["sector"]))
+watchlist = [t for t in wl["ticker"] if t in prices.tickers]
+
+# ⚠️ The account shape is the whole point: idle cash AND holdings. A zeroed portfolio hides
+#    four of the five defects found in August 2026.
+pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("500000"))
+advice = advise_deploy_into_weakness(
+    pf, Decimal("100000"), watchlist, sector_of, prices,
+    _load_benchmark_series(), date.today(), max_names=8, spend_idle_cash=False,
+)
+print(advice.render())          # then check every rendered figure against what the code summed
+```
+
+Refresh both panels before auditing anything:
+```bash
+uv run python scripts/build_nifty100_watchlist.py --prices    # watchlist panel
+uv run python -c "import sys;sys.path.insert(0,'scripts');from paper import _refresh_benchmark;_refresh_benchmark()"
+```
+
 All four gates (ruff, ruff-format, mypy strict, pytest) must pass before committing.
 
 ## Architecture (the funnel)
@@ -942,7 +1125,7 @@ factors/      momentum, volatility, liquidity (0a) + value, quality, dividend (0
 alloc/        Ledoit-Wolf+EWMA covariance conditioning → scipy sector allocator → scipy optimizer
 accounting/   FIFO tax lots + Zerodha costs + capital-gains tax + corporate_actions (split/bonus/dividend, crit 5)   (reused live; Portfolio.to_state persists a book)
 backtest/     walk-forward engine, portfolio accountant, baselines, metrics, report; decision.py = shared decide_rebalance
-live/         Kite auth + replay harness + paper book (PaperBook) + dashboard renderer (+ systemic_risk_markdown, read-only hedge watch) + advisor.py (tax-smart layer, crit 10; now nets §70 loss set-off) + holdings.py (live reader) + tradebook.py (Console CSV → dated FIFO, crit 4) + taxpnl.py (Tax P&L reconcile) + safety.py (fail-loud staleness/data/session guards) + ticker.py (session-scoped KiteTicker realtime stream)
+live/         Kite auth · replay · paper book · dashboard renderer (+ account_overview tiles, systemic_risk_markdown) · advisor.py (tax-smart layer, crit 10; §70 set-off; `spend_idle_cash` budget) · deploy.py (the buy screen: weakness → cheapness → health filter → sector cap) · holdings.py · tradebook.py + tradebook_store.py + gist_store.py (Console CSV → dated FIFO, crit 4, private-gist master) · taxpnl.py · safety.py (fail-loud guards) · ticker.py (session-scoped realtime) · **price_integrity.py** (demerger/bad-print guard) · **position_health.py** (§4.7 breakdown test, now a filter) · **cooling_off.py** (names the user deliberately exited) · **measures.py** (a basis + window on every number) · **track_record.py** (the real account vs the same money in the index, XIRR) · go_scorecard.py (deterministic GO verdict; refuses to grade on a stale benchmark) · autopilot.py · ai_brief.py · hedge.py · notify.py · scan.py
 scripts/      run_phase0, paper, advisor (CLI), dashboard_app (Streamlit, `dashboard` extra), build_nifty_universe, experiments
 config.py     every tunable parameter (Q_alpha.md §16) in one place
               (the research track — QUBO/QAOA §15 + planned regime/agentic — lives in the separate Q_Alpha_Research repo)
@@ -1073,6 +1256,14 @@ gated by a mandatory paper-trading run.
 
 ## Iron rules (don't violate)
 
+- **Real money never auto-trades. The user places every order.** Outlives every gate in this repo.
+- **A number on a real-money surface must be labelled as the thing that was computed.** Five separate
+  defects in August 2026 were all this one mistake, and one of them nearly became a 64-share order.
+  When a figure reaches a screen, check what its label claims against what the code summed.
+- **Audit with idle cash in the portfolio.** Four of those five only appear when `portfolio.cash > 0`.
+  A zeroed fixture is why 481 tests missed them.
+- **The GO gate is not open. Never call the system validated for real money**, and never soften a red
+  because money is already committed.
 - Do **not** auto-tune parameters to manufacture a GO — that defeats Phase 0. Validate out-of-sample.
 - Keep all four gates green (ruff, ruff-format, mypy strict, pytest) before every commit.
 - Surface honest caveats in the report; never let a survivor-only universe silently earn a GO.
