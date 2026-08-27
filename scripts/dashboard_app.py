@@ -1319,7 +1319,13 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
             result = replay_tradebook(master, cfg, cash=live.portfolio.cash)
         except Exception as exc:
             st.error(f"Could not replay the saved tradebook: {exc}")
-            _live_overview(live.portfolio, live.prices, caveat=live.tax_caveat)
+            _live_overview(
+                live.portfolio,
+                live.prices,
+                caveat=live.tax_caveat,
+                cfg=cfg,
+                previous_close=_previous_closes(sorted(live.portfolio.positions())),
+            )
             return live.portfolio, live.prices
         st.download_button(
             "⬇ Download combined tradebook",
@@ -1353,10 +1359,23 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
             st.session_state["tb_reconciles"] = True
             st.caption("✓ Reconstructed holdings match your broker account exactly.")
             caveat = None
-        _live_overview(result.portfolio, live.prices, caveat=caveat)
+        _live_overview(
+            result.portfolio,
+            live.prices,
+            caveat=caveat,
+            cfg=cfg,
+            previous_close=_previous_closes(sorted(result.portfolio.positions())),
+            realised_tax=result.realized_tax,
+        )
         return result.portfolio, live.prices
 
-    _live_overview(live.portfolio, live.prices, caveat=live.tax_caveat)
+    _live_overview(
+        live.portfolio,
+        live.prices,
+        caveat=live.tax_caveat,
+        cfg=cfg,
+        previous_close=_previous_closes(sorted(live.portfolio.positions())),
+    )
     return live.portfolio, live.prices
 
 
@@ -1412,12 +1431,98 @@ def _taxpnl_reconcile_panel(result: object, cfg: Config) -> None:
         st.code("\n".join(rec.lines))
 
 
-def _live_overview(portfolio: Portfolio, prices: dict[str, Decimal], *, caveat: str | None) -> None:
-    equity = portfolio.market_value(prices)
+def _previous_closes(tickers: list[str]) -> dict[str, Decimal] | None:
+    """Yesterday's close per held name, from the cached watchlist panel — for today's move.
+
+    Returns ``None`` rather than a partial map: a day's P&L computed over some of the holdings reads
+    as the whole account's move and is wrong in a way nobody can see. Off-watchlist names (an IPO, a
+    hand-picked holding) are exactly the ones missing, so partial is the common case, not the rare one.
+    """
+    from qalpha.backtest.portfolio import to_decimal_price
+
+    wl = _watchlist()
+    if wl is None or not tickers:
+        return None
+    _, _, panel = wl
+    adj = panel.adj_close
+    if len(adj.index) < 2:
+        return None
+    prior = adj.iloc[-2]
+    out: dict[str, Decimal] = {}
+    for t in tickers:
+        if t not in adj.columns:
+            return None
+        value = prior.get(t)
+        if value is None or pd.isna(value):
+            return None
+        out[t] = to_decimal_price(float(value))
+    return out
+
+
+def _live_overview(
+    portfolio: Portfolio,
+    prices: dict[str, Decimal],
+    *,
+    caveat: str | None,
+    cfg: Config,
+    previous_close: dict[str, Decimal] | None = None,
+    realised_tax: Decimal = Decimal("0"),
+) -> None:
+    """The tile row, rebuilt from the imported design (2026-08-26).
+
+    The old row was "Equity / Cash / Holdings", and **Equity was ``market_value`` — which includes
+    cash**. On this account, with ₹5,00,000 parked for future SIP instalments, that tile would have
+    read ₹5,00,000 of "Equity" against ₹0 of stock. Same defect family as the deploy heading: an
+    amount labelled as something it is not, on the screen where buying decisions get made.
+
+    Stock and cash are now separate and add up to the account total, and every figure carries the
+    basis it is measured against instead of standing alone.
+    """
+    from qalpha.live.dashboard import account_overview, idle_cash_note
+
+    ov = account_overview(
+        portfolio, prices, previous_close=previous_close, realised_tax=realised_tax
+    )
     c1, c2, c3 = st.columns(3)
-    c1.metric("Equity", f"₹{equity:,.0f}")
-    c2.metric("Cash", f"₹{portfolio.cash:,.0f}")
-    c3.metric("Holdings", str(len(portfolio.positions())))
+    c1.metric(
+        "Equity (shares only)",
+        f"₹{ov.holdings_value:,.0f}",
+        delta=(None if ov.day_change is None else f"₹{ov.day_change:,.0f} today"),
+    )
+    c1.caption(
+        f"{ov.n_names} name{'s' if ov.n_names != 1 else ''} · "
+        + (
+            "no previous close for every holding, so today's move is not shown"
+            if ov.day_change_pct is None
+            else f"{ov.day_change_pct:+.2f}% today"
+        )
+    )
+    c2.metric("Cash / available margin", f"₹{ov.cash:,.0f}")
+    c2.caption(
+        "uninvested — not part of Equity"
+        if ov.cash_pct is None
+        else f"{ov.cash_pct:.1f}% of the ₹{ov.account_total:,.0f} account — uninvested"
+    )
+    c3.metric(
+        "Unrealised P&L",
+        f"₹{ov.unrealised:,.0f}",
+        delta=(None if ov.unrealised_pct is None else f"{ov.unrealised_pct:+.2f}%"),
+    )
+    c3.caption(
+        "nothing bought yet"
+        if ov.invested <= 0
+        else f"on ₹{ov.invested:,.0f} invested · realised CG tax this FY ₹{ov.realised_tax:,.0f}"
+    )
+    # The design gives idle cash its own line rather than a bare number, because the number alone
+    # cannot say whether it is waiting to be used or waiting for next month.
+    st.markdown(idle_cash_note(ov.cash, cfg.deploy_policy.idle_cash_floor))
+    if ov.unpriced:
+        st.warning(
+            "⚠️ **No live price for "
+            + ", ".join(t.removesuffix(".NS") for t in ov.unpriced)
+            + "** — those holdings are excluded from Equity above, so the account is worth more "
+            "than it says. They are never silently valued at zero."
+        )
     if caveat:
         st.warning(caveat)
     else:
