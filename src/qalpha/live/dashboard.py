@@ -9,6 +9,7 @@ curve vs Nifty 50 TRI, realized tax, and any orders awaiting human approval. Thi
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -18,6 +19,7 @@ import pandas as pd
 
 from qalpha.accounting.capital_gains import twelve_months_after
 from qalpha.accounting.tax_lots import FIFOLedger
+from qalpha.backtest.portfolio import Portfolio
 from qalpha.data.prices import PriceData
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.paper import DailyPlan, PaperBook, _prices_on
@@ -860,3 +862,118 @@ def equity_csv(book: PaperBook) -> str:
         )
         rows.append(f"{p['date']},{eq},{p['cash']},{r:.4f}")
     return "\n".join(rows) + "\n"
+
+
+# ---- The account overview tiles (design import, 2026-08-26) --------------------------------------
+#
+# The Live tab's three tiles read "Equity / Cash / Holdings". Two of the three are a problem.
+#
+# **"Equity" was `market_value`, which includes cash.** With a broker balance parked for future SIP
+# instalments — the exact situation this account is in, ₹5,00,000 sitting against ₹0 of stock — the
+# tile reads ₹5,00,000 and calls it Equity. It is the same defect family as the deploy heading that
+# turned an 11-share order into 64: an amount labelled as something it is not, on the surface where
+# the user decides what to buy. The imported design separates them explicitly, and its own figures
+# prove the intent: Equity ₹1,91,312 + Cash ₹7,335 = the ₹1,98,647 account total in its allocation
+# ring, so its "Equity" is holdings **only**.
+#
+# **"Holdings: 5" is a count where a basis belongs.** It answers a question nobody asks, on a screen
+# where the useful numbers — what you put in, what it is worth, what that is as a return — were
+# absent entirely. PR-4's rule is that a number without a basis is unreadable; a bare count is the
+# degenerate case of that.
+
+
+@dataclass(frozen=True)
+class AccountOverview:
+    """Every figure on the Live tab's tile row, each with the basis that makes it readable."""
+
+    invested: Decimal  # cost basis of the open FIFO lots — what you actually paid
+    holdings_value: Decimal  # those lots marked at current prices
+    cash: Decimal  # uninvested broker balance
+    unrealised: Decimal  # holdings_value - invested
+    realised_tax: Decimal  # capital-gains tax realised this FY, from the tradebook replay
+    n_names: int
+    day_change: Decimal | None  # None when any held name has no previous close — never guessed
+    unpriced: tuple[str, ...]  # held names the price source could not mark
+
+    @property
+    def account_total(self) -> Decimal:
+        """Stock plus cash. The only figure the two tiles are meant to add up to."""
+        return self.holdings_value + self.cash
+
+    @property
+    def cash_pct(self) -> float | None:
+        total = self.account_total
+        return float(self.cash / total * 100) if total > 0 else None
+
+    @property
+    def unrealised_pct(self) -> float | None:
+        return float(self.unrealised / self.invested * 100) if self.invested > 0 else None
+
+    @property
+    def day_change_pct(self) -> float | None:
+        if self.day_change is None:
+            return None
+        prior = self.holdings_value - self.day_change
+        return float(self.day_change / prior * 100) if prior > 0 else None
+
+
+def account_overview(
+    portfolio: Portfolio,
+    prices: Mapping[str, Decimal],
+    *,
+    previous_close: Mapping[str, Decimal] | None = None,
+    realised_tax: Decimal = Decimal("0"),
+) -> AccountOverview:
+    """Build the tile row. Pure — no Streamlit, no broker call, no network.
+
+    ``day_change`` is returned only when **every** held name has a previous close. A partial day's
+    P&L is worse than none: it silently reports the movement of a subset as the movement of the
+    account, and the names most likely to be missing are the off-watchlist ones the user added by
+    hand. Unmarked names are listed in ``unpriced`` so the caller can say so rather than drop them.
+    """
+    held = portfolio.positions()
+    invested = Decimal("0")
+    for ticker in held:
+        for lot in portfolio.ledger.open_lots(ticker):
+            invested += lot.cost_basis_per_share * lot.quantity_remaining
+
+    unpriced = tuple(sorted(t for t in held if t not in prices))
+    holdings_value = sum((qty * prices[t] for t, qty in held.items() if t in prices), Decimal("0"))
+
+    day_change: Decimal | None = None
+    complete = previous_close is not None and all(t in previous_close for t in held)
+    if held and not unpriced and complete and previous_close is not None:
+        day_change = sum(
+            (qty * (prices[t] - previous_close[t]) for t, qty in held.items()), Decimal("0")
+        )
+
+    return AccountOverview(
+        invested=invested,
+        holdings_value=holdings_value,
+        cash=portfolio.cash,
+        unrealised=holdings_value - invested,
+        realised_tax=realised_tax,
+        n_names=len(held),
+        day_change=day_change,
+        unpriced=unpriced,
+    )
+
+
+def idle_cash_note(cash: Decimal, floor: Decimal, *, weakness: str | None = None) -> str:
+    """What the uninvested balance means today — deployable, below the floor, or simply parked.
+
+    The imported design gives idle cash its own line in a "what to do next" panel rather than a bare
+    number, because the number alone does not say whether it is waiting to be used or waiting for
+    next month. This states the floor so the reader can tell which.
+    """
+    if cash < floor:
+        return (
+            f"🟡 **Idle cash below the floor** — ₹{cash:,.0f} sitting; the deploy floor is "
+            f"₹{floor:,.0f}. Nothing to do."
+        )
+    market = f" The market is **{weakness}**." if weakness else ""
+    return (
+        f"🟢 **₹{cash:,.0f} is uninvested** and above the ₹{floor:,.0f} deploy floor.{market} "
+        "The Add-money tab will size a basket for whatever part of it you want to put to work — "
+        "type the amount, and only that amount is spent."
+    )
