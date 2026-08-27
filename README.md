@@ -211,6 +211,34 @@ around. Real money never auto-trades; the human places every order — that rule
 **There is no unbuilt engineering on the critical path.** What remains is calendar time and real-world
 events.
 
+### ⚠️ Real money went in before the gate opened (2026-08-27)
+
+The author transferred ₹5,00,000 to his live Zerodha account and began a ₹1,00,000 + ₹50,000/month
+plan **while the scorecard read NOT YET** — a deliberate, informed decision, recorded here rather than
+tidied away. On audit day the paper book was **trailing the Nifty by 3.1 points over 50 days** and the
+volatility-event gate had **never** fired. The honest expectation he was given is the index's
+**~11–12%**, with the backtest's 16.4% treated as unproven upside.
+
+Because a claim is only as good as the instrument measuring it, `live/track_record.py` now compares his
+real account against **the same rupees on the same days in NIFTYBEES**, money-weighted (XIRR). It is
+built so it **can say he is behind**, and for the first twelve months it says the gap is entry timing
+rather than stock selection. That panel — not another backtest — is what will eventually settle
+whether the screen adds anything.
+
+### What auditing the live surfaces found
+
+Five defects in the week the money landed, **every one the same mistake**: a number labelled as
+something it is not, on a screen where the label becomes an order. The worst put a *"Deploy
+₹100,000.00"* heading over a **₹5,97,418** basket, because the advisor spends idle cash plus new money
+while the heading named only the new money — one click from a 64-share order that should have been 11.
+Another reported cash as "Equity". A third let a 70-day-stale benchmark grade the GO scorecard in
+silence, reporting a calm market when the truth was *no data*.
+
+None was caught by 481 passing tests, because each is a figure reported **about** the machinery rather
+than the machinery's own arithmetic — and four of the five only appear when the account holds idle
+cash, which no test fixture did. All are fixed. Full write-up:
+**[reports/PREFLIGHT_AUDIT.md](reports/PREFLIGHT_AUDIT.md)**.
+
 ---
 
 ## 6. Math & methods glossary (for the curious interviewer)
