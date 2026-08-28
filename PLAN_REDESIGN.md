@@ -163,6 +163,55 @@ stops counting.
 **The hedge graduating last is not a failure of the hedge.** It is the only component whose blocker is
 a contract-size rule rather than evidence, and nothing about the others should wait on it.
 
+## 2b. The output contract — every recommendation is an order you can place
+
+**Asked 2026-08-28:** *"I can't just pick a loser — the system must tell me sell this much of X at
+this price, and provide the CSV. The system needs to ask whenever it needs."*
+
+This is a contract for the **whole system**, not just harvesting, and it is the same thing asked in
+this session's first message, when the answer was no. **Every recommendation, on every surface, must
+be: exact orders → an importable file → pushed when it matters.**
+
+| Surface | Today | Under the contract |
+|---|---|---|
+| Buy screen | ✅ name · qty · price | + CSV + push |
+| **Tax-loss harvest** | ✗ does not exist | full |
+| Drawdown / §4.7 exit | prose advisory only | full |
+| Raise cash | ✅ name · qty · price | + CSV + push |
+| Telegram | regime + 3 names, **no quantities** | the actual orders |
+
+**Why harvesting cannot be a hand-picked list.** FIFO decides which losses are *reachable*: a gain lot
+ahead of a loss lot blocks it, so selecting by eye can realise a gain larger than the loss it was
+chasing (§7 note, and the mirror of `_tax_free_quantity`'s existing walk). The system must compute the
+reachable set and emit exact quantities — this is precisely a case where a human picking from a list
+of "losers" gets it wrong.
+
+Each harvest line states: shares, price, **loss realised**, whether it offsets this FY or carries
+forward under §74, the round-trip cost, and **the holding-period reset** (rebuying restarts the
+12-month LTCG clock — near the boundary the trade is usually bad).
+
+### The CSV — blocked on one input from the user
+
+**Kite basket import exists and is Kite-web only** ("Orders → Baskets → New Basket → Import basket
+icon"). **Zerodha does not publish the column spec** — not the field names, accepted exchange /
+product / order-type values, or any row limit.
+
+⚠️ **Do not invent the format.** Required: the user creates a two-order basket in Kite web by hand,
+exports/shares it, and commits the file as a fixture. The generator is then written against a file
+Kite itself produced, and the fixture becomes the format's regression test. A CSV that errors at the
+terminal is worse than no CSV.
+
+### "Ask whenever it needs" — the push
+
+Routed through the existing Telegram spine (`live/notify.py` + `live/scan.py`), which is already
+edge-triggered with hysteresis and fail-soft. Harvesting is the natural fit because **its trigger is a
+date**: quiet until February, escalating toward **31 March**, silent once acted on. Alerts carry the
+orders themselves, not a regime summary — the gap this session opened by identifying that the alert
+names three tickers and no quantities.
+
+**Unchanged: real money never auto-trades.** A CSV the user imports and executes is still the user
+placing the order. The contract makes recommendations *placeable*, never *placed*.
+
 ## 3. What is archived
 
 **Full reset, per decision 2026-08-28.** Archived under `data/archive/2026-08-28/` with a written
