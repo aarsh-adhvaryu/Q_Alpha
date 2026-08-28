@@ -166,13 +166,47 @@ because real money rides on the answer — that is exactly when the discipline m
 
 ---
 
-## 7. Open — needs your answer
+## 7. Position-level dip management — RESOLVED: no trim, harvest losses instead
 
-**"Freezing the assets — what to freeze, how much to freeze."** My reading, alongside hedging, is
-**de-risking: move some fraction out of equity into cash when risk is elevated, and hold it there.**
-If that is right, the design questions are: what triggers it (the fragility gauge? drawdown? the
-regime model?), what fraction, and what brings it back. If you meant something else — locking specific
-lots from being sold, or ring-fencing cash from deployment — say so; they are different features.
+**Asked for:** *"there won't be huge crashes all the time, but there will be things affecting smaller
+parts of it — understand the dips, handle the current assets wisely, buying a few stocks of a company
+or selling, such that it doesn't affect much in the dip but helps in the rise."* That is harvesting the
+rebalancing premium at position level: add on weakness, trim on strength.
+
+**Decision (2026-08-28): the add half is kept and already exists; the trim half is NOT built.**
+
+**The decisive reason: the SIP is already the rebalancing mechanism, and it is free.**
+
+| Lever | Redirectable per month | Tax |
+|---|---|---|
+| ₹50,000 SIP on a ₹3L book | **16.7% of the book** | **₹0** |
+| ₹50,000 SIP on a ₹9L book (one year on) | **5.6%/month ≈ 67%/yr** | **₹0** |
+| Trimming 5% of the book | 5%, once | 20% STCG on the gain |
+
+New money moves more weight per month, tax-free, than any trim could. A name that runs to 25% is
+de-concentrated by *not feeding it* — the SIP dilutes it without a single taxable event.
+
+**Two supporting reasons.** (1) A continuous trim rule is mechanically the monthly row of the only
+robust finding this repo has: monthly 15.2% / Sharpe 0.92 **NO-GO** against annual 18.5% / 1.13
+beating TRI *and* 1/N, with every metric improving monotonically as turnover fell. The premium being
+chased is 0.5–1.5%/yr **gross**, plausibly negative after 20% STCG and charges. (2) Under the ₹0-tax
+constraint the user would want, it cannot fire at all before **August 2027** — every lot is short-term
+until then, so only loss lots qualify. It would be a continuous trading mechanism switched off for its
+first year.
+
+**What is kept:** the add-on-dips half, which already exists — `advise_deploy_into_weakness` tilts new
+money toward pulled-back names and tops up positions already held. Strengthening *how the SIP is
+directed* is the real version of this idea, and it costs nothing.
+
+**What is built instead: tax-loss harvesting.** §70 set-off and §74 eight-year carry-forward exist in
+the tax computation; `capital_gains.py:137` calls harvesting itself "deferred past Phase 0", and no
+surface ever says *"these positions are at a loss; realising them before 31 March banks a loss you can
+carry forward eight years."* It is free (the sale is a loss), it is the one selling behaviour that
+earns its turnover, and it is what the trim instinct should become.
+
+**Sunset condition — this is "not yet", not "never".** Revisit trimming when the SIP falls below
+**~1% of book value per month** (≈ a ₹50L book, roughly 2032 at ₹50,000/month). Past that the inflow
+is no longer enough to rebalance with, and a trim starts to pay for itself.
 
 ---
 
@@ -199,7 +233,7 @@ is the only way across.
 | 0 | **Pre-registration + archive** | This document; old books archived with verdicts; stale scope note fixed |
 | 1 | **One repo** | Hedge + regime moved in, one engine, one test suite, CI green |
 | 2 | **The twin** | Tradebook → real book → three parallel books on identical cash flows |
-| 3 | **Autonomy** | Hedge, de-risk, exits, rebalance running unattended on the twin, every decision logged with its reason |
+| 3 | **Autonomy** | Hedge, de-risk, exits, rebalance + **tax-loss harvesting** running unattended on the twin, every decision logged with its reason. **Twin-only until measured** — the advisor is unchanged, exactly as the AI selector was handled |
 | 4 | **Backtest** | Bootstrap noise floor, drawdown-exit variant, rebalance cadence, optimizer, composite |
 | 5 | **New GO gate** | Six criteria live; dashboard shows four books and the three gaps |
 | 6 | **Frontend** | Decided *after* the engine is right — see below |
