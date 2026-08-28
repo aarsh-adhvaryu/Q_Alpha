@@ -202,6 +202,53 @@ mean anything.
 it caps the back half of a fall rather than dodging it. And it has **never been witnessed firing**
 (endgame pillar 4, still zero).
 
+## 4b-i. Can the hedge scale down to a ₹3L book? No — and cash is the only thing that can
+
+**Asked 2026-08-28:** *"what if we scale the hedge for our scale, dynamic with the portfolio?"*
+
+**No derivative scales below ~₹15L notional in India.** SEBI raised the minimum index-derivative
+contract size to **₹15 lakh** in October 2024, explicitly to keep small retail out of F&O. The floor
+binds every instrument, so it is not a futures-specific problem to route around:
+
+| Instrument | Lot | Notional (current levels) |
+|---|---|---|
+| Nifty futures **and options** | 75 | ≈ ₹19.1L |
+| BankNifty | 30 | ≈ ₹17.1L |
+| FinNifty | 65 | ≈ ₹17.5L |
+| MidcpNifty | 120 | ≈ ₹15.6L |
+| Sensex | 20 | ≈ ₹16.6L |
+
+**Options were the obvious escape and they do not survive the arithmetic.** Delta-sizing normally
+gives fractional exposure and gamma scales the hedge up as the market falls — precisely the dynamic
+behaviour wanted. But one put still controls ₹19.1L and the premium is paid on that whole notional: a
+5% OTM monthly put is roughly **₹9,000–13,500 ≈ 3–4.5% of a ₹3L book, per month**. The portfolio would
+be paid away hedging it.
+
+### The one hedge that scales: not deploying
+
+Withholding a contribution has **no minimum size, no margin, no premium and no tax**. It is infinitely
+divisible and works identically at ₹3L and ₹3Cr. It is also the user's original "freeze the assets"
+idea in the form that works — *trimming* means selling and is taxed (§7); *withholding new money*
+reduces exposure with no taxable event at all.
+
+**⚠️ It contradicts a rule already in production, and that conflict is the point.** The buy screen's
+pre-committed policy is *deploy 50% of idle cash on elevated weakness, 100% on deep* — buy harder as
+the market falls. Cash-withholding says hold back when stress is elevated. One is a mean-reversion
+bet, the other a trend bet; **they cannot both be right**, and only the first has ever been tested.
+
+**Therefore, as a hedge-family ablation on the twin (descriptive, never gating — §1):**
+
+| Variant | Feasible at ₹3L? | Tests |
+|---|---|---|
+| `−HEDGE` | — | the futures overlay's contribution (real from ~₹19L) |
+| `+CASHHOLD` | **yes, today** | withhold deployment while the gauge is elevated |
+| `+DEPLOYHARDER` | **yes, today** (current behaviour) | the existing pre-committed tranche policy |
+
+`+CASHHOLD` vs `+DEPLOYHARDER` is the cleanest question in the whole design: two opposite,
+pre-committed responses to the same signal, on identical cash flows, settled by data rather than by
+argument. **Both are implementable on the real account immediately** — unlike every other hedge — so
+whichever wins is directly actionable rather than parked until ₹19L.
+
 ## 4c. Cash flows — the tradebook is the only source
 
 **There is no SIP schedule.** The user invests whatever amount he chooses, places it in Zerodha, and
