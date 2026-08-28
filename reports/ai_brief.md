@@ -1,22 +1,21 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Sensex fell 539.35 points or 0.7% to 76,933.59 and Nifty50 was down 116.90 points or 0.48% at 24,090.85, extending losses to a second consecutive session.
+**Sentiment**: 🟢 — Nifty closed +0.35%, Sensex +0.43% on recovery from two days of losses.
 
-**Drivers:**
-1. **Metal & PSU Bank selling:** Hindalco Industries, HDFC Bank, and Mahindra & Mahindra were the top losers in the Nifty50 index — cyclical downdraft amid growth concerns and margin pressure.
-2. **FPI outflows dominate:** FII were net sellers of ₹298.30 Cr in the cash segment on August 27, 2026, though DII were net buyers of ₹4,977.20 Cr, showing domestic support insufficient to offset foreign exit.
-3. **Geopolitical premium in crude:** West Asia developments central to outlook for oil prices, though easing crude oil prices continue to improve near-term macro backdrop — net positive for OMCs, input costs for paint/aviation still under review.
+**Drivers**:
+1. **Crude easing (−0.86% to $82.82)** → Oil slipped on improved Strait of Hormuz supply prospects and diplomatic progress in the Middle East. Lower crude supports OMC margins, softens input costs for aviation/paint/chemicals.
+2. **IT sector strength** → TCS +4.1%, Infosys +3.3%, HCL Tech +2.7% led gains; global tech sentiment positive.
+3. **Banking pressure** → ICICI Bank −1.3%, Asian Paints −1.1% lagged on mixed sentiment.
 
-**Watchlist names affected:**
-- **HINDALCO, VEDL** (metals) — down-cycle selling; cyclical weakness.
-- **HDFCBANK, ICICIBANK** (banks) — FPI exits on NIM concerns.
-- **AMBUJACEM, SHREECEM** (cement) — margin compression if input costs stay elevated.
+**Watchlist names affected**:
+- **Up bias**: TCS, INFY, TECHM, HCLTECH (IT tailwind); BPCL, IOC, ONGC (crude relief).
+- **Down bias**: ASIANPAINT (underperformed), ICICIBANK (weakness).
 
-**Likely reaction** (qualitative read, not a recommendation):
-**Lean: down; band: -0.2..0.5%; confidence: low.** Market is range-bound on competing flows: DII buying provides a floor, but broad FPI exit + metal/bank weakness suggests near-term drift lower into resistance. Watch for late-session stabilization if DIIs accelerate. **Most likely movers: HINDALCO (further down), HDFCBANK (down), BAJFINANCE/JIOFIN (NBFC resilience, marginally up).**
+**Likely reaction** (my read): Nifty likely to drift **flat to +0.3%** over next 1–2 sessions on mixed cues—crude ease is tail-positive, but banking softness and geopolitical overhang (Hormuz uncertainty, Russia-Ukraine, Trump tariffs) cap upside. IT momentum may hold, but breadth shallow. **Confidence: medium.**
+- **Most likely movers**: TCS/INFY (up leg if global risk-on holds); ICICIBANK (down if consolidation persists).
 
-**Risk note:** Geopolitical clarity, rupee trajectory, and tariff-related global headwinds remain key volatility drivers; liquidity still skewed toward select large-cap names.
+**Risk note**: NSE/BSE F&O expiry schedule swaps today—Nifty weeklies move to Tuesday from Thursday; watch for volatility/option pinning; geopolitical re-escalation (Middle East, Ukraine) could spike crude and rupee.
 
-SIGNAL: lean=down; band=-0.2..0.5; confidence=low
+SIGNAL: lean=flat; band=−0.1..0.4; confidence=medium
 
-— 🤖 claude-haiku-4-5 · 56,221 in / 916 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 53,212 in / 840 out tokens · ✓ complete
