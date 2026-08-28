@@ -575,7 +575,15 @@ separate, all in one; the optimizer must handle the real world, not just a sched
   read-only on the GO book's committed curve** — protection evidence accrues on both books without
   touching the criterion-6 gate.
 
-## 🏁 THE ENDGAME CONTRACT (locked with the user 2026-07-12 — read before any "GO" work)
+## 📜 SUPERSEDED — THE ENDGAME CONTRACT (2026-07-12)
+
+> ⚠️ **Replaced 2026-08-28 by [PLAN_REDESIGN.md](PLAN_REDESIGN.md) §2a (component graduation).** The
+> all-four-pillars rule below held every component hostage to the hedge — which is blocked by capital
+> (~₹19L minimum contract size) and by a crash, neither of which is evidence about the drawdown exit,
+> loss harvesting or the AI. The research hedge forward-run made this concrete: 23 marks, **zero
+> episodes**, the gauge never fired. Components now graduate individually on their own ablation plus a
+> 6-month persistence bar; the system GO is a separate, single comparison. **What survives unchanged:
+> real money never auto-trades, and a failed pillar is reported, never integrated around.**
 
 **The user is walking away for ~6 months; the system runs itself** (weekday cron: mark GO book → AI
 brief → System book deploy/gate/hedge → commit; funding is manual Add-money (no auto monthly
