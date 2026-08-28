@@ -77,15 +77,46 @@ file that silently truncates. The `max_names` slider defaults to 15 and the open
 this does not bite today — but a harvest across a large book, or a deploy at a high slider setting,
 can reach it. Encode as a constant with a test.
 
-### Still open (low priority)
+### ✅ A minimal 9-field instrument object is enough
 
-Whether the **full 23-key `instrument` object** is required, or a minimal subset suffices.
-`kite_basket_minimal_test.json` keeps only `tradingsymbol`, `exchange`, `segment`,
-`instrumentToken`, `exchangeToken`, `tickSize`, `lotSize`, `type`, `isEquity` and drops the 14
-decorative UI fields (`company`, `fullName`, `niceName`, `niceNameHTML`, `stockWidget`, `precision`,
-`scripCode`, `symbol`, `tradable`, `isin`, `related`, `underlying`, `auctionNumber`, `isWeekly`,
-`isFound`). If it imports, the generator never has to synthesise them — Kite's public instruments dump
-carries the nine that remain. Prices again unfillable (WIPRO ₹85, JIOFIN ₹650).
+`kite_basket_minimal_test.json` (796 bytes vs 2,160) imported cleanly — rows rendered with correct
+symbol, exchange, side, order type, product, quantity, price, and Kite still resolved the LTP. The
+generator therefore needs only:
+
+| Field | Source in Kite's public instruments dump |
+|---|---|
+| `tradingsymbol` | `tradingsymbol` |
+| `exchange` · `segment` | `exchange` · `segment` |
+| `instrumentToken` · `exchangeToken` | `instrument_token` · `exchange_token` |
+| `tickSize` · `lotSize` | `tick_size` · `lot_size` |
+| `type` | `instrument_type` (`EQ`) |
+| `isEquity` | derived (`instrument_type == "EQ"`) |
+
+All nine come straight from the dump. The 15 decorative fields Kite exports — `company`, `fullName`,
+`niceName`, `niceNameHTML`, `stockWidget`, `precision`, `scripCode`, `symbol`, `tradable`, `isin`,
+`related`, `underlying`, `auctionNumber`, `isWeekly`, `isFound` — are **never synthesised**.
+
+## ⚠️ Import APPENDS — it does not replace
+
+Importing a second file into an open basket **adds** its rows to the existing ones: after two imports
+the header read `Instrument (4 / 20)` with both price sets present side by side.
+
+**Consequence, and it is a money bug waiting to happen:** importing the same harvest or deploy basket
+twice produces **double the intended quantity**, and nothing on screen flags it as a duplicate — the
+rows just look like more orders. **Every generated basket must be imported into a NEW basket**, and
+the instructions the system emits must say so on every render. A duplicated ₹3L deploy is exactly the
+class of defect this repo keeps finding: correct arithmetic, wrong on screen.
 
 **Import is Kite web only** — Orders → Baskets → New Basket → Import basket icon. No basket import on
 the mobile app, so any flow ending in a basket ends at a desktop.
+
+## Settled contract for the generator
+
+- Emit a **JSON array**, no `id`, `weight` = row index.
+- **≤ 20 rows per basket**; split beyond that, never truncate.
+- **Round every price to the instrument's `tickSize`** (per instrument *and* per exchange).
+- 9-field `instrument` object from the cached instruments dump.
+- `params`: `transactionType` BUY/SELL · `product` CNC · `orderType` LIMIT · `validity` DAY ·
+  `validityTTL` 1 · integer `quantity` · numeric `price` · `triggerPrice` 0 · `disclosedQuantity` 0 ·
+  `variety` "regular" · `gtt` null · `tags` [].
+- Ship with **"import into a NEW basket"** in the user-facing text.
