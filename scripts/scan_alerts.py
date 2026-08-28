@@ -31,6 +31,8 @@ from qalpha.live.deploy import cheapness_scores, market_weakness
 from qalpha.live.go_scorecard import build_scorecard, trading_days_remaining
 from qalpha.live.notify import send_telegram, telegram_configured
 from qalpha.live.paper import PaperBook
+from qalpha.live.position_health import position_health
+from qalpha.live.price_integrity import excluded_from_tilt, rebase_starts, unexplained_gaps
 from qalpha.live.runlog import load_runs
 from qalpha.live.scan import ScanFacts, evaluate, load_state, save_state
 
@@ -59,6 +61,18 @@ def _out_of_favour_names(as_of: date) -> str:
     The watchlist price panel is gitignored, so on a fresh CI checkout it's absent; we download it
     in-job (reusing the watchlist builder) only when this runs — i.e. only on genuinely weak days,
     so a normal-market scan never pays the cost.
+
+    **Guarded exactly like the dashboard.** These names arrive on a phone under "deploy 50% of your
+    idle cash", so the line is an order in all but name and must not rank a corporate action as a
+    discount. PR-2's price-continuity guard was wired into the Add-money tab and *not* into this
+    path, so the alert kept ranking on raw ``adj_close``: VEDL read 64.9% off its high (a demerger
+    step-down) against 22.1% once re-based, and went out as the single most out-of-favour name in
+    the market. The guard's own inputs are used here — same panel, same day, same numbers as the
+    screen the user opens after reading the alert.
+
+    PR-3's candidate-health verdict rides along for the same reason: the buy screen shows the
+    breakdown detector's 🔴 beside every recommended name, and an alert that omits it is a strictly
+    more confident version of the same recommendation. Flag, never veto — the ranking is unchanged.
     """
     try:
         if not WATCHLIST_CSV.exists():
@@ -79,12 +93,40 @@ def _out_of_favour_names(as_of: date) -> str:
         wl = pd.read_csv(WATCHLIST_CSV)
         tickers = [str(t) for t in wl["ticker"]]
         prices = load_parquet(str(WATCHLIST_PANEL))
-        cheap = cheapness_scores(prices, tickers, as_of)
+        gaps = unexplained_gaps(prices.adj_close, tickers, as_of)
+        cheap = cheapness_scores(
+            prices,
+            tickers,
+            as_of,
+            rebase_from=rebase_starts(gaps),
+            no_tilt=excluded_from_tilt(gaps),
+        )
         top = sorted(cheap.items(), key=lambda kv: kv[1], reverse=True)[:3]
         if not top:
             return ""
-        parts = [f"{t.removesuffix('.NS')} ({-score:.0%} off 1y high)" for t, score in top]
-        return "Most out of favour: " + ", ".join(parts) + "."
+        health = {h.ticker: h for h in position_health(prices.adj_close, tickers, as_of).holdings}
+        parts = []
+        for ticker, score in top:
+            icon = health[ticker].icon + " " if ticker in health else ""
+            parts.append(f"{icon}{ticker.removesuffix('.NS')} ({-score:.0%} off 1y high)")
+        line = "Most out of favour: " + ", ".join(parts) + "."
+        flagged = [t for t, _ in top if t in health and health[t].level == "breaking"]
+        if flagged:
+            names = ", ".join(t.removesuffix(".NS") for t in flagged)
+            line += (
+                f"\n🔴 <b>{names}</b> — the §4.7 breakdown detector would flag "
+                f"{'these' if len(flagged) > 1 else 'this'} for review-for-exit if you held "
+                f"{'them' if len(flagged) > 1 else 'it'}. Shown, not vetoed: open the dashboard for "
+                "the full verdict table before you buy."
+            )
+        adjusted = [t for t, g in gaps.items() if g.unexplained]
+        if adjusted:
+            line += (
+                f"\n⚠️ Price-continuity guard adjusted {len(adjusted)} name(s) "
+                f"({', '.join(sorted(t.removesuffix('.NS') for t in adjusted))}) — a one-day step no "
+                "split or dividend explains is not a discount."
+            )
+        return line
     except Exception as exc:
         print(f"[scan] out-of-favour names skipped: {exc}")
         return ""
