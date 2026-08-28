@@ -263,12 +263,23 @@ def test_blocked_notice_names_the_failing_guard_and_spares_the_sell_side() -> No
     assert "Raise cash" in md
 
 
-def test_the_scope_note_states_the_screen_was_never_backtested() -> None:
-    """T1.5 on screen: the buy rule is not the 18.2% strategy, and must say so on every render."""
+def test_the_scope_note_states_what_the_screen_is_not() -> None:
+    """T1.5 on screen: the buy rule is not the 18.2% strategy, and must say so on every render.
+
+    This used to assert the literal words "never been backtested" — which stopped being true on
+    2026-08-20 and kept rendering on a real-money surface for eight days, exactly the way
+    ``test_the_track_record_is_on_the_real_money_page`` pinned defect #1 in place. Assert the
+    standing property (it is not the validated strategy, and it names its own limits), never the
+    sentence, so the note can be corrected without the suite going red.
+    """
     from qalpha.live.dashboard import buy_advice_scope_note
 
     md = buy_advice_scope_note()
-    assert "never been backtested" in md
+    assert "never been backtested" not in md, (
+        "stale claim — backtested 2026-08-20, see BACKTEST_SIP"
+    )
+    assert "not:** the validated strategy" in md
+    assert "never as part of the whole system" in md  # the limit that is still true
     assert "18.2%" in md
     assert "no selection code" in md
     assert "₹0 capital-gains tax" in md  # what it *is* still gets said plainly

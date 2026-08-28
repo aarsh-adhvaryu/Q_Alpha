@@ -247,9 +247,15 @@ def buy_advice_blocked_markdown(reasons: list[str]) -> str:
 def buy_advice_scope_note() -> str:
     """The permanent framing that rides *with* the buy list — what this screen is, and is not.
 
-    The buy rule has never been backtested. It shares no selection code and no names with the funnel
-    the 18.2% headline describes, and no script has ever measured it against a baseline. That is not
-    a reason to hide it — it is a reason to say so every single time it renders.
+    **Updated 2026-08-28.** This note used to say the screen had "never been backtested". That was
+    true when it was written and stopped being true on 2026-08-20, when ``scripts/backtest_sip.py``
+    measured it over 2013-07 → 2026-06 on a point-in-time Nifty-50: **+209.7% against NIFTYBEES at
+    +126.3%**, ₹1,00,000 initial plus ₹50,000/month, costs included. The note kept rendering the old
+    claim on a real-money surface for eight days — the same defect as the other six the pre-flight and
+    final audits found, a label that no longer describes what it labels, differing only in that this
+    one *under*-stated the system. What is still true is the second half: it shares no selection code
+    and no names with the funnel behind the 18.2% headline, and it has never been tested as part of
+    the composite system that actually runs.
     """
     return (
         "**What this is:** a deterministic screen you can act on. It takes names that have pulled "
@@ -257,10 +263,13 @@ def buy_advice_scope_note() -> str:
         "name-specific decline** (a falling knife is not a discount), checks the survivors' prices "
         "for continuity, spreads them across sectors, and buys whole shares at **₹0 capital-gains "
         "tax**. What comes out is meant to be bought, not adjudicated.\n\n"
-        "**What this is not:** the validated strategy. This screen has **never been backtested** — "
-        "it shares no selection code and no names with the factor funnel behind the 18.2% headline. "
-        "That is a real limit on how much confidence it has earned, not a reason for it to hedge: "
-        "it makes the call, shows its working, and you place the order."
+        "**What this is not:** the validated strategy. It shares no selection code and no names with "
+        "the factor funnel behind the 18.2% headline. It **has** been backtested on its own "
+        "(2013–2026, ₹1L + ₹50k/month, point-in-time Nifty-50: **+209.7% vs NIFTYBEES +126.3%**, "
+        "costs included) — but never as part of the whole system that actually runs, and one "
+        "backtest of one variant is thin evidence. That is a real limit on how much confidence it "
+        "has earned, not a reason for it to hedge: it makes the call, shows its working, and you "
+        "place the order."
     )
 
 

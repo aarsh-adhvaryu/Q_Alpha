@@ -87,7 +87,8 @@ def test_the_buy_list_renders_with_its_scope_note() -> None:
     assert any("Suggest what to buy" in lbl for lbl in labels)  # back on the page
     # The scope note is not optional decoration: T1.5 must be on screen whenever the list is.
     infos = " ".join(i.value for i in at.info)
-    assert "never been backtested" in infos
+    # The property, not the sentence — see test_dashboard_status for why.
+    assert "not:** the validated strategy" in infos
     assert "18.2%" in infos
     # Sell / Raise cash are untouched throughout.
     assert any("Advise sell" in lbl for lbl in labels)
