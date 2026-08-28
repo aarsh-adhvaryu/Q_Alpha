@@ -26,15 +26,18 @@ them*. That is the finding behind the findings, and §7 is about it.
 
 | # | Surface | What it says | What is true | Fixed? |
 |---|---|---|---|---|
-| 1 | Track record (#71) | "You are **ahead by ₹4,01,677**" | ahead by **₹1,677** | no — one line |
-| 2 | Raise cash | "₹620 tax" | **₹9,570** tax | no |
-| 3 | Raise cash | "Raises ₹3,92,610.50" | ₹3,91,675.88 | no |
-| 4 | Holdings table | HCLTECH "**3.3%**" weight | **17.8%** of the portfolio | no |
-| 5 | Position health | VEDL "−59%, breaking down" | a demerger step, ~−22% | no |
-| 6 | Telegram scan | "Most out of favour: **VEDL −65%**" | a demerger step, −22% | **yes, this PR** |
+| 1 | Track record (#71) | "You are **ahead by ₹4,01,677**" | ahead by **₹1,677** | ✅ |
+| 2 | Raise cash | "₹620 tax" | **₹9,570** tax | ✅ |
+| 3 | Raise cash | "Raises ₹3,92,610.50" | ₹3,91,675.88 | ✅ |
+| 4 | Holdings table | HCLTECH "**3.3%**" weight | **17.8%** of the portfolio | ✅ |
+| 5 | Position health | VEDL "−59%, breaking down" | a demerger step, ~−22% | ✅ |
+| 6 | Telegram scan | "Most out of favour: **VEDL −65%**" | a demerger step, −22% | ✅ |
 
-Only #6 was in the scope agreed for this session. #1–#5 are reported, reproduced, and left for the
-user's decision — with a recommended order in §8.
+**All six are fixed.** #6 was the scope first agreed; the user then said *"start fixing the problems,
+today investing starts"*, and #1–#5 followed. **522 tests, 0 skipped; ruff, format and mypy green.**
+Rule (a) holds: `git diff --name-only` touches **no** file under `src/qalpha/{backtest,accounting,
+data,config}` — the validated engine and the 18.2% headline are untouched, and every new guard
+defaults to off so the SIP backtest's own `position_health` call is bit-for-bit unchanged.
 
 ---
 
@@ -70,8 +73,14 @@ It is also **defect #74 verbatim** — the Equity tile that included cash — on
 same fortnight #74 was fixed. `account_overview` was taught to separate shares from cash; the
 `market_value` call two hundred lines away was not.
 
-**Fix:** `portfolio.holdings_value(prices)`. One word. It is left unapplied only because it was
-outside the scope agreed for this session.
+**Fixed:** `portfolio.holdings_value(prices)`. The panel now reads **+1.2% · ahead by ₹1,677**.
+
+⚠️ **A test was pinning the defect in place.** `test_the_track_record_is_on_the_real_money_page`
+asserted the literal string `track_record(trades, portfolio.market_value(prices), benchmark, as_of)`
+— so the suite would have failed had anyone fixed it. That is the sharpest illustration in this
+report of why 503 green tests meant nothing here. It now asserts `holdings_value` *and forbids
+`market_value(` by name*, and a behavioural test in `test_track_record.py` marks the same book both
+ways and requires the shares-only reading to report the loss.
 
 ---
 
@@ -104,17 +113,26 @@ Take the *same* ITC shares to the Sell tab and it reports **₹1,57,472.65 of sh
 **₹32,754.31 of tax**, and warns: *"900 share(s) are NOT long-term yet, despite being held 365+
 days."* Raise-cash says ₹620 and warns nothing. **Same book, same day, same shares, two answers.**
 
-Two aggravating details on the same surface:
+**Fixed.** `advise_raise_cash` now runs the same path as `advise_sell` — `apply_long_term_boundary`
+on every consumed lot, then one `net_capital_gains_tax` over the **whole plan** (tax cannot be
+attributed per order: §70 nets a loss in one name against a gain in another). Re-run of the table
+above: the under-quote is **₹0.00 at every level**, asserted by a test that replays the plan's own
+orders through the Sell tab's engine and demands equality. The panel now also carries the Sell tab's
+`⚠️ N share(s) are NOT long-term yet` warning.
 
-- **The `_unverified_branch_warning` is wired into the Sell tab only** (`dashboard_app.py:1756`). The
+Two aggravating details on the same surface, **both also fixed**:
+
+- **`_unverified_branch_warning` was wired into the Sell tab only** (`dashboard_app.py:1756`). The
   Raise-cash tab sells *multiple names across multiple lots by construction* — it exercises the
-  multi-lot, LTCG, set-off and exemption branches every single time, and it is the one tab that never
-  warns they are unreconciled. `RaiseCashAdvice` carries no `realized` field, so the helper would
-  no-op even if called.
-- **`_liquidation_efficiency` ranks each holding against the full FY exemption independently**
-  (`preview_sell` is non-mutating). Several holdings can each look "free within the exemption" when
-  together they exhaust it, so the *ordering* — the tab's entire value proposition — is computed on an
-  assumption the execution then violates. The executed tax is right; the plan may not be the cheapest.
+  multi-lot, LTCG, set-off and exemption branches every single time, and it was the one tab that
+  never warned they are unreconciled. `RaiseCashAdvice` carried no `realized` field, so the helper
+  would have no-opped even if called. It now carries `realized` and `ltcg_sheltered`, and the tab
+  calls the same helper the Sell tab does.
+- **`_liquidation_efficiency` ranked on the uncorrected tax**, so a lot held exactly 365 days ranked
+  as the *cheapest* source when it is among the dearest. It now ranks boundary-corrected. It still
+  costs each holding in isolation against the full remaining FY exemption, which several holdings
+  cannot all use — so the **ordering remains a documented heuristic**. The quoted tax is not: it is
+  computed on the executed plan as a whole.
 
 ---
 
@@ -139,10 +157,22 @@ OVER-STATED CASH                    :     934.62
 The per-order **Tax column also fails to sum to the headline**: ₹15,195.15 + ₹8,170.42 = ₹23,365.57,
 against ₹24,300.19 printed below it. Two numbers a user can add up by eye, on one screen, that don't.
 
-**And it silently under-delivers.** The sizing loop makes **one pass** over holdings; when the 0.5%
-price buffer is smaller than the tax, it under-raises and never comes back for more. Above: ₹4,00,000
+**And it silently under-delivered.** The sizing loop made **one pass** over holdings; when the 0.5%
+price buffer was smaller than the tax it under-raised and never came back. Above: ₹4,00,000
 requested, **₹3,92,610 raised — ₹7,389 short — with 466 SBIN shares still held**, and nothing on the
-panel says so. If the money is needed for something real, the orders leave him short.
+panel said so.
+
+**Fixed.** The loop now draws from the cheapest source until it is exhausted, then the next, and
+**re-costs on the ITR basis after every sale**, so it stops on cash actually received. Same case now
+raises **₹4,00,064** with `shortfall = 0`; when the book genuinely cannot cover the request it says
+so in a line of its own. Tax is stated **once**, where it is subtracted, and the panel reconciles
+exactly: 426,320.00 − 1,321.41 − 24,934.53 = **400,064.06**, which is the figure printed.
+
+One subtlety worth recording, because it is the same defect in miniature: the loop can draw from one
+source several times, but the user places **one order per name**. Merging the display rows while
+costing three split trades left the quoted tax ₹5.63 off the orders he would actually place — caught
+by the cross-surface test, not by inspection. The plan is now **re-costed from scratch as the merged
+orders**, so every number describes the thing beside it.
 
 ---
 
@@ -161,7 +191,11 @@ On the real account shape today:
 | … | | | |
 | **SUM** | ₹91,335 | **18.6%** | 100.0% |
 
-Every line is under-stated **5.4×**, and the column does not sum to 100% — visible on its face.
+Every line was under-stated **5.4×**, and the column did not sum to 100% — visible on its face.
+
+**Fixed.** The column divides by `holdings_value` and is renamed **"% of equity"**. With ₹4,00,000
+parked it now reads HCLTECH **17.8%** and sums to **100.0%**. `Portfolio.current_weights` is
+deliberately **not** changed — `backtest/decision.py` depends on the NAV basis, and that is rule (a).
 
 This is load-bearing, not cosmetic. The advisor enforces `max_name_fraction = 0.20` and a 30% sector
 cap. A user eyeballing "3.3%" concludes he is nowhere near concentrated; HCLTECH is at **17.8%**, one
@@ -185,19 +219,33 @@ Measured on the live watchlist (panel 2026-08-24):
 normal pullback. The detector, reading the same series unguarded, calls it *"a name-specific
 breakdown, not a market move"* and recommends reviewing it for exit.
 
-The guard fixed one direction of the artifact and left the other. It now propagates **both ways**:
+**Fixed.** `position_health` takes `rebase_from` / `exclude` — the same inputs and the same
+default-off contract PR-2 gave `cheapness_scores`, so the validated SIP backtest's call is bit-for-bit
+unchanged (asserted by test). A re-based name is measured from its gap day, the cross-sectional
+median is computed **after** re-basing so artifacts cannot set the systemic baseline either, and the
+note no longer claims "~6mo" for a shorter window. VEDL now reads:
+
+> `VEDL.NS: +2% since its Apr 2026 corporate action (+1% vs market) — healthy.`
+
+Every live caller — the health panel, the today-brief, the buy screen's candidate flags, the
+autopilot and the Telegram alert — routes through the guard; the dashboard's go through one
+`_guarded_health` helper so a future caller cannot quietly reintroduce the raw path.
+
+Before the fix the guard corrected one direction of the artifact and left the other. It propagated
+**both ways**:
 PR-3 pointed `position_health` at buy *candidates*, so an artifact that no longer looks cheap still
 attaches a spurious 🔴 to the buy screen; and if the name is held, it produces a spurious sell
 prompt. TRENT is clean here only because its gap (2026-01-01) has aged out of the 126-day lookback —
 the defect bites for roughly six months after any demerger.
 
-*(Sixth, minor, same family: the tradebook panel captions `result.realized_tax` as "realized
+*(Minor, same family, **not fixed**: the tradebook panel captions `result.realized_tax` as "realized
 capital-gains tax to date". That figure comes from the same backtest engine as §2 — no set-off, no
-cess, no §2(42A). It is not the ITR number and is not labelled as an estimate.)*
+cess, no §2(42A). It is not the ITR number and is not labelled as an estimate. It is a caption on a
+historical figure, not an input to an order, which is why it is the one thing left.)*
 
 ---
 
-## 6. The Telegram scan was the unguarded path — **fixed in this PR**
+## 6. The Telegram scan was the unguarded path
 
 `scripts/scan_alerts.py:_out_of_favour_names` called `cheapness_scores(prices, tickers, as_of)` with
 neither `rebase_from` nor `no_tilt`, and carried no candidate-health verdict. Every guard PR-2 and
@@ -229,9 +277,8 @@ is **not** "VEDL is dropped" — a guard that merely dropped volatile names woul
 an artifact must not outrank a genuine decline, and that the phone cannot be more confident than the
 screen.
 
-⚠️ **The health verdict this alert now carries is itself computed unguarded** (§5). The alert now
-*matches the dashboard*, which is what this fix set out to do; it does not make the underlying
-detector correct. Fixing §5 fixes both surfaces at once.
+The health verdict this alert carries was itself computed unguarded when this fix first landed; §5
+closed that, so the alert and the screen now agree on both the ranking *and* the verdict.
 
 ---
 
@@ -259,27 +306,38 @@ figures never got the same treatment.
 
 ---
 
-## 8. Recommended order
+## 8. What was changed
 
-Nothing here is applied beyond §6. In priority order:
+All six fixes are in `live/` + `scripts/` + tests. **No file under `src/qalpha/{backtest, accounting,
+data, config}` is touched** — the validated funnel and the 18.2% headline are provably unchanged, and
+every new guard parameter defaults to off so existing callers (the SIP backtest among them) are
+bit-for-bit identical.
 
-1. **§1, the track record** — one word (`market_value` → `holdings_value`), and it is the panel whose
-   entire purpose is defeated. Until it is fixed, **ignore that panel completely**; it is currently
-   incapable of reporting bad news.
-2. **§5, `position_health`** — thread PR-2's `rebase_from`/`no_tilt` through it. Fixes the buy screen's
-   🔴 flags, the exit prompts, and the alert this PR just shipped, in one change.
-3. **§4, the holdings weight** — divide by `holdings_value`, or relabel the column "% of account".
-   Cheap, and it currently mis-states concentration 5×.
-4. **§2 and §3, Raise cash** — the largest amount of work: route it through the same ITR path as
-   `advise_sell`, net `smart_raised` against the same tax it reports, loop until the target is met or
-   say it fell short, and wire in the unverified-branch warning.
+| Where | Change |
+|---|---|
+| `dashboard_app.py` | track record marks shares only; holdings column is "% of equity"; all health calls go through one `_guarded_health` helper; Raise cash shows the unverified-branch warning |
+| `live/advisor.py` | `advise_raise_cash` rebuilt on the ITR basis — boundary-corrected, plan-level §70 tax, redraw-until-met, re-costed as placed orders, `shortfall` / `realized` / `boundary_demoted` surfaced |
+| `live/position_health.py` | `rebase_from` / `exclude`, median computed post-rebasing, honest window label |
+| `live/deploy.py` | gaps computed once over the pre-filter universe and reused by cheapness *and* both health calls |
+| `scripts/scan_alerts.py`, `scripts/autopilot.py` | routed through the same guard inputs |
+
+**522 tests, 0 skipped** (was 503). The new ones assert properties, not values: an artifact must not
+outrank a genuine decline; the two tax surfaces must return the *same number* for the same shares;
+the panel must add up on its own face; the guard must be off by default; and — the one that would
+have caught the worst finding — a portfolio marked with parked cash must still be able to report a
+loss.
+
+**Still open, deliberately:** the tradebook panel's `realized_tax` caption (§5, a caption on history,
+not an order), and `_liquidation_efficiency`'s isolated-exemption ranking, now documented as the
+heuristic it is.
 
 ## 9. What is trustworthy today
 
 - **The Sell tab is the best-built surface in the system.** §2(42A) boundary demotion, §112A, §70
   set-off, cess, the exemption, the tax-free quantity, and an explicit warning naming which
-  unreconciled branch a sale touches. Nothing was found wrong with it. **When the two tabs disagree,
-  the Sell tab is right.**
+  unreconciled branch a sale touches. Nothing was found wrong with it — which is why every other tax
+  surface was made to agree with it rather than the reverse. **They now return the same number for
+  the same shares, asserted by test.**
 - **The tradebook reconciliation panel is honest.** It refuses to claim accuracy when the replay does
   not match the broker, and says every tax figure is an estimate when it doesn't. Only its
   `realized_tax` caption is on the wrong basis.
@@ -292,8 +350,10 @@ Nothing here is applied beyond §6. In priority order:
 - **The gate has not opened.** Nothing in this audit moves the GO scorecard, and none of it should be
   read as validation.
 - **Most of the tax engine has never met a broker statement** — one sell reconciled, single-lot,
-  all-STCG, no loss. §2 makes this worse than it looked: there is a *second* tax path, on a
-  real-money tab, that has never been reconciled against anything at all.
+  all-STCG, no loss. §2 made this worse than it looked: there was a *second* tax path on a real-money
+  tab, never reconciled against anything. There is now **one** path, but it is the same
+  never-reconciled one. **The first multi-lot or LTCG sale must be reconciled against the Zerodha
+  Tax P&L afterwards** — that is the evidence that closes this, and no amount of code will.
 
 ## Runbook — reproducing this audit
 

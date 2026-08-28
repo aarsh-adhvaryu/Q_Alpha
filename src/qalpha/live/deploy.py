@@ -485,8 +485,14 @@ def advise_deploy_into_weakness(
     # pre-2026-08-19 behaviour for comparison.
     breaking: set[str] = set()
     pre_filter_universe = list(universe)
+    # Computed ONCE, over the full pre-filter universe, and reused by every consumer below. The
+    # continuity guard was wired into `cheapness_scores` and not into `position_health`, so the same
+    # screen scored VEDL 22.1% off its high while its own detector called the same name a −59%
+    # breakdown. A superset of names is harmless: each consumer only looks up what it scores.
+    gaps = unexplained_gaps(adj, pre_filter_universe, as_of, actions=known_actions)
+    rebase, untilted = rebase_starts(gaps), excluded_from_tilt(gaps)
     if exclude_breaking:
-        report = position_health(adj, universe, as_of)
+        report = position_health(adj, universe, as_of, rebase_from=rebase, exclude=untilted)
         breaking = {h.ticker for h in report.holdings if h.level == "breaking"}
         healthy = [t for t in universe if t not in breaking]
         # Never starve the basket: if the filter would leave too little to diversify across, keep the
@@ -505,13 +511,12 @@ def advise_deploy_into_weakness(
     if on_cooling_off:
         universe = [t for t in universe if t not in set(do_not_buy)]
 
-    gaps = unexplained_gaps(adj, universe, as_of, actions=known_actions)
     cheap = cheapness_scores(
         prices,
         universe,
         as_of,
-        rebase_from=rebase_starts(gaps),
-        no_tilt=excluded_from_tilt(gaps),
+        rebase_from=rebase,
+        no_tilt=untilted,
     )
     # Keep building the positions you already own (2026-08-20). User's framing, and it is the right
     # one: "if a company is good, and getting a good deal, why not add to it?"
@@ -599,7 +604,9 @@ def advise_deploy_into_weakness(
     # interpretable ("the basket is N× more concentrated in them than the universe it was drawn
     # from") never rendered. It went missing in exactly the case it exists for: the filter failing
     # open and a 🔴 reaching the basket anyway.
-    universe_health = position_health(adj, sorted(pre_filter_universe), as_of).holdings
+    universe_health = position_health(
+        adj, sorted(pre_filter_universe), as_of, rebase_from=rebase, exclude=untilted
+    ).holdings
     by_ticker = {h.ticker: h for h in universe_health}
     health = [by_ticker[t] for t in recommended if t in by_ticker]
     breaking_rate = (

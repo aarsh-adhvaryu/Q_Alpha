@@ -104,7 +104,16 @@ def _out_of_favour_names(as_of: date) -> str:
         top = sorted(cheap.items(), key=lambda kv: kv[1], reverse=True)[:3]
         if not top:
             return ""
-        health = {h.ticker: h for h in position_health(prices.adj_close, tickers, as_of).holdings}
+        health = {
+            h.ticker: h
+            for h in position_health(
+                prices.adj_close,
+                tickers,
+                as_of,
+                rebase_from=rebase_starts(gaps),
+                exclude=excluded_from_tilt(gaps),
+            ).holdings
+        }
         parts = []
         for ticker, score in top:
             icon = health[ticker].icon + " " if ticker in health else ""

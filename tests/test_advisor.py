@@ -336,3 +336,122 @@ def test_a_capped_deploy_sizes_names_against_the_money_actually_being_spent() ->
     assert {o.ticker: o.quantity for o in a.buy_orders} == {
         o.ticker: o.quantity for o in b.buy_orders
     }
+
+
+# ---- advise_raise_cash: the final audit's findings #2 and #3 (2026-08-28) -----------------------
+#
+# The tab quoted its tax from the frozen backtest engine — which by its own docstring defers §70 loss
+# set-off, and calls a lot long-term at 365 days when §2(42A) needs *more than* twelve calendar
+# months — then bolted cess on at the end. The Sell tab quoted the ITR figure for the same shares.
+# On a lot held exactly 365 days that was ₹620 against ₹32,754. Separately, the panel netted the cash
+# against a pre-cess tax while reporting the post-cess one, and its sizing loop made a single pass,
+# so it could silently raise less than asked. These are cross-surface and arithmetic properties, not
+# assertions on particular rupee values.
+
+_AUDIT_AS_OF = date(2026, 8, 28)
+
+
+def _boundary_book() -> Portfolio:
+    """Winners only, with an ITC lot held EXACTLY 365 days on the valuation date."""
+    pf = _pf()
+    _add(pf, "ITC.NS", "900", "250.00", date(2025, 8, 28))  # 365 days: STCG in law, LTCG to engine
+    _add(pf, "SBIN.NS", "200", "600.00", date(2024, 1, 10))
+    _add(pf, "HCLTECH.NS", "60", "1100.00", date(2024, 1, 10))
+    return pf
+
+
+_AUDIT_PRICES = {
+    "ITC.NS": Decimal("425.00"),
+    "SBIN.NS": Decimal("905.00"),
+    "HCLTECH.NS": Decimal("1480.00"),
+}
+
+
+def test_raise_cash_quotes_the_same_tax_engine_as_the_sell_tab() -> None:
+    """One book, one day, one set of shares — the two tabs must not disagree about the tax."""
+    from qalpha.accounting.capital_gains import (
+        apply_long_term_boundary,
+        financial_year,
+        net_capital_gains_tax,
+    )
+
+    cfg = Config()
+    pf = _boundary_book()
+    advice = advise_raise_cash(pf, Decimal("380000"), _AUDIT_PRICES, _AUDIT_AS_OF, cfg)
+
+    # Replay the plan's own orders through the Sell tab's ITR path and demand the same number.
+    clone = pf.clone()
+    realized = []
+    for o in advice.smart_orders:
+        lots, _ = clone.preview_sell(_AUDIT_AS_OF, o.ticker, o.quantity, o.price)
+        lots, _demoted = apply_long_term_boundary(lots, cfg.tax)
+        realized.extend(lots)
+        clone.sell(_AUDIT_AS_OF, o.ticker, o.quantity, o.price)
+    itr = sum(
+        (
+            r.total_tax
+            for r in net_capital_gains_tax(
+                realized, cfg.tax, exemption_used_by_fy={financial_year(_AUDIT_AS_OF): Decimal("0")}
+            )
+        ),
+        Decimal("0"),
+    )
+    assert advice.smart_tax == itr
+
+
+def test_raise_cash_warns_that_a_365_day_lot_is_not_long_term_yet() -> None:
+    """§2(42A) needs more than twelve calendar months; the Sell tab says so and this tab now does."""
+    advice = advise_raise_cash(
+        _boundary_book(), Decimal("380000"), _AUDIT_PRICES, _AUDIT_AS_OF, Config()
+    )
+    assert advice.boundary_demoted
+    assert "NOT long-term yet" in advice.render()
+
+
+def test_the_raise_cash_panel_adds_up_on_its_own_face() -> None:
+    """gross − charges − the tax it reports must equal the cash it says you receive."""
+    pf = _pf()
+    _add(pf, "SBIN.NS", "600", "600.00", date(2026, 6, 1))  # all short-term winners: nothing is
+    _add(pf, "HCLTECH.NS", "200", "1100.00", date(2026, 6, 1))  # hidden inside the FY exemption
+    advice = advise_raise_cash(pf, Decimal("400000"), _AUDIT_PRICES, _AUDIT_AS_OF, Config())
+    assert advice.smart_tax > 0, "a test that passes only at zero tax proves nothing"
+    assert advice.smart_raised == advice.gross_proceeds - advice.charges - advice.smart_tax
+
+
+def test_raise_cash_keeps_drawing_until_the_target_is_met() -> None:
+    """The single-pass loop under-raised whenever tax exceeded its 0.5% price buffer, and said nothing."""
+    pf = _pf()
+    _add(pf, "SBIN.NS", "600", "600.00", date(2026, 6, 1))
+    _add(pf, "HCLTECH.NS", "200", "1100.00", date(2026, 6, 1))
+    advice = advise_raise_cash(pf, Decimal("400000"), _AUDIT_PRICES, _AUDIT_AS_OF, Config())
+    assert advice.smart_raised >= Decimal("400000")
+    assert advice.shortfall == 0
+
+
+def test_raise_cash_says_so_when_the_book_cannot_cover_the_request() -> None:
+    """Falling short is fine; falling short silently is the defect."""
+    pf = _pf()
+    _add(pf, "SBIN.NS", "10", "600.00", date(2026, 6, 1))
+    advice = advise_raise_cash(pf, Decimal("400000"), _AUDIT_PRICES, _AUDIT_AS_OF, Config())
+    assert advice.shortfall > 0
+    assert "short of the" in advice.render()
+
+
+def test_raise_cash_exposes_the_lots_the_unverified_branch_warning_reads() -> None:
+    """This tab exercises multi-lot/LTCG/set-off/exemption on essentially every use, and never said so."""
+    advice = advise_raise_cash(
+        _boundary_book(), Decimal("380000"), _AUDIT_PRICES, _AUDIT_AS_OF, Config()
+    )
+    assert advice.realized, "the warning helper reads `realized`; without it, it silently no-ops"
+
+
+def test_raise_cash_never_sells_more_than_is_held() -> None:
+    """The redraw loop must not walk past a holding's remaining quantity."""
+    pf = _boundary_book()
+    held = pf.positions()
+    advice = advise_raise_cash(pf, Decimal("10000000"), _AUDIT_PRICES, _AUDIT_AS_OF, Config())
+    sold: dict[str, Decimal] = {}
+    for o in advice.smart_orders:
+        sold[o.ticker] = sold.get(o.ticker, Decimal("0")) + o.quantity
+    for ticker, qty in sold.items():
+        assert qty <= held[ticker]
