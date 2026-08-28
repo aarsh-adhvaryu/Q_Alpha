@@ -26,29 +26,54 @@ could never be the thing that runs, and anything the product ran was never what 
 autonomous ever touches Zerodha.**
 
 ```
-   Zerodha tradebook (uploaded)                  ┌─ REAL      your orders, your judgement
-            │                                    │            (advisor-assisted, manual)
-            ▼                                    │
-   FIFO ledger + dated lots ──► cash flows ──────┼─ TWIN-AI   full system, autonomous, AI selector
-   (buys, sells, SIP instalments)                │
-            │                                    ├─ TWIN-DET  full system, autonomous, no AI
-            │                                    │
-            └────────────────────────────────────┴─ BASELINE  NIFTYBEES, do nothing
+   Zerodha tradebook (uploaded)
+            │
+            ▼                              HEADLINE
+   FIFO ledger + dated lots                ┌─ TWIN-FULL   everything on, AI agentic, integrated
+            │                              │       │
+            ▼                              │       ├─ TWIN −AI      ablation: the AI's contribution
+   cash flows ─────────────────────────────┤       ├─ TWIN −HEDGE   ablation: the hedge's
+   (buys, sells, SIP instalments)          │       └─ TWIN −EXITS   ablation: the exits'
+            │                              │
+            │                              ├─ BASELINE    NIFTYBEES, do nothing
+            └──────────────────────────────┴─ REAL        your orders, your judgement
 ```
 
-**Four books. Identical cash flows. Four decision-makers.** Every book receives the same rupees on the
-same days — derived from your actual tradebook — so the only difference is who decides. That isolates
-exactly three questions:
+**One integrated system as the headline; one-factor-removed ablations below it.** Every book receives
+the same rupees on the same days, derived from your actual tradebook, so the only difference is who
+decides. Each ablation removes **exactly one factor** from TWIN-FULL, so every gap is attributable to
+one thing:
 
-| Comparison | Answers |
-|---|---|
-| TWIN-DET − BASELINE | Does the system beat doing nothing? |
-| TWIN-AI − TWIN-DET | Does the AI add anything? (one treatment, as before) |
-| TWIN-DET − REAL | Does autonomy beat your judgement? |
+| Comparison | Answers | Gates? |
+|---|---|---|
+| **TWIN-FULL − BASELINE** | **Does the system beat doing nothing?** | **YES — criterion 3** |
+| TWIN-FULL − (TWIN −AI) | What did the AI contribute? | no — descriptive |
+| TWIN-FULL − (TWIN −HEDGE) | What did the hedge contribute? | no — descriptive |
+| TWIN-FULL − (TWIN −EXITS) | What did the exits contribute? | no — descriptive |
+| TWIN-FULL − REAL | Does autonomy beat your judgement? | no — descriptive |
 
-The third is the one that has never existed, and it is the one that decides whether autonomy should
-ever graduate toward the real account. **It is reported, never gated** — it is information about you,
-not a pass/fail on the system.
+**⚠️ Only the headline gates, and this is load-bearing.** Four comparisons at 95% confidence throw a
+false positive roughly one run in five. If an ablation can also open the gate, the gate eventually
+opens on noise. Ablations inform; they never authorise. The same rule voided forward run 1.
+
+TWIN-FULL − REAL has never been asked before. It decides whether autonomy should ever graduate toward
+the real account — **reported, never gated**: it is information about you, not a pass/fail on the
+system.
+
+### What the AI may do (the agentic boundary)
+
+The AI is **integrated into doing**, not advising: on the twin it may act on **selection** (keep/drop
+from the deterministic candidate set), **sizing** (how much of available cash now vs held), **timing**
+(deploy or wait), **the hedge** (on/off) and **calling an exit**.
+
+It may **not**, enforced in code and asserted by test, exactly as PR-8: invent a name outside the
+deterministic universe; breach the 20% name / 30% sector caps; or **fail closed** — no response, no
+key, an unparseable reply or a refusal all fall back to the deterministic path, so an AI outage
+degrades TWIN-FULL to TWIN −AI rather than to nothing.
+
+*This deliberately reverses PR-8's retirement of the size tilt.* That retirement existed so the run
+tested exactly one treatment; under the ablation design TWIN −AI isolates the AI's **total**
+contribution however many levers it pulls, so the constraint is no longer needed.
 
 **Money-weighted throughout (XIRR).** A monthly SIP is not present for the whole window, so a
 start-to-end percentage is not a rate. This is `live/track_record.py`'s existing contract, extended to
@@ -71,12 +96,12 @@ Replaces §14's criterion set. **All must hold; no criterion may be softened to 
 |---|---|---|---|
 | 1 | Track length | **≥ 12 months** of real cash flows | Below this the comparison is dominated by entry timing, not selection — `MIN_MONTHS_FOR_A_VERDICT`, the same bar that voided forward run 1 |
 | 2 | Volatility event | ≥ one **−10%** Nifty drawdown inside the window | Nobody has watched this system fall. Unchanged from the old gate, and still the criterion most likely to block |
-| 3 | TWIN-DET vs BASELINE | XIRR gap **exceeds the Monte-Carlo noise floor** (§5) net of cost + tax | A gap smaller than the noise is not a result |
+| 3 | **TWIN-FULL** vs BASELINE | XIRR gap **exceeds the Monte-Carlo noise floor** (§5) net of cost + tax | A gap smaller than the noise is not a result. **The only comparison that gates** — ablations are descriptive |
 | 4 | Tax reconciled | ≥ one **multi-lot or LTCG** sale matched to the Zerodha Tax P&L | Exactly one sell has ever been reconciled: single-lot, all-STCG, no loss |
 | 5 | Corporate action reconciled | ≥ one applied live and matched to the broker | Never done. Demerger is not even modelled yet (§6) |
 | 6 | Data integrity | Tradebook reconciles to broker holdings; no unexplained price gaps ungated | Off-market credits and demerger steps both break the ledger silently |
 
-**Reported alongside, never gated:** TWIN-AI − TWIN-DET, TWIN-DET − REAL, and the delivered vs
+**Reported alongside, never gated:** all three ablations, TWIN-FULL − REAL, and the delivered vs
 advertised sector/name caps.
 
 ---
@@ -119,6 +144,24 @@ name whose §4.7 test also reads breaking; **−30%** unconditionally. One varia
 
 ---
 
+## 4a. Selling: least tax, and the gate that decides whether to sell at all
+
+**₹0 tax is a special case, not the objective.** Zero exists only on loss lots and on long-term gains
+inside the ₹1.25L exemption — for this account, nothing until **August 2027**. A rule gated on ₹0
+would be a sell rule that cannot fire.
+
+**Two separate mechanisms, both kept:**
+
+1. **Whether to sell at all — the §4.6 net-benefit gate.** Trade only when the benefit exceeds cost +
+   tax. This is the larger lever by far: it is what produced **18.5% against 15.2%**, and it is the
+   reason low realised turnover is the validated edge. Every autonomous sell on the twin passes it.
+2. **How to sell, once decided — least tax.** `advise_raise_cash` ranks by tax-per-rupee, takes the
+   free portion first (loss lots, then LTCG inside the exemption), then the cheapest taxed lots, and
+   states the ITR figure. Rebuilt on the ITR basis 2026-08-28.
+
+Least tax is *execution*. The gate is *decision*. Confusing the two is how a system talks itself into
+turnover it cannot afford.
+
 ## 5. Monte Carlo — what it is for, and what it is not
 
 You asked for Monte Carlo / GBM to improve the advisor. **It cannot do that, and using it that way
@@ -131,7 +174,7 @@ market that does not exist.
 
 1. **The noise floor (criterion 3).** Block-bootstrap the historical return panel (preserving fat
    tails and autocorrelation, which GBM discards), replay the full system on each path, and take the
-   distribution of TWIN-DET − BASELINE. **The 95th percentile of that distribution under a null of
+   distribution of TWIN-FULL − BASELINE. **The 95th percentile of that distribution under a null of
    "no skill" is the bar the live gap must clear.** This is the single most valuable thing simulation
    gives you, and the current design has no equivalent — forward run 1 was voided precisely because
    nobody knew how big a difference had to be to mean something.
