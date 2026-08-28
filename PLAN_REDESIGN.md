@@ -106,6 +106,63 @@ advertised sector/name caps.
 
 ---
 
+## 2a. Component graduation — replaces the four-pillar endgame contract
+
+**Supersedes 🏁 THE ENDGAME CONTRACT (2026-07-12)**, which required *all four* pillars — core GO,
+System > Baseline, AI verdict, hedge witnessed — before anything reached the real account.
+
+**Why it was wrong:** the hedge is blocked by **capital** (~₹19L, §4b) and by **a crash** (criterion
+2), neither of which is evidence about anything else. The research hedge forward-run proves the point:
+23 marks, **zero episodes**, the gauge never fired. Under the old contract the drawdown exit and
+tax-loss harvesting would have waited years on a futures overlay that cannot legally be placed.
+
+**Two gates, answering different questions:**
+
+| Gate | Question | Comparison | Consequence |
+|---|---|---|---|
+| **System GO** | Should real money follow this system at all? | **TWIN-FULL − BASELINE** only | The headline verdict |
+| **Component graduation** | Should *this piece* reach the real-money surface? | That component's ablation | That piece becomes advisory |
+
+**They are independent.** A component can help inside a system that still loses to the index — those
+are compatible statements. But if TWIN-FULL trails BASELINE, the honest headline stays *"you would
+have done better in NIFTYBEES,"* and no amount of component graduation softens it.
+
+### The graduation bar
+
+A component graduates when **both** hold:
+
+1. Its ablation gap exceeds the **bootstrap noise floor** (§5), net of cost and tax; and
+2. **The sign has held for ≥ 6 consecutive months.**
+
+Condition 2 is the multiplicity guard, and it is why ablations can gate *here* while remaining
+descriptive for the system GO (§1). Four comparisons at 95% throw a false positive about one run in
+five; requiring the same sign to persist across six months of independent marks makes chance
+agreement implausible without the machinery of a formal correction. It is the same hysteresis logic
+already in `scan.py`, applied to evidence instead of alerts.
+
+**Graduation is to ADVISORY, never to execution.** A graduated component appears on the Live tab as a
+priced suggestion — *"consider exiting X, tax ₹Y"*, *"realise these losses before 31 March"* — and the
+user places every order. **Real money never auto-trades** (§10), and graduation does not touch that.
+
+**Graduation is reversible.** If a component's ablation gap decays back inside the noise floor for 3
+consecutive months, it returns to twin-only and the surface says why. Evidence that stops being true
+stops counting.
+
+### Where each component stands
+
+| Component | Blocked by | Earliest graduation |
+|---|---|---|
+| Buy screen / advisor | — **already live** | ⚠️ *in use before any gate, knowingly* (see CLAUDE.md) |
+| Tax-loss harvesting | evidence only | soonest — needs a loser and an FY end |
+| Drawdown exit (§4) | evidence + a fall | needs criterion 2 |
+| §4.7 breakdown exit | evidence | already advisory; graduation formalises it |
+| AI selector | evidence | 6 months of ablation sign |
+| `+CASHHOLD` vs `+DEPLOYHARDER` | **a crash** | needs criterion 2 |
+| **Hedge** | **capital (~₹19L) *and* a crash** | last, by arithmetic — and that is fine |
+
+**The hedge graduating last is not a failure of the hedge.** It is the only component whose blocker is
+a contract-size rule rather than evidence, and nothing about the others should wait on it.
+
 ## 3. What is archived
 
 **Full reset, per decision 2026-08-28.** Archived under `data/archive/2026-08-28/` with a written
