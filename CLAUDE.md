@@ -106,38 +106,75 @@ exactly what it just bought, realizes a loss, triggers tax, and fires constantly
 The exit rule is the §4.7 breakdown test, which distinguishes a name-specific fall from the market
 falling. A stop-loss cannot.
 
-## 🔍 NEXT SESSION — THE FINAL AUDIT (this is the job)
+## ✅ DONE — THE FINAL AUDIT, ALL SIX FIXED (2026-08-28)
 
-**Brief: audit every remaining real-money surface the way the pre-flight audit did, then report.**
+**Full write-up: [reports/FINAL_AUDIT.md](reports/FINAL_AUDIT.md).** Branch `telegram-guard-parity`.
+**522 tests, 0 skipped; ruff + format + mypy green.**
 
-The method that found all five defects, in order:
+**Six defects, all the same defect again** — a number labelled as something it is not, on a surface
+where the label becomes an order. 503 passing tests caught none of them. All six are now fixed.
 
-1. **Refresh the data first.** `uv run python scripts/paper.py refresh` does **not** refresh the
-   benchmark — call `_refresh_benchmark()` too, or you will audit against a stale series (defect 1
-   was found this way, by being bitten by it).
-2. **Instantiate the real account shape**, not a clean fixture: a `Portfolio` with **idle cash *and*
-   holdings**. Four of five defects only appear when cash is non-zero. A zeroed test portfolio hides
-   them, which is exactly why the suite did not catch them.
-3. **Render the surface and reconcile every number against its source.** Not "is this value right"
-   but *"does the label describe the thing that was computed, and do the figures on screen add up to
-   each other"*. Every defect was an internal inconsistency visible on one screen.
-4. **Chase anything surprising in your own scratch output.** See the process lesson above.
+| # | Surface | Said | Truth |
+|---|---|---|---|
+| 1 | Track record (#71) | "ahead by **₹4,01,677**" (+444.2%) | ahead by **₹1,677** (+1.2%) |
+| 2 | Raise cash | "₹620 tax" | **₹9,570** — Sell tab said ₹32,754 for the same shares |
+| 3 | Raise cash | "Raises ₹3,92,610.50" | ₹3,91,675.88, and ₹7,389 short of the ask |
+| 4 | Holdings table | HCLTECH "3.3%" | **17.8%**; column summed to 18.6% |
+| 5 | `position_health` | VEDL "−59%, breaking down" | a demerger step: **+2%** since it |
+| 6 | Telegram scan | "VEDL −65% off high" | −22% once re-based |
 
-**Surfaces already audited (2026-08-24 / 08-27):** the buy screen (`advise_deploy_into_weakness`), the
-deploy heading, the GO scorecard, the Live tile row.
+**#1 was the worst and was pinned in place by a test.**
+`test_the_track_record_is_on_the_real_money_page` asserted the literal string
+`track_record(trades, portfolio.market_value(prices), ...)` — the suite would have gone **red** if
+anyone had fixed it. `market_value` is cash + holdings, and the benchmark leg is built from traded
+rupees alone, so ₹4L of parked SIP money read as pure outperformance on the one panel whose asserted
+property is that it *must be able to say "behind by ₹X"*. Now `holdings_value`; the test forbids
+`market_value(` by name and a behavioural test marks the same book both ways.
 
-**Surfaces NOT yet audited — start here:** the **Sell tab** (`advise_sell` — quoted tax, set-off,
-LTCG-safe dates, the unverified-branch warning), the **Raise cash tab** (`advise_raise_cash` — least-tax
-ordering), the **holdings table** (`_holdings_frame`), **position health**, the **System tab's** book
-comparison and per-book holdings, the **tradebook reconciliation** panel, and the **track record panel**
-(#71) once real trades exist to drive it.
+**#2 was two tax engines on one book.** `advise_raise_cash` costed its plan on the frozen backtest
+engine (no §70 set-off, no §112A, **no §2(42A) 12-calendar-month correction**) and bolted cess on at
+the end. It now runs the Sell tab's path: boundary-corrected lots, one `net_capital_gains_tax` over
+the **whole plan** (tax is not attributable per order — §70 nets across names), redraw-until-met, and
+**re-costed as the merged orders the user actually places**. Under-quote is now ₹0.00 at every level,
+asserted by replaying the plan through the Sell tab's engine. The tab also finally shows the
+unverified-branch warning and the "NOT long-term yet" demotion.
 
-Then produce a written verdict the user can act on: what is trustworthy, what is not, what he should
-do differently. The previous audit's deliverable is the shape to match — findings with reproduced
-numbers, fixes shipped as a PR, standing limitations stated plainly, and a runbook.
+**#5 fixed the last unguarded consumer of `adj_close`.** `position_health` takes
+`rebase_from`/`exclude` on the same default-off contract PR-2 gave `cheapness_scores`; the
+cross-sectional median is computed **after** re-basing; the note no longer claims "~6mo" for a
+shorter window. Every live caller routes through it — dashboards via one `_guarded_health` helper.
 
-**Do NOT:** re-run the SIP backtest (adding a month to thirteen years restates the same answer, and it
-is deliberately not on any cron), tune anything toward a GO, or soften a red.
+**Rule (a) holds, provably:** `git diff --name-only` touches **no** file under
+`src/qalpha/{backtest, accounting, data, config}`. Every new guard defaults to off, so the SIP
+backtest's own `position_health` call is bit-for-bit unchanged (asserted by test).
+
+### The process lesson — second time running
+
+> **When you fix a defect, grep for every other caller of the thing you fixed.**
+
+#74 separated shares from cash in `account_overview` — `market_value` had two other live callers, and
+#1 was merged in the same fortnight. PR-2 guarded `cheapness_scores` — `adj_close` had two other
+unguarded consumers. Both fixes were correct; both were applied at one call site and reasoned about
+as if applied to a concept. Corollary from #1: **a test that asserts a source line pins that line's
+bug in place** — assert the property.
+
+**⚠️ `scripts/paper.py refresh` refreshes neither the benchmark nor the watchlist panel.** Call
+`_refresh_benchmark()` and `build_nifty100_watchlist.py --prices` too, or you audit stale data.
+
+### Left open, deliberately
+
+- The tradebook panel captions `result.realized_tax` as "realized capital-gains tax to date" — the
+  backtest engine's figure, not the ITR number, unlabelled as an estimate. A caption on history, not
+  an input to an order.
+- `_liquidation_efficiency` still ranks each holding against the **full** remaining FY exemption in
+  isolation, so the source *ordering* is a documented heuristic. The quoted tax is exact.
+- The System tab's book comparison (fake money, captioned as such).
+- **Nothing is merged to `main`** — this branch, and the earlier `docs-real-money` commit.
+
+**The first multi-lot or LTCG sale must be reconciled against the Zerodha Tax P&L afterwards.** There
+is now one tax path instead of two, but it is still the path that has met exactly one broker
+statement (single-lot, all-STCG, no loss, ₹25.25, Δ ₹0.00). Code cannot close that; a reconciliation
+can.
 
 ## ✅ CLOSED — TRUST REPAIR (2026-08-17, all eight PRs merged)
 

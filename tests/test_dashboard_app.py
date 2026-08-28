@@ -209,7 +209,16 @@ def test_the_track_record_is_on_the_real_money_page() -> None:
     panel = inspect.getsource(dashboard_app._track_record_panel)
     # It must mark against the prices the page is actually showing, and against the same benchmark
     # every other "vs Nifty" number on the dashboard uses — not a second, privately-loaded series.
-    assert "track_record(trades, portfolio.market_value(prices), benchmark, as_of)" in panel
+    assert "benchmark, as_of)" in panel
+    # SHARES ONLY. The benchmark leg is built from the traded rupees alone, so passing market_value
+    # (cash + holdings) compares a column containing next month's parked SIP instalment against one
+    # that cannot contain it: ₹4L parked against a ₹1L basket rendered "+444.2%, ahead by ₹4,01,677"
+    # where the truth was +1.2% and ₹1,677. This assertion previously pinned that exact expression in
+    # place, which is why 503 passing tests did not catch it — so it now forbids that call.
+    assert "portfolio.holdings_value(prices)" in panel
+    assert "market_value(" not in panel, (
+        "the track record must not count idle cash as investment performance"
+    )
 
 
 def test_the_track_record_never_takes_the_page_down_with_it() -> None:
@@ -221,3 +230,50 @@ def test_the_track_record_never_takes_the_page_down_with_it() -> None:
     panel = inspect.getsource(dashboard_app._track_record_panel)
     assert "except Exception" in panel
     assert "if not trades:\n        return" in panel
+
+
+# ---- final audit, 2026-08-28: idle cash must not leak into a portfolio-weight column -------------
+
+
+def test_holdings_weights_are_of_equity_and_are_unmoved_by_idle_cash() -> None:
+    """The column read 3.3% for a position that was 17.8% of the portfolio, and summed to 18.6%.
+
+    ``Portfolio.current_weights`` divides by cash + holdings, which is right for the paper book's NAV
+    and wrong for a real account where the cash is next month's SIP instalment, not an allocation.
+    That column is how concentration is read by eye against the advisor's own 20% max-name and 30%
+    sector caps, so a 5.4× understatement is load-bearing. ``current_weights`` itself is untouched —
+    the validated decision layer depends on the NAV basis.
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    import dashboard_app
+
+    from qalpha.accounting.tax_lots import TaxLot
+    from qalpha.backtest.portfolio import Portfolio
+    from qalpha.config import Config
+
+    cfg = Config()
+    prices = {"A.NS": Decimal("100"), "B.NS": Decimal("100")}
+
+    def _book(cash: str) -> Portfolio:
+        pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal(cash))
+        for t, q in (("A.NS", "80"), ("B.NS", "20")):
+            pf.ledger.add_lot(
+                TaxLot(
+                    ticker=t,
+                    acquisition_date=date(2026, 1, 1),
+                    quantity_original=Decimal(q),
+                    buy_price=Decimal("100"),
+                )
+            )
+        return pf
+
+    as_of = date(2026, 8, 28)
+    lean = dashboard_app._holdings_frame(_book("0"), prices, as_of)
+    parked = dashboard_app._holdings_frame(_book("400000"), prices, as_of)
+
+    assert list(lean["% of equity"]) == ["80.0%", "20.0%"]
+    # The identical book with ₹4L of SIP money parked beside it must read identically.
+    assert list(parked["% of equity"]) == list(lean["% of equity"])
+    assert sum(float(x.rstrip("%")) for x in parked["% of equity"]) == pytest.approx(100.0)

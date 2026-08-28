@@ -337,7 +337,16 @@ def _name_verdicts(
     cheap = cheapness_scores(
         prices, tickers, as_of, rebase_from=rebase_starts(gaps), no_tilt=excluded_from_tilt(gaps)
     )
-    health = {h.ticker: h for h in position_health(prices.adj_close, tickers, as_of).holdings}
+    health = {
+        h.ticker: h
+        for h in position_health(
+            prices.adj_close,
+            tickers,
+            as_of,
+            rebase_from=rebase_starts(gaps),
+            exclude=excluded_from_tilt(gaps),
+        ).holdings
+    }
     candidates = [
         Candidate(
             ticker=t,
