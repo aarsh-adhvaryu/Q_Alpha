@@ -106,60 +106,75 @@ exactly what it just bought, realizes a loss, triggers tax, and fires constantly
 The exit rule is the §4.7 breakdown test, which distinguishes a name-specific fall from the market
 falling. A stop-loss cannot.
 
-## ✅ DONE — THE FINAL AUDIT (2026-08-28)
+## ✅ DONE — THE FINAL AUDIT, ALL SIX FIXED (2026-08-28)
 
-**Full write-up: [reports/FINAL_AUDIT.md](reports/FINAL_AUDIT.md)** — six findings with reproduced
-numbers, a recommended fix order, and the runbook.
+**Full write-up: [reports/FINAL_AUDIT.md](reports/FINAL_AUDIT.md).** Branch `telegram-guard-parity`.
+**522 tests, 0 skipped; ruff + format + mypy green.**
 
 **Six defects, all the same defect again** — a number labelled as something it is not, on a surface
-where the label becomes an order. 503 passing tests caught none of them, for the same reason as last
-time. Only #6 was fixed (the scope the user agreed); **#1–#5 are reported and NOT applied.**
+where the label becomes an order. 503 passing tests caught none of them. All six are now fixed.
 
-| # | Surface | Says | Truth | Fixed |
-|---|---|---|---|---|
-| 1 | Track record (#71) | "ahead by **₹4,01,677**" | ahead by **₹1,677** | no |
-| 2 | Raise cash | "₹620 tax" | **₹9,570** | no |
-| 3 | Raise cash | "Raises ₹3,92,610.50" | ₹3,91,675.88 | no |
-| 4 | Holdings table | HCLTECH "3.3%" | **17.8%** | no |
-| 5 | `position_health` | VEDL "−59%, breaking" | a demerger step, −22% | no |
-| 6 | Telegram scan | "VEDL −65% off high" | −22% once re-based | **yes** |
+| # | Surface | Said | Truth |
+|---|---|---|---|
+| 1 | Track record (#71) | "ahead by **₹4,01,677**" (+444.2%) | ahead by **₹1,677** (+1.2%) |
+| 2 | Raise cash | "₹620 tax" | **₹9,570** — Sell tab said ₹32,754 for the same shares |
+| 3 | Raise cash | "Raises ₹3,92,610.50" | ₹3,91,675.88, and ₹7,389 short of the ask |
+| 4 | Holdings table | HCLTECH "3.3%" | **17.8%**; column summed to 18.6% |
+| 5 | `position_health` | VEDL "−59%, breaking down" | a demerger step: **+2%** since it |
+| 6 | Telegram scan | "VEDL −65% off high" | −22% once re-based |
 
-**⚠️ #1 is the serious one and it is one word.** `dashboard_app.py:1562` passes
-`portfolio.market_value(prices)` — **cash + holdings** — as the track record's `value`, against a
-benchmark leg built only from traded rupees. With ₹4L of SIP money parked it renders **"+444.2%,
-ahead by ₹4,01,677"**. The panel whose asserted design property is that it *must be able to say
-"behind by ₹X"* currently cannot. **Until it is fixed, that panel is not readable.** Fix:
-`holdings_value`.
+**#1 was the worst and was pinned in place by a test.**
+`test_the_track_record_is_on_the_real_money_page` asserted the literal string
+`track_record(trades, portfolio.market_value(prices), ...)` — the suite would have gone **red** if
+anyone had fixed it. `market_value` is cash + holdings, and the benchmark leg is built from traded
+rupees alone, so ₹4L of parked SIP money read as pure outperformance on the one panel whose asserted
+property is that it *must be able to say "behind by ₹X"*. Now `holdings_value`; the test forbids
+`market_value(` by name and a behavioural test marks the same book both ways.
 
-**#2 is the other one that costs money.** `advise_raise_cash` costs its plan on the frozen backtest
-tax engine (no §70 set-off, no §112A, **no §2(42A) 12-calendar-month correction**) and bolts cess on
-at the end; `advise_sell` quotes the real ITR figure. On a lot held exactly 365 days the two tabs
-report **₹620 vs ₹32,754** for the same shares. **When they disagree, the Sell tab is right.** The
-Raise-cash tab also never shows the unverified-branch warning, though it exercises those branches on
-every use.
+**#2 was two tax engines on one book.** `advise_raise_cash` costed its plan on the frozen backtest
+engine (no §70 set-off, no §112A, **no §2(42A) 12-calendar-month correction**) and bolted cess on at
+the end. It now runs the Sell tab's path: boundary-corrected lots, one `net_capital_gains_tax` over
+the **whole plan** (tax is not attributable per order — §70 nets across names), redraw-until-met, and
+**re-costed as the merged orders the user actually places**. Under-quote is now ₹0.00 at every level,
+asserted by replaying the plan through the Sell tab's engine. The tab also finally shows the
+unverified-branch warning and the "NOT long-term yet" demotion.
 
-**The process lesson, and it is the second time: when you fix a defect, grep for every other caller
-of what you fixed.** #74 separated shares from cash in `account_overview` — `market_value` had two
-other live callers, and #1 above was merged in the same fortnight. PR-2 guarded `cheapness_scores` —
-`adj_close` had two other unguarded consumers (`position_health`, the Telegram scan). Both fixes were
-correct; both were applied at one call site and reasoned about as if applied to a concept.
+**#5 fixed the last unguarded consumer of `adj_close`.** `position_health` takes
+`rebase_from`/`exclude` on the same default-off contract PR-2 gave `cheapness_scores`; the
+cross-sectional median is computed **after** re-basing; the note no longer claims "~6mo" for a
+shorter window. Every live caller routes through it — dashboards via one `_guarded_health` helper.
+
+**Rule (a) holds, provably:** `git diff --name-only` touches **no** file under
+`src/qalpha/{backtest, accounting, data, config}`. Every new guard defaults to off, so the SIP
+backtest's own `position_health` call is bit-for-bit unchanged (asserted by test).
+
+### The process lesson — second time running
+
+> **When you fix a defect, grep for every other caller of the thing you fixed.**
+
+#74 separated shares from cash in `account_overview` — `market_value` had two other live callers, and
+#1 was merged in the same fortnight. PR-2 guarded `cheapness_scores` — `adj_close` had two other
+unguarded consumers. Both fixes were correct; both were applied at one call site and reasoned about
+as if applied to a concept. Corollary from #1: **a test that asserts a source line pins that line's
+bug in place** — assert the property.
 
 **⚠️ `scripts/paper.py refresh` refreshes neither the benchmark nor the watchlist panel.** Call
-`_refresh_benchmark()` and `build_nifty100_watchlist.py --prices` too, or you audit against stale
-data (this is how defect 1 of the *pre-flight* audit was found).
+`_refresh_benchmark()` and `build_nifty100_watchlist.py --prices` too, or you audit stale data.
 
-**PR (branch `telegram-guard-parity`): the alert path now matches the dashboard.** PR-2's
-price-continuity guard and PR-3's candidate-health verdict were wired into the Add-money tab and not
-into `scripts/scan_alerts.py`, so the daily Telegram alert ranked on raw `adj_close` — beneath
-"deploy 50% of idle cash now", on his phone, unprompted. `alert_state.json` shows
-`weakness_level: elevated`, so those names **had already been sent**. Top three went from
-`VEDL −65%, TRENT −47%, IRFC −35%` to `🔴 IRFC −35%, 🔴 ITC −33%, 🔴 INFY −32%` plus a line naming
-what the guard adjusted. Flag, never veto (asserted by test). **508 tests, 0 skipped.**
-⚠️ The health verdict the alert now carries is itself computed unguarded (#5) — this makes the phone
-match the screen; it does not make the detector correct. Fixing #5 fixes both.
+### Left open, deliberately
 
-**Still not audited:** the System tab's book comparison and per-book holdings (fake money, explicitly
-captioned as such — deliberately deprioritised against the real-money surfaces above).
+- The tradebook panel captions `result.realized_tax` as "realized capital-gains tax to date" — the
+  backtest engine's figure, not the ITR number, unlabelled as an estimate. A caption on history, not
+  an input to an order.
+- `_liquidation_efficiency` still ranks each holding against the **full** remaining FY exemption in
+  isolation, so the source *ordering* is a documented heuristic. The quoted tax is exact.
+- The System tab's book comparison (fake money, captioned as such).
+- **Nothing is merged to `main`** — this branch, and the earlier `docs-real-money` commit.
+
+**The first multi-lot or LTCG sale must be reconciled against the Zerodha Tax P&L afterwards.** There
+is now one tax path instead of two, but it is still the path that has met exactly one broker
+statement (single-lot, all-STCG, no loss, ₹25.25, Δ ₹0.00). Code cannot close that; a reconciliation
+can.
 
 ## ✅ CLOSED — TRUST REPAIR (2026-08-17, all eight PRs merged)
 

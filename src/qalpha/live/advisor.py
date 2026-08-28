@@ -22,7 +22,7 @@ snapshot later with no change.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import ROUND_CEILING, ROUND_DOWN, Decimal
 
@@ -310,7 +310,16 @@ def advise_sell(
 
 @dataclass(frozen=True)
 class RaiseCashAdvice:
-    """Which holdings to sell to raise ``amount`` at the least tax, vs a naive pro-rata sell."""
+    """Which holdings to sell to raise ``amount`` at the least tax, vs a naive pro-rata sell.
+
+    ``smart_tax`` is the **real ITR figure**, on the identical basis as :class:`SellAdvice` — §70
+    set-off, the §2(42A) 12-calendar-month boundary, the FY exemption and the 4% cess. It used to be
+    a sum of per-lot ``Portfolio.sell`` taxes: the frozen backtest engine, which by its own docstring
+    defers loss set-off and calls a lot long-term at 365 days when the law needs *more than* twelve
+    calendar months. On a lot held exactly 365 days that quoted ₹620 against a true ₹9,570, while the
+    Sell tab priced the same shares at ₹32,754 and warned they were not long-term yet. Two surfaces,
+    one book, one day, two answers — so both now run the same engine.
+    """
 
     as_of: date
     amount: Decimal
@@ -319,6 +328,15 @@ class RaiseCashAdvice:
     smart_raised: Decimal
     naive_tax: Decimal
     tax_saved: Decimal
+    charges: Decimal = _ZERO  # brokerage/STT/stamp on the smart plan
+    realized: list[RealizedGain] = field(default_factory=list)  # every lot the plan consumes
+    boundary_demoted: tuple[RealizedGain, ...] = ()  # 365+ days but not 12 calendar months
+    shortfall: Decimal = _ZERO  # requested minus actually raised, when the book cannot cover it
+    ltcg_sheltered: Decimal = _ZERO  # long-term gain absorbed by the FY exemption
+
+    @property
+    def gross_proceeds(self) -> Decimal:
+        return sum((o.quantity * o.price for o in self.smart_orders), _ZERO)
 
     def render(self) -> str:
         lines = [
@@ -327,15 +345,44 @@ class RaiseCashAdvice:
             "**Tax-smart source order** (long-term lots and losers first, gains kept in the "
             "exemption):",
             "",
-            "| Sell | Qty | Price | Tax |",
+            "| Sell | Qty | Price | Gross |",
             "|---|---|---|---|",
         ]
         for o in self.smart_orders:
-            lines.append(f"| {o.ticker} | {o.quantity} | {_rupees(o.price)} | {_rupees(o.tax)} |")
+            lines.append(
+                f"| {o.ticker} | {o.quantity} | {_rupees(o.price)} | "
+                f"{_rupees(o.quantity * o.price)} |"
+            )
+        # Every line below must reconcile to the one above it. The old panel netted the cash against
+        # a pre-cess tax while reporting the post-cess figure, so "Raises ₹392,610.50 for ₹24,300.19
+        # tax" was ₹934.62 out on its own face, and the per-order tax column did not sum to the
+        # headline. Tax is a property of the *plan* (§70 nets across names), not of one order, so it
+        # is stated once, here, where it is subtracted.
         lines += [
             "",
-            f"- Raises {_rupees(self.smart_raised)} for **{_rupees(self.smart_tax)} tax**.",
-            f"- A naive pro-rata sell across all holdings would cost {_rupees(self.naive_tax)}.",
+            f"- Gross proceeds: {_rupees(self.gross_proceeds)}",
+            f"- Less charges: {_rupees(self.charges)}",
+            f"- Less capital-gains tax: **{_rupees(self.smart_tax)}** "
+            "(§70 set-off + FY exemption + 4% cess — the ITR figure)",
+            f"- **Cash you receive: {_rupees(self.smart_raised)}**",
+        ]
+        if self.shortfall > 0:
+            lines.append(
+                f"- ⚠️ **{_rupees(self.shortfall)} short of the {_rupees(self.amount)} you asked "
+                "for** — selling everything sellable does not raise it. Nothing here is wrong; the "
+                "book cannot cover the request."
+            )
+        if self.boundary_demoted:
+            qty = sum((g.quantity for g in self.boundary_demoted), _ZERO)
+            names = ", ".join(sorted({g.ticker for g in self.boundary_demoted}))
+            lines.append(
+                f"- ⚠️ **{qty} share(s) in {names} are NOT long-term yet**, despite being held 365+ "
+                "days: the law needs *more than* 12 calendar months, so they are taxed at **20%**, "
+                "not 12.5%. Waiting a few days is the cheapest change you can make to this plan."
+            )
+        lines += [
+            f"- A naive pro-rata sell across all holdings would cost {_rupees(self.naive_tax)} on "
+            "the same basis.",
             f"- **Tax saved: {_rupees(self.tax_saved)}.**",
         ]
         return "\n".join(lines)
@@ -352,15 +399,23 @@ class _Liquidation:
 
 
 def _liquidation_efficiency(
-    portfolio: Portfolio, prices: Mapping[str, Decimal], as_of: date
+    portfolio: Portfolio, prices: Mapping[str, Decimal], as_of: date, cfg: Config
 ) -> list[_Liquidation]:
-    """Per-holding full-liquidation cost, ranked by tax per rupee raised (cheapest first)."""
+    """Per-holding full-liquidation cost, ranked by tax per rupee raised (cheapest first).
+
+    Ranked on the **boundary-corrected** tax: a lot held exactly 365 days is long-term to the engine
+    and short-term to the law, so the raw figure ranked such a holding as the cheapest source when it
+    is among the dearest. This is a ranking heuristic — each holding is costed in isolation against
+    the full remaining FY exemption, which several holdings cannot all use — so the *order* is
+    advisory. The plan's quoted tax is not: it is computed on the executed plan as a whole.
+    """
     rows: list[_Liquidation] = []
     for ticker, qty in portfolio.positions().items():
         price = prices.get(ticker)
         if price is None or price <= 0:
             continue
         realized, cb = portfolio.preview_sell(as_of, ticker, qty, price)
+        realized, _demoted = apply_long_term_boundary(realized, cfg.tax)
         tax = sum((g.tax for g in realized), _ZERO)
         proceeds = qty * price - cb.total - tax
         per_rupee = float(tax / proceeds) if proceeds > 0 else 0.0
@@ -369,53 +424,122 @@ def _liquidation_efficiency(
     return rows
 
 
+def _itr_tax(
+    realized: list[RealizedGain], cfg: Config, exemption_used: Mapping[int, Decimal]
+) -> Decimal:
+    """The plan's tax as the ITR computes it — §70 set-off, FY exemption, 4% cess. One number.
+
+    Tax cannot be attributed per order: a loss in one name sets off a gain in another, so the plan's
+    liability is a property of the whole plan. Summing per-order taxes (the old behaviour) could only
+    ever over-state the set-off case and under-state the boundary case, and never reconciled to the
+    cash line beneath it.
+    """
+    rows = net_capital_gains_tax(realized, cfg.tax, exemption_used_by_fy=dict(exemption_used))
+    return sum((r.total_tax for r in rows), _ZERO)
+
+
 def advise_raise_cash(
     portfolio: Portfolio,
     amount: Decimal,
     prices: Mapping[str, Decimal],
     as_of: date,
+    cfg: Config | None = None,
 ) -> RaiseCashAdvice:
     """Plan the least-tax way to raise ``amount`` in cash, vs a naive pro-rata liquidation.
 
-    The smart plan is costed exactly by replaying the chosen sells on a clone in order (the FY LTCG
-    exemption depletes across sequential sells, so order matters). Share counts are sized off the
-    gross price, so the cash actually raised can be a touch below ``amount`` once tax is netted —
-    the figures are advisory, the tax numbers are exact.
+    The plan is built by drawing from the cheapest source until it is exhausted, then the next, and
+    is **re-costed on the ITR basis after every sale** — so the loop stops on the cash actually
+    received, not on an estimate. Three defects this closes, all found on one panel:
+
+    * the quoted tax came from the frozen backtest engine (no §70 set-off, no §2(42A) boundary) while
+      the Sell tab quoted the ITR figure for the same shares — ₹620 against ₹32,754;
+    * ``smart_raised`` netted the pre-cess tax while ``smart_tax`` reported the post-cess one, so
+      "Raises ₹X for ₹Y tax" was out by the cess on its own face;
+    * the sizing loop made a single pass over holdings, so when tax exceeded the 0.5% price buffer it
+      silently under-raised — ₹4,00,000 asked, ₹3,92,610 raised, 466 shares still held, no mention.
+      It now keeps drawing, and says so plainly when the book genuinely cannot cover the request.
     """
-    ranked = _liquidation_efficiency(portfolio, prices, as_of)
+    cfg = cfg or Config()
+    fy = financial_year(as_of)
+    used = {fy: portfolio.gains.ltcg_realized(fy)}
+    ranked = _liquidation_efficiency(portfolio, prices, as_of, cfg)
 
     smart = portfolio.clone()
     orders: list[TradeRecord] = []
+    realized_all: list[RealizedGain] = []
+    demoted_all: list[RealizedGain] = []
+    charges = _ZERO
+    gross = _ZERO
     raised = _ZERO
+    remaining = {r.ticker: r.quantity for r in ranked}
+
     for row in ranked:
+        # Draw from this source until it is exhausted or the target is met, re-costing each time.
+        while raised < amount and remaining[row.ticker] > 0:
+            need = amount - raised
+            # Size off a slightly discounted price so the net (post cost+tax) clears ``need`` in one
+            # go rather than spilling a stray share into the next — usually dearer — holding.
+            buffered = row.price * Decimal("0.995")
+            shares = min(
+                remaining[row.ticker], (need / buffered).to_integral_value(rounding=ROUND_CEILING)
+            )
+            if shares <= 0:
+                break
+            # Capture the per-lot gains on the identical pre-sell state (the same preview-then-sell
+            # pairing ``replay_tradebook`` uses), boundary-correct them, then execute.
+            lots, _cb = smart.preview_sell(as_of, row.ticker, shares, row.price)
+            lots, demoted = apply_long_term_boundary(lots, cfg.tax)
+            rec = smart.sell(as_of, row.ticker, shares, row.price)
+            realized_all.extend(lots)
+            demoted_all.extend(demoted)
+            orders.append(rec)
+            remaining[row.ticker] -= shares
+            gross += shares * row.price
+            charges += rec.cost
+            raised = gross - charges - _itr_tax(realized_all, cfg, used)
         if raised >= amount:
             break
-        need = amount - raised
-        # Size off a slightly discounted price so the net (post cost+tax) clears ``need`` in one
-        # source instead of spilling a stray share into the next — usually more taxable — holding.
-        buffered = row.price * Decimal("0.995")
-        shares = min(row.quantity, (need / buffered).to_integral_value(rounding=ROUND_CEILING))
-        if shares <= 0:
-            continue
-        rec = smart.sell(as_of, row.ticker, shares, row.price)
+    # The loop above sizes the plan; it can draw from one source several times, but the user places
+    # ONE order per name. Charges and per-lot gains both depend on trade size, so the plan is now
+    # **re-costed from scratch as the orders he will actually place** — quoting a merged order while
+    # costing three split ones would reintroduce the very thing this audit is about: a number that
+    # does not describe the thing beside it.
+    quantities: dict[str, Decimal] = {}
+    for o in orders:
+        quantities[o.ticker] = quantities.get(o.ticker, _ZERO) + o.quantity
+    final = portfolio.clone()
+    orders, realized_all, demoted_all = [], [], []
+    gross = charges = _ZERO
+    for ticker in [r.ticker for r in ranked if r.ticker in quantities]:
+        qty, price = quantities[ticker], next(r.price for r in ranked if r.ticker == ticker)
+        lots, _cb = final.preview_sell(as_of, ticker, qty, price)
+        lots, demoted = apply_long_term_boundary(lots, cfg.tax)
+        rec = final.sell(as_of, ticker, qty, price)
+        realized_all.extend(lots)
+        demoted_all.extend(demoted)
         orders.append(rec)
-        raised += shares * row.price - rec.cost - rec.tax
-    cess_rate = portfolio.tax_cfg.cess_rate  # real ITR figures include the 4% cess
-    smart_tax = _add_cess(sum((o.tax for o in orders), _ZERO), cess_rate)
+        gross += qty * price
+        charges += rec.cost
+    smart_tax = _itr_tax(realized_all, cfg, used)
+    raised = gross - charges - smart_tax
 
-    # Naive baseline: sell the same fraction of every holding to raise ``amount``.
+    # Naive baseline: sell the same fraction of every holding to raise ``amount`` — costed on the
+    # SAME basis, or "tax saved" would be a difference between two different tax engines.
     naive = portfolio.clone()
+    naive_realized: list[RealizedGain] = []
     holdings_value = portfolio.holdings_value(prices)
     frac = min(Decimal("1"), amount / holdings_value) if holdings_value > 0 else _ZERO
-    naive_tax = _ZERO
     for ticker, qty in portfolio.positions().items():
-        price = prices.get(ticker)
-        if price is None or price <= 0:
+        mark = prices.get(ticker)
+        if mark is None or mark <= 0:
             continue
         shares = (qty * frac).to_integral_value(rounding=ROUND_DOWN)
         if shares > 0:
-            naive_tax += naive.sell(as_of, ticker, shares, price).tax
-    naive_tax = _add_cess(naive_tax, cess_rate)
+            lots, _cb = naive.preview_sell(as_of, ticker, shares, mark)
+            lots, _demoted = apply_long_term_boundary(lots, cfg.tax)
+            naive_realized.extend(lots)
+            naive.sell(as_of, ticker, shares, mark)
+    naive_tax = _itr_tax(naive_realized, cfg, used)
 
     return RaiseCashAdvice(
         as_of=as_of,
@@ -425,6 +549,19 @@ def advise_raise_cash(
         smart_raised=raised,
         naive_tax=naive_tax,
         tax_saved=naive_tax - smart_tax,
+        charges=charges,
+        realized=realized_all,
+        boundary_demoted=tuple(demoted_all),
+        shortfall=max(_ZERO, amount - raised),
+        ltcg_sheltered=sum(
+            (
+                r.ltcg_exempted
+                for r in net_capital_gains_tax(
+                    realized_all, cfg.tax, exemption_used_by_fy=dict(used)
+                )
+            ),
+            _ZERO,
+        ),
     )
 
 
