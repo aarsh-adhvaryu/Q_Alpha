@@ -56,18 +56,36 @@ Tokens are Kite-internal (WIPRO 969473, JIOFIN 4644609) and cannot be derived fr
 a basket for arbitrary names needs Kite's instruments dump; the tradebook/holdings path already deals
 in `tradingsymbol`, so the mapping has to be built and cached.
 
-## ⚠️ UNVERIFIED: the round trip
+## ✅ VERIFIED: the round trip works (2026-08-28)
 
-This file proves what Kite **exports**. It does **not** prove what Kite **imports**. Open questions:
+`kite_basket_roundtrip_test.json` — machine-written, `id` stripped, prices altered — **imported
+cleanly into Kite web.** Both rows rendered correctly: BUY WIPRO NSE LIMIT ₹90 CNC (LTP ₹180.95) and
+SELL JIOFIN NSE LIMIT ₹600 CNC (LTP ₹238.40), required margin ₹90.
 
-1. Is `id` required, optional, or ignored on a generated file?
-2. Is the full 23-key `instrument` object required, or is `tradingsymbol` + `exchange` enough?
-3. Is there a row limit?
+Settled:
 
-**These are settled by importing a machine-written file, not by reading.** `data/fixtures/
-kite_basket_roundtrip_test.json` is the first probe: identical instruments, `id` removed, prices
-changed. Both prices are deliberately unfillable (WIPRO buy ₹90 vs ~₹180 market; JIOFIN sell ₹600 vs
-~₹238), so even an accidental execute rests unfilled and is cancelled.
+| Question | Answer |
+|---|---|
+| Is `id` required? | **No** — omitted, imported fine. Never generate it. |
+| Does a machine-written file import? | **Yes** |
+| Row limit? | **20 per basket** — the UI header reads `Instrument (2 / 20)` |
+
+### ⚠️ 20 orders per basket is a hard cap
+
+Any basket over 20 rows must be **split**, and the generator must do the splitting rather than emit a
+file that silently truncates. The `max_names` slider defaults to 15 and the opening basket used 8, so
+this does not bite today — but a harvest across a large book, or a deploy at a high slider setting,
+can reach it. Encode as a constant with a test.
+
+### Still open (low priority)
+
+Whether the **full 23-key `instrument` object** is required, or a minimal subset suffices.
+`kite_basket_minimal_test.json` keeps only `tradingsymbol`, `exchange`, `segment`,
+`instrumentToken`, `exchangeToken`, `tickSize`, `lotSize`, `type`, `isEquity` and drops the 14
+decorative UI fields (`company`, `fullName`, `niceName`, `niceNameHTML`, `stockWidget`, `precision`,
+`scripCode`, `symbol`, `tradable`, `isin`, `related`, `underlying`, `auctionNumber`, `isWeekly`,
+`isFound`). If it imports, the generator never has to synthesise them — Kite's public instruments dump
+carries the nine that remain. Prices again unfillable (WIPRO ₹85, JIOFIN ₹650).
 
 **Import is Kite web only** — Orders → Baskets → New Basket → Import basket icon. No basket import on
 the mobile app, so any flow ending in a basket ends at a desktop.
