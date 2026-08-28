@@ -230,3 +230,46 @@ def test_a_book_that_tracks_the_index_exactly_shows_no_edge() -> None:
     assert record is not None
     assert record.ahead_by is not None
     assert abs(record.ahead_by) < Decimal("1500")  # within a rounding band of the index leg
+
+
+def test_parked_cash_is_not_investment_performance() -> None:
+    """Findings #1 of the final audit (2026-08-28): the call site passed cash + holdings as ``value``.
+
+    The benchmark leg is built from the traded rupees alone, so counting idle cash on the other side
+    compares a column that contains next month's SIP instalment against one that cannot. On the real
+    account shape — a ₹1L opening basket with ₹4L parked — the panel rendered "+444.2%, ahead by
+    ₹4,01,677" where the truth was +1.2% and ₹1,677, and every instalment that landed before it was
+    deployed would have added its full value as phantom outperformance.
+
+    The panel's asserted design property is that it must be able to say "behind by ₹X". Fed the
+    account total it structurally cannot, which is what makes this the audit's most serious finding.
+    """
+    from dataclasses import dataclass
+    from datetime import date
+    from decimal import Decimal
+
+    import pandas as pd
+
+    from qalpha.accounting.costs import Side
+    from qalpha.live.track_record import track_record
+
+    @dataclass(frozen=True)
+    class _T:
+        trade_date: date
+        ticker: str
+        side: Side
+        quantity: Decimal
+        price: Decimal
+
+    trades = [_T(date(2026, 1, 5), "A.NS", Side.BUY, Decimal("100"), Decimal("1000"))]
+    index = pd.bdate_range("2026-01-01", periods=200)
+    bench = pd.Series([100.0] * len(index), index=index)
+    as_of = index[-1].date()
+
+    shares_only = track_record(trades, Decimal("99000"), bench, as_of)  # the basket fell 1%
+    with_parked_cash = track_record(trades, Decimal("99000") + Decimal("400000"), bench, as_of)
+
+    # Marked on shares alone the panel reports the loss, which is the entire point of it existing.
+    assert shares_only.ahead_by < 0
+    # Fed the account total it reports a windfall instead — the defect, pinned so it cannot return.
+    assert with_parked_cash.ahead_by > Decimal("390000")

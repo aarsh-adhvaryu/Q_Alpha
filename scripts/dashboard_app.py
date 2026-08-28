@@ -615,7 +615,7 @@ def _live_health_view(
         adj = adj.reindex(idx).ffill()
         adj[extra] = wl_prices.adj_close[extra].reindex(idx).ffill()
     with st.expander("🩺 Are any of my holdings breaking down?", expanded=False):
-        st.markdown(health_panel_markdown(position_health(adj, held, as_of)))
+        st.markdown(health_panel_markdown(_guarded_health(adj, held, as_of)))
         st.caption(
             "Advisory only — this never sells, and a 🟠 is not a reason to act. It exists so a "
             "holding cannot quietly fall apart between the times you look."
@@ -633,7 +633,7 @@ def _position_health_view(book: PaperBook, prices: PriceData, as_of: date) -> No
     if not held:
         st.info("No holdings yet — nothing to watch.")
         return
-    st.markdown(health_panel_markdown(position_health(prices.adj_close, held, as_of)))
+    st.markdown(health_panel_markdown(_guarded_health(prices.adj_close, held, as_of)))
 
 
 def _plain_summary(
@@ -684,7 +684,7 @@ def _today_brief(
     )
     held = list(book.portfolio.positions())
     if held:
-        rep = position_health(prices.adj_close, held, as_of)
+        rep = _guarded_health(prices.adj_close, held, as_of)
         flagged = [h for h in rep.holdings if h.level != "healthy"]
         health_note = (
             "all holdings healthy — nothing to sell."
@@ -1559,7 +1559,13 @@ def _track_record_panel(
     if not trades:
         return
     try:
-        record = track_record(trades, portfolio.market_value(prices), benchmark, as_of)
+        # Shares only — NOT the account total. The benchmark leg is built from traded rupees alone,
+        # so counting idle cash on this side compares a number that includes next month's SIP
+        # instalment against one that cannot. With ₹4L parked against a ₹1L basket the panel read
+        # "+444.2%, ahead by ₹4,01,677" where the truth was +1.2% and ₹1,677 — and every instalment
+        # that lands before it is deployed adds its full value as phantom outperformance. The panel
+        # whose asserted property is that it must be able to say "behind by ₹X" could not say it.
+        record = track_record(trades, portfolio.holdings_value(prices), benchmark, as_of)
     except Exception as exc:  # never let the track record break the account page
         st.caption(f"Track record unavailable: {exc}")
         return
@@ -1761,7 +1767,14 @@ def _advisor_tabs(
             "Cash needed (₹)", min_value=1000, value=50000, step=1000, key=f"raise_amt_{namespace}"
         )
         if st.button("Advise raise-cash", key=f"raise_btn_{namespace}"):
-            st.markdown(advise_raise_cash(portfolio, Decimal(amount), prices_dec, as_of).render())
+            raise_advice = advise_raise_cash(
+                portfolio, Decimal(amount), prices_dec, as_of, Config()
+            )
+            st.markdown(raise_advice.render())
+            # This tab sells several names across several lots by construction, so it exercises the
+            # multi-lot, LTCG, set-off and exemption branches on essentially every use — and it was
+            # the one tab that never said so. Same warning, same helper as the Sell tab.
+            _unverified_branch_warning(raise_advice)
 
     with add_tab:
         # Three states, deliberately distinguished: switched off at the flag (kill-switch), allowed
@@ -1947,6 +1960,22 @@ _LTCG_SAFE_LEGEND = (
 )
 
 
+def _guarded_health(adj: pd.DataFrame, names: list[str], as_of: date):
+    """``position_health`` with the price-continuity guard applied — the only way it should be called.
+
+    ``adj_close`` corrects splits and dividends and nothing else, so a demerger step-down reads to the
+    §4.7 detector as a company falling apart. Unguarded, this panel called VEDL a −59% idiosyncratic
+    breakdown on the same screen where the guarded cheapness score read it as a routine 22% pullback.
+    Every live surface routes through here so the two can no longer disagree.
+    """
+    from qalpha.live.price_integrity import excluded_from_tilt, rebase_starts, unexplained_gaps
+
+    gaps = unexplained_gaps(adj, names, as_of)
+    return position_health(
+        adj, names, as_of, rebase_from=rebase_starts(gaps), exclude=excluded_from_tilt(gaps)
+    )
+
+
 def _holdings_frame(
     portfolio: Portfolio,
     prices_dec: dict[str, Decimal],
@@ -1960,18 +1989,25 @@ def _holdings_frame(
     the live account does once a tradebook CSV is uploaded. When it doesn't (broker blended-average
     holdings), the crossover date is genuinely unknown, so the column says so instead of guessing.
     """
-    weights = portfolio.current_weights(prices_dec)
+    # % of EQUITY, not Portfolio.current_weights (which divides by cash + holdings). Idle cash is
+    # next month's instalment, not an allocation, so dividing by it silently dilutes every line: on a
+    # ₹4L-parked / ₹1L-invested account HCLTECH read 3.3% against a true 17.8%, and the column did
+    # not sum to 100%. That column is how concentration is read by eye against the advisor's own 20%
+    # max-name and 30% sector caps, so a 5× understatement is load-bearing. current_weights itself is
+    # untouched — the backtest's decision layer depends on the NAV basis.
+    equity = portfolio.holdings_value(prices_dec)
     rows = []
     for t, q in sorted(portfolio.positions().items()):
         px = prices_dec.get(t, Decimal("0"))
         safe = ltcg_safe_sell_note(portfolio.ledger, t, as_of) if dated else "❔ upload tradebook"
+        weight = float(q * px / equity) if equity > 0 else 0.0
         rows.append(
             {
                 "Ticker": t,
                 "Qty": str(q),
                 "Price": f"₹{px:,.2f}",
                 "Value": f"₹{q * px:,.0f}",
-                "Weight": f"{weights.get(t, 0.0) * 100:.1f}%",
+                "% of equity": f"{weight * 100:.1f}%",
                 "LTCG-safe": safe,
             }
         )
