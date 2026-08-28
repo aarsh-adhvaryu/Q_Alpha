@@ -106,38 +106,60 @@ exactly what it just bought, realizes a loss, triggers tax, and fires constantly
 The exit rule is the §4.7 breakdown test, which distinguishes a name-specific fall from the market
 falling. A stop-loss cannot.
 
-## 🔍 NEXT SESSION — THE FINAL AUDIT (this is the job)
+## ✅ DONE — THE FINAL AUDIT (2026-08-28)
 
-**Brief: audit every remaining real-money surface the way the pre-flight audit did, then report.**
+**Full write-up: [reports/FINAL_AUDIT.md](reports/FINAL_AUDIT.md)** — six findings with reproduced
+numbers, a recommended fix order, and the runbook.
 
-The method that found all five defects, in order:
+**Six defects, all the same defect again** — a number labelled as something it is not, on a surface
+where the label becomes an order. 503 passing tests caught none of them, for the same reason as last
+time. Only #6 was fixed (the scope the user agreed); **#1–#5 are reported and NOT applied.**
 
-1. **Refresh the data first.** `uv run python scripts/paper.py refresh` does **not** refresh the
-   benchmark — call `_refresh_benchmark()` too, or you will audit against a stale series (defect 1
-   was found this way, by being bitten by it).
-2. **Instantiate the real account shape**, not a clean fixture: a `Portfolio` with **idle cash *and*
-   holdings**. Four of five defects only appear when cash is non-zero. A zeroed test portfolio hides
-   them, which is exactly why the suite did not catch them.
-3. **Render the surface and reconcile every number against its source.** Not "is this value right"
-   but *"does the label describe the thing that was computed, and do the figures on screen add up to
-   each other"*. Every defect was an internal inconsistency visible on one screen.
-4. **Chase anything surprising in your own scratch output.** See the process lesson above.
+| # | Surface | Says | Truth | Fixed |
+|---|---|---|---|---|
+| 1 | Track record (#71) | "ahead by **₹4,01,677**" | ahead by **₹1,677** | no |
+| 2 | Raise cash | "₹620 tax" | **₹9,570** | no |
+| 3 | Raise cash | "Raises ₹3,92,610.50" | ₹3,91,675.88 | no |
+| 4 | Holdings table | HCLTECH "3.3%" | **17.8%** | no |
+| 5 | `position_health` | VEDL "−59%, breaking" | a demerger step, −22% | no |
+| 6 | Telegram scan | "VEDL −65% off high" | −22% once re-based | **yes** |
 
-**Surfaces already audited (2026-08-24 / 08-27):** the buy screen (`advise_deploy_into_weakness`), the
-deploy heading, the GO scorecard, the Live tile row.
+**⚠️ #1 is the serious one and it is one word.** `dashboard_app.py:1562` passes
+`portfolio.market_value(prices)` — **cash + holdings** — as the track record's `value`, against a
+benchmark leg built only from traded rupees. With ₹4L of SIP money parked it renders **"+444.2%,
+ahead by ₹4,01,677"**. The panel whose asserted design property is that it *must be able to say
+"behind by ₹X"* currently cannot. **Until it is fixed, that panel is not readable.** Fix:
+`holdings_value`.
 
-**Surfaces NOT yet audited — start here:** the **Sell tab** (`advise_sell` — quoted tax, set-off,
-LTCG-safe dates, the unverified-branch warning), the **Raise cash tab** (`advise_raise_cash` — least-tax
-ordering), the **holdings table** (`_holdings_frame`), **position health**, the **System tab's** book
-comparison and per-book holdings, the **tradebook reconciliation** panel, and the **track record panel**
-(#71) once real trades exist to drive it.
+**#2 is the other one that costs money.** `advise_raise_cash` costs its plan on the frozen backtest
+tax engine (no §70 set-off, no §112A, **no §2(42A) 12-calendar-month correction**) and bolts cess on
+at the end; `advise_sell` quotes the real ITR figure. On a lot held exactly 365 days the two tabs
+report **₹620 vs ₹32,754** for the same shares. **When they disagree, the Sell tab is right.** The
+Raise-cash tab also never shows the unverified-branch warning, though it exercises those branches on
+every use.
 
-Then produce a written verdict the user can act on: what is trustworthy, what is not, what he should
-do differently. The previous audit's deliverable is the shape to match — findings with reproduced
-numbers, fixes shipped as a PR, standing limitations stated plainly, and a runbook.
+**The process lesson, and it is the second time: when you fix a defect, grep for every other caller
+of what you fixed.** #74 separated shares from cash in `account_overview` — `market_value` had two
+other live callers, and #1 above was merged in the same fortnight. PR-2 guarded `cheapness_scores` —
+`adj_close` had two other unguarded consumers (`position_health`, the Telegram scan). Both fixes were
+correct; both were applied at one call site and reasoned about as if applied to a concept.
 
-**Do NOT:** re-run the SIP backtest (adding a month to thirteen years restates the same answer, and it
-is deliberately not on any cron), tune anything toward a GO, or soften a red.
+**⚠️ `scripts/paper.py refresh` refreshes neither the benchmark nor the watchlist panel.** Call
+`_refresh_benchmark()` and `build_nifty100_watchlist.py --prices` too, or you audit against stale
+data (this is how defect 1 of the *pre-flight* audit was found).
+
+**PR (branch `telegram-guard-parity`): the alert path now matches the dashboard.** PR-2's
+price-continuity guard and PR-3's candidate-health verdict were wired into the Add-money tab and not
+into `scripts/scan_alerts.py`, so the daily Telegram alert ranked on raw `adj_close` — beneath
+"deploy 50% of idle cash now", on his phone, unprompted. `alert_state.json` shows
+`weakness_level: elevated`, so those names **had already been sent**. Top three went from
+`VEDL −65%, TRENT −47%, IRFC −35%` to `🔴 IRFC −35%, 🔴 ITC −33%, 🔴 INFY −32%` plus a line naming
+what the guard adjusted. Flag, never veto (asserted by test). **508 tests, 0 skipped.**
+⚠️ The health verdict the alert now carries is itself computed unguarded (#5) — this makes the phone
+match the screen; it does not make the detector correct. Fixing #5 fixes both.
+
+**Still not audited:** the System tab's book comparison and per-book holdings (fake money, explicitly
+captioned as such — deliberately deprioritised against the real-money surfaces above).
 
 ## ✅ CLOSED — TRUST REPAIR (2026-08-17, all eight PRs merged)
 
