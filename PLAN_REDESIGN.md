@@ -162,6 +162,57 @@ would be a sell rule that cannot fire.
 Least tax is *execution*. The gate is *decision*. Confusing the two is how a system talks itself into
 turnover it cannot afford.
 
+## 4b. The hedge — what it is for, and why it is twin-only for years
+
+**The purpose:** in a crash, the two ways not to lose are selling and hedging, and Indian tax decides
+which works. Selling realises 20% STCG to avoid a loss that mostly recovers — the research HMM
+sell-overlay tested exactly this and **lost**. Hedging keeps every share (₹0 capital gains) and shorts
+index futures at ratio `h` (0.5) of book value while the stress gauge is elevated. Measured on the
+validated book: **COVID drawdown ≈ −25% → −10% with ~no return given up.** *The tax is always the
+killer; hedge, don't sell.*
+
+**It is not free:** 0.03%/side, 0.05% monthly roll, and **30% F&O business-income tax on hedge
+gains** — F&O is business income in India, not capital gains, and `hedge.py` models this. Cheaper
+than selling, not costless.
+
+### ⚠️ It cannot be placed on the real account for years — lot size
+
+`apply_futures_hedge` uses `notional = h * pv`, a **continuous fraction of book value: no lot size, no
+margin**. Correct for a fake-money twin; not how futures trade.
+
+| | |
+|---|---|
+| Nifty futures lot size | **75** |
+| One lot notional at Nifty ~25,500 | **≈ ₹19.1 lakh** (margin ~₹2.5L) |
+| Equity book, 2026-08-28 | ~₹3,00,000 |
+| Hedge wanted at h=0.5 | ₹1,50,000 |
+| **Smallest purchasable hedge** | **₹19,10,000 — 12.7× the hedge, 6.4× the book** |
+
+Real-account feasibility begins at **~₹19L** (h=1.0) or **~₹38L** (h=0.5) — roughly **2 and 4 years**
+at ₹50,000/month. Options are the realistic small-account alternative (premium, not margin) but are a
+different instrument with different behaviour; `hedge.py` models futures only. Not built now.
+
+**Therefore: hedge is TWIN-ONLY, and that is the point, not a limitation.** The twin can carry a
+fractional notional the real account cannot, so it is the only place this can be tested at current
+size — and by the time the book can place the trade, there would be years of evidence. The `−HEDGE`
+ablation (§1) measures its contribution; criterion 2 (a −10% event) is what makes the measurement
+mean anything.
+
+**Two standing caveats:** the gauge is **coincident, not predictive** — it fires at 15% drawdown, so
+it caps the back half of a fall rather than dodging it. And it has **never been witnessed firing**
+(endgame pillar 4, still zero).
+
+## 4c. Cash flows — the tradebook is the only source
+
+**There is no SIP schedule.** The user invests whatever amount he chooses, places it in Zerodha, and
+uploads the tradebook; those trades become the dated cash flows every book receives. No book is ever
+funded on a calendar.
+
+This is load-bearing for the comparison: **all five books must see the same rupees on the same days**,
+so the only difference between them is who decides. A scheduled injection that the real account did
+not actually receive would silently break that, which is the flaw that voided forward run 1's
+predecessor. The tradebook is the single source of truth; if it says nothing arrived, nothing arrived.
+
 ## 5. Monte Carlo — what it is for, and what it is not
 
 You asked for Monte Carlo / GBM to improve the advisor. **It cannot do that, and using it that way
