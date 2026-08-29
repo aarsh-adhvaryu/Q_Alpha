@@ -455,3 +455,113 @@ def test_raise_cash_never_sells_more_than_is_held() -> None:
         sold[o.ticker] = sold.get(o.ticker, Decimal("0")) + o.quantity
     for ticker, qty in sold.items():
         assert qty <= held[ticker]
+
+
+# ---- tax-loss harvesting (Phase 3, 2026-08-29) ---------------------------------------------------
+#
+# The tax computation always existed — §70 set-off and the §74 eight-year carry-forward live in
+# net_capital_gains_tax. What never existed was a surface saying "these positions are at a loss;
+# realising them before 31 March banks a loss carryable eight years"; capital_gains.py:137 calls
+# harvesting itself "deferred past Phase 0".
+#
+# The load-bearing property is FIFO reachability. Lots cannot be chosen — a sale consumes the oldest
+# first — so a gain lot in FRONT of a loss lot blocks it, and picking "the losers" by eye can realise
+# a gain larger than the loss it was chasing.
+
+_HARVEST_AS_OF = date(2027, 1, 15)
+
+
+def _harvest_book(*lots: tuple[str, date, str, str]) -> Portfolio:
+    pf = _pf()
+    for ticker, on, qty, price in lots:
+        _add(pf, ticker, qty, price, on)
+    return pf
+
+
+def test_a_plain_loser_is_offered() -> None:
+    from qalpha.live.advisor import advise_harvest
+
+    pf = _harvest_book(("A.NS", date(2026, 6, 1), "100", "500"))
+    adv = advise_harvest(pf, {"A.NS": Decimal("400")}, _HARVEST_AS_OF, Config())
+    (c,) = adv.actionable
+    assert c.quantity == Decimal("100")
+    assert c.net_gain == Decimal("-10000")
+    assert c.gain_crossed == Decimal("0")
+
+
+def test_a_winner_is_never_offered() -> None:
+    from qalpha.live.advisor import advise_harvest
+
+    pf = _harvest_book(("D.NS", date(2026, 6, 1), "10", "100"))
+    assert advise_harvest(pf, {"D.NS": Decimal("150")}, _HARVEST_AS_OF, Config()).actionable == []
+
+
+def test_a_gain_lot_in_front_that_cancels_the_loss_makes_it_unreachable() -> None:
+    """The FIFO trap. Selling both lots nets to zero, so there is no loss to bank — offer nothing."""
+    from qalpha.live.advisor import advise_harvest
+
+    pf = _harvest_book(
+        ("B.NS", date(2026, 5, 1), "50", "100"),  # +₹5,000 at ₹200
+        ("B.NS", date(2026, 7, 1), "50", "300"),  # −₹5,000 at ₹200
+    )
+    assert advise_harvest(pf, {"B.NS": Decimal("200")}, _HARVEST_AS_OF, Config()).actionable == []
+
+
+def test_a_large_gain_in_front_of_a_small_loss_is_refused() -> None:
+    """Selling by eye here would realise ₹15,000 of gain to chase ₹600 of loss."""
+    from qalpha.live.advisor import advise_harvest
+
+    pf = _harvest_book(
+        ("C.NS", date(2026, 5, 1), "100", "50"),  # +₹15,000 at ₹200
+        ("C.NS", date(2026, 7, 1), "10", "260"),  # −₹600
+    )
+    assert advise_harvest(pf, {"C.NS": Decimal("200")}, _HARVEST_AS_OF, Config()).actionable == []
+
+
+def test_a_small_gain_in_front_of_a_big_loss_is_crossed_and_disclosed() -> None:
+    """Crossing IS correct when the loss behind is worth more — but the crossing must be stated."""
+    from qalpha.live.advisor import advise_harvest
+
+    pf = _harvest_book(
+        ("E.NS", date(2026, 5, 1), "10", "180"),  # +₹200 at ₹200
+        ("E.NS", date(2026, 7, 1), "100", "300"),  # −₹10,000
+    )
+    adv = advise_harvest(pf, {"E.NS": Decimal("200")}, _HARVEST_AS_OF, Config())
+    (c,) = adv.actionable
+    assert c.lots_consumed == 2
+    assert c.quantity == Decimal("110"), "must sell the whole prefix, not just the loss lot"
+    assert c.net_gain == Decimal("-9800")
+    assert c.gain_crossed == Decimal("200")
+    assert "already netted off" in adv.render()
+
+
+def test_a_loss_smaller_than_the_round_trip_is_not_worthwhile() -> None:
+    """Banking a loss that costs more than it saves is churn wearing a tax costume."""
+    from qalpha.live.advisor import advise_harvest
+
+    pf = _harvest_book(("F.NS", date(2026, 6, 1), "1", "100.10"))
+    adv = advise_harvest(pf, {"F.NS": Decimal("100")}, _HARVEST_AS_OF, Config())
+    assert adv.candidates and adv.candidates[0].net_gain < 0
+    assert adv.actionable == [], "a ₹0.10 loss cannot beat the round-trip charges"
+
+
+def test_it_says_a_banked_loss_is_not_cash_back_when_there_are_no_gains() -> None:
+    """His actual position: no realised gains, so the loss carries forward rather than cutting a bill."""
+    from qalpha.live.advisor import advise_harvest
+
+    pf = _harvest_book(("A.NS", date(2026, 6, 1), "100", "500"))
+    md = advise_harvest(pf, {"A.NS": Decimal("400")}, _HARVEST_AS_OF, Config()).render()
+    assert "no realised gains" in md
+    assert "carries forward" in md
+    assert "not cash back" in md
+    assert "file your ITR by the due date" in md
+
+
+def test_nothing_to_harvest_says_so_plainly() -> None:
+    from qalpha.live.advisor import advise_harvest
+
+    pf = _harvest_book(("D.NS", date(2026, 6, 1), "10", "100"))
+    assert (
+        "Nothing to do"
+        in advise_harvest(pf, {"D.NS": Decimal("150")}, _HARVEST_AS_OF, Config()).render()
+    )
