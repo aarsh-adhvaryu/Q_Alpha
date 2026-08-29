@@ -19,6 +19,12 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest
 
 _ROOT = Path(__file__).resolve().parent.parent
+
+# Make ``scripts/`` importable at MODULE level. It used to be inserted inside
+# ``test_the_kill_switch_still_withholds_every_buy_surface``, so every later test doing
+# ``import dashboard_app`` only worked because that one had already run — a test depending on
+# another test's side effect, which breaks the moment anything runs in isolation or is reordered.
+sys.path.insert(0, str(_ROOT / "scripts"))
 _APP = _ROOT / "scripts" / "dashboard_app.py"
 _BOOK = _ROOT / "data" / "paper" / "book.json"
 
@@ -390,3 +396,63 @@ def test_the_archived_autopilot_panel_says_it_is_archived() -> None:
     src = inspect.getsource(dashboard_app._system_tab)
     assert "Superseded 2026-08-29" in src
     assert "will not move" in src
+
+
+def test_the_orphaned_add_money_queue_is_retired() -> None:
+    """It promised a credit that could no longer arrive.
+
+    The button wrote to data/autopilot/pending_injections.json, which only `autopilot.py daily` ever
+    applied — and that cron step is `if: false` since the books were archived. So it queued money,
+    said "the next daily run credits all three books equally", and nothing would ever credit
+    anything. A surface promising an action that no longer happens is the same defect as a number
+    labelled wrong; it just costs fake money instead of real.
+
+    The twin is funded by the tradebook and nothing else (PLAN_REDESIGN §4c) — a manual injection
+    the real account never received is exactly what voided a predecessor run.
+    """
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._system_tab)
+    assert "Add-money is retired" in src
+    assert "funded by your **tradebook**" in src
+    # The promise that could not be kept must be gone.
+    assert "credits all three books equally" not in src
+
+
+def test_every_order_producing_surface_offers_a_kite_basket() -> None:
+    """§2b: a recommendation must become a file you import, not orders you retype.
+
+    All three surfaces compute exact orders; before this they made the user copy them by hand.
+    """
+    import inspect
+
+    import dashboard_app
+
+    # Harvest and Raise-cash live in _advisor_tabs; the deploy basket is inside _add_money_advisor.
+    src = inspect.getsource(dashboard_app._advisor_tabs) + inspect.getsource(
+        dashboard_app._add_money_advisor
+    )
+    for surface in ("harvest_basket_", "raise_basket_", "deploy_basket_"):
+        assert surface in src, f"{surface} has no basket download"
+
+
+def test_the_add_money_tab_caches_the_advice_not_its_markdown() -> None:
+    """A rendered string cannot be turned back into orders, and the basket needs the orders."""
+    import inspect
+
+    src = inspect.getsource(__import__("dashboard_app")._add_money_advisor)
+    assert "st.markdown(advice.render())" in src
+    assert "].render()" not in src, "the advice object must be cached, not its markdown"
+
+
+def test_the_basket_helper_fails_soft() -> None:
+    """An unknown symbol or a missing instrument master must cost the download, never the page."""
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._basket_download)
+    assert "UnknownInstrumentError" in src
+    assert 'st.caption(f"Kite basket unavailable' in src
