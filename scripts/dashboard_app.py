@@ -75,6 +75,7 @@ AUTOPILOT_DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
 TWIN_DASHBOARD_MD = Path("reports/twin_dashboard.md")
 TWIN_DECISIONS_MD = Path("reports/twin_decisions.md")
 TWIN_BOOKS_JSON = Path("data/twin/books.json")
+TWIN_MARKS_JSON = Path("data/twin/marks.json")
 AI_BRIEF_MD = Path("reports/ai_brief.md")
 SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
 
@@ -807,6 +808,28 @@ def _core_go_expander(
             st.markdown(glossary_markdown())
 
 
+def _twin_prices() -> dict:
+    """Latest marks for the twin's charts — watchlist panel first, core panel as fallback."""
+    from qalpha.data.ingest import load_parquet
+
+    for path in (
+        "data/historical/prices_watchlist.parquet",
+        "data/historical/prices_pit_2026.parquet",
+    ):
+        try:
+            adj = load_parquet(path).adj_close
+        except (OSError, ValueError):
+            continue
+        out = {}
+        for t in adj.columns:
+            series = adj[t].dropna()
+            if len(series):
+                out[str(t)] = Decimal(str(float(series.iloc[-1])))
+        if out:
+            return out
+    return {}
+
+
 def _basket_download(orders: list, label: str, key: str) -> None:
     """Turn a recommendation into a file you import into Kite, instead of retyping it.
 
@@ -884,6 +907,57 @@ def _twin_panel(as_of: date) -> None:
         st.markdown(TWIN_DASHBOARD_MD.read_text(encoding="utf-8"))
     else:
         st.info("Seeded, but no daily run has written a dashboard yet.")
+
+    # --- charts -------------------------------------------------------------------------------
+    # Read from the saved books rather than the rendered markdown: a table of text cannot be
+    # plotted, and recomputing marks here would show numbers that disagree with the report above it.
+    try:
+        from qalpha.config import Config
+        from qalpha.live.twin import (
+            REAL,
+            TWIN_FULL,
+            holdings_frame,
+            load_books,
+        )
+
+        books = load_books(Config())
+    except Exception as exc:  # a chart must never take the page down
+        st.caption(f"Charts unavailable: {exc}")
+        books = {}
+
+    if books and TWIN_MARKS_JSON.exists():
+        try:
+            saved = json.loads(TWIN_MARKS_JSON.read_text(encoding="utf-8"))
+            frame = pd.DataFrame(saved["books"])
+            if not frame.empty:
+                st.subheader("Every book, same rupees, same days")
+                st.bar_chart(frame.set_index("Book")["Return %"], height=260)
+                st.caption(
+                    "Return against **net money in** — the one denominator every book shares. "
+                    "Bars this close together are noise: the gate needs a gap larger than "
+                    "±₹83,62,315 *and* twelve months of history."
+                )
+        except (OSError, ValueError, KeyError):
+            pass
+
+    if books:
+        prices = _twin_prices()
+        left, right = st.columns(2)
+        for column, name, title in (
+            (left, REAL, "Your account"),
+            (right, TWIN_FULL, "The twin"),
+        ):
+            with column:
+                st.caption(f"**{title}** — what it holds")
+                held = holdings_frame(books[name], prices) if name in books else pd.DataFrame()
+                if held.empty:
+                    st.caption("_no holdings_")
+                else:
+                    st.bar_chart(held.set_index("Ticker")["Share %"], height=240, horizontal=True)
+        st.caption(
+            "Share of **equity**, not of equity + cash — a slice labelled with the account total "
+            "understates every position, which is how a 17.8% holding once read as 3.3%."
+        )
 
     if TWIN_DECISIONS_MD.exists():
         with st.expander("📋 What the books decided, and why"):
@@ -1530,6 +1604,40 @@ def _live_overview(
         width="stretch",
     )
     st.caption(_LTCG_SAFE_LEGEND)
+
+    # Composition, at a glance. Share of EQUITY — not of equity + cash — for the same reason the
+    # table's column is: a slice measured against the account total understates every position, and
+    # this is the number concentration is judged by against the 20% name and 30% sector caps.
+    if portfolio.positions():
+        equity = portfolio.holdings_value(prices)
+        if equity > 0:
+            comp = pd.DataFrame(
+                [
+                    {
+                        "Ticker": t.removesuffix(".NS"),
+                        "Share %": float(q * prices[t] / equity * 100),
+                        "Value": float(q * prices[t]),
+                    }
+                    for t, q in sorted(portfolio.positions().items())
+                    if t in prices
+                ]
+            ).sort_values("Share %", ascending=False)
+            top = comp.iloc[0]
+            st.bar_chart(comp.set_index("Ticker")["Share %"], height=260, horizontal=True)
+            over = comp[comp["Share %"] > 20.0]
+            note = (
+                f"Largest position **{top['Ticker']} at {top['Share %']:.1f}%** of equity "
+                f"(₹{top['Value']:,.0f}). Share of **equity**, not of the account — parked cash is "
+                "next month's instalment, not an allocation."
+            )
+            if not over.empty:
+                st.warning(
+                    note + f"\n\n⚠️ **{', '.join(over['Ticker'])}** exceed the advisor's own 20% "
+                    "max-name cap. Whole-share rounding can push a delivered basket past a cap it "
+                    "advertised; worth knowing before the next deploy."
+                )
+            else:
+                st.caption(note)
 
     # One row per name hides a name bought more than once: its lots reach the 12.5% rate on
     # different dates, and the row can only show the latest. Surfaced, not summarised.

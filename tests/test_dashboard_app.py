@@ -481,3 +481,34 @@ def test_the_viewer_never_marks_the_book() -> None:
     assert '"daily"' not in src, "the dashboard must never run the marking command"
     assert '"refresh"' in src
     assert "_refresh_benchmark" in src, "refresh alone does not fetch the benchmark"
+
+
+def test_the_live_holdings_have_a_composition_chart_measured_on_equity() -> None:
+    """Concentration is judged by eye, so it needs a picture — on the right denominator.
+
+    Share of **equity**, not equity + cash: a slice measured against the account total understates
+    every position, which is how a 17.8% holding once read as 3.3% (the defect fixed 2026-08-28).
+    It must also flag a breach of the advisor's own 20% max-name cap, because whole-share rounding
+    can push a delivered basket past a cap it advertised — on the live book VBL sits at 20.0%.
+    """
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._live_overview)
+    assert "Composition, at a glance" in src
+    assert "portfolio.holdings_value(prices)" in src, "must divide by equity, not market_value"
+    assert "20.0" in src and "max-name cap" in src
+
+
+def test_the_twin_panel_plots_the_marks_it_reported() -> None:
+    """Charts must plot the saved marks, not recompute — a chart disagreeing with the table above
+    it is two answers to one question, which is the defect family this repo keeps finding."""
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._twin_panel)
+    assert "TWIN_MARKS_JSON" in src
+    assert "st.bar_chart" in src
+    assert "holdings_frame" in src
