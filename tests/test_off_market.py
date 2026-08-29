@@ -44,6 +44,19 @@ def _trades() -> list[_T]:
     return [_T(date(2026, 6, 15), "INFY.NS", Side.BUY, Decimal("5"), Decimal("1136"))]
 
 
+def _lot(pf, ticker: str, on: date, qty: str, price: str) -> None:
+    from qalpha.accounting.tax_lots import TaxLot
+
+    pf.ledger.add_lot(
+        TaxLot(
+            ticker=ticker,
+            acquisition_date=on,
+            quantity_original=Decimal(qty),
+            buy_price=Decimal(price),
+        )
+    )
+
+
 def _ipo(on: date = date(2026, 7, 10)) -> OffMarketCredit:
     """A small IPO allotment: 15 shares at a ₹230 issue price."""
     return OffMarketCredit(
@@ -132,3 +145,57 @@ def test_credits_are_ordered_oldest_first() -> None:
         )
         path = Path(fh.name)
     assert [c.ticker for c in load_off_market(path)] == ["A.NS", "B.NS"]
+
+
+# ---- detected from the broker, not typed by hand -------------------------------------------------
+
+
+def _broker_book() -> tuple:
+    """A replayed book missing 15 shares the broker holds — an allotment that credited."""
+    from qalpha.live.twin import unexplained_holdings
+
+    books = seed_books(_trades(), Config())
+    replayed = books[REAL].portfolio
+    # add_lot, not buy(): buy() is affordability-capped, so it would under-fill and the shortfall
+    # would itself register as "unexplained" — which is correct behaviour and a wrong fixture.
+    _lot(replayed, "INFY.NS", date(2026, 6, 15), "5", "1136")
+    broker_qty = {"INFY.NS": Decimal("5"), "NEWCO.NS": Decimal("15")}
+    broker_avg = {"INFY.NS": Decimal("1136"), "NEWCO.NS": Decimal("230")}
+    return unexplained_holdings(replayed, broker_qty, broker_avg), replayed
+
+
+def test_the_broker_supplies_three_of_the_four_fields() -> None:
+    """kite.holdings() returns settled demat stock, so an allotment appears the moment it credits."""
+    detected, _ = _broker_book()
+    (c,) = detected
+    assert c.ticker == "NEWCO.NS"
+    assert c.quantity == Decimal("15")
+    assert c.cost_per_share == Decimal("230"), "average_price is the issue price for an allotment"
+
+
+def test_explained_holdings_are_not_flagged() -> None:
+    """Only the gap is detected — a share the tradebook accounts for must never be double-counted."""
+    detected, _ = _broker_book()
+    assert [c.ticker for c in detected] == ["NEWCO.NS"]
+
+
+def test_a_partial_gap_detects_only_the_difference() -> None:
+    from qalpha.live.twin import unexplained_holdings
+
+    books = seed_books(_trades(), Config())
+    pf = books[REAL].portfolio
+    _lot(pf, "INFY.NS", date(2026, 6, 15), "5", "1136")
+    (c,) = unexplained_holdings(pf, {"INFY.NS": Decimal("12")}, {"INFY.NS": Decimal("1136")})
+    assert c.quantity == Decimal("7"), "12 held, 5 explained → 7 unexplained"
+
+
+def test_the_snippet_prefills_everything_except_the_date() -> None:
+    """The date is the one field the broker cannot supply, so it is the only one left blank."""
+    from qalpha.live.twin import off_market_snippet
+
+    detected, _ = _broker_book()
+    snippet = off_market_snippet(detected)
+    assert '"ticker": "NEWCO.NS"' in snippet
+    assert '"quantity": "15"' in snippet
+    assert '"cost_per_share": "230"' in snippet
+    assert '"on": "YYYY-MM-DD"' in snippet, "the date must be the blank the user fills"
