@@ -38,9 +38,19 @@ dashboard = [
 ai = [
     "anthropic>=0.40",
 ]
-# NOTE: the research track (quantum QUBO/QAOA, and the planned regime + agentic work) lives in a
-# separate repo — github.com/aarsh-adhvaryu/Q_Alpha_Research — which imports this engine as a
-# dependency. Production never imports from it, so it carries no extras here.
+# The research track (research/) — ideas that have NOT passed a pre-registered test — lives in THIS
+# repo since 2026-08-28, walled off by tests/test_repo_boundary.py rather than by being a separate
+# repository. Its heavy deps are optional and its suite is off `testpaths`, so the product run never
+# depends on them and never inherits their skips. See research/README.md.
+research = [
+    "hmmlearn>=0.3",  # Gaussian HMM for regime/risk_state.py (a published negative, kept as evidence)
+]
+# Quantum track (Q_alpha.md §15) — AUM-gated (₹50L+) and twice a published negative. Heavy.
+quantum = [
+    "qiskit>=1.0",
+    "qiskit-algorithms>=0.3",
+    "qiskit-optimization>=0.6",
+]
 
 [build-system]
 requires = ["hatchling"]
