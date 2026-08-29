@@ -42,6 +42,7 @@ from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.live.advisor import advise_harvest, advise_raise_cash, advise_sell
+from qalpha.live.basket import BUY, SELL, BasketOrder
 from qalpha.live.dashboard import (
     BUY_ADVICE_ON_REAL_MONEY,
     _benchmark_return_pct,
@@ -790,6 +791,43 @@ def _core_go_expander(
             st.markdown(glossary_markdown())
 
 
+def _basket_download(orders: list, label: str, key: str) -> None:
+    """Turn a recommendation into a file you import into Kite, instead of retyping it.
+
+    Closes PLAN_REDESIGN §2b: every surface here computed exact orders and then made the user copy
+    them by hand. The format was recovered by experiment, not invented — JSON not CSV, no ``id``, 20
+    orders per basket, prices rounded onto the instrument's tick grid (six distinct ticks across the
+    NSE equity list; INFY's is 0.10, so ₹1,140.05 is rejected outright and nothing upstream catches
+    it). See ``docs/KITE_BASKET_FORMAT.md``.
+
+    Fail-soft: an unknown symbol or a missing instrument master costs the download, never the page.
+    **Real money never auto-trades** — a file the user imports and executes is still the user placing
+    the order.
+    """
+    from qalpha.live.basket import UnknownInstrumentError, basket_json, import_instructions
+    from qalpha.live.instruments import load_instruments
+
+    if not orders:
+        return
+    try:
+        documents = basket_json(orders, load_instruments())
+    except (UnknownInstrumentError, OSError) as exc:
+        st.caption(f"Kite basket unavailable: {exc}")
+        return
+    if not documents:
+        return
+    st.markdown(import_instructions(len(documents)))
+    for n, doc in enumerate(documents, start=1):
+        suffix = f"-{n}" if len(documents) > 1 else ""
+        st.download_button(
+            f"⬇ Kite basket{(' ' + str(n) + ' of ' + str(len(documents))) if len(documents) > 1 else ''}",
+            data=doc,
+            file_name=f"qalpha-{label}-{date.today():%Y%m%d}{suffix}.json",
+            mime="application/json",
+            key=f"{key}_{n}",
+        )
+
+
 def _twin_panel(as_of: date) -> None:
     """The twin: five books on the user's real cash flows, and the six-criterion GO gate.
 
@@ -894,24 +932,25 @@ def _system_tab(
             "secret first; until then, anything you add here is **not** recorded."
         )
 
-    with st.form("add_money", clear_on_submit=True):
-        amount = st.number_input("Add money (₹)", min_value=0, value=0, step=5000)
-        reason = st.text_input("Why (optional — an IPO, a tip, a dip)", value="")
-        submitted = st.form_submit_button("➕ Add money")
-    if submitted and amount > 0:
-        ok, msg = _queue_injection_to_repo(int(amount), reason or "(unspecified)")
-        if ok:
-            st.success(
-                f"✓ **Queued ₹{int(amount):,}** to the repo — it appears in the pending list below, "
-                "and the next daily run credits all three books equally."
-            )
-        else:
-            st.error(
-                f"❌ **NOT saved — ₹{int(amount):,} was not added.** Reason: {msg}. Set a "
-                "`GITHUB_TOKEN` with contents:write in Streamlit secrets, then add it again."
-            )
-
-    # Show the queue so a top-up is *visibly* landing (empty once the daily run applies it).
+    # ⛔ The Add-money queue is ORPHANED. It writes to data/autopilot/pending_injections.json, which
+    # only `autopilot.py daily` ever applied — and that cron step is `if: false` since the books were
+    # archived. So the button queued money, promised "the next daily run credits all three books",
+    # and nothing would ever credit anything. A surface promising an action that no longer happens is
+    # the same defect as a number labelled wrong; it just costs fake money instead of real.
+    #
+    # The twin is funded by the TRADEBOOK and nothing else (PLAN_REDESIGN §4c): the user invests what
+    # he chooses, uploads the export, and those trades become the flows every book receives. There is
+    # no button to press, deliberately — a calendar or manual injection the real account never
+    # received is exactly what voided a predecessor run.
+    st.info(
+        "**Add-money is retired.** The twin is funded by your **tradebook** — invest whatever you "
+        "choose in Zerodha, upload the export on the Live tab, and every book receives those exact "
+        "rupees on those exact days. Nothing to press here.\n\n"
+        "_This button used to queue a top-up for the three archived books; the run that applied the "
+        "queue is switched off, so it would have promised a credit that never arrived._"
+    )
+    # The queue is still SHOWN — if anything was queued before the archive it is still sitting
+    # there, and a pending entry that silently stops being applied is worse than one you can see.
     pending, source = _fetch_pending_injections()
     if pending:
         total = sum(int(float(str(i.get("amount", 0) or 0))) for i in pending)
@@ -1893,6 +1932,14 @@ def _advisor_tabs(
             # multi-lot, LTCG, set-off and exemption branches on essentially every use — and it was
             # the one tab that never said so. Same warning, same helper as the Sell tab.
             _unverified_branch_warning(raise_advice)
+            _basket_download(
+                [
+                    BasketOrder(o.ticker, SELL, int(o.quantity), o.price)
+                    for o in raise_advice.smart_orders
+                ],
+                "raise-cash",
+                f"raise_basket_{namespace}",
+            )
 
     with harvest_tab:
         # Graduated onto the real-money surface WITHOUT the §2a ablation bar, deliberately. That bar
@@ -1915,6 +1962,11 @@ def _advisor_tabs(
                 "already net of any gain crossed. Place the orders yourself in Kite."
             )
             _harvest_branch_warning(harvest, portfolio, as_of)
+            _basket_download(
+                [BasketOrder(c.ticker, SELL, int(c.quantity), c.price) for c in harvest.actionable],
+                "harvest",
+                f"harvest_basket_{namespace}",
+            )
 
     with add_tab:
         # Three states, deliberately distinguished: switched off at the flag (kill-switch), allowed
@@ -2080,12 +2132,23 @@ def _add_money_advisor(
                 max_names=n_stocks,
                 broker_prices=prices_dec,  # marks holdings the watchlist panel can't price
                 spend_idle_cash=spend_idle,
-            ).render()
-    if st.session_state.get(advice_key):
-        st.markdown(st.session_state[advice_key])
+            )
+    advice = st.session_state.get(advice_key)
+    if advice is not None:
+        # The ADVICE object is cached, not its markdown: the rendered string cannot be turned back
+        # into orders, and the basket file needs the orders (§2b).
+        st.markdown(advice.render())
         st.caption(
             "This suggestion stays put through the 30s auto-refresh — press the button again "
             "for fresh prices."
+        )
+        _basket_download(
+            [
+                BasketOrder(o.ticker, BUY, int(o.quantity), o.price)
+                for o in advice.deploy.buy_orders
+            ],
+            "deploy",
+            f"deploy_basket_{namespace}",
         )
         if AI_BRIEF_MD.exists():
             with st.expander("🧠 Today's AI market read (context only — never a signal)"):
