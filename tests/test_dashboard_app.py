@@ -362,3 +362,31 @@ def test_the_harvest_warning_always_flags_the_set_off_branch() -> None:
     src = inspect.getsource(dashboard_app._harvest_branch_warning)
     assert "has_loss_lot=True" in src
     assert "Reconcile it afterwards" in src
+
+
+def test_the_twin_panel_is_on_the_system_tab() -> None:
+    """The twin is the instrument; without a surface it is markdown nobody opens."""
+    import inspect
+
+    import dashboard_app
+
+    assert "_twin_panel(as_of)" in inspect.getsource(dashboard_app._system_tab)
+    src = inspect.getsource(dashboard_app._twin_panel)
+    # An unseeded twin must say so, not render an empty table that reads like a tie.
+    assert "not seeded" in src
+    # Freshness must come from the runner's own stamp, not the file's mtime: Streamlit Cloud
+    # redeploys from a fresh git checkout, which resets every mtime to the deploy time — so an
+    # mtime check reports a two-week-old book as current on exactly the surface where it matters.
+    assert "saved_at" in src
+    assert "_mtime_date" not in src
+
+
+def test_the_archived_autopilot_panel_says_it_is_archived() -> None:
+    """A superseded panel that silently vanishes is worse than one labelled frozen."""
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._system_tab)
+    assert "Superseded 2026-08-29" in src
+    assert "will not move" in src

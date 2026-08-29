@@ -23,6 +23,7 @@ calculator (rule (a) intact).
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from datetime import UTC, date, datetime, timedelta
@@ -72,6 +73,9 @@ from qalpha.live.position_health import position_health
 from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
 
 AUTOPILOT_DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
+TWIN_DASHBOARD_MD = Path("reports/twin_dashboard.md")
+TWIN_DECISIONS_MD = Path("reports/twin_decisions.md")
+TWIN_BOOKS_JSON = Path("data/twin/books.json")
 AI_BRIEF_MD = Path("reports/ai_brief.md")
 SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
 
@@ -786,6 +790,56 @@ def _core_go_expander(
             st.markdown(glossary_markdown())
 
 
+def _twin_panel(as_of: date) -> None:
+    """The twin: five books on the user's real cash flows, and the six-criterion GO gate.
+
+    Renders the artifacts the weekday cron commits rather than recomputing — the same contract every
+    other cron-written panel uses, and the reason it is gated on freshness. **A dead runner and a
+    quiet day produce the same page**, which is how a forward run died unnoticed for 38 days, so the
+    freshness line comes first and an unseeded twin says so explicitly instead of rendering blank.
+    """
+    st.header("🧪 The twin — is the system actually working?")
+    st.caption(
+        "Five fake-money books on **your real cash flows**, four of them autonomous. Your Zerodha "
+        "account is the state source and is never traded. Only **TWIN_FULL vs the equal-weight "
+        "fund** opens the gate; everything else describes."
+    )
+
+    if not TWIN_BOOKS_JSON.exists():
+        st.warning(
+            "**The twin is not seeded.** No book has any cash flows, so nothing below would mean "
+            "anything. Run `uv run python scripts/twin.py seed` once — it reads your tradebook and "
+            "refuses to overwrite, because re-seeding resets the clock."
+        )
+        return
+
+    # Content date, NOT mtime. Streamlit Cloud redeploys from a fresh git checkout, which resets
+    # every mtime to the deploy time — so an mtime check would report a two-week-old book as current
+    # on exactly the surface where staleness matters. `saved_at` is written by the runner itself.
+    saved_at: date | None = None
+    try:
+        saved_at = date.fromisoformat(
+            json.loads(TWIN_BOOKS_JSON.read_text(encoding="utf-8"))["saved_at"]
+        )
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        saved_at = None
+    fresh = sources_freshness_markdown([source_freshness("Twin books", saved_at, as_of)])
+    (st.warning if "⚠️" in fresh else st.caption)(fresh)
+
+    if TWIN_DASHBOARD_MD.exists():
+        st.markdown(TWIN_DASHBOARD_MD.read_text(encoding="utf-8"))
+    else:
+        st.info("Seeded, but no daily run has written a dashboard yet.")
+
+    if TWIN_DECISIONS_MD.exists():
+        with st.expander("📋 What the books decided, and why"):
+            st.markdown(TWIN_DECISIONS_MD.read_text(encoding="utf-8"))
+            st.caption(
+                "Every decision carries its reason — a book that acts without recording why is not "
+                "auditable. A day where nothing happened still records a HOLD."
+            )
+
+
 def _system_tab(
     book: PaperBook,
     prices: PriceData,
@@ -802,6 +856,15 @@ def _system_tab(
 
     from qalpha.live.autopilot import load_state
 
+    _twin_panel(as_of)
+    st.divider()
+    st.subheader("📜 Archived — the auto-pilot books")
+    st.caption(
+        "⛔ **Superseded 2026-08-29.** These three books are archived "
+        "(`reports/ARCHIVE_2026-08-28.md`) and their cron step is switched off, so the figures below "
+        "are frozen at 2026-08-26 and will not move. Kept visible for one release so the transition "
+        "is legible rather than a panel that silently vanished."
+    )
     st.caption(
         "**The whole system, acting on its own advice, on fake money** — deploys idle cash when the "
         "advisor says so (AI-paced), rebalances only when the tax-gate says it's worth it (checked "
