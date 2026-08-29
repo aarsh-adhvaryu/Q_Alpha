@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -1354,6 +1355,22 @@ def _save_tradebook_master(trades: list) -> str:  # list[TradebookTrade]
     return "✓ saved to your private gist."
 
 
+def _broker_avg_prices(live: LiveHoldings) -> dict:
+    """Per-ticker **average price** as the broker reports it — the cost basis of a detected holding.
+
+    ⚠️ Not ``live.prices``, which is the *last traded* price. For an IPO allotment that is the
+    listing price, and using it would record a ₹230 purchase as a ₹310 one — understating the gain
+    and under-reporting the tax. ``portfolio_from_holdings`` already builds one lot per holding at
+    ``Holding.average_price``, so the figure the broker actually reported is recoverable from there.
+    """
+    out: dict = {}
+    for ticker in live.portfolio.positions():
+        lots = live.portfolio.ledger.open_lots(ticker)
+        if lots:
+            out[ticker] = lots[0].cost_basis_per_share
+    return out
+
+
 def _apply_off_market_credits(portfolio: Portfolio) -> list:
     """Add shares that arrived outside the tradebook — IPO allotments, gifts, demat transfers.
 
@@ -1383,6 +1400,11 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
     """
     from qalpha.live.tradebook import parse_tradebook, reconcile_positions, replay_tradebook
     from qalpha.live.tradebook_store import merge_trades, trades_to_master_csv
+    from qalpha.live.twin import (
+        apply_off_market,
+        off_market_snippet,
+        unexplained_holdings,
+    )
 
     master = _load_tradebook_master()
     if master:
@@ -1418,7 +1440,39 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
             # harvest and sell tabs, and from every tax figure — while the reconciliation warns that
             # the account does not add up and downgrades all of it to "estimate". Recording the
             # credit gives them a dated lot, so FIFO, the holding period and §2(42A) are all exact.
-            _apply_off_market_credits(result.portfolio)
+            recorded = _apply_off_market_credits(result.portfolio)
+            # Anything the broker holds that the tradebook AND the recorded credits still cannot
+            # explain is added automatically, at the broker's own average price, dated
+            # conservatively as TODAY. `kite.holdings()` returns settled demat stock, so an IPO
+            # allotment shows up there the moment it credits — the API supplies the ticker, the
+            # quantity and the average price (for an allotment, the issue price). The only field it
+            # cannot supply is the acquisition date, and a recent date makes the lot short-term:
+            # 20% instead of 12.5%, wrong in the direction that cannot cost him money.
+            detected = unexplained_holdings(
+                result.portfolio,
+                live.portfolio.positions(),
+                _broker_avg_prices(live),
+            )
+            if detected:
+                dated = [replace(c, on=date.today()) for c in detected]
+                apply_off_market(result.portfolio, dated)
+                names = ", ".join(c.ticker.removesuffix(".NS") for c in detected)
+                st.info(
+                    f"📥 **{names} added from your broker holdings.** These shares are in your demat "
+                    "account but not in the tradebook — an IPO allotment, a gift or a transfer. "
+                    "Quantity and cost came from the broker; they are now ordinary holdings here, "
+                    "priced and taxed like any other.\n\n"
+                    "⚠️ **Their purchase date is unknown** — `holdings()` carries none — so they are "
+                    "dated **today**, which treats them as short-term (20%, not 12.5%). That "
+                    "over-states the tax rather than under-stating it. To get the real twelve-month "
+                    "clock, paste this into `data/twin/off_market.json` with the actual date:"
+                )
+                st.code(off_market_snippet(detected), language="json")
+            if recorded:
+                st.caption(
+                    f"✓ {len(recorded)} off-market credit(s) applied from `off_market.json` — "
+                    "dated lots, exact holding period."
+                )
         except Exception as exc:
             st.error(f"Could not replay the saved tradebook: {exc}")
             _live_overview(
