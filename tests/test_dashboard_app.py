@@ -394,8 +394,11 @@ def test_the_archived_autopilot_panel_says_it_is_archived() -> None:
     import dashboard_app
 
     src = inspect.getsource(dashboard_app._system_tab)
-    assert "Superseded 2026-08-29" in src
+    assert "Archived — the auto-pilot books" in src
     assert "will not move" in src
+    # Collapsed into an expander rather than deleted: a panel that silently vanishes leaves the
+    # reader wondering what happened to it. Its verdict travels with it.
+    assert "System − Shadow = ₹0.00" in src
 
 
 def test_the_orphaned_add_money_queue_is_retired() -> None:
@@ -414,11 +417,11 @@ def test_the_orphaned_add_money_queue_is_retired() -> None:
 
     import dashboard_app
 
-    src = inspect.getsource(dashboard_app._system_tab)
-    assert "Add-money is retired" in src
-    assert "funded by your **tradebook**" in src
-    # The promise that could not be kept must be gone.
-    assert "credits all three books equally" not in src
+    # The whole Add-money block was removed with the archived panel on 2026-08-29 — the strongest
+    # form of the fix. What must not survive anywhere is the promise it could no longer keep.
+    app = inspect.getsource(dashboard_app)
+    assert "credits all three books equally" not in app
+    assert "_queue_injection_to_repo(" not in inspect.getsource(dashboard_app._system_tab)
 
 
 def test_every_order_producing_surface_offers_a_kite_basket() -> None:
@@ -456,3 +459,56 @@ def test_the_basket_helper_fails_soft() -> None:
     src = inspect.getsource(dashboard_app._basket_download)
     assert "UnknownInstrumentError" in src
     assert 'st.caption(f"Kite basket unavailable' in src
+
+
+def test_the_viewer_never_marks_the_book() -> None:
+    """A viewer must not write the record it displays.
+
+    `_ensure_data` used to run `paper.py daily`, which marks the book and rewrites the equity curve.
+    On a fresh Streamlit Cloud container the panel is downloaded from scratch, and yfinance
+    routinely fails a handful of names — so that mark valued the book on missing prices and the app
+    displayed **its own corrupted mark as the track record**: the GO book read −39.24% and "NO-GO,
+    the strategy is misbehaving" while the cron-committed curve said −0.43%.
+
+    Marking belongs to the weekday cron, whose panel is complete and whose output is committed and
+    reviewable.
+    """
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._ensure_data)
+    assert '"daily"' not in src, "the dashboard must never run the marking command"
+    assert '"refresh"' in src
+    assert "_refresh_benchmark" in src, "refresh alone does not fetch the benchmark"
+
+
+def test_the_live_holdings_have_a_composition_chart_measured_on_equity() -> None:
+    """Concentration is judged by eye, so it needs a picture — on the right denominator.
+
+    Share of **equity**, not equity + cash: a slice measured against the account total understates
+    every position, which is how a 17.8% holding once read as 3.3% (the defect fixed 2026-08-28).
+    It must also flag a breach of the advisor's own 20% max-name cap, because whole-share rounding
+    can push a delivered basket past a cap it advertised — on the live book VBL sits at 20.0%.
+    """
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._live_overview)
+    assert "Composition, at a glance" in src
+    assert "portfolio.holdings_value(prices)" in src, "must divide by equity, not market_value"
+    assert "20.0" in src and "max-name cap" in src
+
+
+def test_the_twin_panel_plots_the_marks_it_reported() -> None:
+    """Charts must plot the saved marks, not recompute — a chart disagreeing with the table above
+    it is two answers to one question, which is the defect family this repo keeps finding."""
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._twin_panel)
+    assert "TWIN_MARKS_JSON" in src
+    assert "st.bar_chart" in src
+    assert "holdings_frame" in src

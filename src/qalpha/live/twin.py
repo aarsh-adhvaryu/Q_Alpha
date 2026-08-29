@@ -442,3 +442,43 @@ def sync_flows(books: dict[str, TwinBook], trades: Sequence[object]) -> list[Flo
         book.flows = list(current)
     assert_identical_flows(list(books.values()))
     return deltas
+
+
+def comparison_frame(marks: dict[str, BookMark]) -> pd.DataFrame:
+    """Every book's return on one basis, for plotting — long form, ready for a chart.
+
+    Return **against net money in**, because that is the only basis every book shares: they were
+    handed the same rupees on the same days, so it is the one denominator that makes the bars
+    comparable rather than merely adjacent.
+    """
+    rows = [
+        {
+            "Book": name,
+            "Return %": float(m.gain / m.net_invested * 100) if m.net_invested else 0.0,
+            "Gain": float(m.gain),
+            "Value": float(m.value),
+        }
+        for name in ALL_BOOKS
+        if (m := marks.get(name)) is not None
+    ]
+    return pd.DataFrame(rows)
+
+
+def holdings_frame(book: TwinBook, prices: dict[str, Decimal]) -> pd.DataFrame:
+    """One row per holding with its share of the book — the input to a composition chart.
+
+    Weights are of **equity**, not of equity + cash. A slice labelled with the account total would
+    understate every position: on the real account the same mistake read HCLTECH at 3.3% when it was
+    17.8%, and it is the number concentration is judged by.
+    """
+    equity = book.portfolio.holdings_value(prices)
+    rows = [
+        {
+            "Ticker": t.removesuffix(".NS"),
+            "Value": float(q * prices[t]),
+            "Share %": float(q * prices[t] / equity * 100) if equity else 0.0,
+        }
+        for t, q in sorted(book.portfolio.positions().items())
+        if t in prices
+    ]
+    return pd.DataFrame(rows).sort_values("Value", ascending=False).reset_index(drop=True)
