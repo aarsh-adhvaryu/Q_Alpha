@@ -941,19 +941,26 @@ def _twin_panel(as_of: date) -> None:
             pass
 
     if books:
-        prices = _twin_prices()
-        left, right = st.columns(2)
-        for column, name, title in (
-            (left, REAL, "Your account"),
-            (right, TWIN_FULL, "The twin"),
-        ):
-            with column:
-                st.caption(f"**{title}** — what it holds")
-                held = holdings_frame(books[name], prices) if name in books else pd.DataFrame()
-                if held.empty:
-                    st.caption("_no holdings_")
-                else:
-                    st.bar_chart(held.set_index("Ticker")["Share %"], height=240, horizontal=True)
+        # Wrapped: a chart is the least important thing on this page and must never be the reason
+        # it does not render. An unhandled empty frame here already took the live app down once.
+        try:
+            prices = _twin_prices()
+            left, right = st.columns(2)
+            for column, name, title in (
+                (left, REAL, "Your account"),
+                (right, TWIN_FULL, "The twin"),
+            ):
+                with column:
+                    st.caption(f"**{title}** — what it holds")
+                    held = holdings_frame(books[name], prices) if name in books else pd.DataFrame()
+                    if held.empty:
+                        st.caption("_nothing priced yet_")
+                    else:
+                        st.bar_chart(
+                            held.set_index("Ticker")["Share %"], height=240, horizontal=True
+                        )
+        except Exception as exc:
+            st.caption(f"Holdings charts unavailable: {exc}")
         st.caption(
             "Share of **equity**, not of equity + cash — a slice labelled with the account total "
             "understates every position, which is how a 17.8% holding once read as 3.3%."
