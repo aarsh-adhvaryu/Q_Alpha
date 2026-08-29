@@ -214,6 +214,21 @@ def cmd_daily(cfg: Config) -> int:
     for d in sync_flows(books, trades):
         print(f"[twin] credited ₹{d.amount:,.2f} on {d.on} to all {len(books)} books")
 
+    # A tradebook that reads empty while the books hold flows is a FAILED READ, not an empty
+    # account. Left unchecked, REAL replays to ₹0 against ₹3,04,144 of flows — a −100% line, with
+    # every twin appearing to beat it by three lakh, written to the dashboard as a verdict. Refuse
+    # to write anything: yesterday's report is far better than today's wrong one.
+    if not trades and books[REAL].flows:
+        print(
+            f"[twin] ABORT — the tradebook read EMPTY but the books hold "
+            f"{len(books[REAL].flows)} flows (₹{books[REAL].net_invested:,.2f}).\n"
+            "       This is a failed read, not an empty account. Nothing was written; the previous "
+            "report stands.\n"
+            "       Check: GIST_TOKEN present in the job, and that it carries the `gist` scope.",
+            file=sys.stderr,
+        )
+        return 0
+
     decisions: list[Decision] = []
     for name in AUTONOMOUS:
         if name in books:

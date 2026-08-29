@@ -1,6 +1,6 @@
 # The twin — 2026-08-29
 
-_Generated 2026-08-29 08:31 UTC. Fake money; the real account is the state source and is never traded._
+_Generated 2026-08-29 09:34 UTC. Fake money; the real account is the state source and is never traded._
 
 | Book | Net money in | Worth today | Gain | XIRR |
 |---|---:|---:|---:|---:|
