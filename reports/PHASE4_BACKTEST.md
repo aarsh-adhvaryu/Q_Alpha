@@ -45,6 +45,33 @@ it did not create.
 **GO criterion 3's noise floor is ₹83,62,315** on this window and scale. A live gap inside it is not
 a result. The twin's `Gap.noise_floor` takes this number.
 
+### The comparison that actually decides whether to bother
+
+76% of the gap is the equal-weight premium — and **that premium is purchasable**. Nifty-50
+equal-weight index funds exist (DSP 0.41% direct; HDFC and SBI higher). So the fair benchmark for
+this system is not the cap-weighted index. It is a fund anyone can buy in five minutes.
+
+| Plan | Money-weighted | Final on ₹78.5L contributed |
+|---|---:|---:|
+| NIFTYBEES (cap-weighted) | 11.96%/yr | ₹1,80,57,394 |
+| **Nifty-50 equal-weight index fund** (0.41% fee) | **16.16%/yr** | **₹2,45,65,309** |
+| Random 15 names, no fee | 16.88%/yr | ₹2,59,12,637 |
+| **The screen** | **18.13%/yr** | **₹2,84,43,450** |
+
+**The system's real case is +1.98 pp/yr — ₹38,78,141 over thirteen years — against a passive
+equal-weight fund. Not +6.17 pp against the index.**
+
+That is still a substantial number: half the contributions again. But it is the number the effort has
+to justify — daily Kite logins, tradebook uploads, tax handling and the operational risk of all of
+it — and **it is in-sample**, since the screen was developed with this data visible. An in-sample
+edge is routinely halved or more out of sample, which would put the honest forward expectation
+nearer **+1 pp/yr, possibly nothing**.
+
+**Two things the fund does that the system cannot**, which sharpen the comparison rather than soften
+it: it rebalances internally with **no capital-gains tax at the fund level**, and it requires no
+correct behaviour from the investor. **Two the system does that the fund cannot**: tax-loss
+harvesting, and never paying a fee that compounds forever.
+
 ---
 
 ## 2. Selling destroys value, and the better exit rule loses harder
