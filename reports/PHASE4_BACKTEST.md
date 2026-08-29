@@ -54,18 +54,21 @@ this system is not the cap-weighted index. It is a fund anyone can buy in five m
 | Plan | Money-weighted | Final on ₹78.5L contributed |
 |---|---:|---:|
 | NIFTYBEES (cap-weighted) | 11.96%/yr | ₹1,80,57,394 |
-| **Nifty-50 equal-weight index fund** (0.41% fee) | **16.16%/yr** | **₹2,45,65,309** |
-| Random 15 names, no fee | 16.88%/yr | ₹2,59,12,637 |
-| **The screen** | **18.13%/yr** | **₹2,84,43,450** |
+| **Nifty-50 equal-weight index fund** (net 0.41%/yr) | **15.78%/yr** | **₹2,38,94,453** |
+| The screen | **18.13%/yr** | ₹2,84,43,450 |
 
-**The system's real case is +1.98 pp/yr — ₹38,78,141 over thirteen years — against a passive
-equal-weight fund. Not +6.17 pp against the index.**
+**The system's real case is +2.35 pp/yr — ₹45,48,996, or 19.0% more terminal wealth — against a
+passive equal-weight fund. Not +6.17 pp against the index.**
 
-That is still a substantial number: half the contributions again. But it is the number the effort has
-to justify — daily Kite logins, tradebook uploads, tax handling and the operational risk of all of
-it — and **it is in-sample**, since the screen was developed with this data visible. An in-sample
-edge is routinely halved or more out of sample, which would put the honest forward expectation
-nearer **+1 pp/yr, possibly nothing**.
+*(The equal-weight leg is built by `equal_weight_pit`, which rebalances monthly over the names
+actually in the index that month, so it holds no name before it entered and none after it left. An
+earlier hand-approximation from the null median gave ₹38.8L; this is the rigorous figure.)*
+
+That is a substantial number — over half the contributions again. But it is the number the effort has
+to justify: daily Kite logins, tradebook uploads, tax handling and the operational risk of all of it.
+And **it is in-sample**, since the screen was developed with this data visible. An in-sample edge is
+routinely halved or worse out of sample, which puts the honest forward expectation nearer
+**+1 pp/yr, possibly nothing**.
 
 **Two things the fund does that the system cannot**, which sharpen the comparison rather than soften
 it: it rebalances internally with **no capital-gains tax at the fund level**, and it requires no

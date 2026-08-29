@@ -1,0 +1,38 @@
+{
+  "caveats": [
+    "One window, one universe, one parameterisation \u2014 no walk-forward on the composite.",
+    "The screen was developed with this data visible: the selection edge is NOT out of sample.",
+    "60 null draws supports p < 0.016 and nothing stronger.",
+    "The static-universe row is survivorship-biased ~2.5x and must never be quoted.",
+    "The AI is absent by necessity: historical verdicts leak the outcome.",
+    "Costs use the Zerodha model at default impact; no slippage sensitivity was run."
+  ],
+  "commit": "9d1c75b",
+  "label": "phase4",
+  "params": {
+    "deploys": 156,
+    "end": "2026-06-30",
+    "ew_fund_fee": "0.0041",
+    "lump": "100000",
+    "max_names": 15,
+    "null_draws": 60,
+    "seed": 20260829,
+    "sip": "50000",
+    "start": "2013-07-01",
+    "universe": "point_in_time_nifty50"
+  },
+  "results": {
+    "baseline_ew_fund_netfee": 23894453.362101343,
+    "baseline_ew_index_nofee": 25204986.687219094,
+    "baseline_niftybees": 18057394.108520508,
+    "noise_floor_p95": 8362315.05,
+    "null_median": 7855243.16758728,
+    "screen_annual_trim": 28073011.723617554,
+    "screen_buyhold": 28443449.73968506,
+    "screen_minus_ew_fund": 4548996.377583716,
+    "screen_minus_niftybees": 10386055.63116455,
+    "screen_with_exits": 21479617.23675537,
+    "static_universe_BIASED": 59271355.417785645
+  },
+  "run_at": "2026-08-29T07:58:22+00:00"
+}
