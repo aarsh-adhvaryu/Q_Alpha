@@ -278,3 +278,54 @@ def test_holdings_weights_are_of_equity_and_are_unmoved_by_idle_cash() -> None:
     # The identical book with ₹4L of SIP money parked beside it must read identically.
     assert list(parked["% of equity"]) == list(lean["% of equity"])
     assert sum(float(x.rstrip("%")) for x in parked["% of equity"]) == pytest.approx(100.0)
+
+
+def test_lots_frame_reveals_a_name_bought_on_two_dates() -> None:
+    """One row per name hides split long-term dates — the live book's INFY, found 2026-08-29.
+
+    The holdings table shows one LTCG-safe date per name: the *latest* lot's, since that is when the
+    whole line qualifies. INFY held 5 shares from 2026-06-15 and 15 from 2026-08-28, so a fifth of
+    the position reaches the 12.5% rate 74 days earlier than the row implies — invisible until now.
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    import dashboard_app
+
+    from qalpha.accounting.tax_lots import TaxLot
+    from qalpha.backtest.portfolio import Portfolio
+    from qalpha.config import Config
+
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    for on, qty, px in [
+        (date(2026, 6, 15), "5", "1136.31"),
+        (date(2026, 8, 28), "15", "1140.21"),
+    ]:
+        pf.ledger.add_lot(
+            TaxLot(
+                ticker="INFY.NS",
+                acquisition_date=on,
+                quantity_original=Decimal(qty),
+                buy_price=Decimal(px),
+            )
+        )
+    pf.ledger.add_lot(
+        TaxLot(
+            ticker="TCS.NS",
+            acquisition_date=date(2026, 8, 28),
+            quantity_original=Decimal("10"),
+            buy_price=Decimal("2340.03"),
+        )
+    )
+
+    frame, split = dashboard_app._lots_frame(
+        pf, {"INFY.NS": Decimal("1140"), "TCS.NS": Decimal("2334")}, date(2026, 8, 29)
+    )
+    assert len(frame) == 3, "one row per LOT, not per name"
+    # Only the twice-bought name is flagged; a single-lot holding must not be.
+    assert split == ["INFY.NS"]
+    infy = frame[frame["Ticker"] == "INFY"]
+    assert len(infy) == 2
+    # The two lots must carry DIFFERENT long-term dates — the whole point of the panel.
+    assert infy["Long-term from"].nunique() == 2
