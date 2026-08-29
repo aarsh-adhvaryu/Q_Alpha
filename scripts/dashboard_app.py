@@ -35,6 +35,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))
 from paper import BOOK_PATH, _load_benchmark_series, _load_market
 
+from qalpha.accounting.capital_gains import twelve_months_after
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.data.prices import PriceData
@@ -1536,6 +1537,26 @@ def _live_overview(
     )
     st.caption(_LTCG_SAFE_LEGEND)
 
+    # One row per name hides a name bought more than once: its lots reach the 12.5% rate on
+    # different dates, and the row can only show the latest. Surfaced, not summarised.
+    if caveat is None and portfolio.positions():
+        lots, split = _lots_frame(portfolio, prices, date.today())
+        with st.expander(
+            f"📄 Every purchase lot ({len(lots)} across {len(portfolio.positions())} names)"
+        ):
+            if split:
+                names = ", ".join(t.removesuffix(".NS") for t in split)
+                st.info(
+                    f"**{names}** — bought on more than one date, so part of the position turns "
+                    "long-term **earlier** than the holdings table's date. That row shows when the "
+                    "*whole* line qualifies; these lots show when each part does."
+                )
+            st.dataframe(lots, hide_index=True, width="stretch")
+            st.caption(
+                "FIFO: a sale consumes the oldest lot first, so these are also the order in which "
+                "shares are sold and taxed. The Sell tab prices any quantity exactly."
+            )
+
 
 def _track_record_panel(
     portfolio: Portfolio,
@@ -2012,6 +2033,47 @@ def _holdings_frame(
             }
         )
     return pd.DataFrame(rows)
+
+
+def _lots_frame(
+    portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: date
+) -> tuple[pd.DataFrame, list[str]]:
+    """Every open FIFO lot, and the names whose lots turn long-term on **different** dates.
+
+    The holdings table shows one row per name with one LTCG-safe date — the *latest* lot's, since
+    that is when the whole line qualifies. A name bought twice hides a real difference behind it: on
+    the live book INFY holds 5 shares from 2026-06-15 and 15 from 2026-08-28, so a fifth of the
+    position reaches the 12.5% rate **74 days before** the row says. Selling on the row's date is
+    never wrong, but it can mean waiting months longer than necessary on part of a holding — and the
+    single date gives no way to see that.
+
+    Returns the frame plus the tickers worth flagging (>1 distinct long-term date).
+    """
+    rows, split = [], []
+    for ticker in sorted(portfolio.positions()):
+        lots = list(portfolio.ledger.open_lots(ticker))
+        dates = {twelve_months_after(lot.acquisition_date) + timedelta(days=1) for lot in lots}
+        if len(dates) > 1:
+            split.append(ticker)
+        px = prices_dec.get(ticker, Decimal("0"))
+        for lot in lots:
+            qty = lot.quantity_remaining
+            cost = qty * lot.cost_basis_per_share
+            lt = twelve_months_after(lot.acquisition_date) + timedelta(days=1)
+            days = (lt - as_of).days
+            rows.append(
+                {
+                    "Ticker": ticker.removesuffix(".NS"),
+                    "Bought": str(lot.acquisition_date),
+                    "Qty": str(int(qty)),
+                    "Buy price": f"₹{lot.cost_basis_per_share:,.2f}",
+                    "Value now": f"₹{qty * px:,.0f}",
+                    "P&L": f"₹{qty * px - cost:+,.0f}",
+                    "Long-term from": f"{lt:%d %b %Y}" if days > 0 else "🟢 now",
+                    "Days": str(max(0, days)),
+                }
+            )
+    return pd.DataFrame(rows), split
 
 
 def _equity_chart(book: PaperBook, benchmark: pd.Series) -> None:
