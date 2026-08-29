@@ -20,6 +20,7 @@ from qalpha.live.track_record import Flow
 from qalpha.live.twin import (
     ALL_BOOKS,
     BASELINE,
+    BASELINE_EW,
     GATING_PAIR,
     REAL,
     TWIN_FULL,
@@ -113,8 +114,10 @@ def _marks(**values: float) -> dict[str, BookMark]:
 
 
 def test_exactly_one_comparison_gates() -> None:
-    """Four comparisons at 95% throw a false positive about one run in five."""
-    gaps = compare(_marks(TWIN_FULL=5000, BASELINE=1000, TWIN_NO_AI=4000, REAL=2000))
+    """Five comparisons at 95% throw a false positive about one run in four."""
+    gaps = compare(
+        _marks(TWIN_FULL=5000, BASELINE_EW=3000, BASELINE=1000, TWIN_NO_AI=4000, REAL=2000)
+    )
     gating = [g for g in gaps if g.gates]
     assert len(gating) == 1
     assert (gating[0].left, gating[0].right) == GATING_PAIR
@@ -177,7 +180,7 @@ def test_the_baseline_refuses_rather_than_inventing_a_number() -> None:
 
 
 def test_the_panel_separates_the_gate_from_the_diagnostics() -> None:
-    marks = _marks(TWIN_FULL=5000, BASELINE=1000, TWIN_NO_AI=4000, REAL=2000)
+    marks = _marks(TWIN_FULL=5000, BASELINE_EW=3000, BASELINE=1000, TWIN_NO_AI=4000, REAL=2000)
     md = comparison_markdown(marks, compare(marks, noise_floor=Decimal("100")))
     assert "The gate" in md
     assert "never gating" in md
@@ -216,3 +219,33 @@ def test_a_gap_smaller_than_the_measured_floor_is_not_a_result() -> None:
     gap = compare(marks, noise_floor=BACKTEST_NOISE_FLOOR)[0]
     assert not gap.readable
     assert "noise floor" in gap.render()
+
+
+def test_the_gate_is_the_purchasable_alternative_not_the_index() -> None:
+    """Phase 4 moved this bar, and the move is the point.
+
+    76% of the screen's gap over NIFTYBEES is the equal-weight premium — and that premium is
+    purchasable for ~0.41%/yr. Gating against the cap-weighted index would let the system claim
+    credit for something it did not create; a system that cannot beat the best cheap passive
+    alternative should not run. See reports/PHASE4_BACKTEST.md.
+    """
+    assert GATING_PAIR == (TWIN_FULL, BASELINE_EW)
+    gaps = compare(_marks(TWIN_FULL=5000, BASELINE_EW=3000, BASELINE=1000))
+    (gate,) = [g for g in gaps if g.gates]
+    assert gate.right == BASELINE_EW
+    # NIFTYBEES is still reported — as a floor, never as the bar.
+    assert any(g.right == BASELINE and not g.gates for g in gaps)
+
+
+def test_the_ew_fund_baseline_charges_its_fee() -> None:
+    """The premium is only worth what it is worth AFTER the cost of buying it."""
+    from qalpha.live.twin import EW_FUND_FEE, ew_fund_mark
+
+    flows = [Flow(on=date(2020, 1, 1), amount=Decimal("100000"))]
+    idx = pd.bdate_range("2019-12-01", "2026-01-01")
+    flat = pd.Series([100.0] * len(idx), index=idx)
+    m = ew_fund_mark(flows, flat, date(2026, 1, 1))
+    assert m is not None
+    # A flat index returns the money; the fee must still bite, so the mark is BELOW what went in.
+    assert m.value < m.net_invested
+    assert EW_FUND_FEE > 0

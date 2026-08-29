@@ -51,14 +51,26 @@ TWIN_NO_AI = "TWIN_NO_AI"
 TWIN_NO_HEDGE = "TWIN_NO_HEDGE"
 TWIN_NO_EXITS = "TWIN_NO_EXITS"
 BASELINE = "BASELINE"
+#: The equal-weight index fund — the baseline that actually decides whether this system is worth
+#: running. Phase 4 found that **76% of the screen's gap over NIFTYBEES is the equal-weight premium**,
+#: and that premium is purchasable (Nifty-50 EW index funds exist; DSP 0.41% direct). Beating the
+#: cap-weighted index is therefore not the achievement it looks like: the honest question is whether
+#: the system beats a fund anyone can buy in five minutes. See reports/PHASE4_BACKTEST.md.
+BASELINE_EW = "BASELINE_EW"
 
 #: Books that make their own decisions — the ones Phase 3 gives policies to.
 AUTONOMOUS = (TWIN_FULL, TWIN_NO_AI, TWIN_NO_HEDGE, TWIN_NO_EXITS)
 #: Every book in the comparison, in report order.
-ALL_BOOKS = (REAL, *AUTONOMOUS, BASELINE)
+ALL_BOOKS = (REAL, *AUTONOMOUS, BASELINE_EW, BASELINE)
 
-#: The only comparison that opens the GO gate. Everything else is descriptive (§1).
-GATING_PAIR = (TWIN_FULL, BASELINE)
+#: The only comparison that opens the GO gate — and it gates against the **harder** baseline.
+#: Gating against NIFTYBEES would let the system claim credit for the equal-weight premium it did
+#: not create; a system that cannot beat the best cheap passive alternative should not run.
+GATING_PAIR = (TWIN_FULL, BASELINE_EW)
+
+#: Annual expense ratio of the cheapest Nifty-50 equal-weight index fund available (DSP, direct).
+#: Charged against the EW baseline so it is a purchasable alternative, not an unattainable index.
+EW_FUND_FEE = Decimal("0.0041")
 
 
 @dataclass
@@ -258,7 +270,8 @@ def compare(marks: dict[str, BookMark], *, noise_floor: Decimal | None = None) -
     information about *him*, never a pass/fail on the system.
     """
     pairs = [
-        (TWIN_FULL, BASELINE),  # the only gate
+        (TWIN_FULL, BASELINE_EW),  # the only gate — the purchasable alternative
+        (TWIN_FULL, BASELINE),  # reported: the do-nothing floor, never the bar
         (TWIN_FULL, TWIN_NO_AI),
         (TWIN_FULL, TWIN_NO_HEDGE),
         (TWIN_FULL, TWIN_NO_EXITS),
@@ -310,3 +323,39 @@ def comparison_markdown(marks: dict[str, BookMark], gaps: Sequence[Gap]) -> str:
         ]
         lines += [f"- {g.render()}" for g in others]
     return "\n".join(lines)
+
+
+def ew_fund_mark(
+    flows: Sequence[Flow],
+    ew_series: pd.Series,
+    as_of: date,
+    *,
+    fee: Decimal = EW_FUND_FEE,
+) -> BookMark | None:
+    """The same rupees into an equal-weight index **fund** — the bar that decides whether to bother.
+
+    ``ew_series`` is a point-in-time equal-weight index level (see
+    :func:`qalpha.backtest.baselines.equal_weight_pit`, which rebalances monthly over the names
+    actually in the index that month rather than holding today's survivors). The fund's annual fee is
+    charged continuously, because the premium is only worth what it is worth **after** the cost of
+    buying it — an unattainable zero-fee index is not an alternative anyone can hold.
+
+    Note the asymmetry that makes this a fair fight rather than a rigged one: the fund rebalances
+    internally with **no capital-gains tax at the fund level**, which the twin cannot do. It pays a
+    fee the twin never pays. Both are real.
+    """
+    leg = benchmark_leg(flows, ew_series, as_of)
+    if leg is None or not flows:
+        return None
+    years = Decimal(str((as_of - flows[0].on).days / 365.25))
+    value = leg.value * (Decimal("1") - fee) ** years
+    net = sum((f.amount for f in flows), Decimal("0"))
+    dated = [(f.on, -f.amount) for f in flows] + [(as_of, value)]
+    return BookMark(
+        name=BASELINE_EW,
+        as_of=as_of,
+        start=flows[0].on,
+        net_invested=net,
+        value=value,
+        rate=xirr(dated),
+    )

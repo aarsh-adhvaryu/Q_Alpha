@@ -34,9 +34,13 @@ import pandas as pd
 from backtest_sip import Result, _month_starts, run_index, run_screen
 from paper import _load_benchmark_series
 
+from qalpha.backtest.baselines import equal_weight_pit
+from qalpha.backtest.runstore import RunRecord, save_run
 from qalpha.backtest.significance import noise_floor, summarise_null
 from qalpha.data.ingest import load_parquet
 from qalpha.data.prices import PriceData
+from qalpha.data.universe import Universe
+from qalpha.live.twin import EW_FUND_FEE
 
 WATCHLIST_PANEL = "data/historical/prices_watchlist.parquet"
 WATCHLIST_CSV = "data/universes/nifty100_watchlist.csv"
@@ -129,11 +133,20 @@ def main(argv: list[str] | None = None) -> int:
         f"({len(universe_on(schedule[0]))} on day one, {len(universe_on(schedule[-1]))} at the end)\n"
     )
 
-    # ---- the do-nothing baseline ----------------------------------------------------------------
+    # ---- the two baselines ------------------------------------------------------------------------
+    # NIFTYBEES is the floor: doing literally nothing. The equal-weight FUND is the bar that decides
+    # whether to bother, because 76% of the screen's gap over the cap-weighted index is the
+    # equal-weight premium — and that premium is purchasable for ~0.41%/yr.
     base = run_index(bench, schedule, lump=LUMP, sip=SIP, label="NIFTYBEES (do nothing)")
+    ew_level = equal_weight_pit(
+        prices, Universe.from_csv(PIT_MEMBERSHIP), prices.adj_close.index, Decimal("100")
+    )
+    ew = run_index(ew_level, schedule, lump=LUMP, sip=SIP, label="Equal-weight index (no fee)")
+    years = Decimal(str((end - schedule[0]).days / 365.25))
+    ew_fund_final = float(Decimal(str(ew.final)) * (Decimal("1") - EW_FUND_FEE) ** years)
 
     # ---- each component alone, then the composite -------------------------------------------------
-    runs: list[Result] = [base]
+    runs: list[Result] = [base, ew]
     for label, maintain in [
         ("Screen only (buy & hold)", "none"),
         ("Screen + §4.7 exits", "prune"),
@@ -201,7 +214,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {i + 1}/{args.null}…")
 
     floor = noise_floor([abs(g) for g in gaps])
-    real_gap = runs[1].final - base.final
+    screen = runs[2]
+    real_gap = screen.final - base.final
     print(f"\n{summarise_null([abs(g) for g in gaps])}")
     print(f"\nScreen − baseline: ₹{real_gap:,.0f}")
     print(f"Noise floor (p95): ₹{floor:,.0f}")
@@ -209,6 +223,56 @@ def main(argv: list[str] | None = None) -> int:
         "CLEARS the floor" if abs(real_gap) > float(floor) else "INSIDE the floor — not a result"
     )
     print(f"Verdict: **{verdict}**")
+
+    vs_fund = screen.final - ew_fund_final
+    print("\n--- against the baseline that decides whether to bother ---")
+    print(
+        f"Equal-weight index FUND (net {float(EW_FUND_FEE) * 100:.2f}%/yr fee): ₹{ew_fund_final:,.0f}"
+    )
+    print(
+        f"Screen − EW fund: ₹{vs_fund:,.0f}  "
+        f"({vs_fund / ew_fund_final * 100:+.1f}% more terminal wealth)"
+    )
+
+    path = save_run(
+        RunRecord(
+            label="phase4",
+            params={
+                "universe": "point_in_time_nifty50",
+                "start": str(start),
+                "end": str(end),
+                "deploys": len(schedule),
+                "lump": str(LUMP),
+                "sip": str(SIP),
+                "max_names": MAX_NAMES,
+                "null_draws": args.null,
+                "seed": args.seed,
+                "ew_fund_fee": str(EW_FUND_FEE),
+            },
+            results={
+                "baseline_niftybees": base.final,
+                "baseline_ew_index_nofee": ew.final,
+                "baseline_ew_fund_netfee": ew_fund_final,
+                "screen_buyhold": screen.final,
+                "screen_with_exits": runs[3].final,
+                "screen_annual_trim": runs[4].final,
+                "static_universe_BIASED": runs[5].final,
+                "noise_floor_p95": float(floor),
+                "null_median": float(np.median([abs(g) for g in gaps])),
+                "screen_minus_niftybees": real_gap,
+                "screen_minus_ew_fund": vs_fund,
+            },
+            caveats=[
+                "One window, one universe, one parameterisation — no walk-forward on the composite.",
+                "The screen was developed with this data visible: the selection edge is NOT out of sample.",
+                f"{args.null} null draws supports p < {1 / (args.null + 1):.3f} and nothing stronger.",
+                "The static-universe row is survivorship-biased ~2.5x and must never be quoted.",
+                "The AI is absent by necessity: historical verdicts leak the outcome.",
+                "Costs use the Zerodha model at default impact; no slippage sensitivity was run.",
+            ],
+        )
+    )
+    print(f"\n✓ run recorded → {path}")
     return 0
 
 
