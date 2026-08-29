@@ -1354,6 +1354,25 @@ def _save_tradebook_master(trades: list) -> str:  # list[TradebookTrade]
     return "✓ saved to your private gist."
 
 
+def _apply_off_market_credits(portfolio: Portfolio) -> list:
+    """Add shares that arrived outside the tradebook — IPO allotments, gifts, demat transfers.
+
+    Same source as the twin (``data/twin/off_market.json``), so the real book and every twin book
+    agree about what is held and what it cost. Fail-soft: a malformed file costs the credits, never
+    the page.
+    """
+    try:
+        from qalpha.live.twin import apply_off_market, load_off_market
+
+        credits = load_off_market()
+    except (OSError, ValueError, KeyError) as exc:
+        st.caption(f"Off-market credits not loaded: {exc}")
+        return []
+    if credits:
+        apply_off_market(portfolio, credits)
+    return credits
+
+
 def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str, Decimal]]:
     """Render the live overview over the **cumulative** tradebook (stack new exports, never re-upload).
 
@@ -1393,6 +1412,13 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
     if master:
         try:
             result = replay_tradebook(master, cfg, cash=live.portfolio.cash)
+            # An IPO allotment IS part of the portfolio like any other holding — it simply did not
+            # arrive as a trade, so a tradebook replay cannot see it. Without this the shares are
+            # invisible on this tab: absent from holdings, from the composition chart, from the
+            # harvest and sell tabs, and from every tax figure — while the reconciliation warns that
+            # the account does not add up and downgrades all of it to "estimate". Recording the
+            # credit gives them a dated lot, so FIFO, the holding period and §2(42A) are all exact.
+            _apply_off_market_credits(result.portfolio)
         except Exception as exc:
             st.error(f"Could not replay the saved tradebook: {exc}")
             _live_overview(
@@ -1429,7 +1455,10 @@ def _live_section(live: LiveHoldings, cfg: Config) -> tuple[Portfolio, dict[str,
                 "⚠️ The uploaded tradebook does not reconcile with your broker holdings (see above), "
                 "so purchase dates are incomplete and **every tax figure on this page is an "
                 "estimate, not your ITR number**. Off-market credits (IPO allotments, transfers) "
-                "never appear in a tradebook export — add those lots before acting on the tax."
+                "never appear in a tradebook export. **If this is an IPO allotment, record it in "
+                "`data/twin/off_market.json`** (ticker, allotment date, quantity, and the *issue* "
+                "price you paid) — the shares then behave exactly like any other holding here: "
+                "dated lot, exact FIFO, correct holding period, and the twin is funded for them too."
             )
         else:
             st.session_state["tb_reconciles"] = True

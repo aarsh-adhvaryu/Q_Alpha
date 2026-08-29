@@ -512,3 +512,36 @@ def test_the_twin_panel_plots_the_marks_it_reported() -> None:
     assert "TWIN_MARKS_JSON" in src
     assert "st.bar_chart" in src
     assert "holdings_frame" in src
+
+
+def test_ipo_allotments_reach_the_real_money_surface_too() -> None:
+    """An IPO allotment IS part of the portfolio like any other holding.
+
+    It just did not arrive as a *trade*, so a tradebook replay cannot see it. Without applying the
+    credit here the shares are invisible on the Live tab — absent from holdings, the composition
+    chart, the harvest and sell tabs, and every tax figure — while the reconciliation warns the
+    account does not add up and downgrades all of it to "estimate".
+    """
+    import inspect
+
+    import dashboard_app
+
+    live = inspect.getsource(dashboard_app._live_section)
+    assert "_apply_off_market_credits(result.portfolio)" in live
+    # Applied BEFORE reconciliation, or the account still looks unexplained.
+    assert live.index("_apply_off_market_credits") < live.index("reconcile_positions(")
+    # Same source as the twin, so both agree on what is held and what it cost.
+    assert "load_off_market" in inspect.getsource(dashboard_app._apply_off_market_credits)
+
+
+def test_the_reconciliation_warning_names_the_fix() -> None:
+    """Telling the user their account does not reconcile is only half of it."""
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._live_section)
+    assert "off_market.json" in src
+    # The §48 acquisition cost is the ISSUE price, not the listing price — recording the
+    # latter would understate the gain and overstate the tax.
+    assert "*issue*" in src
