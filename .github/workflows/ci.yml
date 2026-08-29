@@ -19,7 +19,7 @@ jobs:
         # Without it `pytest.importorskip("streamlit")` skipped the whole module, and the dashboard
         # — the surface every defect in PLAN_TRUST_REPAIR.md reached the user through — was the
         # least-tested code in the repo despite a green suite (T3.3).
-        run: uv sync --extra dev --extra dashboard --frozen
+        run: uv sync --extra dev --extra dashboard --extra research --frozen
       - name: Ruff (lint)
         run: uv run ruff check .
       - name: Ruff (format check)
@@ -37,3 +37,11 @@ jobs:
             echo "::error::tests were skipped — a skip is not a pass. See the short summary above."
             exit 1
           fi
+      - name: Pytest — research track (advisory, may skip, never gates)
+        # research/ holds ideas that have NOT passed a pre-registered test. They legitimately skip
+        # without their heavy optional deps (hmmlearn, qiskit), which is exactly why they are kept
+        # off `testpaths` — folding them into the product run would either force those deps into CI
+        # or reintroduce the silent-skip hole the step above exists to close. Run anyway so the
+        # track cannot rot unnoticed, but never let it gate the product.
+        continue-on-error: true
+        run: uv run pytest research/tests -q -rs || true

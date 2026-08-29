@@ -87,7 +87,8 @@ def test_the_buy_list_renders_with_its_scope_note() -> None:
     assert any("Suggest what to buy" in lbl for lbl in labels)  # back on the page
     # The scope note is not optional decoration: T1.5 must be on screen whenever the list is.
     infos = " ".join(i.value for i in at.info)
-    assert "never been backtested" in infos
+    # The property, not the sentence — see test_dashboard_status for why.
+    assert "not:** the validated strategy" in infos
     assert "18.2%" in infos
     # Sell / Raise cash are untouched throughout.
     assert any("Advise sell" in lbl for lbl in labels)
@@ -277,3 +278,115 @@ def test_holdings_weights_are_of_equity_and_are_unmoved_by_idle_cash() -> None:
     # The identical book with ₹4L of SIP money parked beside it must read identically.
     assert list(parked["% of equity"]) == list(lean["% of equity"])
     assert sum(float(x.rstrip("%")) for x in parked["% of equity"]) == pytest.approx(100.0)
+
+
+def test_lots_frame_reveals_a_name_bought_on_two_dates() -> None:
+    """One row per name hides split long-term dates — the live book's INFY, found 2026-08-29.
+
+    The holdings table shows one LTCG-safe date per name: the *latest* lot's, since that is when the
+    whole line qualifies. INFY held 5 shares from 2026-06-15 and 15 from 2026-08-28, so a fifth of
+    the position reaches the 12.5% rate 74 days earlier than the row implies — invisible until now.
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    import dashboard_app
+
+    from qalpha.accounting.tax_lots import TaxLot
+    from qalpha.backtest.portfolio import Portfolio
+    from qalpha.config import Config
+
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    for on, qty, px in [
+        (date(2026, 6, 15), "5", "1136.31"),
+        (date(2026, 8, 28), "15", "1140.21"),
+    ]:
+        pf.ledger.add_lot(
+            TaxLot(
+                ticker="INFY.NS",
+                acquisition_date=on,
+                quantity_original=Decimal(qty),
+                buy_price=Decimal(px),
+            )
+        )
+    pf.ledger.add_lot(
+        TaxLot(
+            ticker="TCS.NS",
+            acquisition_date=date(2026, 8, 28),
+            quantity_original=Decimal("10"),
+            buy_price=Decimal("2340.03"),
+        )
+    )
+
+    frame, split = dashboard_app._lots_frame(
+        pf, {"INFY.NS": Decimal("1140"), "TCS.NS": Decimal("2334")}, date(2026, 8, 29)
+    )
+    assert len(frame) == 3, "one row per LOT, not per name"
+    # Only the twice-bought name is flagged; a single-lot holding must not be.
+    assert split == ["INFY.NS"]
+    infy = frame[frame["Ticker"] == "INFY"]
+    assert len(infy) == 2
+    # The two lots must carry DIFFERENT long-term dates — the whole point of the panel.
+    assert infy["Long-term from"].nunique() == 2
+
+
+def test_the_harvest_tab_is_on_the_live_advisor() -> None:
+    """Tax-loss harvesting graduated onto the real-money surface without the §2a ablation bar.
+
+    Deliberate, and worth stating: that bar exists to stop an unproven *strategy claim* reaching real
+    money. Harvesting makes no such claim — it converts a paper loss into a §74 carry-forward asset
+    and realises ₹0 capital-gains tax by construction, which is exactly why it has no ablation.
+    It also has a deadline the twin cannot wait out: 31 March.
+    """
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._advisor_tabs)
+    assert "Harvest losses" in src
+    assert "advise_harvest(" in src
+    # A harvest is still a sale, so it must carry the same unreconciled-branch warning as Sell.
+    assert "_harvest_branch_warning(" in src
+    # And it must say the quantities are FIFO prefixes — picking by eye is the defect it prevents.
+    assert "FIFO **prefixes**" in src
+
+
+def test_the_harvest_warning_always_flags_the_set_off_branch() -> None:
+    """Every harvest realises a loss, so §70 — never confirmed against a Zerodha statement — is
+    always exercised. A sale that looks free of tax risk is the one worth reconciling."""
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._harvest_branch_warning)
+    assert "has_loss_lot=True" in src
+    assert "Reconcile it afterwards" in src
+
+
+def test_the_twin_panel_is_on_the_system_tab() -> None:
+    """The twin is the instrument; without a surface it is markdown nobody opens."""
+    import inspect
+
+    import dashboard_app
+
+    assert "_twin_panel(as_of)" in inspect.getsource(dashboard_app._system_tab)
+    src = inspect.getsource(dashboard_app._twin_panel)
+    # An unseeded twin must say so, not render an empty table that reads like a tie.
+    assert "not seeded" in src
+    # Freshness must come from the runner's own stamp, not the file's mtime: Streamlit Cloud
+    # redeploys from a fresh git checkout, which resets every mtime to the deploy time — so an
+    # mtime check reports a two-week-old book as current on exactly the surface where it matters.
+    assert "saved_at" in src
+    assert "_mtime_date" not in src
+
+
+def test_the_archived_autopilot_panel_says_it_is_archived() -> None:
+    """A superseded panel that silently vanishes is worse than one labelled frozen."""
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._system_tab)
+    assert "Superseded 2026-08-29" in src
+    assert "will not move" in src

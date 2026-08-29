@@ -23,6 +23,24 @@ Criteria (all must be 🟢 for GO):
    tracks a market crash is beta (🟢); only an *idiosyncratic* drawdown materially worse than the index
    means behaviour diverged from the validated profile (🔴 → NO-GO).
 5. **Data integrity** — the track record must be dense and ordered (no missed marks / feed gaps).
+
+⛔ **SUPERSEDED 2026-08-29 by ``qalpha.live.go_gate``.** Do not add criteria here, and do not gate
+anything on this module.
+
+It graded ``data/paper/book.json`` — a paper book running the **validated funnel** (shrink-weighted,
+annual, tax-aware rebalancing). The real money runs the deploy-into-weakness advisor, which shares no
+selection code and no names with it. **Every criterion here could have gone green without saying
+anything about the money at risk**, which is a category error, not a calibration problem.
+
+That book is archived with its verdict in ``reports/ARCHIVE_2026-08-28.md`` (53 marks, −0.68% against
+Nifty TRI +3.42%, worst in-window fall −2.24% against a −10% gate). ``go_gate`` replaces it with six
+criteria over the composite system the twin actually runs, and gates against the **equal-weight
+fund** rather than the cap-weighted index — Phase 4 found 76% of the old gap was a purchasable
+premium.
+
+Kept, not deleted: the archived scorecard is the evidence for why the redesign happened, and its
+``_benchmark_covers`` refusal-to-grade is the pattern ``go_gate`` inherits.
+
 """
 
 from __future__ import annotations

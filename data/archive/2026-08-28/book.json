@@ -1,0 +1,409 @@
+{
+  "start_date": "2026-06-12",
+  "starting_capital": "200000",
+  "params": {
+    "band": 0.1,
+    "weighting": "shrink",
+    "tax_aware": true,
+    "force_refresh": true,
+    "rebalance_freq": "Y"
+  },
+  "portfolio": {
+    "cash": "7335.38",
+    "lots": [
+      {
+        "ticker": "APOLLOHOSP.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "4",
+        "buy_price": "8498.00",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.10",
+        "other_costs": "1.23",
+        "lot_id": "96419e6c-24ec-452b-8fba-1f82df143e92",
+        "broker_trade_id": null,
+        "quantity_remaining": "4"
+      },
+      {
+        "ticker": "ASIANPAINT.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "14",
+        "buy_price": "2747.40",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.77",
+        "other_costs": "1.39",
+        "lot_id": "4c9110c1-ffc3-4830-b5c5-5d0a4f8bf307",
+        "broker_trade_id": null,
+        "quantity_remaining": "14"
+      },
+      {
+        "ticker": "BEL.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "98",
+        "buy_price": "406.50",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.98",
+        "other_costs": "1.44",
+        "lot_id": "344fd21e-f10f-4a22-b3f6-5c4355b2547f",
+        "broker_trade_id": null,
+        "quantity_remaining": "98"
+      },
+      {
+        "ticker": "NTPC.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "113",
+        "buy_price": "353.90",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "6.00",
+        "other_costs": "1.45",
+        "lot_id": "bd5a6abd-ec68-418f-961a-8a4ddefe191d",
+        "broker_trade_id": null,
+        "quantity_remaining": "113"
+      },
+      {
+        "ticker": "SUNPHARMA.NS",
+        "acquisition_date": "2026-06-12",
+        "quantity_original": "22",
+        "buy_price": "1807.70",
+        "pool": "core",
+        "brokerage": "0.00",
+        "stamp_duty": "5.97",
+        "other_costs": "1.44",
+        "lot_id": "4bb57c46-703b-41ff-ba8a-20720e2fe13a",
+        "broker_trade_id": null,
+        "quantity_remaining": "22"
+      }
+    ],
+    "ltcg_by_fy": {}
+  },
+  "history": [
+    {
+      "as_of": "2026-06-12",
+      "reason": "first deployment of capital",
+      "orders": [
+        {
+          "date": "2026-06-12",
+          "ticker": "APOLLOHOSP.NS",
+          "side": "BUY",
+          "quantity": "4",
+          "price": "8498.00",
+          "cost": "108.30",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-06-12",
+          "ticker": "ASIANPAINT.NS",
+          "side": "BUY",
+          "quantity": "14",
+          "price": "2747.40",
+          "cost": "122.55",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-06-12",
+          "ticker": "BEL.NS",
+          "side": "BUY",
+          "quantity": "98",
+          "price": "406.50",
+          "cost": "126.93",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-06-12",
+          "ticker": "NTPC.NS",
+          "side": "BUY",
+          "quantity": "113",
+          "price": "353.90",
+          "cost": "127.42",
+          "tax": "0.00"
+        },
+        {
+          "date": "2026-06-12",
+          "ticker": "SUNPHARMA.NS",
+          "side": "BUY",
+          "quantity": "22",
+          "price": "1807.70",
+          "cost": "126.72",
+          "tax": "0.00"
+        }
+      ]
+    }
+  ],
+  "last_target": {
+    "NTPC.NS": 0.2007637341399515,
+    "ASIANPAINT.NS": 0.2007637341399515,
+    "SUNPHARMA.NS": 0.1992362658600485,
+    "APOLLOHOSP.NS": 0.1992362658600485,
+    "BEL.NS": 0.2
+  },
+  "equity_curve": [
+    {
+      "date": "2026-06-12",
+      "equity": "199388.08",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-15",
+      "equity": "198762.78",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-16",
+      "equity": "199103.23",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-17",
+      "equity": "200748.63",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-18",
+      "equity": "202600.13",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-19",
+      "equity": "203168.18",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-22",
+      "equity": "203394.83",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-23",
+      "equity": "201997.98",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-24",
+      "equity": "201085.73",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-25",
+      "equity": "199405.03",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-29",
+      "equity": "200973.68",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-06-30",
+      "equity": "200596.03",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-01",
+      "equity": "202130.58",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-02",
+      "equity": "202861.53",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-03",
+      "equity": "204391.93",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-06",
+      "equity": "205499.73",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-07",
+      "equity": "203899.08",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-08",
+      "equity": "200560.28",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-09",
+      "equity": "201447.68",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-10",
+      "equity": "202359.03",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-13",
+      "equity": "201871.73",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-14",
+      "equity": "202179.33",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-15",
+      "equity": "202569.03",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-16",
+      "equity": "201828.03",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-17",
+      "equity": "201557.73",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-20",
+      "equity": "202913.73",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-21",
+      "equity": "203467.83",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-22",
+      "equity": "203000.58",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-23",
+      "equity": "202250.68",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-24",
+      "equity": "201115.78",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-27",
+      "equity": "203614.68",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-28",
+      "equity": "201707.33",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-29",
+      "equity": "202266.18",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-30",
+      "equity": "202446.63",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-07-31",
+      "equity": "202665.13",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-03",
+      "equity": "203234.78",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-04",
+      "equity": "202792.83",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-05",
+      "equity": "202054.08",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-06",
+      "equity": "202831.98",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-07",
+      "equity": "202195.88",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-10",
+      "equity": "202357.33",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-11",
+      "equity": "201376.53",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-12",
+      "equity": "200967.83",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-13",
+      "equity": "201945.63",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-14",
+      "equity": "201903.98",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-17",
+      "equity": "200167.48",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-18",
+      "equity": "199121.48",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-19",
+      "equity": "199098.33",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-20",
+      "equity": "199174.88",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-21",
+      "equity": "199912.18",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-24",
+      "equity": "199580.08",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-25",
+      "equity": "201034.13",
+      "cash": "7335.38"
+    },
+    {
+      "date": "2026-08-26",
+      "equity": "198647.38",
+      "cash": "7335.38"
+    }
+  ]
+}
