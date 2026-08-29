@@ -249,3 +249,47 @@ def test_the_ew_fund_baseline_charges_its_fee() -> None:
     # A flat index returns the money; the fee must still bite, so the mark is BELOW what went in.
     assert m.value < m.net_invested
     assert EW_FUND_FEE > 0
+
+
+def test_new_trades_are_credited_to_every_book() -> None:
+    """The twin's flows must not freeze at seed time while REAL is replayed fresh each run.
+
+    Otherwise the user's next purchase lands in REAL and in none of the books it is compared
+    against, and the identical-flow invariant breaks **silently, on the next SIP**.
+    """
+    from qalpha.live.twin import sync_flows
+
+    books = seed_books(_trades(), Config())
+    before = books[TWIN_FULL].net_invested
+    later = [*_trades(), _T(date(2026, 9, 15), "TCS.NS", Side.BUY, Decimal("5"), Decimal("2400"))]
+
+    deltas = sync_flows(books, later)
+    assert len(deltas) == 1
+    assert deltas[0].amount == Decimal("12000")
+    for name in ALL_BOOKS:
+        assert books[name].net_invested == before + Decimal("12000"), name
+    assert_identical_flows(list(books.values()))
+
+
+def test_an_amended_day_is_credited_as_a_delta_not_missed() -> None:
+    """A new trade on a day already seen AMENDS that day's flow — a length check would miss it."""
+    from qalpha.live.twin import sync_flows
+
+    books = seed_books(_trades(), Config())
+    same_day = [
+        *_trades(),
+        _T(date(2026, 8, 28), "WIPRO.NS", Side.BUY, Decimal("10"), Decimal("180")),
+    ]
+
+    deltas = sync_flows(books, same_day)
+    assert len(deltas) == 1, "same number of flow-days, but the amount changed"
+    assert deltas[0].on == date(2026, 8, 28)
+    assert deltas[0].amount == Decimal("1800")
+    assert len(books[TWIN_FULL].flows) == 2  # still two days, one of them larger
+
+
+def test_no_new_trades_credits_nothing() -> None:
+    from qalpha.live.twin import sync_flows
+
+    books = seed_books(_trades(), Config())
+    assert sync_flows(books, _trades()) == []
