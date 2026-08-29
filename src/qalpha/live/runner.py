@@ -76,13 +76,20 @@ class Market:
 def step(
     book: TwinBook, policy: Policy, market: Market, cfg: Config | None = None
 ) -> list[Decision]:
-    """Run one day for one book and return every decision it made, each with its reason."""
+    """Run one day for one book, **execute** what it decided, and return the decisions with reasons.
+
+    Execution is not optional. The first live run produced 60 decisions and left every book at ₹0
+    gain with zero lots, because ``step`` computed a plan and never touched the portfolio — a
+    decision log wearing a book's clothes. The comparison only means something if the books actually
+    hold what they chose.
+    """
     cfg = cfg or Config()
     out: list[Decision] = []
     out += _harvest(book, policy, market, cfg)
     out += _exits(book, policy, market)
     out += _hedge(book, policy, market)
     out += _deploy(book, policy, market, cfg)
+    _execute(book, out, market)
     if not out:
         out.append(
             Decision(
@@ -93,6 +100,32 @@ def step(
             )
         )
     return out
+
+
+def _execute(book: TwinBook, decisions: list[Decision], market: Market) -> None:
+    """Apply the day's decisions to the book, through the validated FIFO/cost/tax engine.
+
+    Sells before buys, so cash freed by a harvest or an exit is spendable the same day rather than
+    idling until tomorrow. ``HEDGE_ON``/``HEDGE_OFF`` move no shares — the overlay is a futures
+    position outside the equity book — so they are recorded and not executed here.
+    """
+    for d in decisions:
+        if d.ticker is None or d.quantity is None or d.quantity <= 0:
+            continue
+        price = market.prices.get(d.ticker)
+        if price is None or price <= 0:
+            continue
+        if d.action in (HARVEST, EXIT):
+            held = book.portfolio.ledger.quantity_held(d.ticker)
+            qty = min(d.quantity, held)
+            if qty > 0:
+                book.portfolio.sell(market.as_of, d.ticker, qty, price)
+    for d in decisions:
+        if d.action != DEPLOY or d.ticker is None or d.quantity is None or d.quantity <= 0:
+            continue
+        price = market.prices.get(d.ticker)
+        if price is not None and price > 0:
+            book.portfolio.buy(market.as_of, d.ticker, d.quantity, price)
 
 
 def _harvest(book: TwinBook, policy: Policy, market: Market, cfg: Config) -> list[Decision]:
@@ -209,6 +242,7 @@ def _deploy(book: TwinBook, policy: Policy, market: Market, cfg: Config) -> list
         market.wl_prices,
         market.index_close,
         market.as_of,
+        max_names=cfg.deploy_policy.max_names_default,
         spend_idle_cash=False,
     )
     orders = list(advice.deploy.buy_orders)
