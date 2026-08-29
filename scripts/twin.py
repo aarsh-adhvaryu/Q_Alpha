@@ -36,12 +36,16 @@ from qalpha.live.twin import (
     AUTONOMOUS,
     BACKTEST_NOISE_FLOOR,
     REAL,
+    apply_off_market,
+    assert_identical_flows,
     baseline_mark,
     compare,
     comparison_frame,
     comparison_markdown,
     ew_fund_mark,
+    flows_with_off_market,
     load_books,
+    load_off_market,
     mark,
     save_books,
     seed_books,
@@ -148,7 +152,18 @@ def cmd_seed(cfg: Config) -> int:
     if not trades:
         print("[twin] no tradebook — nothing to seed from.", file=sys.stderr)
         return 1
+    credits = load_off_market()
     books = seed_books(trades, cfg)
+    if credits:
+        # IPO allotments and other off-market credits never appear in a tradebook. Fund every book
+        # with them so REAL does not hold shares the twins were never given money for.
+        flows = flows_with_off_market(trades, credits)
+        extra = sum((c.amount for c in credits), Decimal("0"))
+        for book in books.values():
+            book.flows = list(flows)
+            book.portfolio.cash += extra
+        assert_identical_flows(list(books.values()))
+        print(f"  + {len(credits)} off-market credit(s), ₹{extra:,.2f}")
     save_books(books)
     flows = books[REAL].flows
     print(
@@ -164,6 +179,9 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config):
 
     marks = {n: mark(b, market.prices, market.as_of) for n, b in books.items() if n != REAL}
     real = replay_tradebook(_tradebook(), cfg).portfolio
+    # The allotment is not a trade, so the replay cannot know about it — give REAL the lots, with
+    # the allotment date, because that is what §2(42A) counts the holding period from.
+    apply_off_market(real, load_off_market())
     books[REAL].portfolio = real
     marks[REAL] = mark(books[REAL], market.prices, market.as_of)
 
@@ -214,7 +232,8 @@ def cmd_daily(cfg: Config) -> int:
     # New money first: the user's flows are the twin's only funding, and a purchase that reached
     # REAL but not the twins would break the identical-flow invariant on his very next SIP.
     trades = _tradebook()
-    for d in sync_flows(books, trades):
+    credits = load_off_market()
+    for d in sync_flows(books, trades, credits):
         print(f"[twin] credited ₹{d.amount:,.2f} on {d.on} to all {len(books)} books")
 
     # A tradebook that reads empty while the books hold flows is a FAILED READ, not an empty

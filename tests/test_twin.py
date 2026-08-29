@@ -317,3 +317,31 @@ def test_an_empty_tradebook_read_must_not_be_treated_as_an_empty_account() -> No
     write_at = src.index("REPORT.write_text")
     assert abort_at < write_at, "the abort must precede any write"
     assert "return 0" in src[abort_at : abort_at + 600], "abort must return before writing"
+
+
+def test_holdings_frame_survives_a_book_with_nothing_in_it() -> None:
+    """An empty frame has no columns, so sorting by name raises KeyError.
+
+    This took the live dashboard down: `_twin_panel` charts REAL and TWIN_FULL side by side, and a
+    book holding nothing — or whose names the deployed panel could not price — crashed the page
+    rather than drawing an empty chart.
+    """
+    from qalpha.live.twin import holdings_frame
+
+    empty = seed_books(_trades(), Config())[TWIN_FULL]
+    frame = holdings_frame(empty, {})  # no prices at all
+    assert frame.empty
+    assert list(frame.columns) == ["Ticker", "Value", "Share %"], "shape must survive"
+
+
+def test_holdings_frame_skips_names_it_cannot_price() -> None:
+    """A holding with no price is omitted, never valued at zero — that would understate the book."""
+    from qalpha.live.twin import holdings_frame
+
+    books = seed_books(_trades(), Config())
+    book = books[TWIN_FULL]
+    book.portfolio.buy(date(2026, 8, 28), "INFY.NS", Decimal("10"), Decimal("1140"))
+    book.portfolio.buy(date(2026, 8, 28), "TCS.NS", Decimal("5"), Decimal("2340"))
+    frame = holdings_frame(book, {"INFY.NS": Decimal("1140")})  # TCS unpriced
+    assert list(frame["Ticker"]) == ["INFY"]
+    assert abs(frame["Share %"].sum() - 100.0) < 1e-6, "shares are of what could be priced"

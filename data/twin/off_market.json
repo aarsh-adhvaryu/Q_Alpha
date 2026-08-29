@@ -1,0 +1,22 @@
+{
+  "_readme": [
+    "Shares that arrived OUTSIDE the tradebook — IPO allotments, gifts, demat transfers.",
+    "A Zerodha tradebook export contains trades; an allotment is not one, so the shares show up in",
+    "your holdings with no matching row. Recording it here does two things: credits the cost to",
+    "EVERY twin book as a dated flow (so the twins get the same rupees to deploy their own way), and",
+    "gives REAL the actual lot so its FIFO cost basis and holding period are right.",
+    "",
+    "cost_per_share = the ISSUE price you paid, not the listing price. That is the acquisition cost",
+    "under §48, and 'on' is the ALLOTMENT date, which is what §2(42A) counts the 12 months from.",
+    "",
+    "Add an entry, then: uv run python scripts/twin.py daily"
+  ],
+  "_example": {
+    "ticker": "NEWCO.NS",
+    "on": "2026-09-15",
+    "quantity": "15",
+    "cost_per_share": "230",
+    "note": "IPO allotment"
+  },
+  "credits": []
+}
