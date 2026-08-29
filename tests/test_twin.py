@@ -293,3 +293,27 @@ def test_no_new_trades_credits_nothing() -> None:
 
     books = seed_books(_trades(), Config())
     assert sync_flows(books, _trades()) == []
+
+
+def test_an_empty_tradebook_read_must_not_be_treated_as_an_empty_account() -> None:
+    """The silent failure this guards: a failed gist read makes REAL replay to ₹0.
+
+    With flows stored per book, REAL would show ₹0 against ₹3,04,144 of net money in — a −100% line,
+    with every twin appearing to beat it by three lakh, written to the dashboard as a verdict. The
+    runner must refuse to write rather than publish that.
+    """
+    import inspect
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import twin as runner_script
+
+    src = inspect.getsource(runner_script.cmd_daily)
+    assert "if not trades and books[REAL].flows:" in src
+    assert "ABORT" in src
+    # And it must not write a report on that path.
+    abort_at = src.index("ABORT")
+    write_at = src.index("REPORT.write_text")
+    assert abort_at < write_at, "the abort must precede any write"
+    assert "return 0" in src[abort_at : abort_at + 600], "abort must return before writing"
