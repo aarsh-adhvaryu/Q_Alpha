@@ -32,10 +32,12 @@ until then they hold cash and are honest about it.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pandas as pd
 
@@ -359,3 +361,49 @@ def ew_fund_mark(
         value=value,
         rate=xirr(dated),
     )
+
+
+# ---- persistence: the books have to survive between cron runs ------------------------------------
+
+TWIN_STATE = Path("data/twin/books.json")
+
+
+def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
+    """Persist every book's portfolio and flows.
+
+    The flows are stored **per book** rather than once, deliberately: it costs a few bytes and makes
+    :func:`assert_identical_flows` a real check on reload instead of a tautology. If a bug ever gave
+    one book a different flow, storing them once would hide it forever.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "saved_at": date.today().isoformat(),
+        "books": {
+            name: {
+                "portfolio": book.portfolio.to_state(),
+                "flows": [{"on": f.on.isoformat(), "amount": str(f.amount)} for f in book.flows],
+            }
+            for name, book in books.items()
+        },
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
+    """Reload the books, re-checking the identical-flow invariant rather than trusting the file."""
+    if not path.exists():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    books = {
+        name: TwinBook(
+            name=name,
+            portfolio=Portfolio.from_state(entry["portfolio"], cfg.cost, cfg.tax),
+            flows=[
+                Flow(on=date.fromisoformat(f["on"]), amount=Decimal(f["amount"]))
+                for f in entry["flows"]
+            ],
+        )
+        for name, entry in raw["books"].items()
+    }
+    assert_identical_flows(list(books.values()))
+    return books

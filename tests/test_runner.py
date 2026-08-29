@@ -34,6 +34,14 @@ def _book(name: str = TWIN_FULL, cash: str = "0", lots: tuple = ()) -> TwinBook:
     return TwinBook(name=name, portfolio=pf)
 
 
+def _price_data():
+    """A one-name PriceData panel, so the deploy step has a watchlist it can actually price."""
+    from qalpha.data.prices import PriceData
+
+    frame = pd.DataFrame({"A.NS": [100.0] * len(_DATES)}, index=_DATES)
+    return PriceData(frame, frame.copy(), frame.copy() * 0 + 1e6)
+
+
 def _calm_index() -> pd.Series:
     return pd.Series(np.linspace(100.0, 112.0, len(_DATES)), index=_DATES)
 
@@ -166,3 +174,57 @@ def test_cash_with_no_watchlist_says_so_instead_of_silently_holding() -> None:
     ]
     assert "no watchlist panel" in d.reason
     assert "100,000" in d.reason
+
+
+def test_deploy_respects_the_concentration_cap() -> None:
+    """Without max_names the screen buys ~75 names at one share each.
+
+    That is the "43×1-share, over-diversified" defect the slider was added to fix — and on the first
+    live twin run it produced 75 single-share buys per book, four books, 300 decisions in a day.
+    A basket nobody would place is not a strategy being tested.
+    """
+    import inspect
+
+    from qalpha.config import Config
+    from qalpha.live import runner
+
+    src = inspect.getsource(runner._deploy)
+    assert "max_names=cfg.deploy_policy.max_names_default" in src
+    assert Config().deploy_policy.max_names_default <= 20, (
+        "a basket over 20 also breaks Kite's import cap"
+    )
+
+
+def test_step_actually_executes_what_it_decides() -> None:
+    """A decision log is not a book.
+
+    The first live run produced 60 decisions and left every book at ₹0 gain with **zero lots**,
+    because step() computed a plan and never touched the portfolio. The comparison only means
+    anything if the books hold what they chose — so execution is asserted, not assumed.
+    """
+    book = _book(cash="500000")
+    market = _market(prices={"A.NS": Decimal("100")})
+    market = Market(
+        as_of=_AS_OF,
+        prices={"A.NS": Decimal("100")},
+        index_close=market.index_close,
+        adj_close=market.adj_close,
+        watchlist=["A.NS"],
+        sector_of={"A.NS": "IT"},
+        wl_prices=_price_data(),
+    )
+    before = book.portfolio.cash
+    decisions = step(book, POLICIES[TWIN_FULL], market)
+    if any(d.action == DEPLOY for d in decisions):
+        assert book.portfolio.cash < before, "cash must leave the book when it deploys"
+        assert list(book.portfolio.positions()), "a deploy must leave lots behind"
+
+
+def test_an_exit_frees_cash_before_the_deploy_spends_it() -> None:
+    """Sells run before buys so freed cash is spendable the same day, not idle until tomorrow."""
+    import inspect
+
+    from qalpha.live import runner
+
+    src = inspect.getsource(runner._execute)
+    assert src.index("HARVEST, EXIT") < src.index("!= DEPLOY"), "sells must precede buys"
