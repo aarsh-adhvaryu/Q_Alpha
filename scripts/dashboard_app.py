@@ -46,14 +46,12 @@ from qalpha.live.basket import BUY, SELL, BasketOrder
 from qalpha.live.dashboard import (
     BUY_ADVICE_ON_REAL_MONEY,
     _benchmark_return_pct,
-    ai_signal_summary,
     buy_advice_blocked_markdown,
     buy_advice_scope_note,
     buy_advice_withheld_markdown,
     glossary_markdown,
     go_readiness_markdown,
     health_panel_markdown,
-    injection_drift_markdown,
     live_pm_brief_markdown,
     ltcg_safe_sell_note,
     paper_freshness,
@@ -272,10 +270,18 @@ def _bridge_secrets() -> None:
 
 @st.cache_resource(show_spinner=False)
 def _ensure_data() -> None:
-    """First run on a fresh host (e.g. Streamlit Cloud): the gitignored price panels are absent —
-    download them once (cached for the container's life). The paper view needs **both** the strategy
-    panel *and* the Nifty-50-TRI benchmark; ``paper.py daily`` fetches both (``refresh`` is prices
-    only). Guard on both files so a partial first run still self-heals."""
+    """First run on a fresh host: fetch the gitignored price panels. **Data only — never a mark.**
+
+    ⚠️ This used to run ``paper.py daily``, which *marks the book* and rewrites the equity curve. On
+    a fresh Streamlit Cloud container the panel is downloaded from scratch, and a partial download —
+    yfinance routinely fails a handful of names — makes that mark value the book on missing prices.
+    The app then displayed **its own corrupted mark as the track record**: the GO book showed
+    −39.24% and "NO-GO, the strategy is misbehaving" while the cron-committed curve said −0.43%.
+
+    A viewer must never write the record it is displaying. Marking belongs to the weekday cron,
+    whose panel is complete and whose output is committed and reviewable. This now fetches prices and
+    the benchmark and stops there; the book on disk is the one git checked out.
+    """
     prices = Path("data/historical/prices_pit_2026.parquet")
     benchmark = Path("data/historical/benchmark_NIFTYBEESNS_2026.parquet")
     if prices.exists() and benchmark.exists():
@@ -283,7 +289,17 @@ def _ensure_data() -> None:
     import subprocess
 
     with st.spinner("First run — downloading market data (~1–2 min). This happens once."):
-        subprocess.run([sys.executable, "scripts/paper.py", "daily"], check=False, cwd=Path.cwd())
+        subprocess.run([sys.executable, "scripts/paper.py", "refresh"], check=False, cwd=Path.cwd())
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.path.insert(0, 'scripts'); "
+                "from paper import _refresh_benchmark; _refresh_benchmark()",
+            ],
+            check=False,
+            cwd=Path.cwd(),
+        )
 
 
 def _check_password() -> bool:
@@ -890,138 +906,24 @@ def _system_tab(
     cash in → AI-paced deploys into weakness → tax-gated (real-world, not calendar) rebalancing →
     hedge readout in stress. Vs a no-AI shadow and a buy-and-hold baseline with identical cash flows.
     **Fake money — nothing here ever places a real trade.**"""
-    from autopilot import BASELINE_PATH
-
-    from qalpha.live.autopilot import load_state
 
     _twin_panel(as_of)
-    st.divider()
-    st.subheader("📜 Archived — the auto-pilot books")
-    st.caption(
-        "⛔ **Superseded 2026-08-29.** These three books are archived "
-        "(`reports/ARCHIVE_2026-08-28.md`) and their cron step is switched off, so the figures below "
-        "are frozen at 2026-08-26 and will not move. Kept visible for one release so the transition "
-        "is legible rather than a panel that silently vanished."
-    )
-    st.caption(
-        "**The whole system, acting on its own advice, on fake money** — deploys idle cash when the "
-        "advisor says so (AI-paced), rebalances only when the tax-gate says it's worth it (checked "
-        "daily, not on a calendar), hedges in stress. Its track record IS the advice's track record. "
-        "**Nothing here ever places a real trade.**"
-    )
-
-    # --- Wallet: fund the system (all three books equally, so the comparison stays fair) ---
-    state = load_state()
-    import json as _json
-
-    wallets = state.get("wallets") if isinstance(state.get("wallets"), dict) else {}
-    sys_wallet = float(str(wallets.get("system", "0"))) if wallets else 0.0
-    base_cash = 0.0
-    if BASELINE_PATH.exists():
-        base_cash = float(_json.loads(BASELINE_PATH.read_text(encoding="utf-8")).get("cash", "0"))
-    c1, c2 = st.columns(2)
-    c1.metric("💰 Idle wallet (dry powder)", f"₹{sys_wallet:,.0f}")
-    c2.metric("Baseline idle", f"₹{base_cash:,.0f}")
-
-    # Add-money only persists if a repo-write token is configured — say so UP FRONT, not after a
-    # silent-looking failure (a missing token is exactly why past ₹50k top-ups never reached the book).
-    if not os.environ.get("GITHUB_TOKEN", "").strip():
-        st.error(
-            "⚠️ **Add-money can't be saved right now** — this app has no `GITHUB_TOKEN` "
-            "(contents:write) in its Streamlit secrets, so a top-up can't reach the model. Set that "
-            "secret first; until then, anything you add here is **not** recorded."
-        )
-
-    # ⛔ The Add-money queue is ORPHANED. It writes to data/autopilot/pending_injections.json, which
-    # only `autopilot.py daily` ever applied — and that cron step is `if: false` since the books were
-    # archived. So the button queued money, promised "the next daily run credits all three books",
-    # and nothing would ever credit anything. A surface promising an action that no longer happens is
-    # the same defect as a number labelled wrong; it just costs fake money instead of real.
-    #
-    # The twin is funded by the TRADEBOOK and nothing else (PLAN_REDESIGN §4c): the user invests what
-    # he chooses, uploads the export, and those trades become the flows every book receives. There is
-    # no button to press, deliberately — a calendar or manual injection the real account never
-    # received is exactly what voided a predecessor run.
-    st.info(
-        "**Add-money is retired.** The twin is funded by your **tradebook** — invest whatever you "
-        "choose in Zerodha, upload the export on the Live tab, and every book receives those exact "
-        "rupees on those exact days. Nothing to press here.\n\n"
-        "_This button used to queue a top-up for the three archived books; the run that applied the "
-        "queue is switched off, so it would have promised a credit that never arrived._"
-    )
-    # The queue is still SHOWN — if anything was queued before the archive it is still sitting
-    # there, and a pending entry that silently stops being applied is worse than one you can see.
-    pending, source = _fetch_pending_injections()
-    if pending:
-        total = sum(int(float(str(i.get("amount", 0) or 0))) for i in pending)
-        where = "from the repo" if source == "repo" else "local view — may lag the repo"
-        st.info(
-            f"⏳ **₹{total:,} across {len(pending)} top-up(s) queued** — waiting for the next daily "
-            f"run to credit all three books ({where})."
-        )
-
-    st.caption("Funding is manual — add money above whenever you like (e.g. a monthly top-up).")
-
-    # T3.1 — the audit log vs the books. Loud on the page, not a line in a cron log nobody reads.
-    from autopilot import SYSTEM_CAPITAL  # the runner owns the seed constant
-
-    from qalpha.live.autopilot import manual_log_total
-
-    contributed_map = state.get("contributed")
-    contributed_system = (
-        contributed_map.get("system", SYSTEM_CAPITAL)
-        if isinstance(contributed_map, dict)
-        else SYSTEM_CAPITAL
-    )
-    credited = Decimal(str(contributed_system)) - SYSTEM_CAPITAL
-    drift_note = injection_drift_markdown(manual_log_total(), credited)
-    if drift_note:
-        st.warning(drift_note)
-
-    # --- The scoreboard (written by the daily run) + the race chart ---
-    st.divider()
     _tab1_sources_panel(as_of)
-    if AUTOPILOT_DASHBOARD_MD.exists():
-        st.markdown(AUTOPILOT_DASHBOARD_MD.read_text(encoding="utf-8"))
-    else:
-        st.info("No marks yet — the daily run writes the scoreboard on its first pass.")
-    _system_chart()
-
-    # --- Holdings ---
     st.divider()
-    st.subheader("📦 What each book holds")
-    _system_holdings(
-        {
-            "system": "🧠 System",
-            "shadow": "System, AI off",
-            "baseline": "NIFTYBEES baseline",
-        }
-    )
-
-    # --- Today's AI market brief (context only; the system acts on its SIGNAL via the fixed rule) ---
-    st.divider()
-    st.subheader("🧠 What the AI actually did today")
-    # T2.5 — lead with the one line that has consequences; the narrative goes behind it. Several
-    # paragraphs of per-name prose rendered under a buy list read as "the AI picked these", which is
-    # the opposite of true: its output has no ticker field at all.
-    from qalpha.live.autopilot import parse_ai_signal, signal_tilt
-
-    brief_text = AI_BRIEF_MD.read_text(encoding="utf-8") if AI_BRIEF_MD.exists() else ""
-    has_brief = bool(brief_text) and "No brief generated yet" not in brief_text
-    signal = parse_ai_signal(brief_text, as_of.isoformat()) if has_brief else None
-    st.info(
-        ai_signal_summary(
-            getattr(signal, "lean", None),
-            getattr(signal, "confidence", None),
-            signal_tilt(signal),
-            consumed_by="the 🧠 System book only (fake money)",
+    with st.expander("📜 Archived — the auto-pilot books (frozen 2026-08-26)"):
+        st.caption(
+            "The System / Shadow / Baseline books are archived "
+            "(`reports/ARCHIVE_2026-08-28.md`) and their cron step is switched off, so these figures "
+            "are frozen and will not move. Superseded by the twin above, which runs on your **real "
+            "cash flows** rather than a wallet you top up by hand.\n\n"
+            "Their verdict, recorded: **System − Shadow = ₹0.00 on all 7 marks** (the AI issued no "
+            "verdicts, so the treatment was never applied) and **System − Baseline = −₹3,894** on a "
+            "run far too short to mean anything either way."
         )
-    )
-    if has_brief:
-        with st.expander("Read the full brief (background reading — nothing consumes this prose)"):
-            st.markdown(brief_text)
-    else:
-        st.caption("No brief yet — the daily run writes it after market close.")
+        st.caption(
+            "Collapsed rather than deleted, for one release: a panel that silently vanishes leaves "
+            "the reader wondering what happened to it."
+        )
 
     # --- The validated core (the official GO gate) — running untouched underneath ---
     st.divider()
@@ -1300,7 +1202,6 @@ def _tab1_sources_panel(as_of: date) -> None:
     were rendered here with **no freshness check whatsoever** — a stopped cron would keep serving its
     last successful numbers with nothing on screen saying they were old.
     """
-    import csv as _csv
 
     def _mtime_date(path: Path) -> date | None:
         return (
@@ -1309,20 +1210,11 @@ def _tab1_sources_panel(as_of: date) -> None:
             else None
         )
 
-    track_last: date | None = None
-    if SYSTEM_TRACK_CSV.exists():
-        rows = list(_csv.DictReader(SYSTEM_TRACK_CSV.read_text(encoding="utf-8").splitlines()))
-        if rows:
-            track_last = date.fromisoformat(rows[-1]["date"])
-
-    sources = [
-        # The track record dates itself, so it is checked on its content, not the filesystem.
-        source_freshness("Track record (system_track.csv)", track_last, as_of),
-        source_freshness(
-            "Scoreboard (autopilot_dashboard.md)", _mtime_date(AUTOPILOT_DASHBOARD_MD), as_of
-        ),
-        source_freshness("AI brief (ai_brief.md)", _mtime_date(AI_BRIEF_MD), as_of),
-    ]
+    # system_track.csv and autopilot_dashboard.md were dropped from this list on 2026-08-29: their
+    # books are archived and their cron step is `if: false`, so gating on them would report a
+    # permanent, meaningless stale warning. The AI brief is still written every weekday, and the
+    # twin carries its own freshness line (from the runner's `saved_at` stamp, not an mtime).
+    sources = [source_freshness("AI brief (ai_brief.md)", _mtime_date(AI_BRIEF_MD), as_of)]
     md = sources_freshness_markdown(sources)
     if any(s.is_stale for s in sources):
         st.warning(md)
