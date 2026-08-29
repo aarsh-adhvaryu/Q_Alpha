@@ -41,6 +41,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from qalpha.accounting.tax_lots import TaxLot
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.live.track_record import Flow, benchmark_leg, flows_from_trades, xirr
@@ -409,7 +410,11 @@ def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
     return books
 
 
-def sync_flows(books: dict[str, TwinBook], trades: Sequence[object]) -> list[Flow]:
+def sync_flows(
+    books: dict[str, TwinBook],
+    trades: Sequence[object],
+    credits: Sequence[OffMarketCredit] = (),
+) -> list[Flow]:
     """Credit any **new or amended** cash flows to every book, keeping them identical.
 
     Without this the twin's flows freeze at seed time while ``REAL`` is replayed fresh from the
@@ -427,7 +432,7 @@ def sync_flows(books: dict[str, TwinBook], trades: Sequence[object]) -> list[Flo
     """
     if not books:
         return []
-    current = flows_from_trades(trades)
+    current = flows_with_off_market(trades, credits)
     known = {f.on: f.amount for f in next(iter(books.values())).flows}
     deltas = [
         Flow(on=f.on, amount=f.amount - known.get(f.on, Decimal("0")))
@@ -481,4 +486,98 @@ def holdings_frame(book: TwinBook, prices: dict[str, Decimal]) -> pd.DataFrame:
         for t, q in sorted(book.portfolio.positions().items())
         if t in prices
     ]
-    return pd.DataFrame(rows).sort_values("Value", ascending=False).reset_index(drop=True)
+    # An empty frame has no columns, so sorting by name raises KeyError — which took the live
+    # dashboard down on a book that held nothing (or whose names the panel could not price).
+    # Return the shape the caller expects rather than an untyped empty frame.
+    columns = ["Ticker", "Value", "Share %"]
+    if not rows:
+        return pd.DataFrame(columns=columns)
+    return (
+        pd.DataFrame(rows, columns=columns)
+        .sort_values("Value", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+# ---- off-market credits: IPO allotments, gifts, demat transfers -----------------------------------
+
+OFF_MARKET_PATH = Path("data/twin/off_market.json")
+
+
+@dataclass(frozen=True)
+class OffMarketCredit:
+    """Shares that arrived **outside** the tradebook — an IPO allotment, a gift, a demat transfer.
+
+    A Zerodha tradebook export contains *trades*. An IPO allotment is not a trade: the shares appear
+    in holdings with no matching row, so a tradebook replay silently under-counts the account. That
+    already shows up as a reconciliation warning on the Live tab; for the twin it is worse, because
+    the money was never credited to any book. ``REAL`` would hold shares the twins were never funded
+    for, and every gap after that would compare different amounts of money — the identical-flow
+    invariant broken from the opposite direction to a missed SIP.
+
+    Recording one here credits the **cost** to every book as a dated flow (so the twins can deploy
+    the same rupees their own way) and gives ``REAL`` the actual lot (so its tax and holding period
+    are right). ``cost_per_share`` is the IPO issue price — the acquisition cost for §48, not the
+    listing price.
+    """
+
+    ticker: str
+    on: date
+    quantity: Decimal
+    cost_per_share: Decimal
+    note: str = ""
+
+    @property
+    def amount(self) -> Decimal:
+        return self.quantity * self.cost_per_share
+
+
+def load_off_market(path: Path = OFF_MARKET_PATH) -> list[OffMarketCredit]:
+    """Read the recorded off-market credits, oldest first."""
+    if not path.exists():
+        return []
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    credits = [
+        OffMarketCredit(
+            ticker=str(e["ticker"]),
+            on=date.fromisoformat(str(e["on"])),
+            quantity=Decimal(str(e["quantity"])),
+            cost_per_share=Decimal(str(e["cost_per_share"])),
+            note=str(e.get("note", "")),
+        )
+        for e in raw.get("credits", [])
+    ]
+    return sorted(credits, key=lambda c: c.on)
+
+
+def flows_with_off_market(
+    trades: Sequence[object], credits: Sequence[OffMarketCredit]
+) -> list[Flow]:
+    """Tradebook flows **plus** off-market credits, netted per day and ordered.
+
+    The credit is money the user put in, so every book must receive it on the day it arrived —
+    exactly as a purchase would be. Netting per day matters because an allotment can land on a day
+    that already has trades.
+    """
+    by_day: dict[date, Decimal] = {f.on: f.amount for f in flows_from_trades(trades)}
+    for credit in credits:
+        by_day[credit.on] = by_day.get(credit.on, Decimal("0")) + credit.amount
+    return [Flow(on=d, amount=by_day[d]) for d in sorted(by_day)]
+
+
+def apply_off_market(portfolio: Portfolio, credits: Sequence[OffMarketCredit]) -> None:
+    """Give ``REAL`` the actual lots, so its holding period and FIFO cost basis are correct.
+
+    Added as dated lots rather than bought, because no cash left the account through the broker on
+    that date — the money went out at application, and the shares arrived on allotment. The
+    acquisition date is what §2(42A) counts from, and it is the allotment date.
+    """
+    for credit in credits:
+        portfolio.ledger.add_lot(
+            TaxLot(
+                ticker=credit.ticker,
+                acquisition_date=credit.on,
+                quantity_original=credit.quantity,
+                buy_price=credit.cost_per_share,
+            )
+        )
