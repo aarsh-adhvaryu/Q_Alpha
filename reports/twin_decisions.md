@@ -1,62 +1,6 @@
 # Twin decisions — 2026-08-29
 
-- 2026-08-29 · TWIN_FULL · DEPLOY 1×SHREECEM.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 7×MUTHOOTFIN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 19×INFY.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 9×TCS.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 114×WIPRO.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 9×HYUNDAI.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 15×HCLTECH.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 15×ADANIGREEN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 47×VBL.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 82×JIOFIN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 55×TATAPOWER.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 15×RELIANCE.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 5×DMART.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 65×VEDL.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_FULL · DEPLOY 18×TATACONSUM.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 1×SHREECEM.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 7×MUTHOOTFIN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 19×INFY.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 9×TCS.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 114×WIPRO.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 9×HYUNDAI.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 15×HCLTECH.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 15×ADANIGREEN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 47×VBL.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 82×JIOFIN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 55×TATAPOWER.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 15×RELIANCE.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 5×DMART.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 65×VEDL.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_AI · DEPLOY 18×TATACONSUM.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 1×SHREECEM.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 7×MUTHOOTFIN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 19×INFY.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 9×TCS.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 114×WIPRO.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 9×HYUNDAI.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 15×HCLTECH.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 15×ADANIGREEN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 47×VBL.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 82×JIOFIN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 55×TATAPOWER.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 15×RELIANCE.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 5×DMART.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 65×VEDL.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_HEDGE · DEPLOY 18×TATACONSUM.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 1×SHREECEM.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 7×MUTHOOTFIN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 19×INFY.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 9×TCS.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 114×WIPRO.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 9×HYUNDAI.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 15×HCLTECH.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 15×ADANIGREEN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 47×VBL.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 82×JIOFIN.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 55×TATAPOWER.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 15×RELIANCE.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 5×DMART.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 65×VEDL.NS — market elevated; deploy-into-weakness from ₹304,144 idle
-- 2026-08-29 · TWIN_NO_EXITS · DEPLOY 18×TATACONSUM.NS — market elevated; deploy-into-weakness from ₹304,144 idle
+- 2026-08-29 · TWIN_FULL · HOLD — no harvest worth its round trip, no breakdown, hedge unchanged
+- 2026-08-29 · TWIN_NO_AI · HOLD — no harvest worth its round trip, no breakdown, hedge unchanged
+- 2026-08-29 · TWIN_NO_HEDGE · HOLD — no harvest worth its round trip, no breakdown, hedge unchanged
+- 2026-08-29 · TWIN_NO_EXITS · HOLD — no harvest worth its round trip, no breakdown, hedge unchanged
