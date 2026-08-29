@@ -37,6 +37,7 @@ from qalpha.accounting.capital_gains import (
     net_capital_gains_tax,
     twelve_months_after,
 )
+from qalpha.accounting.costs import Side, compute_costs
 from qalpha.backtest.portfolio import Portfolio, TradeRecord
 from qalpha.config import Config
 
@@ -732,4 +733,189 @@ def advise_deploy(
         naive_cost=naive_cost,
         tax_saved=naive_tax,
         idle_cash=portfolio.cash,
+    )
+
+
+# ---- "which losses can I bank before 31 March?" --------------------------------------------------
+
+
+@dataclass(frozen=True)
+class HarvestCandidate:
+    """One name's best reachable loss, and what it costs to reach it."""
+
+    ticker: str
+    quantity: Decimal  # whole shares to sell — a FIFO **prefix**, not a chosen lot
+    price: Decimal
+    net_gain: Decimal  # negative = the loss banked; includes any gain crossed to reach it
+    gain_crossed: Decimal  # gain realised on lots sold *only* to reach the loss behind them
+    lots_consumed: int
+    charges: Decimal  # round-trip: this sale plus buying the position back
+    resets_long_term: bool  # rebuying restarts the 12-month clock on these shares
+
+    @property
+    def worthwhile(self) -> bool:
+        """Does the banked loss exceed what it costs to bank it?
+
+        A loss is only worth realising if it survives the gain crossed to reach it *and* the
+        round trip. ``net_gain`` is already net of the crossing; charges are the remaining hurdle.
+        """
+        return self.net_gain < 0 and abs(self.net_gain) > self.charges
+
+
+@dataclass(frozen=True)
+class HarvestAdvice:
+    """Losses that can be banked before the financial year closes, and what each is worth."""
+
+    as_of: date
+    financial_year: int
+    candidates: list[HarvestCandidate]
+    realized_gains_this_fy: Decimal  # what a banked loss can offset *now*
+    days_to_fy_end: int
+
+    @property
+    def actionable(self) -> list[HarvestCandidate]:
+        return [c for c in self.candidates if c.worthwhile]
+
+    @property
+    def total_loss(self) -> Decimal:
+        return sum((c.net_gain for c in self.actionable), _ZERO)
+
+    def render(self) -> str:
+        if not self.actionable:
+            return (
+                "### Tax-loss harvest\n\nNo position is far enough underwater for banking the loss "
+                "to beat the cost of the round trip. Nothing to do."
+            )
+        lines = [
+            f"### Tax-loss harvest — {self.days_to_fy_end} days to 31 March",
+            "",
+            "Selling a position that is **down** converts a paper loss into a **realised** one, which "
+            "sets off against gains under §70 and carries forward **eight years** under §74. India "
+            "has no wash-sale rule, so the position can be bought straight back.",
+            "",
+            "| Sell | Qty | Price | Loss banked | Round trip |",
+            "|---|---|---|---|---|",
+        ]
+        for c in self.actionable:
+            lines.append(
+                f"| {c.ticker} | {c.quantity} | {_rupees(c.price)} | "
+                f"**{_rupees(-c.net_gain)}** | {_rupees(c.charges)} |"
+            )
+        lines += ["", f"- **Total loss banked: {_rupees(-self.total_loss)}**"]
+        if self.realized_gains_this_fy > 0:
+            lines.append(
+                f"- Offsets the {_rupees(self.realized_gains_this_fy)} of gains you have already "
+                "realised this financial year; any excess carries forward eight years."
+            )
+        else:
+            lines.append(
+                "- ⚠️ You have **no realised gains this financial year**, so this does not cut a "
+                "bill now — it banks a loss that carries forward **eight years** against gains you "
+                "have not made yet. Real value, but not cash back."
+            )
+        crossed = [c for c in self.actionable if c.gain_crossed > 0]
+        if crossed:
+            names = ", ".join(c.ticker for c in crossed)
+            lines.append(
+                f"- ⚠️ **{names}**: FIFO sells oldest first, so reaching the loss also realises "
+                f"{_rupees(sum((c.gain_crossed for c in crossed), _ZERO))} of gain on the lots in "
+                "front of it. That is already netted off the figures above."
+            )
+        if any(c.resets_long_term for c in self.actionable):
+            lines.append(
+                "- ⚠️ Buying back **restarts the 12-month clock** on those shares. Close to the "
+                "long-term line, the delayed 12.5% rate can cost more than the loss is worth."
+            )
+        lines.append(
+            "- To carry a loss forward you must **file your ITR by the due date** — an unfiled "
+            "return forfeits the carry-forward entirely."
+        )
+        return "\n".join(lines)
+
+
+def _best_harvest_prefix(
+    portfolio: Portfolio, ticker: str, price: Decimal, as_of: date, cfg: Config
+) -> tuple[Decimal, Decimal, Decimal, int] | None:
+    """The FIFO prefix that banks the largest net loss: (quantity, net_gain, gain_crossed, n_lots).
+
+    **Why a prefix and not a lot.** Lots cannot be chosen — a sale consumes the oldest first, so a
+    gain lot sitting in front of a loss lot blocks it, and reaching the loss means realising that
+    gain too. Selecting "the losers" by eye can therefore realise a gain *larger* than the loss it
+    was chasing. This walks the cumulative gain lot by lot and returns the cut with the most
+    negative total, which is the most loss the ledger actually permits.
+    """
+    lots = portfolio.ledger.open_lots(ticker)
+    if not lots:
+        return None
+    running_qty = _ZERO
+    running_gain = _ZERO
+    best: tuple[Decimal, Decimal, Decimal, int] | None = None
+    positive_seen = _ZERO
+    for n, lot in enumerate(lots, start=1):
+        qty = lot.quantity_remaining
+        lot_gain = (price - lot.cost_basis_per_share) * qty
+        running_qty += qty
+        running_gain += lot_gain
+        if lot_gain > 0:
+            positive_seen += lot_gain
+        if running_gain < 0 and (best is None or running_gain < best[1]):
+            best = (running_qty, running_gain, positive_seen, n)
+    return best
+
+
+def advise_harvest(
+    portfolio: Portfolio,
+    prices: Mapping[str, Decimal],
+    as_of: date,
+    cfg: Config | None = None,
+) -> HarvestAdvice:
+    """Which losses can be banked before 31 March, FIFO-aware, net of the round trip.
+
+    The tax *computation* has always been here — §70 set-off and the §74 eight-year carry-forward
+    live in ``net_capital_gains_tax``. What has never existed is a surface that says *"these
+    positions are at a loss; realising them before 31 March banks a loss you can carry forward eight
+    years"*; ``capital_gains.py`` calls harvesting itself "deferred past Phase 0" in a comment.
+
+    This is the one selling behaviour that earns its turnover: the sale is a loss, so it costs no
+    capital-gains tax, and the loss is an asset. It needs no crash and no minimum book size — only a
+    position underwater and a date on the calendar — which is why it is the first component expected
+    to graduate onto the real-money surface (PLAN_REDESIGN §2a).
+    """
+    cfg = cfg or Config()
+    fy = financial_year(as_of)
+    fy_end = date(as_of.year + 1 if as_of.month > 3 else as_of.year, 3, 31)
+    candidates: list[HarvestCandidate] = []
+    for ticker in sorted(portfolio.positions()):
+        price = prices.get(ticker)
+        if price is None or price <= 0:
+            continue
+        best = _best_harvest_prefix(portfolio, ticker, price, as_of, cfg)
+        if best is None:
+            continue
+        qty, net_gain, crossed, n_lots = best
+        sell_cb = compute_costs(Side.SELL, qty, price, cfg.cost)
+        buy_cb = compute_costs(Side.BUY, qty, price, cfg.cost)
+        lots = portfolio.ledger.open_lots(ticker)[:n_lots]
+        near_boundary = any(
+            0 < (twelve_months_after(lot.acquisition_date) - as_of).days <= _BOUNDARY_WINDOW_DAYS
+            for lot in lots
+        )
+        candidates.append(
+            HarvestCandidate(
+                ticker=ticker,
+                quantity=qty,
+                price=price,
+                net_gain=net_gain,
+                gain_crossed=crossed,
+                lots_consumed=n_lots,
+                charges=sell_cb.total + buy_cb.total,
+                resets_long_term=near_boundary,
+            )
+        )
+    return HarvestAdvice(
+        as_of=as_of,
+        financial_year=fy,
+        candidates=candidates,
+        realized_gains_this_fy=portfolio.gains.ltcg_realized(fy),
+        days_to_fy_end=(fy_end - as_of).days,
     )

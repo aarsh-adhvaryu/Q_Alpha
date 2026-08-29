@@ -23,6 +23,7 @@ calculator (rule (a) intact).
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from datetime import UTC, date, datetime, timedelta
@@ -35,11 +36,12 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))
 from paper import BOOK_PATH, _load_benchmark_series, _load_market
 
+from qalpha.accounting.capital_gains import is_long_term_holding, twelve_months_after
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
-from qalpha.live.advisor import advise_raise_cash, advise_sell
+from qalpha.live.advisor import advise_harvest, advise_raise_cash, advise_sell
 from qalpha.live.dashboard import (
     BUY_ADVICE_ON_REAL_MONEY,
     _benchmark_return_pct,
@@ -71,6 +73,9 @@ from qalpha.live.position_health import position_health
 from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
 
 AUTOPILOT_DASHBOARD_MD = Path("reports/autopilot_dashboard.md")
+TWIN_DASHBOARD_MD = Path("reports/twin_dashboard.md")
+TWIN_DECISIONS_MD = Path("reports/twin_decisions.md")
+TWIN_BOOKS_JSON = Path("data/twin/books.json")
 AI_BRIEF_MD = Path("reports/ai_brief.md")
 SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
 
@@ -785,6 +790,56 @@ def _core_go_expander(
             st.markdown(glossary_markdown())
 
 
+def _twin_panel(as_of: date) -> None:
+    """The twin: five books on the user's real cash flows, and the six-criterion GO gate.
+
+    Renders the artifacts the weekday cron commits rather than recomputing — the same contract every
+    other cron-written panel uses, and the reason it is gated on freshness. **A dead runner and a
+    quiet day produce the same page**, which is how a forward run died unnoticed for 38 days, so the
+    freshness line comes first and an unseeded twin says so explicitly instead of rendering blank.
+    """
+    st.header("🧪 The twin — is the system actually working?")
+    st.caption(
+        "Five fake-money books on **your real cash flows**, four of them autonomous. Your Zerodha "
+        "account is the state source and is never traded. Only **TWIN_FULL vs the equal-weight "
+        "fund** opens the gate; everything else describes."
+    )
+
+    if not TWIN_BOOKS_JSON.exists():
+        st.warning(
+            "**The twin is not seeded.** No book has any cash flows, so nothing below would mean "
+            "anything. Run `uv run python scripts/twin.py seed` once — it reads your tradebook and "
+            "refuses to overwrite, because re-seeding resets the clock."
+        )
+        return
+
+    # Content date, NOT mtime. Streamlit Cloud redeploys from a fresh git checkout, which resets
+    # every mtime to the deploy time — so an mtime check would report a two-week-old book as current
+    # on exactly the surface where staleness matters. `saved_at` is written by the runner itself.
+    saved_at: date | None = None
+    try:
+        saved_at = date.fromisoformat(
+            json.loads(TWIN_BOOKS_JSON.read_text(encoding="utf-8"))["saved_at"]
+        )
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        saved_at = None
+    fresh = sources_freshness_markdown([source_freshness("Twin books", saved_at, as_of)])
+    (st.warning if "⚠️" in fresh else st.caption)(fresh)
+
+    if TWIN_DASHBOARD_MD.exists():
+        st.markdown(TWIN_DASHBOARD_MD.read_text(encoding="utf-8"))
+    else:
+        st.info("Seeded, but no daily run has written a dashboard yet.")
+
+    if TWIN_DECISIONS_MD.exists():
+        with st.expander("📋 What the books decided, and why"):
+            st.markdown(TWIN_DECISIONS_MD.read_text(encoding="utf-8"))
+            st.caption(
+                "Every decision carries its reason — a book that acts without recording why is not "
+                "auditable. A day where nothing happened still records a HOLD."
+            )
+
+
 def _system_tab(
     book: PaperBook,
     prices: PriceData,
@@ -801,6 +856,15 @@ def _system_tab(
 
     from qalpha.live.autopilot import load_state
 
+    _twin_panel(as_of)
+    st.divider()
+    st.subheader("📜 Archived — the auto-pilot books")
+    st.caption(
+        "⛔ **Superseded 2026-08-29.** These three books are archived "
+        "(`reports/ARCHIVE_2026-08-28.md`) and their cron step is switched off, so the figures below "
+        "are frozen at 2026-08-26 and will not move. Kept visible for one release so the transition "
+        "is legible rather than a panel that silently vanished."
+    )
     st.caption(
         "**The whole system, acting on its own advice, on fake money** — deploys idle cash when the "
         "advisor says so (AI-paced), rebalances only when the tax-gate says it's worth it (checked "
@@ -1536,6 +1600,58 @@ def _live_overview(
     )
     st.caption(_LTCG_SAFE_LEGEND)
 
+    # One row per name hides a name bought more than once: its lots reach the 12.5% rate on
+    # different dates, and the row can only show the latest. Surfaced, not summarised.
+    if caveat is None and portfolio.positions():
+        lots, split = _lots_frame(portfolio, prices, date.today())
+        with st.expander(
+            f"📄 Every purchase lot ({len(lots)} across {len(portfolio.positions())} names)"
+        ):
+            if split:
+                names = ", ".join(t.removesuffix(".NS") for t in split)
+                st.info(
+                    f"**{names}** — bought on more than one date, so part of the position turns "
+                    "long-term **earlier** than the holdings table's date. That row shows when the "
+                    "*whole* line qualifies; these lots show when each part does."
+                )
+            st.dataframe(lots, hide_index=True, width="stretch")
+            st.caption(
+                "FIFO: a sale consumes the oldest lot first, so these are also the order in which "
+                "shares are sold and taxed. The Sell tab prices any quantity exactly."
+            )
+
+
+def _harvest_branch_warning(advice: object, portfolio: Portfolio, as_of: date) -> None:
+    """A harvest is still a sale, so it exercises the same never-broker-verified tax paths.
+
+    Every harvest realises a loss by definition, which means it *always* touches §70 set-off — the
+    branch that has never been confirmed against a Zerodha statement. Saying so here is the same
+    contract the Sell and Raise-cash tabs carry; a sale that looks free of tax risk is exactly the
+    one worth reconciling afterwards.
+    """
+    from qalpha.live.dashboard import unverified_tax_branches
+
+    actionable = list(getattr(advice, "actionable", []))
+    if not actionable:
+        return
+    consumed = [
+        lot
+        for c in actionable
+        for lot in portfolio.ledger.open_lots(c.ticker)[: getattr(c, "lots_consumed", 1)]
+    ]
+    branches = unverified_tax_branches(
+        has_loss_lot=True,  # a harvest realises a loss by definition — §70 is always exercised
+        has_ltcg=any(is_long_term_holding(lot.acquisition_date, as_of) for lot in consumed),
+        distinct_cost_bases=len({lot.cost_basis_per_share for lot in consumed}),
+        uses_exemption=False,  # a loss consumes no exemption
+    )
+    if branches:
+        st.info(
+            "🧾 **This sale exercises tax logic no broker statement has ever confirmed:** "
+            + "; ".join(branches)
+            + ". Reconcile it afterwards — Console → Reports → Tax P&L, uploaded above."
+        )
+
 
 def _track_record_panel(
     portfolio: Portfolio,
@@ -1732,7 +1848,9 @@ def _advisor_tabs(
     keys unique so the paper and live advisors can both render in one run without a key collision;
     ``default_add_amount`` prefills the Add-money field (live view seeds it with available cash).
     """
-    sell_tab, raise_tab, add_tab = st.tabs(["Sell a holding", "Raise cash", "Add money"])
+    sell_tab, raise_tab, add_tab, harvest_tab = st.tabs(
+        ["Sell a holding", "Raise cash", "Add money", "🌾 Harvest losses"]
+    )
     positions = sorted(portfolio.positions())
 
     with sell_tab:
@@ -1775,6 +1893,28 @@ def _advisor_tabs(
             # multi-lot, LTCG, set-off and exemption branches on essentially every use — and it was
             # the one tab that never said so. Same warning, same helper as the Sell tab.
             _unverified_branch_warning(raise_advice)
+
+    with harvest_tab:
+        # Graduated onto the real-money surface WITHOUT the §2a ablation bar, deliberately. That bar
+        # exists to stop an unproven *strategy claim* reaching real money. Harvesting makes no such
+        # claim: it converts a paper loss into a §74 carry-forward asset and realises ₹0 capital-gains
+        # tax by construction, which is why it has no ablation — removing it would test nothing.
+        # It also has a deadline the twin cannot wait out: 31 March.
+        harvest = advise_harvest(portfolio, prices_dec, as_of, Config())
+        if harvest.days_to_fy_end <= 60 and harvest.actionable:
+            st.warning(
+                f"⏳ **{harvest.days_to_fy_end} days to 31 March.** A loss not realised by then "
+                "cannot be set off in this financial year."
+            )
+        st.markdown(harvest.render())
+        if harvest.actionable:
+            st.caption(
+                "Quantities are FIFO **prefixes**, not chosen lots — a sale consumes the oldest lot "
+                "first, so a gain lot in front of a loss lot has to be sold to reach it. Selecting "
+                "by eye can realise a gain larger than the loss you were chasing; these figures are "
+                "already net of any gain crossed. Place the orders yourself in Kite."
+            )
+            _harvest_branch_warning(harvest, portfolio, as_of)
 
     with add_tab:
         # Three states, deliberately distinguished: switched off at the flag (kill-switch), allowed
@@ -2012,6 +2152,47 @@ def _holdings_frame(
             }
         )
     return pd.DataFrame(rows)
+
+
+def _lots_frame(
+    portfolio: Portfolio, prices_dec: dict[str, Decimal], as_of: date
+) -> tuple[pd.DataFrame, list[str]]:
+    """Every open FIFO lot, and the names whose lots turn long-term on **different** dates.
+
+    The holdings table shows one row per name with one LTCG-safe date — the *latest* lot's, since
+    that is when the whole line qualifies. A name bought twice hides a real difference behind it: on
+    the live book INFY holds 5 shares from 2026-06-15 and 15 from 2026-08-28, so a fifth of the
+    position reaches the 12.5% rate **74 days before** the row says. Selling on the row's date is
+    never wrong, but it can mean waiting months longer than necessary on part of a holding — and the
+    single date gives no way to see that.
+
+    Returns the frame plus the tickers worth flagging (>1 distinct long-term date).
+    """
+    rows, split = [], []
+    for ticker in sorted(portfolio.positions()):
+        lots = list(portfolio.ledger.open_lots(ticker))
+        dates = {twelve_months_after(lot.acquisition_date) + timedelta(days=1) for lot in lots}
+        if len(dates) > 1:
+            split.append(ticker)
+        px = prices_dec.get(ticker, Decimal("0"))
+        for lot in lots:
+            qty = lot.quantity_remaining
+            cost = qty * lot.cost_basis_per_share
+            lt = twelve_months_after(lot.acquisition_date) + timedelta(days=1)
+            days = (lt - as_of).days
+            rows.append(
+                {
+                    "Ticker": ticker.removesuffix(".NS"),
+                    "Bought": str(lot.acquisition_date),
+                    "Qty": str(int(qty)),
+                    "Buy price": f"₹{lot.cost_basis_per_share:,.2f}",
+                    "Value now": f"₹{qty * px:,.0f}",
+                    "P&L": f"₹{qty * px - cost:+,.0f}",
+                    "Long-term from": f"{lt:%d %b %Y}" if days > 0 else "🟢 now",
+                    "Days": str(max(0, days)),
+                }
+            )
+    return pd.DataFrame(rows), split
 
 
 def _equity_chart(book: PaperBook, benchmark: pd.Series) -> None:

@@ -29,10 +29,16 @@ from typing import IO
 import pandas as pd
 
 # Section titles in the "Equity and Non Equity" sheet → our gain-type tag.
+# Zerodha renamed these between the FY2026-27 Q1 and Q1-Q2 exports: "Short Term profit" became
+# "Equity Short Term profit", and the "Short Term Trades" section became "Equity Short Term". Exact
+# matching therefore silently found nothing, the profit defaulted to 0, and the panel told the user
+# "Zerodha ₹0.00 vs ours ₹25.25 — MISMATCH" about a statement that in fact said ₹25.25. Labels are
+# normalised (leading "Equity ", trailing " Trades") so both layouts parse, and a label that is not
+# found is now recorded as MISSING rather than read as zero — see ``TaxPnL.missing``.
 _SECTION_TYPES = {
     "Intraday": "INTRADAY",
-    "Short Term Trades": "STCG",
-    "Long Term Trades": "LTCG",
+    "Short Term": "STCG",
+    "Long Term": "LTCG",
     "Non Equity": "NON_EQUITY",
 }
 _REALIZED_LABELS = {
@@ -41,7 +47,19 @@ _REALIZED_LABELS = {
     "Long Term profit": "long_term",
     "Non Equity profit": "non_equity",
 }
+#: Labels whose absence must block reconciliation — the two the verdict is computed from.
+_REQUIRED = ("short_term", "long_term")
 _SUMMARY_SHEET = "Equity and Non Equity"
+
+
+def _norm(head: str) -> str:
+    """Normalise a Zerodha row/section label across export-format revisions."""
+    h = head.strip()
+    if h.startswith("Equity "):
+        h = h[len("Equity ") :]
+    if h.endswith(" Trades"):
+        h = h[: -len(" Trades")]
+    return h
 
 
 def _dec(value: object) -> Decimal:
@@ -72,6 +90,9 @@ class TaxPnL:
     non_equity_profit: Decimal
     charges: dict[str, Decimal]
     trades: list[TaxPnLTrade]
+    #: Realized-profit labels the sheet did not contain. A figure that is absent is NOT zero — it is
+    #: unknown, and reconciling against it would compare our number to a parse failure.
+    missing: tuple[str, ...] = ()
 
     def trades_of(self, gain_type: str) -> list[TaxPnLTrade]:
         return [t for t in self.trades if t.gain_type == gain_type]
@@ -109,6 +130,7 @@ def parse_taxpnl(source: str | Path | IO[bytes]) -> TaxPnL:
     }
     charges: dict[str, Decimal] = {}
     trades: list[TaxPnLTrade] = []
+    seen: set[str] = set()
 
     in_charges = False
     current_type: str | None = None
@@ -121,8 +143,10 @@ def parse_taxpnl(source: str | Path | IO[bytes]) -> TaxPnL:
         if head == "Client ID" and len(vals) >= 2:
             client_id = str(vals[1]).strip()
             continue
-        if head in _REALIZED_LABELS and len(vals) >= 2:
-            profits[_REALIZED_LABELS[head]] = _dec(vals[1])
+        if _norm(head) in _REALIZED_LABELS and len(vals) >= 2:
+            key = _REALIZED_LABELS[_norm(head)]
+            profits[key] = _dec(vals[1])
+            seen.add(key)
             continue
         if head == "Charges":
             in_charges = True
@@ -133,9 +157,9 @@ def parse_taxpnl(source: str | Path | IO[bytes]) -> TaxPnL:
         # Per-symbol trade tables: a section title opens a block, "Symbol" is its header, then data.
         # Reaching either also closes the charges block (which runs through the "Other Charges"
         # subsection, capturing e.g. the DP charge booked as "Other Credits & Debits").
-        if head in _SECTION_TYPES:
+        if _norm(head) in _SECTION_TYPES:
             in_charges = False
-            current_type = _SECTION_TYPES[head]
+            current_type = _SECTION_TYPES[_norm(head)]
             continue
         if head == "Symbol":
             in_charges = False
@@ -167,6 +191,7 @@ def parse_taxpnl(source: str | Path | IO[bytes]) -> TaxPnL:
         non_equity_profit=profits["non_equity"],
         charges=charges,
         trades=trades,
+        missing=tuple(k for k in _REALIZED_LABELS.values() if k not in seen),
     )
 
 
@@ -194,6 +219,27 @@ def reconcile_gross(
     ``tolerance``; intraday/non-equity are reported for completeness but not gated (this engine is
     delivery-only).
     """
+    # A label the parser could not find is UNKNOWN, not zero. Reconciling against it compares our
+    # figure to a parse failure and reports it as Zerodha's — which is how a correct ₹25.25 was
+    # shown to the user as "Zerodha ₹0.00 — MISMATCH" after Zerodha renamed its row headings.
+    # Refuse to grade instead, and name the fix, exactly as `_benchmark_covers` does for a stale
+    # benchmark.
+    blocking = [k for k in _REQUIRED if k in statement.missing]
+    if blocking:
+        names = ", ".join(sorted(blocking))
+        return ReconcileResult(
+            ok=False,
+            tolerance=tolerance,
+            gross_by_type=ours_gross_by_type,
+            theirs_by_type={},
+            lines=[
+                f"⚠️ CANNOT RECONCILE — this Tax P&L has no row the parser recognises for: {names}.",
+                "This is a PARSE failure, not a tax discrepancy: the statement's figures were never "
+                "read, so nothing here says your tax is wrong. Zerodha has changed these headings "
+                'before ("Short Term profit" → "Equity Short Term profit"). Send the file so the '
+                "parser can be taught the new layout.",
+            ],
+        )
     theirs = statement.gross_by_type
     lines: list[str] = []
     ok = True

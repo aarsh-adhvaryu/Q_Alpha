@@ -48,9 +48,27 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: uv run python scripts/ai_brief.py daily
-      - name: Auto-pilot — fund the three fake books + deploy + resolve (fake money; fail-soft)
+      # ⛔ DISABLED 2026-08-29. This funded and marked the System/Shadow/Baseline books, which are
+      # ARCHIVED (reports/ARCHIVE_2026-08-28.md) — the run recorded System − Shadow = ₹0.00 on all 7
+      # marks and a Baseline that beat both. Leaving it running kept writing fresh marks into books
+      # the archive says are closed, so the repo simultaneously claimed a reset and carried on
+      # accruing to the thing it reset. Its replacement is the twin (live/twin.py + live/runner.py),
+      # wired here once the twin books are seeded — Phase 5.
+      - name: Auto-pilot — SUPERSEDED by the twin; kept for one release, no longer run
+        if: false
         continue-on-error: true # a fake-money measurement must never red the paper cron
         run: uv run python scripts/autopilot.py daily
+      # The twin: five books on the user's real cash flows, four of them autonomous. This replaces
+      # the auto-pilot step above. Fake money — no broker client is imported and nothing can place an
+      # order. GIST_TOKEN reads the private tradebook master; without it the runner falls back to a
+      # committed export and says so rather than marking a book with no flows.
+      - name: The twin — step the autonomous books, mark all five, grade the gate (fail-soft)
+        continue-on-error: true
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TRADEBOOK_GIST_ID: ${{ secrets.TRADEBOOK_GIST_ID }}
+        run: uv run python scripts/twin.py daily
+
       - name: Commit the track record
         run: |
           git config user.name "github-actions[bot]"
@@ -59,6 +77,12 @@ jobs:
           git add reports/ai_brief.md data/autopilot/state.json data/autopilot/ledger.json reports/autopilot_dashboard.md 2>/dev/null || true
           git add reports/ai_verdicts.md 2>/dev/null || true  # PR-8: the AI's per-name keep/drop sheet — written but never committed, so nobody could see what it decided
           # The System book trio (system = the former adaptive book; shadow = no-AI twin; baseline = NIFTYBEES)
+          # The twin — five books, their decisions, and the gate. This is what accrues now.
+          git add data/twin/books.json 2>/dev/null || true
+          git add reports/twin_dashboard.md reports/twin_decisions.md 2>/dev/null || true
+          # ⛔ The auto-pilot books below are ARCHIVED (reports/ARCHIVE_2026-08-28.md) and their step
+          # is `if: false`. These lines stay one release so a stale working copy cannot resurrect
+          # them by committing a file the cron no longer writes.
           git add data/paper/adaptive_book.json 2>/dev/null || true
           git add data/paper/shadow_book.json 2>/dev/null || true
           git add data/autopilot/baseline_book.json 2>/dev/null || true
