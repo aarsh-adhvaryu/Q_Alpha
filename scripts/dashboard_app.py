@@ -35,12 +35,12 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))
 from paper import BOOK_PATH, _load_benchmark_series, _load_market
 
-from qalpha.accounting.capital_gains import twelve_months_after
+from qalpha.accounting.capital_gains import is_long_term_holding, twelve_months_after
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
-from qalpha.live.advisor import advise_raise_cash, advise_sell
+from qalpha.live.advisor import advise_harvest, advise_raise_cash, advise_sell
 from qalpha.live.dashboard import (
     BUY_ADVICE_ON_REAL_MONEY,
     _benchmark_return_pct,
@@ -1558,6 +1558,38 @@ def _live_overview(
             )
 
 
+def _harvest_branch_warning(advice: object, portfolio: Portfolio, as_of: date) -> None:
+    """A harvest is still a sale, so it exercises the same never-broker-verified tax paths.
+
+    Every harvest realises a loss by definition, which means it *always* touches §70 set-off — the
+    branch that has never been confirmed against a Zerodha statement. Saying so here is the same
+    contract the Sell and Raise-cash tabs carry; a sale that looks free of tax risk is exactly the
+    one worth reconciling afterwards.
+    """
+    from qalpha.live.dashboard import unverified_tax_branches
+
+    actionable = list(getattr(advice, "actionable", []))
+    if not actionable:
+        return
+    consumed = [
+        lot
+        for c in actionable
+        for lot in portfolio.ledger.open_lots(c.ticker)[: getattr(c, "lots_consumed", 1)]
+    ]
+    branches = unverified_tax_branches(
+        has_loss_lot=True,  # a harvest realises a loss by definition — §70 is always exercised
+        has_ltcg=any(is_long_term_holding(lot.acquisition_date, as_of) for lot in consumed),
+        distinct_cost_bases=len({lot.cost_basis_per_share for lot in consumed}),
+        uses_exemption=False,  # a loss consumes no exemption
+    )
+    if branches:
+        st.info(
+            "🧾 **This sale exercises tax logic no broker statement has ever confirmed:** "
+            + "; ".join(branches)
+            + ". Reconcile it afterwards — Console → Reports → Tax P&L, uploaded above."
+        )
+
+
 def _track_record_panel(
     portfolio: Portfolio,
     prices: dict[str, Decimal],
@@ -1753,7 +1785,9 @@ def _advisor_tabs(
     keys unique so the paper and live advisors can both render in one run without a key collision;
     ``default_add_amount`` prefills the Add-money field (live view seeds it with available cash).
     """
-    sell_tab, raise_tab, add_tab = st.tabs(["Sell a holding", "Raise cash", "Add money"])
+    sell_tab, raise_tab, add_tab, harvest_tab = st.tabs(
+        ["Sell a holding", "Raise cash", "Add money", "🌾 Harvest losses"]
+    )
     positions = sorted(portfolio.positions())
 
     with sell_tab:
@@ -1796,6 +1830,28 @@ def _advisor_tabs(
             # multi-lot, LTCG, set-off and exemption branches on essentially every use — and it was
             # the one tab that never said so. Same warning, same helper as the Sell tab.
             _unverified_branch_warning(raise_advice)
+
+    with harvest_tab:
+        # Graduated onto the real-money surface WITHOUT the §2a ablation bar, deliberately. That bar
+        # exists to stop an unproven *strategy claim* reaching real money. Harvesting makes no such
+        # claim: it converts a paper loss into a §74 carry-forward asset and realises ₹0 capital-gains
+        # tax by construction, which is why it has no ablation — removing it would test nothing.
+        # It also has a deadline the twin cannot wait out: 31 March.
+        harvest = advise_harvest(portfolio, prices_dec, as_of, Config())
+        if harvest.days_to_fy_end <= 60 and harvest.actionable:
+            st.warning(
+                f"⏳ **{harvest.days_to_fy_end} days to 31 March.** A loss not realised by then "
+                "cannot be set off in this financial year."
+            )
+        st.markdown(harvest.render())
+        if harvest.actionable:
+            st.caption(
+                "Quantities are FIFO **prefixes**, not chosen lots — a sale consumes the oldest lot "
+                "first, so a gain lot in front of a loss lot has to be sold to reach it. Selecting "
+                "by eye can realise a gain larger than the loss you were chasing; these figures are "
+                "already net of any gain crossed. Place the orders yourself in Kite."
+            )
+            _harvest_branch_warning(harvest, portfolio, as_of)
 
     with add_tab:
         # Three states, deliberately distinguished: switched off at the flag (kill-switch), allowed
