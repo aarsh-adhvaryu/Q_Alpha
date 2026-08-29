@@ -48,7 +48,14 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: uv run python scripts/ai_brief.py daily
-      - name: Auto-pilot — fund the three fake books + deploy + resolve (fake money; fail-soft)
+      # ⛔ DISABLED 2026-08-29. This funded and marked the System/Shadow/Baseline books, which are
+      # ARCHIVED (reports/ARCHIVE_2026-08-28.md) — the run recorded System − Shadow = ₹0.00 on all 7
+      # marks and a Baseline that beat both. Leaving it running kept writing fresh marks into books
+      # the archive says are closed, so the repo simultaneously claimed a reset and carried on
+      # accruing to the thing it reset. Its replacement is the twin (live/twin.py + live/runner.py),
+      # wired here once the twin books are seeded — Phase 5.
+      - name: Auto-pilot — SUPERSEDED by the twin; kept for one release, no longer run
+        if: false
         continue-on-error: true # a fake-money measurement must never red the paper cron
         run: uv run python scripts/autopilot.py daily
       - name: Commit the track record
