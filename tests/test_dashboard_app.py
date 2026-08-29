@@ -329,3 +329,36 @@ def test_lots_frame_reveals_a_name_bought_on_two_dates() -> None:
     assert len(infy) == 2
     # The two lots must carry DIFFERENT long-term dates — the whole point of the panel.
     assert infy["Long-term from"].nunique() == 2
+
+
+def test_the_harvest_tab_is_on_the_live_advisor() -> None:
+    """Tax-loss harvesting graduated onto the real-money surface without the §2a ablation bar.
+
+    Deliberate, and worth stating: that bar exists to stop an unproven *strategy claim* reaching real
+    money. Harvesting makes no such claim — it converts a paper loss into a §74 carry-forward asset
+    and realises ₹0 capital-gains tax by construction, which is exactly why it has no ablation.
+    It also has a deadline the twin cannot wait out: 31 March.
+    """
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._advisor_tabs)
+    assert "Harvest losses" in src
+    assert "advise_harvest(" in src
+    # A harvest is still a sale, so it must carry the same unreconciled-branch warning as Sell.
+    assert "_harvest_branch_warning(" in src
+    # And it must say the quantities are FIFO prefixes — picking by eye is the defect it prevents.
+    assert "FIFO **prefixes**" in src
+
+
+def test_the_harvest_warning_always_flags_the_set_off_branch() -> None:
+    """Every harvest realises a loss, so §70 — never confirmed against a Zerodha statement — is
+    always exercised. A sale that looks free of tax risk is the one worth reconciling."""
+    import inspect
+
+    import dashboard_app
+
+    src = inspect.getsource(dashboard_app._harvest_branch_warning)
+    assert "has_loss_lot=True" in src
+    assert "Reconcile it afterwards" in src
