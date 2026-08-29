@@ -182,3 +182,37 @@ def test_the_panel_separates_the_gate_from_the_diagnostics() -> None:
     assert "The gate" in md
     assert "never gating" in md
     assert md.index("The gate") < md.index("Diagnostics")  # the gate leads
+
+
+def test_the_noise_floor_is_a_measured_number_not_a_guess() -> None:
+    """GO criterion 3's bar comes from 60 no-skill draws, not from judgement.
+
+    Forward run 1 was voided because no bar existed: its System − Shadow of ₹1,541 sat under ₹1,964
+    of one day's rounding noise, discovered only afterwards. This is that number, computed in
+    advance — reports/PHASE4_BACKTEST.md.
+    """
+    from qalpha.live.twin import BACKTEST_NOISE_FLOOR
+
+    assert Decimal("8362315") == BACKTEST_NOISE_FLOOR
+
+
+def test_a_gap_smaller_than_the_measured_floor_is_not_a_result() -> None:
+    """The screen's own selection edge (₹25.3L) is INSIDE this floor — which is the point.
+
+    The floor is set by the equal-weight premium a random basket earns, so a gap has to beat luck at
+    that scale, not merely beat the index.
+    """
+    from qalpha.live.twin import BACKTEST_NOISE_FLOOR
+
+    marks = _marks(TWIN_FULL=2_530_813, BASELINE=0)
+    marks[TWIN_FULL] = BookMark(
+        TWIN_FULL,
+        date(2028, 9, 1),  # comfortably past the 12-month bar, so only size is being tested
+        date(2026, 6, 15),
+        Decimal("100000"),
+        Decimal("2630813"),
+        None,
+    )
+    gap = compare(marks, noise_floor=BACKTEST_NOISE_FLOOR)[0]
+    assert not gap.readable
+    assert "noise floor" in gap.render()

@@ -481,7 +481,7 @@ is the only way across.
 | 1 | ✅ **One repo** | `fragility` · `hedge_study` · `overlay` graduated; `research/` walled off by `tests/test_repo_boundary.py`; two suites; hedge liveness closed; old repo archived + cron disabled |
 | 2 | 🟡 **The twin** | `live/twin.py` — five books, flows from the tradebook, identical-flow invariant asserted, gate/diagnostic split enforced. **Decisions arrive in Phase 3**, so the twins hold cash and say so |
 | 3 | 🟡 **Autonomy** | `advise_harvest` (FIFO-aware, new) + `live/policy.py` — single-factor ablations asserted, `Decision` cannot exist without a reason. **Remaining: the daily runner wiring deploy/exit/hedge into `step()`.** Twin-only until measured |
-| 4 | **Backtest** | Bootstrap noise floor, drawdown-exit variant, rebalance cadence, optimizer, composite |
+| 4 | ✅ **Backtest** | [PHASE4_BACKTEST.md](reports/PHASE4_BACKTEST.md) — noise floor **₹83,62,315** from 60 no-skill draws; screen beats all 60 (*p*<0.016) but **76% of its gap is the equal-weight premium**, not selection; **both exit rules lose to buy-and-hold net of tax**; AI is un-backtestable (leakage) and stays forward-only |
 | 5 | **New GO gate** | Six criteria live; dashboard shows four books and the three gaps |
 | 6 | **Frontend** | Decided *after* the engine is right — see below |
 
