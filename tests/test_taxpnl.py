@@ -134,3 +134,99 @@ def test_zero_cost_replay_reproduces_gross_gain(tmp_path: Path) -> None:
     gross = replay_tradebook(trades, replace(cfg, cost=zero))
     # 5 * (790.50 - 785.45) = 25.25
     assert gross.realized_gains[0].gain == Decimal("25.25")
+
+
+# ---- Zerodha renamed its row headings (2026-08-29, found on real money) -------------------------
+#
+# Between the FY2026-27 Q1 and Q1-Q2 exports Zerodha changed "Short Term profit" to "Equity Short
+# Term profit" and "Short Term Trades" to "Equity Short Term". Exact matching found nothing, the
+# profit defaulted to Decimal("0"), and the reconciliation panel told the user
+# "STCG: ours ₹25.25 vs Zerodha ₹0.00 — MISMATCH — do not rely on the tax figures" about a statement
+# that said ₹25.25. Correct arithmetic, wrong on screen — the same family as the seven label defects
+# of 2026-08-28, except this one cried wolf instead of hiding a problem.
+
+
+def _rows_new_format() -> list[list[object]]:
+    """The Q1-Q2 layout: every equity heading gained an 'Equity ' prefix; 'Non Equity' row dropped."""
+    return [
+        [None, "Client ID", "YHK037"],
+        [None, None, None],
+        [None, "Realized Profit Breakdown", None],
+        [None, "Equity Intraday/Speculative profit", 0],
+        [None, "Equity Short Term profit", 25.25],
+        [None, "Equity Long Term profit", 0],
+        [None, None, None],
+        [None, "Equity Short Term", None],
+        [None, None, None],
+        [None, "Symbol", "Quantity", "Buy Value", "Sell Value", "Realized P&L"],
+        [None, "HDFCBANK", 5, 3927.25, 3952.5, 25.25],
+    ]
+
+
+def _write_rows(path: Path, rows: list[list[object]]) -> None:
+    pd.DataFrame(rows).to_excel(path, sheet_name="Equity and Non Equity", header=False, index=False)
+
+
+def test_the_renamed_equity_headings_still_parse(tmp_path: Path) -> None:
+    """The exact defect: a renamed heading must not read as ₹0.00."""
+    p = tmp_path / "new.xlsx"
+    _write_rows(p, _rows_new_format())
+    st = parse_taxpnl(p)
+    assert st.short_term_profit == Decimal("25.25")
+    assert st.long_term_profit == Decimal("0")
+    assert [t.symbol for t in st.trades_of("STCG")] == ["HDFCBANK"]
+
+
+def test_the_renamed_format_reconciles(tmp_path: Path) -> None:
+    """End to end: the file that produced a false MISMATCH must now reconcile to ₹0.00."""
+    p = tmp_path / "new.xlsx"
+    _write_rows(p, _rows_new_format())
+    result = reconcile_gross({"STCG": Decimal("25.25"), "LTCG": Decimal("0")}, parse_taxpnl(p))
+    assert result.ok, result.lines
+
+
+def test_an_unreadable_statement_refuses_to_grade_rather_than_reporting_zero(
+    tmp_path: Path,
+) -> None:
+    """The structural fix: absent is NOT zero.
+
+    If a future rename defeats the parser again, the panel must say it could not read the file —
+    never present a parse failure as Zerodha's number. Mirrors ``_benchmark_covers`` refusing to
+    grade the GO scorecard on a stale benchmark.
+    """
+    p = tmp_path / "future.xlsx"
+    _write_rows(
+        p,
+        [
+            [None, "Client ID", "YHK037"],
+            [None, "Realized Profit Breakdown", None],
+            [None, "Cash Segment Short Term gains", 25.25],  # a rename we do not know
+        ],
+    )
+    st = parse_taxpnl(p)
+    assert "short_term" in st.missing and "long_term" in st.missing
+
+    result = reconcile_gross({"STCG": Decimal("25.25"), "LTCG": Decimal("0")}, st)
+    assert not result.ok
+    blob = " ".join(result.lines)
+    assert "CANNOT RECONCILE" in blob
+    assert "PARSE failure, not a tax discrepancy" in blob
+    # It must NOT claim Zerodha reported zero — that is the defect being closed.
+    assert "₹0.00" not in blob
+
+
+def test_a_present_zero_is_still_a_real_zero(tmp_path: Path) -> None:
+    """Guard the other direction: a genuine ₹0 must reconcile, not be mistaken for missing."""
+    p = tmp_path / "zero.xlsx"
+    _write_rows(
+        p,
+        [
+            [None, "Client ID", "YHK037"],
+            [None, "Realized Profit Breakdown", None],
+            [None, "Equity Short Term profit", 0],
+            [None, "Equity Long Term profit", 0],
+        ],
+    )
+    st = parse_taxpnl(p)
+    assert st.missing == ("intraday", "non_equity")  # not the two that matter
+    assert reconcile_gross({"STCG": Decimal("0"), "LTCG": Decimal("0")}, st).ok
