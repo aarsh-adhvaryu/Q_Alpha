@@ -477,9 +477,9 @@ is the only way across.
 
 | # | Phase | Deliverable |
 |---|---|---|
-| 0 | **Pre-registration + archive** | This document; old books archived with verdicts; stale scope note fixed |
-| 1 | **One repo** | Hedge + regime moved in, one engine, one test suite, CI green |
-| 2 | **The twin** | Tradebook → real book → three parallel books on identical cash flows |
+| 0 | ✅ **Pre-registration + archive** | This document; [ARCHIVE_2026-08-28](reports/ARCHIVE_2026-08-28.md) with verdicts; stale scope note fixed |
+| 1 | ✅ **One repo** | `fragility` · `hedge_study` · `overlay` graduated; `research/` walled off by `tests/test_repo_boundary.py`; two suites; hedge liveness closed; old repo archived + cron disabled |
+| 2 | 🟡 **The twin** | `live/twin.py` — five books, flows from the tradebook, identical-flow invariant asserted, gate/diagnostic split enforced. **Decisions arrive in Phase 3**, so the twins hold cash and say so |
 | 3 | **Autonomy** | Hedge, de-risk, exits, rebalance + **tax-loss harvesting** running unattended on the twin, every decision logged with its reason. **Twin-only until measured** — the advisor is unchanged, exactly as the AI selector was handled |
 | 4 | **Backtest** | Bootstrap noise floor, drawdown-exit variant, rebalance cadence, optimizer, composite |
 | 5 | **New GO gate** | Six criteria live; dashboard shows four books and the three gaps |
