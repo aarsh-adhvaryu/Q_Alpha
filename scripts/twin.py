@@ -43,6 +43,7 @@ from qalpha.live.twin import (
     mark,
     save_books,
     seed_books,
+    sync_flows,
 )
 
 REPORT = Path("reports/twin_dashboard.md")
@@ -206,6 +207,12 @@ def cmd_daily(cfg: Config) -> int:
     if market is None:
         print("[twin] no market data — nothing marked (this is a data problem, not a quiet day).")
         return 0
+
+    # New money first: the user's flows are the twin's only funding, and a purchase that reached
+    # REAL but not the twins would break the identical-flow invariant on his very next SIP.
+    trades = _tradebook()
+    for d in sync_flows(books, trades):
+        print(f"[twin] credited ₹{d.amount:,.2f} on {d.on} to all {len(books)} books")
 
     decisions: list[Decision] = []
     for name in AUTONOMOUS:

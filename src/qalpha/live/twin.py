@@ -407,3 +407,38 @@ def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
     }
     assert_identical_flows(list(books.values()))
     return books
+
+
+def sync_flows(books: dict[str, TwinBook], trades: Sequence[object]) -> list[Flow]:
+    """Credit any **new or amended** cash flows to every book, keeping them identical.
+
+    Without this the twin's flows freeze at seed time while ``REAL`` is replayed fresh from the
+    tradebook every run — so the user's next purchase lands in ``REAL`` and in none of the books it
+    is compared against. The identical-flow invariant would break **silently, on the next SIP**, and
+    every gap after that would be measuring different amounts of money rather than different
+    decisions. It is the flaw that voided a predecessor run, arriving by a different door.
+
+    Diffed **by day**, not by count: ``flows_from_trades`` nets each day's trades into one flow, so a
+    new trade on a day already seen *amends* that day's amount rather than appending a flow. Both
+    cases are credited as a delta, and the amended case is exactly the one a length check misses —
+    which is why this compares amounts.
+
+    Returns the deltas applied, so the caller can log what changed rather than infer it.
+    """
+    if not books:
+        return []
+    current = flows_from_trades(trades)
+    known = {f.on: f.amount for f in next(iter(books.values())).flows}
+    deltas = [
+        Flow(on=f.on, amount=f.amount - known.get(f.on, Decimal("0")))
+        for f in current
+        if f.amount != known.get(f.on, Decimal("0"))
+    ]
+    if not deltas:
+        return []
+    for book in books.values():
+        for d in deltas:
+            book.portfolio.cash += d.amount
+        book.flows = list(current)
+    assert_identical_flows(list(books.values()))
+    return deltas
