@@ -18,6 +18,7 @@ that stops the whole pipeline is not. ``seed`` is the exception: it refuses rath
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -37,6 +38,7 @@ from qalpha.live.twin import (
     REAL,
     baseline_mark,
     compare,
+    comparison_frame,
     comparison_markdown,
     ew_fund_mark,
     load_books,
@@ -48,6 +50,7 @@ from qalpha.live.twin import (
 
 REPORT = Path("reports/twin_dashboard.md")
 DECISIONS_LOG = Path("reports/twin_decisions.md")
+MARKS = Path("data/twin/marks.json")
 WATCHLIST_PANEL = Path("data/historical/prices_watchlist.parquet")
 WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
 
@@ -243,6 +246,19 @@ def cmd_daily(cfg: Config) -> int:
         + comparison_markdown(marks, gaps)
         + "\n\n---\n\n"
         + gate.render()
+        + "\n",
+        encoding="utf-8",
+    )
+    # Persist the marks the report was built from, so the dashboard charts plot exactly these
+    # numbers rather than recomputing and quietly disagreeing with the table above them.
+    MARKS.write_text(
+        json.dumps(
+            {
+                "as_of": as_of.isoformat(),
+                "books": comparison_frame(marks).to_dict(orient="records"),
+            },
+            indent=2,
+        )
         + "\n",
         encoding="utf-8",
     )
