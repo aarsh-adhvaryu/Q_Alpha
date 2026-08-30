@@ -228,7 +228,12 @@ def main(argv: list[str] | None = None) -> int:
     # business-income tax on hedge gains that makes it cheaper than selling but not free.
     from qalpha.live.hedge import apply_futures_hedge, hedge_active, stress_gauge
 
-    curve = screen.equity_curve
+    # The hedge runs on the **unitized NAV**, not the rupee curve. `curve.pct_change()` treated every
+    # monthly deposit as a one-day investment return — a ₹50,000 SIP into an early ₹1,00,000 book read
+    # as +50% — and compounding those produced the ×286.2 "terminal wealth" this overlay was once
+    # quoted against. That figure measured the contributions, not the strategy. `nav()` removes them,
+    # so these are returns the overlay can legitimately be applied to.
+    curve = screen.nav()
     book_ret = curve.pct_change().fillna(0.0)
     idx = index_close.reindex(curve.index).ffill()
     gauge = stress_gauge(idx)
