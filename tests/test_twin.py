@@ -130,29 +130,29 @@ def test_a_gap_is_unreadable_before_twelve_months() -> None:
     marks[TWIN_FULL] = BookMark(
         TWIN_FULL, date(2026, 9, 1), date(2026, 6, 15), Decimal("100000"), Decimal("150000"), None
     )
-    gap = compare(marks, noise_floor=Decimal("1000"))[0]
+    gap = compare(marks, null_p95=0.01)[0]
     assert not gap.readable
     assert "No verdict before" in gap.render()
 
 
-def test_a_gap_inside_the_noise_floor_is_not_a_result() -> None:
-    gap = compare(_marks(TWIN_FULL=1200, BASELINE=1000), noise_floor=Decimal("5000"))[0]
+def test_a_gap_inside_the_null_band_is_not_a_result() -> None:
+    gap = compare(_marks(TWIN_FULL=1200, BASELINE=1000), null_p95=0.05)[0]
     assert not gap.readable
-    assert "noise floor" in gap.render()
+    assert "null band" in gap.render()
 
 
 def test_a_gap_is_readable_only_when_old_enough_and_big_enough() -> None:
-    gap = compare(_marks(TWIN_FULL=90000, BASELINE=1000), noise_floor=Decimal("5000"))[0]
+    gap = compare(_marks(TWIN_FULL=90000, BASELINE=1000), null_p95=0.05)[0]
     assert gap.readable
     assert "clearing" in gap.render()
 
 
-def test_without_a_noise_floor_nothing_is_readable() -> None:
-    """Phase 4 has not run. Until it has, there is no bar — and no bar means no verdict."""
+def test_without_a_null_nothing_is_readable() -> None:
+    """The matched null has not been run. No bar means no verdict — never a bar of zero."""
     gap = compare(_marks(TWIN_FULL=90000, BASELINE=1000))[0]
-    assert gap.noise_floor is None
+    assert gap.null_p95 is None
     assert not gap.readable
-    assert "does not exist" in gap.render()
+    assert "has not been run" in gap.render()
 
 
 # ---- the baseline ---------------------------------------------------------------------------------
@@ -181,47 +181,45 @@ def test_the_baseline_refuses_rather_than_inventing_a_number() -> None:
 
 def test_the_panel_separates_the_gate_from_the_diagnostics() -> None:
     marks = _marks(TWIN_FULL=5000, BASELINE_EW=3000, BASELINE=1000, TWIN_NO_AI=4000, REAL=2000)
-    md = comparison_markdown(marks, compare(marks, noise_floor=Decimal("100")))
+    md = comparison_markdown(marks, compare(marks, null_p95=0.001))
     assert "The gate" in md
     assert "never gating" in md
     assert md.index("The gate") < md.index("Diagnostics")  # the gate leads
 
 
-def test_the_noise_floor_is_a_measured_number_not_a_guess() -> None:
-    """GO criterion 3's bar comes from 60 no-skill draws, not from judgement.
+def test_the_gating_statistic_is_scale_free() -> None:
+    """The defect that retired the rupee floor: a bar in rupees does not survive a growing book.
 
-    Forward run 1 was voided because no bar existed: its System − Shadow of ₹1,541 sat under ₹1,964
-    of one day's rounding noise, discovered only afterwards. This is that number, computed in
-    advance — reports/PHASE4_BACKTEST.md.
+    ``BACKTEST_NOISE_FLOOR`` was ₹84,11,106 — a p95 estimated over thirteen years and ₹78.5L of
+    contributions against NIFTYBEES, then applied to a ₹3L book over twelve months against the
+    equal-weight fund. It asked a ₹3 lakh book to beat luck by ₹84 lakh, so the gate could not open
+    at all. Log relative wealth cannot fail that way: ten times the money, identical statistic.
     """
-    from qalpha.live.twin import BACKTEST_NOISE_FLOOR
+    small = _marks(TWIN_FULL=20000, BASELINE_EW=10000)
+    big = {
+        name: BookMark(m.name, m.as_of, m.start, m.net_invested * 10, m.value * 10, m.rate)
+        for name, m in small.items()
+    }
+    g_small = compare(small, null_p95=0.05)[0].log_rel_wealth
+    g_big = compare(big, null_p95=0.05)[0].log_rel_wealth
+    assert g_small is not None and g_big is not None
+    assert g_small == pytest.approx(g_big)
+    # ...while the rupee gap it replaced moved by exactly the scale factor, which is the bug.
+    assert compare(big, null_p95=0.05)[0].rupees == compare(small, null_p95=0.05)[0].rupees * 10
 
-    # Re-measured 2026-08-30 after a price refresh: 8,362,315 → 8,411,106, about 0.6%. The floor is
-    # data-dependent as well as scale-dependent, and that drift is visible only because every run is
-    # recorded — same parameters on the same data reproduce exactly.
-    assert Decimal("8411106") == BACKTEST_NOISE_FLOOR
 
+def test_the_pre_registered_null_has_not_been_run_and_says_so() -> None:
+    """A bar that does not exist must read CANNOT ASSESS, never a silent bar of zero.
 
-def test_a_gap_smaller_than_the_measured_floor_is_not_a_result() -> None:
-    """The screen's own selection edge (₹25.3L) is INSIDE this floor — which is the point.
-
-    The floor is set by the equal-weight premium a random basket earns, so a gap has to beat luck at
-    that scale, not merely beat the index.
+    Forward run 1 was voided because no bar existed and nobody noticed until afterwards. The
+    specification is frozen in ``twin.NULL_P95_LOG_REL_WEALTH``'s docstring; the value stays ``None``
+    until a matched null is actually generated, and ``None`` blocks.
     """
-    from qalpha.live.twin import BACKTEST_NOISE_FLOOR
+    from qalpha.live.twin import NULL_P95_LOG_REL_WEALTH
 
-    marks = _marks(TWIN_FULL=2_530_813, BASELINE_EW=0)
-    marks[TWIN_FULL] = BookMark(
-        TWIN_FULL,
-        date(2028, 9, 1),  # comfortably past the 12-month bar, so only size is being tested
-        date(2026, 6, 15),
-        Decimal("100000"),
-        Decimal("2630813"),
-        None,
-    )
-    gap = compare(marks, noise_floor=BACKTEST_NOISE_FLOOR)[0]
-    assert not gap.readable
-    assert "noise floor" in gap.render()
+    assert NULL_P95_LOG_REL_WEALTH is None
+    gap = compare(_marks(TWIN_FULL=900000, BASELINE_EW=1000), null_p95=NULL_P95_LOG_REL_WEALTH)[0]
+    assert not gap.readable, "a gap of any size is unreadable without a bar"
 
 
 def test_the_gate_is_the_purchasable_alternative_not_the_index() -> None:

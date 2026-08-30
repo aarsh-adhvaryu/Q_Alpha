@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -33,9 +35,14 @@ from qalpha.live.go_gate import Evidence, build_gate
 from qalpha.live.policy import POLICIES, Decision, decisions_markdown
 from qalpha.live.runner import Market, step
 from qalpha.live.twin import (
+    AI_VERDICT_HISTORY,
     AUTONOMOUS,
-    BACKTEST_NOISE_FLOOR,
+    NULL_P95_LOG_REL_WEALTH,
     REAL,
+    TWIN_FULL,
+    TWIN_HISTORY,
+    append_ai_verdicts,
+    append_history,
     apply_off_market,
     assert_identical_flows,
     baseline_mark,
@@ -51,12 +58,18 @@ from qalpha.live.twin import (
     seed_books,
     sync_flows,
 )
+from qalpha.live.verdicts import basket_verdicts, verdict_calls
 
 REPORT = Path("reports/twin_dashboard.md")
 DECISIONS_LOG = Path("reports/twin_decisions.md")
 MARKS = Path("data/twin/marks.json")
 WATCHLIST_PANEL = Path("data/historical/prices_watchlist.parquet")
 WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
+
+#: Pre-registered with the treatment, and frozen for the run: a prompt change is a second
+#: treatment, not an improvement. Recorded on every verdict row so a later reader knows which
+#: prompt produced which call.
+AI_PROMPT_VERSION = "PR-8"
 
 
 def _tradebook() -> list[object]:
@@ -136,6 +149,80 @@ def _market(as_of: date) -> Market | None:
     )
 
 
+def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
+    """Ask the AI about the basket ``TWIN_FULL`` is about to buy — the run's single AI treatment.
+
+    Asked about **TWIN_FULL's** candidates specifically, because that is the only book whose policy
+    consults them. The verdict for a ticker is a view on the company, not on a book, so one map
+    serves every book; ``runner._deploy`` keeps any name the map does not mention.
+
+    Costs nothing on a day with no deployable cash, which is most days — the screen only runs when
+    idle cash clears ``idle_cash_floor``, so in practice the model is asked roughly when a SIP lands.
+    Fail-soft throughout: any error returns ``{}``, which downstream means keep the whole basket, so
+    TWIN_FULL degrades to exactly TWIN_NO_AI rather than to an empty book.
+    """
+    from qalpha.data.prices import PriceData
+    from qalpha.live.deploy import advise_deploy_into_weakness
+
+    book = books.get(TWIN_FULL)
+    if book is None:
+        return {}
+    # The cash floor is checked FIRST and on its own: it is the cost control, and on most days it is
+    # the reason no model call happens at all. Nothing above it may depend on market data.
+    cash = book.portfolio.cash
+    if cash < cfg.deploy_policy.idle_cash_floor:
+        return {}
+    if market is None or not market.watchlist or not isinstance(market.wl_prices, PriceData):
+        return {}
+    try:
+        advice = advise_deploy_into_weakness(
+            book.portfolio,
+            cash,
+            market.watchlist,
+            market.sector_of or {},
+            market.wl_prices,
+            market.index_close,
+            market.as_of,
+            max_names=cfg.deploy_policy.max_names_default,
+            spend_idle_cash=False,
+        )
+        basket = {o.ticker: int(o.quantity) for o in advice.deploy.buy_orders}
+        verdicts, _raw, usage = basket_verdicts(
+            basket, market.sector_of or {}, market.wl_prices, market.as_of
+        )
+    except Exception as exc:
+        print(f"[twin] AI verdicts unavailable ({exc}) — TWIN_FULL keeps the whole basket")
+        return {}
+    if not verdicts:
+        return {}
+    dropped = [t for t, v in verdicts.items() if not v.keep]
+    print(
+        f"[twin] AI verdicts: {len(verdicts)} name(s), {len(dropped)} dropped "
+        f"{dropped} · tokens in/out {usage.get('input', 0)}/{usage.get('output', 0)}"
+    )
+    # Provenance first, and unconditionally: a verdict that is acted on but not recorded cannot be
+    # scored afterwards, and scoring it afterwards is the entire point of the experiment.
+    try:
+        n = append_ai_verdicts(
+            {
+                t: {
+                    "call": "keep" if v.keep else "drop",
+                    "confidence": v.confidence,
+                    "reason": v.reason,
+                }
+                for t, v in verdicts.items()
+            },
+            market.prices,
+            as_of=market.as_of,
+            model=os.environ.get("ANTHROPIC_MODEL") or "claude-haiku-4-5",
+            prompt_version=AI_PROMPT_VERSION,
+        )
+        print(f"✓ ai verdicts: {n} row(s) on file → {AI_VERDICT_HISTORY}")
+    except Exception as exc:
+        print(f"[twin] WARNING: verdicts not recorded ({exc})", file=sys.stderr)
+    return verdicts
+
+
 def cmd_seed(cfg: Config) -> int:
     """The reset event: create the five books from the tradebook. Refuses to overwrite."""
     from qalpha.live.twin import TWIN_STATE
@@ -192,9 +279,11 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config):
     ):
         if m is not None:
             marks[m.name] = m
-    gaps = compare(marks, noise_floor=BACKTEST_NOISE_FLOOR)
-    gate_gap = next((g.rupees for g in gaps if g.gates), None)
-    months = next((g.months for g in gaps if g.gates), None)
+    gaps = compare(marks, null_p95=NULL_P95_LOG_REL_WEALTH)
+    gating = next((g for g in gaps if g.gates), None)
+    gate_gap = gating.rupees if gating else None
+    gate_g = gating.log_rel_wealth if gating else None
+    months = gating.months if gating else None
     # Criterion 2 measures the fall THIS BOOK LIVED THROUGH — from the first cash flow, not a
     # trailing year. A -14.8% drop that happened before the money went in tests nothing, and the
     # first run of this file reported exactly that as a green.
@@ -206,7 +295,8 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config):
             months_of_flows=months,
             worst_drawdown_in_window=worst,
             gap_vs_ew_baseline=gate_gap,
-            noise_floor=BACKTEST_NOISE_FLOOR,
+            log_rel_wealth=gate_g,
+            null_p95=NULL_P95_LOG_REL_WEALTH,
             reconciled_complex_sale=False,
             reconciled_corporate_action=False,
             tradebook_reconciles=True,
@@ -251,6 +341,14 @@ def cmd_daily(cfg: Config) -> int:
         )
         return 0
 
+    # The AI treatment. Until 2026-08-30 this was never gathered, so `Market.ai_verdicts` was always
+    # None, `policy.use_ai and market.ai_verdicts` was always False, and all four twins were
+    # byte-identical by construction — TWIN_FULL − TWIN_NO_AI could only ever have read ₹0. The
+    # verdicts are asked for HERE, outside `step`, because the runner must stay pure and replayable:
+    # it consumes a decided map, it never calls anything.
+    verdicts = _ai_verdicts(books, market, cfg)
+    market = replace(market, ai_verdicts=verdict_calls(verdicts))
+
     decisions: list[Decision] = []
     for name in AUTONOMOUS:
         if name in books:
@@ -284,6 +382,14 @@ def cmd_daily(cfg: Config) -> int:
     DECISIONS_LOG.write_text(
         f"# Twin decisions — {as_of}\n\n" + decisions_markdown(decisions) + "\n", encoding="utf-8"
     )
+    # The append-only record. Everything above this line is a snapshot that the next run destroys;
+    # this is the only thing that accumulates. It is written LAST and fail-soft — a history write
+    # that raised would stop the cron, and a stopped cron loses far more days than one bad row.
+    try:
+        rows = append_history(marks, gaps, as_of=as_of, gate_verdict=gate.verdict)
+        print(f"✓ history: {rows} day(s) on file → {TWIN_HISTORY}")
+    except Exception as exc:
+        print(f"[twin] WARNING: history not appended ({exc})", file=sys.stderr)
     print(f"✓ {len(decisions)} decision(s) · gate: {gate.verdict} · → {REPORT}")
     return 0
 
