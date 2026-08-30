@@ -1,10 +1,50 @@
 # Phase 4 — the whole system, backtested
 
 **Run 2026-08-29 · pre-registered in [PLAN_REDESIGN.md](../PLAN_REDESIGN.md) §5/§6 before the first
-execution.** Reproduce with `uv run python scripts/backtest_phase4.py --null 60`.
+execution. ⚠️ CORRECTED 2026-08-30 — every number below is a re-run; see §0.** Reproduce with
+`uv run python scripts/backtest_phase4.py --null 60`.
 
 Point-in-time Nifty-50 membership (dead names included), 2013-07 → 2026-06, 156 monthly deploys,
 ₹1,00,000 lump + ₹50,000/month, Zerodha costs and real capital-gains tax throughout.
+
+---
+
+## 0. ⚠️ Correction, 2026-08-30 — the SIP accounting was wrong, and one conclusion reversed
+
+An external review found that this script marked the book **shares-only** and computed drawdowns on
+the **rupee curve with contributions still in it**. Two consequences, both real:
+
+**A. Cash that a sale produced disappeared from the book.** `_mark` valued holdings and ignored
+`portfolio.cash`, so proceeds vanished from the curve until the next monthly deploy re-spent them.
+Buy-and-hold barely noticed (**+₹807** on ₹2.85 crore). Anything that *sells* was penalised hard:
+
+| | terminal, old accounting | terminal, corrected | difference |
+|---|---:|---:|---:|
+| Screen only (never sells) | ₹2,85,25,560 | ₹2,85,26,367 | +₹807 |
+| **Screen + §4.7 exits** | ₹2,08,03,470 | ₹2,10,46,350 | **+₹2,42,880** |
+
+**B. Contributions were counted as returns.** `max_drawdown_pct`'s docstring promised they were
+stripped; the code ran `cummax` straight down the rupee curve and stripped nothing. Deposits landing
+during a fall keep that curve making new highs, so drawdowns were understated — and for a selling
+strategy the vanished cash *manufactured* extra drawdown on top. Both now run on a **unitized
+(time-weighted) NAV**, the arithmetic a fund uses to report a NAV while money flows in and out.
+
+**The reversal.** §2 below used to state that the §4.7 exits "endured a deeper drawdown than never
+selling at all" — **−42.2% vs −34.0%**. Corrected, the exits fall **−33.9%** against buy-and-hold's
+**−35.2%**: the exits were *marginally shallower*, not deeper. That extra 8.3 points of drawdown was
+the sale proceeds being written off, not anything the market did.
+
+**What survives.** The return conclusion is untouched and remains overwhelming: the exits still
+finish **₹74.8 lakh behind** buy-and-hold (was ₹77.2 lakh) after paying ₹13.3 lakh of tax to get
+there. "Low realised turnover is the edge" stands on that evidence. Its *drawdown* half does not, and
+has been withdrawn.
+
+**Isolation method.** The old and new code were run against the **same price panel** via a git
+worktree, so every difference above is the accounting fix alone. That check also exposed something
+separate: the figures published here on 2026-08-29 no longer reproduce on today's data at all
+(NIFTYBEES ₹1,80,57,394 → ₹1,80,98,746; the exits leg moved ₹6.8 lakh and its trade count 689 → 692)
+**with the original code**. Yahoo revises history. Until the input panels are hashed and pinned, every
+number in this report is reproducible only to about half a percent — see §6.
 
 ---
 
@@ -12,14 +52,23 @@ Point-in-time Nifty-50 membership (dead names included), 2013-07 → 2026-06, 15
 
 | Plan | Final | Return | Worst fall | Tax paid | Trades |
 |---|---:|---:|---:|---:|---:|
-| NIFTYBEES (do nothing) | ₹1,80,57,394 | +130.0% | −35.2% | ₹0 | 156 |
-| **Screen only (buy & hold)** | **₹2,84,43,450** | **+262.3%** | **−34.0%** | **₹0** | 437 |
-| Screen + §4.7 exits | ₹2,14,79,617 | +173.6% | −42.2% | ₹13,21,383 | 689 |
-| Screen + annual trim | ₹2,80,73,012 | +257.6% | −35.9% | ₹7,71,431 | 722 |
-| ⚠️ static Nifty-100 (**BIASED**) | ₹5,92,71,355 | +655.0% | −39.1% | ₹0 | 391 |
+| NIFTYBEES (do nothing) | ₹1,80,98,958 | +130.6% | −36.3% | ₹0 | 156 |
+| Equal-weight index (no fee) | ₹2,52,77,875 | +222.0% | −35.8% | ₹0 | 156 |
+| **Screen only (buy & hold)** | **₹2,85,26,367** | **+263.4%** | **−35.2%** | **₹0** | 437 |
+| Screen + §4.7 exits | ₹2,10,46,350 | +168.1% | −33.9% | ₹13,25,747 | 692 |
+| Screen + annual trim | ₹2,81,77,376 | +258.9% | −37.6% | ₹7,70,925 | 708 |
+| ⚠️ static Nifty-100 (**BIASED**) | ₹5,94,57,989 | +657.4% | −39.5% | ₹0 | 391 |
 
-**The screen beats doing nothing by ₹1,03,86,056.** It also beat **all 60** no-skill draws
+**The screen beats doing nothing by ₹1,04,27,409.** It also beat **all 60** no-skill draws
 (best random draw: ₹85,48,296), so *p* < 1/61 ≈ **0.016**.
+
+⚠️ **The 60-draw null below has NOT been re-run since the §0 correction** — the numbers in this
+subsection are the 2026-08-29 figures. The fix moves a null draw's terminal value by roughly the
+buy-and-hold amount (**+₹807** — random baskets never sell, so the residual-cash correction barely
+touches them), so the decomposition's *shape* is unaffected. The absolute figures are nonetheless
+stale on two counts — the accounting fix and the data drift in §0 — and the null is being regenerated
+at ≥1,000 draws under the specification frozen in
+[PREREGISTRATION_TWIN_RUN2.md](PREREGISTRATION_TWIN_RUN2.md).
 
 ### ⚠️ But three-quarters of that gap is not stock-picking
 
@@ -33,7 +82,7 @@ A random basket of 15 Nifty-50 names beats the cap-weighted index by **₹78.6 l
 **equal-weight premium**, not skill — and this repo already knew it (1/N returned 17.7% against the
 index's 14.5%). Decomposing:
 
-| Source of the ₹1,03,86,056 gap | Rupees | Share |
+| Source of the ₹1,04,27,409 gap | Rupees | Share |
 |---|---:|---:|
 | Equal-weighting 15 names instead of cap-weighting 50 | ₹78,55,243 | **76%** |
 | **The screen's actual selection** | **₹25,30,813** | **24%** |
@@ -42,8 +91,13 @@ index's 14.5%). Decomposing:
 quoting "+262% vs +130%" as the screen's achievement is crediting it with the equal-weight premium
 it did not create.
 
-**GO criterion 3's noise floor is ₹83,62,315** on this window and scale. A live gap inside it is not
-a result. The twin's `Gap.noise_floor` takes this number.
+⚠️ **This number is no longer GO criterion 3's bar, and must not be used as one.** It was estimated
+over thirteen years and ₹78.5 lakh of contributions **against NIFTYBEES**, and was then applied to a
+₹3 lakh twin book over twelve months **against the equal-weight fund** — mismatched in scale, horizon
+and benchmark, and unreachable by construction. The gate now uses a **scale-free** statistic,
+log relative wealth `G = ln(V_TWIN_FULL / V_BASELINE_EW)`, judged against a matched null. See
+[PREREGISTRATION_TWIN_RUN2.md](PREREGISTRATION_TWIN_RUN2.md). The decomposition above remains valid
+as *description* of this backtest; it is simply not a live bar.
 
 ### The comparison that actually decides whether to bother
 
@@ -81,12 +135,16 @@ harvesting, and never paying a fee that compounds forever.
 
 | | vs buy & hold | Tax paid to get there | Drawdown |
 |---|---:|---:|---:|
-| §4.7 idiosyncratic exits | **−₹69,63,833** | ₹13,21,383 | **worse** (−42.2% vs −34.0%) |
-| Annual trim to equal weight | −₹3,70,438 | ₹7,71,431 | worse (−35.9%) |
+| §4.7 idiosyncratic exits | **−₹74,80,017** | ₹13,25,747 | −33.9% (vs −35.2%) — *marginally shallower* |
+| Annual trim to equal weight | −₹3,48,991 | ₹7,70,925 | −37.6% — worse |
 
 **Both selling mechanisms lose, and the §4.7 test — the more discriminating of the two — loses by
-far the most.** It paid ₹13.2 lakh of capital-gains tax to finish ₹69.6 lakh behind, *and* endured a
-deeper drawdown than never selling at all.
+far the most.** It paid ₹13.3 lakh of capital-gains tax to finish ₹74.8 lakh behind.
+
+⚠️ **This paragraph used to end "*and* endured a deeper drawdown than never selling at all." That was
+an accounting artefact and is withdrawn — see §0.** The exits' drawdown is in fact a shade *better*
+than buy-and-hold's. The case against selling now rests entirely on return and tax, where it is not
+close; there is no drawdown argument to add to it, and adding one was wrong.
 
 This is the strongest confirmation yet of the repo's one robust finding: **low realised turnover is
 the edge.** It also lands directly on two live decisions:
@@ -107,12 +165,23 @@ persist=3, h=0.5.
 
 | | unhedged | hedged |
 |---|---:|---:|
-| Terminal (×) | **286.2** | 224.8 |
-| Worst drawdown | **−34.0%** | **−23.4%** |
+| Terminal (×, time-weighted) | **8.441** | 6.627 |
+| Worst drawdown | **−35.2%** | **−25.2%** |
 
 **Episodes fired: 18** over thirteen years.
 
-> **The overlay cost 21.5% of terminal wealth to cut the worst fall by 10.6 points.**
+> **The overlay cost 21.5% of terminal wealth to cut the worst fall by 10.0 points.**
+
+⚠️ **The multiples above were ×286.2 and ×224.8 when first published.** They were computed from
+`equity_curve.pct_change()` on the contribution-bearing rupee curve, so every ₹50,000 deposit entered
+as a one-day *return* — into an early ₹1,00,000 book, a +50% day — and thirteen years of those
+compounded into ×286. That was never a return multiple; it was the deposits. On the corrected
+time-weighted NAV the book grows **×8.441**, which is what a 263% return on staged contributions
+actually looks like. The overlay's transaction cost fell with it: **0.7233 → 0.0267** of book value.
+
+**The 21.5% is unchanged, and that is not luck.** The spurious deposit-days appeared in the hedged
+and unhedged compounding alike and cancelled in the ratio. So the headline figure was *correct*, but
+nothing in the old run established that it was — it was right by an accident nobody had checked.
 
 That is real insurance at a real premium — not the free lunch the module's own docstring implies.
 `live/hedge.py` says the hedge cut the COVID drawdown *"with ~no return given up"*, and for **that one
@@ -172,7 +241,12 @@ table that looked entirely plausible.
   validated funnel has that, this composite does not yet.
 - **The screen was developed with this data visible.** The selection edge is therefore not
   out-of-sample, and 24% of a gap is exactly the size that in-sample development can manufacture.
-- **60 null draws** is enough to say *p* < 0.016 and no more.
+- **60 null draws** is enough to say *p* < 0.016 and no more — and that null predates the §0
+  correction; it is being regenerated at ≥1,000 draws.
+- **The inputs are not pinned.** Re-running the *unchanged* code on today's panel moves the exits leg
+  by ₹6.8 lakh and its trade count by three, because Yahoo revises history. Until the price panels
+  carry recorded hashes, treat every rupee figure here as reproducible to roughly half a percent, and
+  never compare a number in this report against one computed on a different day's download.
 - **No slippage sensitivity.** Costs use the Zerodha model at default impact.
 - **Nothing here is forward evidence.** GO criterion 1 still needs 12 months of real cash flows, and
   criterion 2 still needs a −10% event that has never arrived.

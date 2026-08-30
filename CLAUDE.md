@@ -83,6 +83,13 @@ explaining it away.**
 ### Standing limitations — true on the first order, not fixable by more code
 
 - **Nobody has watched this system fall.** Every live day so far has been calm.
+- **⚠️ The screen's backtested worst fall is −47.5%, and it is DEEPER than the index** (corrected
+  2026-08-30). `reports/BACKTEST_SIP.md` said −34.9% and "drawdown broadly matching the index rather
+  than being bought with extra risk"; both were artefacts of counting contributions as returns, and
+  both are withdrawn. Peak 2018-01-08 → COVID trough 2020-03-23: the screen −47.5%, NIFTYBEES −36.3%.
+  **The extra return is bought with extra risk.** This matters for what the user is told to expect,
+  because he runs it with no stop-loss: a −45%+ fall on the real book is inside the backtest's own
+  history, not a tail nobody modelled.
 - **The buy screen has one backtest behind it** (16.4% vs 11.8%, 13y SIP), its concentrated variants
   lean on a survivorship-flattered watchlist, and **every guard protecting that result was written in
   the month before the money went in**.

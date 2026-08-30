@@ -1,5 +1,44 @@
 # The buy screen, finally backtested (2026-08-20)
 
+> ## ⚠️ CORRECTED 2026-08-30 — every drawdown in this report was wrong
+>
+> `Result.max_drawdown_pct` promised in its own docstring that contributions were stripped out
+> before measuring, and then ran `cummax` straight down the rupee curve, stripping nothing. Deposits
+> landing *during* a fall keep that curve making new highs, so the falls were masked. It now runs on
+> a **unitized (time-weighted) NAV**. Old and new code were run against the **same price panel** to
+> separate the fix from data drift.
+>
+> **The screen's worst fall is −47.5%, not −34.9%.**
+>
+> | | published | same data, old code | **corrected** |
+> |---|---:|---:|---:|
+> | NIFTYBEES | −35.2% | −35.2% | **−36.3%** |
+> | Screen (PIT Nifty-50) | −34.9% | −38.3% | **−47.5%** |
+> | ⚠️ static Nifty-100 (biased) | −42.3% | −41.8% | **−42.2%** |
+>
+> The fall runs **2018-01-08 → 2020-03-23**, peak to COVID trough. NIFTYBEES lost **−36.3%** over
+> that same window, so the screen fell **11 points further than the index**. ₹28 lakh had been
+> contributed by the peak and more arrived during the 26-month slide, which is precisely what held
+> the rupee curve up and hid it.
+>
+> **The sentence "drawdown broadly matching the index rather than being bought with extra risk" was
+> false and is withdrawn.** The extra return *was* bought with extra risk. On the honest
+> point-in-time universe this screen is meaningfully more volatile than the index it beats — which
+> is the opposite of what this report told its reader, and it is the half that matters to anyone
+> deciding how much to put in.
+>
+> **Terminal values also moved** (₹2,43,07,875 → ₹2,51,77,424), from a longer panel — 158 deploys
+> and ₹79.5 lakh contributed, against 156 and ₹78.5 lakh when published — plus uninvested cash now
+> being counted. Returns are barely affected; the risk column is where the defect lived.
+>
+> **The tables below §"It is not one lucky stretch" were produced by a superseded version of this
+> script** (their trade counts no longer reproduce) and cannot be regenerated. Every *drawdown* in
+> them carries the same defect and is withdrawn — including "removes 13 points of drawdown", "cuts
+> drawdown 48% → 35%", and "selling makes the drawdown worse". The sell question was re-asked
+> properly on the same data in
+> [PHASE4_BACKTEST.md](PHASE4_BACKTEST.md) §2 — where, corrected, **selling does not worsen the
+> drawdown**; it loses on return and tax alone, which it does decisively.
+
 The Add-money screen had never been measured against anything. This is that measurement, run on the
 user's actual plan — a lump sum followed by a monthly SIP — reproducible with
 `uv run python scripts/backtest_sip.py`.
@@ -11,9 +50,11 @@ Costs included (Zerodha model). No selling, so no capital-gains tax on either pl
 
 | Plan | Ended at | Return | Worst fall |
 |---|---:|---:|---:|
-| NIFTYBEES (do nothing) | ₹17,763,342 | +126.3% | −35.2% |
-| **The screen — point-in-time Nifty-50** | **₹24,307,875** | **+209.7%** | **−34.9%** |
-| The screen — today's Nifty-100 | ₹62,096,785 | +691.0% | −42.3% |
+| NIFTYBEES (do nothing) | ₹1,81,98,982 | +128.9% | −36.3% |
+| **The screen — point-in-time Nifty-50** | **₹2,51,77,424** | **+216.7%** | **−47.5%** |
+| The screen — today's Nifty-100 | ₹6,53,32,360 | +721.8% | −42.2% |
+
+*(Corrected 2026-08-30 — see the banner above. 158 deploys, ₹79,50,000 contributed.)*
 
 **The third row is survivorship-biased and must never be quoted.** It holds today's Nifty-100
 constituents fixed across 14 years — every name in it is one that survived to 2026. It is reported
@@ -33,8 +74,11 @@ were members.
 | 2021-01 | ₹3,350,000 | +26.0% | +62.4% | −12.8% / −14.9% |
 | 2023-01 | ₹2,150,000 | +10.1% | +23.7% | −11.8% / −10.7% |
 
-Five start dates, five wins, with drawdown broadly matching the index rather than being bought with
-extra risk. Nor is it knife-edge on the concentration dial — 5, 8, 12 and 20 names give +231%, +210%,
+Five start dates, five wins. ⚠️ **The drawdown column above is uncorrected and understated** — see
+the banner: the 2013-07 row's "−34.9%" is really −47.5%, and the others are wrong by the same
+mechanism in proportion to how large the contributions were relative to the book. **The claim that
+drawdown "broadly matches the index rather than being bought with extra risk" is withdrawn.** The
+return result stands; the risk result does not. Nor is it knife-edge on the concentration dial — 5, 8, 12 and 20 names give +231%, +210%,
 +197%, +221%, all comfortably ahead of +126%.
 
 ## What the health filter actually does
