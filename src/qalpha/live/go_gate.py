@@ -16,6 +16,7 @@ fallback, and no zero standing in for an unknown.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -56,8 +57,13 @@ class Evidence:
 
     months_of_flows: int | None = None
     worst_drawdown_in_window: float | None = None
+    #: Descriptive only — the rupee gap, for the human reading the report. Never the criterion.
     gap_vs_ew_baseline: Decimal | None = None
-    noise_floor: Decimal | None = None
+    #: The criterion: G = ln(V_TWIN_FULL / V_BASELINE_EW). Scale-free, so the SIP growing the book
+    #: does not move it. See ``twin.NULL_P95_LOG_REL_WEALTH`` for the pre-registered specification.
+    log_rel_wealth: float | None = None
+    #: p95 of that pre-registered null, in log units. ``None`` → CANNOT ASSESS, never a pass.
+    null_p95: float | None = None
     reconciled_complex_sale: bool | None = None
     reconciled_corporate_action: bool | None = None
     tradebook_reconciles: bool | None = None
@@ -106,30 +112,37 @@ def _volatility_event(e: Evidence) -> Criterion:
 
 
 def _beats_baseline(e: Evidence) -> Criterion:
-    if e.gap_vs_ew_baseline is None:
+    if e.log_rel_wealth is None:
         return Criterion(
             "Beats the equal-weight fund",
             CANNOT_ASSESS,
             "no comparison computed",
             "seed and mark the twin books",
         )
-    if e.noise_floor is None:
+    # Relative wealth, not rupees: both books receive identical flows, so the ratio isolates the
+    # selection difference and does not move when the monthly SIP grows the book. The rupee gap is
+    # carried alongside for the human, never as the criterion — that confusion is what produced an
+    # ₹84 lakh bar for a ₹3 lakh book.
+    pct = math.expm1(e.log_rel_wealth) * 100
+    rupees = "" if e.gap_vs_ew_baseline is None else f" (₹{e.gap_vs_ew_baseline:+,.0f})"
+    if e.null_p95 is None:
         return Criterion(
             "Beats the equal-weight fund",
             CANNOT_ASSESS,
-            f"gap ₹{e.gap_vs_ew_baseline:,.0f} but no noise floor exists",
-            "run scripts/backtest_phase4.py — without a bar, no gap can be read",
+            f"relative wealth {pct:+.2f}%{rupees}, but the pre-registered null has not been run",
+            "generate the matched null (twin.NULL_P95_LOG_REL_WEALTH names its specification) — "
+            "without a bar, no gap can be read, and a missing bar is never a bar of zero",
         )
-    if e.gap_vs_ew_baseline > e.noise_floor:
+    if e.log_rel_wealth > e.null_p95:
         return Criterion(
             "Beats the equal-weight fund",
             GREEN,
-            f"ahead ₹{e.gap_vs_ew_baseline:,.0f}, clearing the ±₹{e.noise_floor:,.0f} floor",
+            f"ahead {pct:+.2f}%{rupees}, clearing the ±{e.null_p95:.4f} null band",
         )
     return Criterion(
         "Beats the equal-weight fund",
-        AMBER if e.gap_vs_ew_baseline > 0 else RED,
-        f"gap ₹{e.gap_vs_ew_baseline:,.0f} inside the ±₹{e.noise_floor:,.0f} noise floor",
+        AMBER if e.log_rel_wealth > 0 else RED,
+        f"relative wealth {pct:+.2f}%{rupees}, inside the ±{e.null_p95:.4f} null band",
         "a gap larger than luck produces. The bar is the fund anyone can buy, not the index.",
     )
 
