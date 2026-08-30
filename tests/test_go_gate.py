@@ -21,7 +21,8 @@ def _all_green() -> Evidence:
         months_of_flows=18,
         worst_drawdown_in_window=-0.14,
         gap_vs_ew_baseline=Decimal("2000000"),
-        noise_floor=Decimal("1000000"),
+        log_rel_wealth=0.18,
+        null_p95=0.05,
         reconciled_complex_sale=True,
         reconciled_corporate_action=True,
         tradebook_reconciles=True,
@@ -58,16 +59,16 @@ def test_every_blocking_criterion_says_what_would_settle_it() -> None:
         assert c.settles_it, f"{c.name} blocks without saying what would resolve it"
 
 
-def test_a_gap_without_a_noise_floor_cannot_be_read() -> None:
+def test_a_gap_without_a_null_cannot_be_read() -> None:
     """Forward run 1 was voided for exactly this: a difference with no bar behind it."""
-    ev = Evidence(gap_vs_ew_baseline=Decimal("50000000"), noise_floor=None)
+    ev = Evidence(gap_vs_ew_baseline=Decimal("50000000"), log_rel_wealth=2.0, null_p95=None)
     c = build_gate(ev, _AS_OF).criteria[2]
     assert c.verdict == CANNOT_ASSESS
-    assert "no noise floor" in c.reading
+    assert "has not been run" in c.reading
 
 
-def test_a_gap_inside_the_floor_is_not_a_pass() -> None:
-    ev = Evidence(gap_vs_ew_baseline=Decimal("500"), noise_floor=Decimal("8362315"))
+def test_a_gap_inside_the_null_band_is_not_a_pass() -> None:
+    ev = Evidence(gap_vs_ew_baseline=Decimal("500"), log_rel_wealth=0.004, null_p95=0.05)
     assert build_gate(ev, _AS_OF).criteria[2].verdict != GREEN
 
 

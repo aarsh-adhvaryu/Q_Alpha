@@ -13,7 +13,7 @@ from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.live.policy import DEPLOY, EXIT, HARVEST, HEDGE_ON, HOLD, POLICIES
 from qalpha.live.runner import Market, step
-from qalpha.live.twin import TWIN_FULL, TWIN_NO_EXITS, TWIN_NO_HEDGE, TwinBook
+from qalpha.live.twin import TWIN_FULL, TWIN_NO_AI, TWIN_NO_EXITS, TWIN_NO_HEDGE, TwinBook
 
 _AS_OF = date(2026, 8, 28)
 _DATES = pd.bdate_range(end=pd.Timestamp(_AS_OF), periods=400)
@@ -228,3 +228,63 @@ def test_an_exit_frees_cash_before_the_deploy_spends_it() -> None:
 
     src = inspect.getsource(runner._execute)
     assert src.index("HARVEST, EXIT") < src.index("!= DEPLOY"), "sells must precede buys"
+
+
+# ---- the AI ablation: the treatment has to actually reach the book --------------------------------
+
+
+def _two_name_market() -> Market:
+    """A watchlist with two affordable names, so a drop leaves something to compare against."""
+    from qalpha.data.prices import PriceData
+
+    flat = [100.0] * len(_DATES)
+    frame = pd.DataFrame({"A.NS": flat, "B.NS": flat}, index=_DATES)
+    return Market(
+        as_of=_AS_OF,
+        prices={"A.NS": Decimal("100"), "B.NS": Decimal("100")},
+        index_close=_calm_index(),
+        adj_close=frame,
+        watchlist=["A.NS", "B.NS"],
+        sector_of={"A.NS": "IT", "B.NS": "FMCG"},
+        wl_prices=PriceData(frame, frame.copy(), frame.copy() * 0 + 1e6),
+    )
+
+
+def _bought(book: TwinBook, policy, market: Market) -> set[str]:
+    step(book, policy, market)
+    return {t for t, q in book.portfolio.positions().items() if q > 0}
+
+
+def test_the_ai_verdict_actually_changes_what_twin_full_buys() -> None:
+    """The test whose absence let the AI ablation run starved for the whole of run 2's design.
+
+    ``Market.ai_verdicts`` was wired into ``_deploy`` in PR-8 and then never populated by the twin
+    cron, so ``policy.use_ai and market.ai_verdicts`` was False every day and TWIN_FULL and
+    TWIN_NO_AI were byte-identical **by construction** — the ablation could only ever have reported
+    ₹0, and would have reported it in twelve months as though it were a finding. Assert the
+    behaviour, not the call: a DROP must show up as a name the book does not own.
+    """
+    market = _two_name_market()
+    with_ai = _bought(_book(cash="500000"), POLICIES[TWIN_FULL], replace_verdicts(market, "drop"))
+    without = _bought(_book(cash="500000"), POLICIES[TWIN_NO_AI], replace_verdicts(market, "drop"))
+    assert "A.NS" not in with_ai, "TWIN_FULL must not hold a name the AI dropped"
+    assert "A.NS" in without, "TWIN_NO_AI must ignore the verdict entirely — that is the ablation"
+    assert with_ai != without, "if the two books cannot differ, the AI question cannot be answered"
+
+
+def test_no_verdicts_degrades_twin_full_to_exactly_twin_no_ai() -> None:
+    """An AI outage must cost the run its treatment, never its basket.
+
+    Fail-soft is the contract: no key, no response, an unparseable line → an empty map → every name
+    kept. TWIN_FULL then equals TWIN_NO_AI, which is a missing treatment, not a broken book.
+    """
+    market = _two_name_market()
+    full = _bought(_book(cash="500000"), POLICIES[TWIN_FULL], market)
+    none = _bought(_book(cash="500000"), POLICIES[TWIN_NO_AI], market)
+    assert full == none and full, "with no verdicts the two books must buy the same real basket"
+
+
+def replace_verdicts(market: Market, call: str) -> Market:
+    from dataclasses import replace
+
+    return replace(market, ai_verdicts={"A.NS": call})
