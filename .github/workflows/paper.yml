@@ -67,6 +67,11 @@ jobs:
         env:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           TRADEBOOK_GIST_ID: ${{ secrets.TRADEBOOK_GIST_ID }}
+          # Without this the twin's AI step reads "key not set", returns no verdicts, and every
+          # name is kept — so TWIN_FULL silently becomes TWIN_NO_AI and the ablation measures
+          # nothing. Fail-soft is correct behaviour and a terrible thing to leave running unnoticed
+          # for twelve months, which is precisely what the missing env block would have done.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: uv run python scripts/twin.py daily
 
       - name: Commit the track record
@@ -78,8 +83,14 @@ jobs:
           git add reports/ai_verdicts.md 2>/dev/null || true  # PR-8: the AI's per-name keep/drop sheet — written but never committed, so nobody could see what it decided
           # The System book trio (system = the former adaptive book; shadow = no-AI twin; baseline = NIFTYBEES)
           # The twin — five books, their decisions, and the gate. This is what accrues now.
-          git add data/twin/books.json 2>/dev/null || true
+          git add data/twin/books.json data/twin/marks.json 2>/dev/null || true
           git add reports/twin_dashboard.md reports/twin_decisions.md 2>/dev/null || true
+          # The append-only record. THIS IS THE ONE THAT ACCUMULATES — every other twin file above
+          # is a snapshot the next run overwrites. Left uncommitted, each day's history.jsonl is
+          # appended to an empty file inside the container and destroyed with it, which is the exact
+          # defect these files were added to fix. Own line: `git add` is all-or-nothing.
+          git add data/twin/history.jsonl 2>/dev/null || true
+          git add data/twin/ai_verdicts.jsonl 2>/dev/null || true
           # ⛔ The auto-pilot books below are ARCHIVED (reports/ARCHIVE_2026-08-28.md) and their step
           # is `if: false`. These lines stay one release so a stale working copy cannot resurrect
           # them by committing a file the cron no longer writes.
