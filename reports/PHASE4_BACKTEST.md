@@ -99,6 +99,34 @@ the edge.** It also lands directly on two live decisions:
 
 ---
 
+## 2a. The hedge: real protection, at a price the docstring did not name
+
+Measured on the screen's own equity curve — the same book hedged and unhedged, so the difference is
+the overlay and nothing else, including roll cost and the 30% F&O business-income tax. τ=0.7,
+persist=3, h=0.5.
+
+| | unhedged | hedged |
+|---|---:|---:|
+| Terminal (×) | **286.2** | 224.8 |
+| Worst drawdown | **−34.0%** | **−23.4%** |
+
+**Episodes fired: 18** over thirteen years.
+
+> **The overlay cost 21.5% of terminal wealth to cut the worst fall by 10.6 points.**
+
+That is real insurance at a real premium — not the free lunch the module's own docstring implies.
+`live/hedge.py` says the hedge cut the COVID drawdown *"with ~no return given up"*, and for **that one
+episode** it may well be true. Run continuously for thirteen years it fires **18 times**, and most
+firings are not crashes: **you pay for every false alarm.** The docstring has been corrected.
+
+**What this does *not* settle.** The model uses a **continuous notional** — no lot size — which
+§4b-i shows is unattainable below ~₹19L, so nobody could have held exactly this position. And a
+drawdown-reduction of 10.6 points for 21.5% of terminal wealth is a **preference**, not a verdict:
+it is the right trade for someone who would otherwise sell in a panic, and the wrong one for someone
+who would hold. The twin's `−HEDGE` ablation measures it forward; this sets the prior.
+
+---
+
 ## 3. Survivorship: the bias is 2.5×
 
 The same screen on **today's** Nifty-100 held fixed for fourteen years returns **+655.0%** against

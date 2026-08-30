@@ -1,0 +1,41 @@
+{
+  "caveats": [
+    "One window, one universe, one parameterisation \u2014 no walk-forward on the composite.",
+    "The screen was developed with this data visible: the selection edge is NOT out of sample.",
+    "4 null draws supports p < 0.200 and nothing stronger.",
+    "The static-universe row is survivorship-biased ~2.5x and must never be quoted.",
+    "The AI is absent by necessity: historical verdicts leak the outcome.",
+    "Costs use the Zerodha model at default impact; no slippage sensitivity was run."
+  ],
+  "commit": "3890dfb-dirty",
+  "label": "phase4",
+  "params": {
+    "deploys": 156,
+    "end": "2026-06-30",
+    "ew_fund_fee": "0.0041",
+    "lump": "100000",
+    "max_names": 15,
+    "null_draws": 4,
+    "seed": 20260829,
+    "sip": "50000",
+    "start": "2013-07-01",
+    "universe": "point_in_time_nifty50"
+  },
+  "results": {
+    "baseline_ew_fund_netfee": 23963350.813098483,
+    "baseline_ew_index_nofee": 25277662.940107163,
+    "baseline_niftybees": 18098745.739013672,
+    "hedge_cost_frac": 0.7232728738707674,
+    "hedge_episodes": 18.0,
+    "hedge_fno_tax_frac": 0.0,
+    "noise_floor_p95": 8442799.04,
+    "null_median": 7909615.6829071045,
+    "screen_annual_trim": 28177319.50177002,
+    "screen_buyhold": 28525560.101593018,
+    "screen_minus_ew_fund": 4562209.288494535,
+    "screen_minus_niftybees": 10426814.362579346,
+    "screen_with_exits": 20803470.19696045,
+    "static_universe_BIASED": 59457857.81977844
+  },
+  "run_at": "2026-08-30T05:27:37+00:00"
+}

@@ -213,8 +213,11 @@ MIN_MONTHS_FOR_A_VERDICT = 12
 #: GO criterion 3's bar, computed 2026-08-29 by ``scripts/backtest_phase4.py --null 60``: the p95 of
 #: 60 no-skill draws over 2013-07 → 2026-06 at ₹1L + ₹50k/month on point-in-time Nifty-50. A live gap
 #: inside this is not a result. **Scale-dependent** — it belongs to that contribution schedule, so a
-#: materially different one needs the null re-run. See reports/PHASE4_BACKTEST.md.
-BACKTEST_NOISE_FLOOR = Decimal("8362315")
+#: materially different one needs the null re-run. **Also data-dependent**: re-running after a price
+#: refresh moved it 8,362,315 → 8,411,106, about 0.6%. That drift is visible only because every run
+#: is recorded (``backtest/runstore.py``); the same parameters on the same data reproduce exactly.
+#: See reports/PHASE4_BACKTEST.md.
+BACKTEST_NOISE_FLOOR = Decimal("8411106")
 
 
 @dataclass(frozen=True)

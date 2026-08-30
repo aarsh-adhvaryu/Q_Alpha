@@ -196,7 +196,10 @@ def test_the_noise_floor_is_a_measured_number_not_a_guess() -> None:
     """
     from qalpha.live.twin import BACKTEST_NOISE_FLOOR
 
-    assert Decimal("8362315") == BACKTEST_NOISE_FLOOR
+    # Re-measured 2026-08-30 after a price refresh: 8,362,315 → 8,411,106, about 0.6%. The floor is
+    # data-dependent as well as scale-dependent, and that drift is visible only because every run is
+    # recorded — same parameters on the same data reproduce exactly.
+    assert Decimal("8411106") == BACKTEST_NOISE_FLOOR
 
 
 def test_a_gap_smaller_than_the_measured_floor_is_not_a_result() -> None:
@@ -207,7 +210,7 @@ def test_a_gap_smaller_than_the_measured_floor_is_not_a_result() -> None:
     """
     from qalpha.live.twin import BACKTEST_NOISE_FLOOR
 
-    marks = _marks(TWIN_FULL=2_530_813, BASELINE=0)
+    marks = _marks(TWIN_FULL=2_530_813, BASELINE_EW=0)
     marks[TWIN_FULL] = BookMark(
         TWIN_FULL,
         date(2028, 9, 1),  # comfortably past the 12-month bar, so only size is being tested

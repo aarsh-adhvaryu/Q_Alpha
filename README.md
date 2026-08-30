@@ -12,10 +12,23 @@ result is that the "alpha" is mostly **discipline** — trade rarely, be tax-sma
 stock-picking. Then we built the live system around that finding: an advisor that tells a human the
 **tax-smart move**, a dashboard, and a paper-trading run that self-certifies before any real money.
 
-> **Status in one line:** the strategy is validated as far as a backtest can go (it beats the index
-> *and* equal-weight, net of cost and tax, out-of-sample). The live system is built and deployed on a
-> real account. The only thing between here and real-money go-live is **calendar time** — a mandatory
-> ~6-month forward paper run — plus a couple of real-world events to reconcile. No engineering blocks it.
+> **Status, 2026-08-29 — read this before the numbers below.**
+> **Real money is already invested** (₹3,00,000, since 2026-08-27), **before the system's own gate
+> opened.** That was a deliberate, informed decision by the author; nothing here is validated for
+> real money and the gate remains shut.
+>
+> The system was **redesigned in August 2026** because the old gate graded the wrong thing: it scored
+> a paper book running the *validated funnel* while the money actually runs the deploy-into-weakness
+> advisor, which shares no selection code with it. See **[PLAN_REDESIGN.md](PLAN_REDESIGN.md)**.
+>
+> ⚠️ **The headline below understates how much of the edge is not stock-picking.**
+> [Phase 4](reports/PHASE4_BACKTEST.md) found that **76% of the screen's gap over NIFTYBEES is the
+> equal-weight premium** — purchasable for ~0.41%/yr in an index fund. Against *that* benchmark the
+> system's real case is **+2.35 pp/yr, in-sample**, not the ~6 pp the index comparison suggests.
+>
+> What decides it now is the **[digital twin](PLAN_REDESIGN.md#1-architecture--the-digital-twin)**:
+> five fake-money books on the author's real cash flows, one of them fully autonomous. It needs
+> **12 months of flows** (≈ August 2027) and a **−10% market fall**, which has not happened.
 
 Read-me-next: [reports/PHASE0_VERDICT.md](reports/PHASE0_VERDICT.md) (full evidence chain) ·
 [CLAUDE.md](CLAUDE.md) (developer/agent log) · [Q_alpha.md](Q_alpha.md) (the full spec).

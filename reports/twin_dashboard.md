@@ -1,19 +1,19 @@
-# The twin — 2026-08-29
+# The twin — 2026-08-30
 
-_Generated 2026-08-29 10:20 UTC. Fake money; the real account is the state source and is never traded._
+_Generated 2026-08-30 05:17 UTC. Fake money; the real account is the state source and is never traded._
 
 | Book | Net money in | Worth today | Gain | XIRR |
 |---|---:|---:|---:|---:|
-| REAL | ₹304,144 | ₹303,943 | ₹-201 | -9.6%/yr |
-| **TWIN_FULL** | ₹304,144 | ₹303,513 | ₹-631 | -27.5%/yr |
-| TWIN_NO_AI | ₹304,144 | ₹303,513 | ₹-631 | -27.5%/yr |
-| TWIN_NO_HEDGE | ₹304,144 | ₹303,513 | ₹-631 | -27.5%/yr |
-| TWIN_NO_EXITS | ₹304,144 | ₹303,513 | ₹-631 | -27.5%/yr |
-| BASELINE_EW | ₹304,144 | ₹304,031 | ₹-113 | -5.5%/yr |
-| BASELINE | ₹304,144 | ₹304,287 | ₹+143 | +7.4%/yr |
+| REAL | ₹304,144 | ₹303,943 | ₹-201 | -6.9%/yr |
+| **TWIN_FULL** | ₹304,144 | ₹303,513 | ₹-631 | -20.1%/yr |
+| TWIN_NO_AI | ₹304,144 | ₹303,513 | ₹-631 | -20.1%/yr |
+| TWIN_NO_HEDGE | ₹304,144 | ₹303,513 | ₹-631 | -20.1%/yr |
+| TWIN_NO_EXITS | ₹304,144 | ₹303,513 | ₹-631 | -20.1%/yr |
+| BASELINE_EW | ₹304,144 | ₹304,027 | ₹-117 | -4.0%/yr |
+| BASELINE | ₹304,144 | ₹304,287 | ₹+143 | +5.2%/yr |
 
 **The gate** (GO criterion 3 — the only comparison that authorises anything):
-- **TWIN_FULL** is behind **BASELINE_EW** by ₹517 — but 2 month(s) of history is dominated by *when* the money went in, not *what* was picked. No verdict before 12 months.
+- **TWIN_FULL** is behind **BASELINE_EW** by ₹514 — but 2 month(s) of history is dominated by *when* the money went in, not *what* was picked. No verdict before 12 months.
 
 **Diagnostics — descriptive, never gating.** Four comparisons at 95% confidence throw a false positive about one run in five, so these attribute; they do not authorise:
 - **TWIN_FULL** is behind **BASELINE** by ₹774 — but 2 month(s) of history is dominated by *when* the money went in, not *what* was picked. No verdict before 12 months.
@@ -24,7 +24,7 @@ _Generated 2026-08-29 10:20 UTC. Fake money; the real account is the state sourc
 
 ---
 
-# GO gate — **NOT YET** (2026-08-29)
+# GO gate — **NOT YET** (2026-08-30)
 
 **5 of 6 criteria are not green.** The system is not validated for real money.
 
@@ -32,7 +32,7 @@ _Generated 2026-08-29 10:20 UTC. Fake money; the real account is the state sourc
 |---|---|---|
 | 🟡 | Track length | 2 of 12 months |
 | 🟡 | Volatility event withstood | worst in-window fall -2.2%, gate needs ≤ -10% |
-| 🔴 | Beats the equal-weight fund | gap ₹-517 inside the ±₹8,362,315 noise floor |
+| 🔴 | Beats the equal-weight fund | gap ₹-514 inside the ±₹8,362,315 noise floor |
 | 🟡 | Tax reconciled | only a single-lot, all-STCG, no-loss sale has ever matched (₹25.25, Δ ₹0.00) |
 | 🟡 | Corporate action reconciled | never |
 | 🟢 | Data integrity | tradebook matches the broker; no ungated gaps |
