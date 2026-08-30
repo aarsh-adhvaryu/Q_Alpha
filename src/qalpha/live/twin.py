@@ -33,7 +33,7 @@ until then they hold cash and are honest about it.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -581,3 +581,56 @@ def apply_off_market(portfolio: Portfolio, credits: Sequence[OffMarketCredit]) -
                 buy_price=credit.cost_per_share,
             )
         )
+
+
+def unexplained_holdings(
+    replayed: Portfolio, broker_qty: Mapping[str, Decimal], broker_price: Mapping[str, Decimal]
+) -> list[OffMarketCredit]:
+    """Shares the broker holds that the tradebook cannot explain — detected, not typed.
+
+    ``kite.holdings()`` returns **settled demat holdings**, so an IPO allotment appears there as soon
+    as it credits. That gives three of the four fields for free: the ticker, the quantity, and
+    ``average_price`` — which for an allotment *is* the issue price paid. The one thing the broker
+    cannot supply is the **acquisition date**: ``holdings()`` carries no purchase dates at all.
+
+    So the missing shares are dated **conservatively by the caller** rather than guessed. Assuming a
+    recent acquisition makes them short-term, which taxes at 20% instead of 12.5% — an over-statement.
+    The user can set the true allotment date in ``off_market.json`` to recover the correct twelve-month
+    clock; until then the figure is wrong in the direction that cannot cost him money.
+    """
+    held = replayed.positions()
+    out: list[OffMarketCredit] = []
+    for ticker, qty in sorted(broker_qty.items()):
+        gap = qty - held.get(ticker, Decimal("0"))
+        price = broker_price.get(ticker)
+        if gap > 0 and price is not None and price > 0:
+            out.append(
+                OffMarketCredit(
+                    ticker=ticker,
+                    on=date.today(),  # placeholder; the caller stamps the conservative date
+                    quantity=gap,
+                    cost_per_share=price,
+                    note="detected from broker holdings — date unknown",
+                )
+            )
+    return out
+
+
+def off_market_snippet(credits: Sequence[OffMarketCredit]) -> str:
+    """A ready-to-paste ``off_market.json`` entry, pre-filled with everything the broker knew.
+
+    Only ``on`` is left for the user, because it is the only field he holds that the API does not.
+    """
+    lines = [
+        '  "credits": [',
+        *[
+            "    {"
+            f'"ticker": "{c.ticker}", "on": "YYYY-MM-DD", '
+            f'"quantity": "{c.quantity.normalize()}", '
+            f'"cost_per_share": "{c.cost_per_share}", "note": "IPO allotment"'
+            "}" + ("," if i < len(credits) - 1 else "")
+            for i, c in enumerate(credits)
+        ],
+        "  ]",
+    ]
+    return "\n".join(lines)
