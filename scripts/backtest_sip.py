@@ -57,6 +57,9 @@ class Result:
     label: str
     contributed: Decimal = Decimal("0")
     equity_curve: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
+    #: Every deposit, dated. Required to strip contributions back out of ``equity_curve`` — without
+    #: them a rupee curve cannot be told apart from the deposits that grew it.
+    flows: list[tuple[date, Decimal]] = field(default_factory=list)
     names_held: int = 0
     trades: int = 0
     costs: Decimal = Decimal("0")
@@ -75,17 +78,53 @@ class Result:
         c = float(self.contributed)
         return (self.final - c) / c * 100 if c else 0.0
 
-    def max_drawdown_pct(self) -> float:
-        """Worst peak-to-trough fall of the *invested* book.
+    def nav(self) -> pd.Series:
+        """The **unitized** (time-weighted) NAV — the curve with contributions taken back out.
 
-        Contributions are stripped first: a series that grows partly because money was added would
-        otherwise understate every drawdown, and the point here is how bad it felt to hold.
+        **The defect this replaces.** ``max_drawdown_pct`` used to say "contributions are stripped
+        first" and then run ``cummax`` straight down the rupee curve, which strips nothing. Worse,
+        ``backtest_phase4`` took ``pct_change()`` of that same curve to drive the hedge, so a ₹50,000
+        deposit into an early ₹1,00,000 book registered as a **+50% one-day return**. Compounding
+        those produced the ×286.2 "terminal wealth" the hedge result was quoted against. It was never
+        a return multiple — it was the deposits, compounded as though they were performance.
+
+        **The method** is standard unitization, the same arithmetic a mutual fund uses to report a
+        NAV while money flows in and out. Hold a number of *units*; on a contribution day buy new
+        units at the prevailing price rather than inflating the price:
+
+            nav_t      = value_t / units_t
+            units_new  = units_prev + contribution / nav_at_contribution
+
+        A deposit then changes ``units`` and leaves ``nav`` untouched, so the series moves only when
+        the *investments* move. Drawdowns computed on it are what the holder actually felt, and
+        successive ratios are true returns, safe to compound or to hedge against.
         """
-        if len(self.equity_curve) < 2:
-            return 0.0
         curve = self.equity_curve
-        peak = curve.cummax()
-        return float(((curve - peak) / peak).min() * 100)
+        if len(curve) < 2:
+            return curve
+        by_ts: dict[pd.Timestamp, float] = {}
+        for d, amount in self.flows:
+            ts = pd.Timestamp(d)
+            by_ts[ts] = by_ts.get(ts, 0.0) + float(amount)
+        units = 0.0
+        out: list[float] = []
+        for ts, value in curve.items():
+            added = by_ts.get(ts)
+            if added:
+                # ``value`` already contains today's deposit (it was credited before the mark), so
+                # the price the new units are bought at is the value *before* it arrived.
+                before = value - added
+                price = before / units if units > 0 and before > 0 else 1.0
+                units += added / price
+            out.append(value / units if units > 0 else 1.0)
+        return pd.Series(out, index=curve.index)
+
+    def max_drawdown_pct(self) -> float:
+        """Worst peak-to-trough fall of the *invested* book, contributions genuinely removed."""
+        nav = self.nav()
+        if len(nav) < 2:
+            return 0.0
+        return float(((nav - nav.cummax()) / nav.cummax()).min() * 100)
 
 
 def _month_starts(dates: list[date], start: date, end: date) -> list[date]:
@@ -102,14 +141,23 @@ def _month_starts(dates: list[date], start: date, end: date) -> list[date]:
     return out
 
 
-def _mark(holdings: dict[str, int], adj: pd.DataFrame, upto: pd.Timestamp) -> pd.Series:
-    """Daily mark-to-market of a fixed holdings vector, forward-filled and causal."""
+def _mark(
+    holdings: dict[str, int], adj: pd.DataFrame, upto: pd.Timestamp, cash: float = 0.0
+) -> pd.Series:
+    """Daily mark of a fixed holdings vector **plus uninvested cash**, forward-filled and causal.
+
+    ``cash`` is constant across a segment — this simulation only trades on schedule dates — so it is
+    a flat add. It must be added *here* rather than by the caller: with no holdings at all the
+    holdings mark is an empty frame, and an empty series silently drops the whole month, cash
+    included. A book holding nothing still holds its money.
+    """
+    idx = adj.loc[:upto].index
     cols = [t for t in holdings if t in adj.columns]
     if not cols:
-        return pd.Series(dtype=float)
+        return pd.Series(cash, index=idx, dtype=float)
     sub = adj.loc[:upto, cols].ffill()
     qty = pd.Series({t: float(holdings[t]) for t in cols})
-    return (sub * qty).sum(axis=1)
+    return (sub * qty).sum(axis=1) + cash
 
 
 def run_screen(
@@ -148,6 +196,7 @@ def run_screen(
         amount = lump if i == 0 else sip
         pf.cash += amount
         res.contributed += amount
+        res.flows.append((d, amount))
         names = [t for t in universe_on(d) if t in adj.columns]
         if len(names) < 3:
             continue
@@ -194,7 +243,11 @@ def run_screen(
 
         held = {t: int(q) for t, q in pf.positions().items() if q > 0}
         end = pd.Timestamp(schedule[i + 1]) if i + 1 < len(schedule) else adj.index[-1]
-        seg = _mark(held, adj.loc[pd.Timestamp(d) : end], pd.Timestamp(end))
+        # Shares PLUS the cash the screen could not spend. Whole-share rounding leaves a residue
+        # every month, and marking only the shares quietly wrote it off — understating the book, and
+        # understating it *differently* for the screen and the index leg, which is worse: the gap
+        # between them then carries a rounding artefact that no reader could see.
+        seg = _mark(held, adj.loc[pd.Timestamp(d) : end], pd.Timestamp(end), float(pf.cash))
         if len(seg):
             curve_parts.append(seg.iloc[:-1] if i + 1 < len(schedule) else seg)
 
@@ -217,6 +270,7 @@ def run_index(
         amount = lump if i == 0 else sip
         pf.cash += amount
         res.contributed += amount
+        res.flows.append((d, amount))
         hist = bench.loc[: pd.Timestamp(d)].dropna()
         if hist.empty:
             continue
@@ -229,7 +283,8 @@ def run_index(
                 res.trades += 1
                 res.costs += rec.cost
         end = pd.Timestamp(schedule[i + 1]) if i + 1 < len(schedule) else bench.index[-1]
-        seg = bench.loc[pd.Timestamp(d) : end].ffill() * units
+        # The index leg rounds to whole units too, so it carries residual cash for the same reason.
+        seg = bench.loc[pd.Timestamp(d) : end].ffill() * units + float(pf.cash)
         if len(seg):
             curve_parts.append(seg.iloc[:-1] if i + 1 < len(schedule) else seg)
 
