@@ -3,7 +3,11 @@
 The one thing the research arc found that actually *minimises loss* in a crash: hold every share
 (so **no capital-gains tax**, and you don't miss the recovery) and overlay a short index-futures
 position, sized at ratio ``h`` of book value, while the systemic-stress gauge is elevated. It cut the
-COVID drawdown ≈−25%→−10% on the validated book with ~no return given up. The only cost is futures
+COVID drawdown ≈−25%→−10% on the validated book. ⚠️ **Not free, and an earlier version of this line
+said "~no return given up" — the composite backtest measures otherwise.** Run continuously over
+2013–2026 the gauge fires **18 times**, most of them not crashes, and you pay for every false alarm:
+the overlay **cost 21.5% of terminal wealth to cut the worst fall from −34.0% to −23.4%**
+(reports/PHASE4_BACKTEST.md §2a). Real insurance at a real premium. The cost is futures
 transaction + monthly roll + **F&O business-income tax** on hedge gains (the honest India treatment).
 
 *Why this and not "sell to go defensive":* selling appreciated equity to dodge a drawdown was tested

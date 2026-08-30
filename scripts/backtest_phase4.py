@@ -52,6 +52,11 @@ SIP = Decimal("50000")
 MAX_NAMES = 15
 
 
+def _max_drawdown(series: pd.Series) -> float:
+    """Worst peak-to-trough fall of a normalised equity series."""
+    return float((series / series.cummax() - 1).min())
+
+
 def _load() -> tuple[PriceData, dict[str, str], pd.DataFrame, list[str], pd.Series]:
     """Panel, sectors, PIT membership, the (survivorship-biased) watchlist, and a REPAIRED benchmark.
 
@@ -216,6 +221,39 @@ def main(argv: list[str] | None = None) -> int:
     floor = noise_floor([abs(g) for g in gaps])
     screen = runs[2]
     real_gap = screen.final - base.final
+    # ---- the hedge overlay, on the composite's own equity curve ----------------------------------
+    # The docstring promised this component and the first version of this file did not deliver it.
+    # Measured the honest way: the same book, hedged and unhedged, so the difference is the overlay
+    # and nothing else — including its transaction cost, monthly roll, and the 30% F&O
+    # business-income tax on hedge gains that makes it cheaper than selling but not free.
+    from qalpha.live.hedge import apply_futures_hedge, hedge_active, stress_gauge
+
+    curve = screen.equity_curve
+    book_ret = curve.pct_change().fillna(0.0)
+    idx = index_close.reindex(curve.index).ffill()
+    gauge = stress_gauge(idx)
+    active = hedge_active(gauge, 0.7, 3)
+    hedged = apply_futures_hedge(book_ret, idx.pct_change().fillna(0.0), active, h=0.5)
+    unhedged_final = float((1.0 + book_ret).cumprod().iloc[-1])
+    print("\n--- the hedge overlay (τ=0.7, persist=3, h=0.5) ---")
+    print(f"episodes fired: {hedged.episodes}")
+    if hedged.episodes == 0:
+        print("  ⚪ the gauge never cleared τ on this window — NO evidence either way.")
+    else:
+        hedged_final = float(hedged.equity.iloc[-1])
+        unhedged_curve = (1.0 + book_ret).cumprod()
+        dd_un = _max_drawdown(unhedged_curve)
+        dd_hg = _max_drawdown(hedged.equity)
+        print(
+            f"  unhedged ×{unhedged_final:.3f}  ·  hedged ×{hedged_final:.3f}"
+            f"  ·  cost {hedged.cost:.4f} + F&O tax {hedged.tax:.4f} of book value"
+        )
+        print(f"  worst drawdown: unhedged {dd_un:.1%}  ·  hedged {dd_hg:.1%}")
+        print(
+            f"  → cost {(1 - hedged_final / unhedged_final):.1%} of terminal wealth to cut the "
+            f"worst fall by {abs(dd_hg - dd_un):.1%}"
+        )
+
     print(f"\n{summarise_null([abs(g) for g in gaps])}")
     print(f"\nScreen − baseline: ₹{real_gap:,.0f}")
     print(f"Noise floor (p95): ₹{floor:,.0f}")
@@ -256,6 +294,9 @@ def main(argv: list[str] | None = None) -> int:
                 "screen_buyhold": screen.final,
                 "screen_with_exits": runs[3].final,
                 "screen_annual_trim": runs[4].final,
+                "hedge_episodes": float(hedged.episodes),
+                "hedge_cost_frac": float(hedged.cost),
+                "hedge_fno_tax_frac": float(hedged.tax),
                 "static_universe_BIASED": runs[5].final,
                 "noise_floor_p95": float(floor),
                 "null_median": float(np.median([abs(g) for g in gaps])),
