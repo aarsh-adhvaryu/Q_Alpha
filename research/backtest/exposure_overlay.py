@@ -18,6 +18,21 @@ Design choices that keep the selection identical to the always-invested baseline
   *unscaled* funnel target, so the picks don't depend on the overlay.
 - The **exposure** overlay acts only when the regime *transitions* (not to chase price drift), on a
   monthly grid between annual rebalances — mirroring the engine's existing monthly defensive cadence.
+
+⛔ **RETURNED TO research/ on 2026-08-29.** It was graduated into the product in Phase 1 on the claim
+that the Phase 4 composite backtest needed it. **That claim was wrong** — Phase 4 was written without
+it, and it sat unimported.
+
+It also belongs here on the merits: this is the **exposure** overlay — de-risking by *selling* into
+stress — and that approach is a **published negative**. The research HMM sell-overlay LOST to capital
+gains tax, because drawdowns mostly recover and selling pays tax to avoid a loss that heals. Phase 4
+found the same thing twice more: the §4.7 exits finished ₹69,63,833 behind buy-and-hold, and the
+annual trim also lost. Selling is the expensive way to de-risk.
+
+The overlay the product *does* use is the **futures hedge** (``qalpha/live/hedge.py``), which keeps
+every share — ₹0 capital-gains tax — and shorts the index instead. That one is now backtested inside
+the composite (``scripts/backtest_phase4.py``); this one is not, and would graduate only if it beat
+it.
 """
 
 from __future__ import annotations
