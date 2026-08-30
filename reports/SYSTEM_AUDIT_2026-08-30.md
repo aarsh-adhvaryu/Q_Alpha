@@ -28,9 +28,15 @@ the real account.
 Its docstring said *"each component **alone** — buy screen, exits, **hedge**"*. The file contained no
 hedge test, and `reports/PHASE4_BACKTEST.md` was silent on it. A claim in a docstring is a claim.
 
-**Fixed by making it true**, not by deleting the sentence — the hedge is now backtested inside the
-composite, on the screen's own equity curve, hedged against unhedged so the difference is the overlay
-and nothing else, including its roll cost and the 30% F&O business-income tax.
+**Fixed by making it true**, not by deleting the sentence. The result matters:
+
+> **18 episodes over thirteen years. The overlay cost 21.5% of terminal wealth (×286.2 → ×224.8) to
+> cut the worst drawdown from −34.0% to −23.4%.**
+
+Real insurance at a real premium — and it **contradicted a claim in our own code**. `live/hedge.py`
+said the hedge worked *"with ~no return given up"*. For the single COVID episode that may hold; run
+continuously it fires 18 times, most of them not crashes, and **you pay for every false alarm.** The
+docstring is corrected.
 
 ## 2. 🔴 `backtest/overlay.py` was graduated on a claim that turned out false
 
@@ -54,7 +60,22 @@ precisely because engineering *did* block it — the old gate graded the wrong b
 Phase 4's finding that **76% of the headline edge is the purchasable equal-weight premium**, so the
 system's real case is **+2.35 pp/yr in-sample**, not the ~6 pp the index comparison implies.
 
-## 4. ✅ Data: nothing stale that should be fresh
+## 4. ✅ The run store earned its keep on its first real question
+
+`drift_report` showed the noise floor at four different values across runs, which looked like
+non-determinism — the one thing that would invalidate GO criterion 3. It was not. The recorded
+parameters explained it immediately: the runs used **3, 4, 5 and 60 null draws**, and a p95 from
+three draws means nothing. Two runs with identical parameters produced **identical floors**
+(₹8,442,799 twice).
+
+What *is* real: the two 60-draw runs differ — **₹8,362,315 → ₹8,411,106, about 0.6%** — because the
+price panels were refreshed between them. The floor is data-dependent as well as scale-dependent.
+`BACKTEST_NOISE_FLOOR` now carries the later figure and says so.
+
+**Without the run store this would have been a mystery or, worse, unnoticed.** That is exactly what
+it was built for.
+
+## 5. ✅ Data: nothing stale that should be fresh
 
 Every live artifact is within a day. The dated files that look old are **frozen evidence** and must
 not move: `PHASE0_VERDICT.md`, `PREFLIGHT_AUDIT.md`, `FORWARD_RUN_1_VOID.md`, the phase-0 reports,
