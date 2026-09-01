@@ -265,7 +265,15 @@ NULL_P95_LOG_REL_WEALTH: float | None = None
 #:
 #: Everything before this date is *starting basis*, already inside each book's opening value. The
 #: gate measures what happens after it.
-EVALUATION_START = date(2026, 8, 31)
+#:
+#: **Moved 2026-08-31 from that date to the next, before any valid in-window row existed.** The cron
+#: ran on the 31st against the *old* code — the mis-wired ``BASELINE_EW`` (NIFTYBEES minus a fee) and
+#: the raw-value statistic — so that row is a snapshot of a benchmark the experiment does not use.
+#: Opening the window on a day whose only observation was computed against the wrong bar would put a
+#: known-bad row inside the registered evidence. Both existing rows are therefore **pre-window**, kept
+#: as the state-at-registration record, and the window opens on the first day the corrected code runs.
+#: The cost is one day; the alternative is twelve months of evidence whose first entry is wrong.
+EVALUATION_START = date(2026, 9, 1)
 
 
 def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
