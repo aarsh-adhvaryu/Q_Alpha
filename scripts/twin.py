@@ -37,10 +37,12 @@ from qalpha.live.runner import Market, step
 from qalpha.live.twin import (
     AI_VERDICT_HISTORY,
     AUTONOMOUS,
+    EVALUATION_START,
     NULL_P95_LOG_REL_WEALTH,
     REAL,
     TWIN_FULL,
     TWIN_HISTORY,
+    append_ai_attempt,
     append_ai_verdicts,
     append_history,
     apply_off_market,
@@ -52,8 +54,10 @@ from qalpha.live.twin import (
     ew_fund_mark,
     flows_with_off_market,
     load_books,
+    load_history,
     load_off_market,
     mark,
+    navs_from_history,
     save_books,
     seed_books,
     sync_flows,
@@ -65,11 +69,16 @@ DECISIONS_LOG = Path("reports/twin_decisions.md")
 MARKS = Path("data/twin/marks.json")
 WATCHLIST_PANEL = Path("data/historical/prices_watchlist.parquet")
 WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
+#: The point-in-time Nifty-50 panel BASELINE_EW is priced from. Not the watchlist: the purchasable
+#: alternative being modelled is a Nifty-50 **equal-weight index fund**, so the benchmark has to be
+#: the index that fund tracks, on point-in-time membership.
+EW_PANEL = Path("data/historical/prices_pit_2026.parquet")
+EW_CSV = Path("data/universes/nifty50_membership_2026.csv")
 
 #: Pre-registered with the treatment, and frozen for the run: a prompt change is a second
 #: treatment, not an improvement. Recorded on every verdict row so a later reader knows which
 #: prompt produced which call.
-AI_PROMPT_VERSION = "PR-8"
+AI_PROMPT_VERSION = "PR-8b"  # +source= citation required for a DROP (2026-08-30)
 
 
 def _tradebook() -> list[object]:
@@ -149,6 +158,57 @@ def _market(as_of: date) -> Market | None:
     )
 
 
+def _log_attempt(market: Market | None, status: str, detail: str = "", raw: str = "") -> None:
+    """Record one AI attempt, fail-soft. A missing audit row must not stop the cron."""
+    if market is None:
+        return
+    try:
+        append_ai_attempt(
+            as_of=market.as_of,
+            status=status,
+            detail=detail,
+            raw=raw,
+            model=os.environ.get("ANTHROPIC_MODEL") or "claude-haiku-4-5",
+            prompt_version=AI_PROMPT_VERSION,
+        )
+    except Exception as exc:
+        print(f"[twin] WARNING: AI attempt not recorded ({exc})", file=sys.stderr)
+
+
+def _ew_fund_series() -> pd.Series | None:
+    """The point-in-time equal-weight Nifty-50 level that ``BASELINE_EW`` buys units of.
+
+    **The defect this fixes.** Until 2026-08-30 the caller passed ``market.index_close`` — the
+    NIFTYBEES series — to *both* ``baseline_mark`` and ``ew_fund_mark``. ``BASELINE_EW`` was
+    therefore **cap-weighted NIFTYBEES minus a 0.41% fee**: not the equal-weight fund it is named
+    after, and strictly *easier* to beat than ``BASELINE`` sitting next to it. Since ``TWIN_FULL vs
+    BASELINE_EW`` is the **only** comparison that opens the GO gate, the gate was measuring the wrong
+    thing in the wrong direction — the entire reason for gating against the fund rather than the
+    index (Phase 4: 76% of the screen's gap over NIFTYBEES *is* the equal-weight premium) was
+    defeated by one argument.
+
+    :func:`equal_weight_pit` rebalances monthly across exactly the names that were index members on
+    that date and priceable then, so it neither front-runs future entrants nor holds dead names.
+    The absolute base is arbitrary — ``benchmark_leg`` buys units at each flow date, so only the
+    series' *shape* matters.
+
+    Returns ``None`` when the panel is missing, which propagates to no ``BASELINE_EW`` mark and a
+    criterion 3 of ⚪ CANNOT ASSESS. That is the point: a missing benchmark must stop the gate, never
+    quietly borrow the one next to it.
+    """
+    if not (EW_PANEL.exists() and EW_CSV.exists()):
+        print(f"[twin] no equal-weight panel ({EW_PANEL}) — BASELINE_EW cannot be marked")
+        return None
+    from qalpha.backtest.baselines import equal_weight_pit
+    from qalpha.data.ingest import load_parquet
+    from qalpha.data.universe import Universe
+
+    panel = load_parquet(str(EW_PANEL))
+    universe = Universe.from_csv(str(EW_CSV))
+    index = pd.DatetimeIndex(panel.dates)
+    return equal_weight_pit(panel, universe, index, Decimal("100"))
+
+
 def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
     """Ask the AI about the basket ``TWIN_FULL`` is about to buy — the run's single AI treatment.
 
@@ -171,8 +231,12 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
     # the reason no model call happens at all. Nothing above it may depend on market data.
     cash = book.portfolio.cash
     if cash < cfg.deploy_policy.idle_cash_floor:
+        # Not an eligible day: no basket to ask about. Recorded anyway, because "the model was never
+        # asked" and "the model was asked and kept everything" must not both look like silence.
+        _log_attempt(market, "not_asked_cash_below_floor", f"cash ₹{cash:,.0f} < floor")
         return {}
     if market is None or not market.watchlist or not isinstance(market.wl_prices, PriceData):
+        _log_attempt(market, "not_asked_no_watchlist")
         return {}
     try:
         advice = advise_deploy_into_weakness(
@@ -187,13 +251,17 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
             spend_idle_cash=False,
         )
         basket = {o.ticker: int(o.quantity) for o in advice.deploy.buy_orders}
-        verdicts, _raw, usage = basket_verdicts(
+        verdicts, raw, usage = basket_verdicts(
             basket, market.sector_of or {}, market.wl_prices, market.as_of
         )
     except Exception as exc:
         print(f"[twin] AI verdicts unavailable ({exc}) — TWIN_FULL keeps the whole basket")
+        _log_attempt(market, "error", str(exc))
         return {}
     if not verdicts:
+        # No key, a refusal, or nothing parseable. Every one of these keeps the basket — and every
+        # one is now distinguishable from a day the model genuinely had no objection.
+        _log_attempt(market, "no_verdicts_parsed", f"{len(basket)} candidate(s)", raw=raw)
         return {}
     dropped = [t for t, v in verdicts.items() if not v.keep]
     print(
@@ -203,12 +271,30 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
     # Provenance first, and unconditionally: a verdict that is acted on but not recorded cannot be
     # scored afterwards, and scoring it afterwards is the entire point of the experiment.
     try:
+        # The undeployed cash is logged because dropped names are NOT replaced and survivors are
+        # NOT rescaled (the no-resize guard is a real safety property and stays). That means
+        # TWIN_FULL − TWIN_NO_AI measures "the veto PLUS the cash drag it causes", not selection
+        # skill alone. Recording the cash is what lets the two be separated afterwards instead of
+        # being confounded forever.
+        held_back = sum(
+            Decimal(str(o)) for t, o in basket.items() if verdicts.get(t) and not verdicts[t].keep
+        )
+        append_ai_attempt(
+            as_of=market.as_of,
+            status="verdicts_recorded",
+            detail=f"{len(verdicts)} parsed, {len(dropped)} dropped",
+            raw=raw,
+            model=os.environ.get("ANTHROPIC_MODEL") or "claude-haiku-4-5",
+            prompt_version=AI_PROMPT_VERSION,
+            undeployed_cash=str(held_back),
+        )
         n = append_ai_verdicts(
             {
                 t: {
                     "call": "keep" if v.keep else "drop",
                     "confidence": v.confidence,
                     "reason": v.reason,
+                    "source": v.source,
                 }
                 for t, v in verdicts.items()
             },
@@ -219,7 +305,17 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
         )
         print(f"✓ ai verdicts: {n} row(s) on file → {AI_VERDICT_HISTORY}")
     except Exception as exc:
-        print(f"[twin] WARNING: verdicts not recorded ({exc})", file=sys.stderr)
+        # Provenance failing is not a reason to act anyway. A DROP that changes TWIN_FULL without a
+        # row recording *why* is an unauditable treatment: in twelve months nobody could tell a
+        # legitimate governance veto from a hallucination, which is the whole question. Returning {}
+        # keeps every name, degrading TWIN_FULL to exactly TWIN_NO_AI — a lost treatment, not a
+        # corrupted one.
+        print(
+            f"[twin] verdicts NOT recorded ({exc}) — keeping every name rather than acting "
+            "on an unrecorded decision",
+            file=sys.stderr,
+        )
+        return {}
     return verdicts
 
 
@@ -273,13 +369,25 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config):
     marks[REAL] = mark(books[REAL], market.prices, market.as_of)
 
     flows = books[REAL].flows
+    # BASELINE is NIFTYBEES; BASELINE_EW is the equal-weight fund. Two different series — passing
+    # the same one to both is the bug this reads as a fix for.
+    ew_series = _ew_fund_series()
     for m in (
         baseline_mark(flows, market.index_close, market.as_of),
-        ew_fund_mark(flows, market.index_close, market.as_of),
+        None if ew_series is None else ew_fund_mark(flows, ew_series, market.as_of),
     ):
         if m is not None:
             marks[m.name] = m
-    gaps = compare(marks, null_p95=NULL_P95_LOG_REL_WEALTH)
+    # Two-pass, and deliberately so. The gating statistic is a ratio of *unitized NAVs*, which needs
+    # the value path — so today's values are recorded first, the NAVs are read back out of the
+    # append-only record, and only then can the gap be computed. `append_history` replaces a row with
+    # the same date, so the second write below completes today's row rather than duplicating it.
+    try:
+        append_history(marks, [], as_of=market.as_of, gate_verdict=None)
+    except Exception as exc:
+        print(f"[twin] WARNING: values not recorded ({exc})", file=sys.stderr)
+    navs = navs_from_history(load_history())
+    gaps = compare(marks, null_p95=NULL_P95_LOG_REL_WEALTH, navs=navs)
     gating = next((g for g in gaps if g.gates), None)
     gate_gap = gating.rupees if gating else None
     gate_g = gating.log_rel_wealth if gating else None
@@ -287,7 +395,9 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config):
     # Criterion 2 measures the fall THIS BOOK LIVED THROUGH — from the first cash flow, not a
     # trailing year. A -14.8% drop that happened before the money went in tests nothing, and the
     # first run of this file reported exactly that as a green.
-    start = flows[0].on if flows else market.as_of
+    # The registered window, not the first flow ever recorded — criterion 2 must test the fall this
+    # *experiment* lived through, and the tradebook reaches back before the experiment began.
+    start = max(EVALUATION_START, flows[0].on) if flows else EVALUATION_START
     window = market.index_close.loc[pd.Timestamp(start) : pd.Timestamp(market.as_of)]
     worst = float((window / window.cummax() - 1).min()) if len(window) > 1 else None
     gate = build_gate(
@@ -297,10 +407,16 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config):
             gap_vs_ew_baseline=gate_gap,
             log_rel_wealth=gate_g,
             null_p95=NULL_P95_LOG_REL_WEALTH,
-            reconciled_complex_sale=False,
-            reconciled_corporate_action=False,
-            tradebook_reconciles=True,
-            unguarded_price_gaps=0,
+            # These four were hard-coded: two invented REDs and two invented GREENs. The greens are
+            # the dangerous pair — `tradebook_reconciles=True` and `unguarded_price_gaps=0` asserted
+            # a clean reconciliation and a clean feed that nothing had checked, which is this repo's
+            # signature defect (a number labelled as something it is not) sitting inside the gate
+            # itself. `None` reads ⚪ CANNOT ASSESS, which blocks a GO exactly as a red does while
+            # saying honestly that nobody looked.
+            reconciled_complex_sale=None,
+            reconciled_corporate_action=None,
+            tradebook_reconciles=None,
+            unguarded_price_gaps=None,
         ),
         market.as_of,
     )

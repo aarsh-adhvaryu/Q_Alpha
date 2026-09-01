@@ -39,7 +39,7 @@ def _candidates() -> list[Candidate]:
 def test_a_ticker_outside_the_universe_is_discarded() -> None:
     """The opportunity set is fixed by the deterministic screen before the model is ever asked."""
     text = (
-        "VERDICT: ticker=VEDL; call=drop; confidence=high; reason=demerger unresolved\n"
+        "VERDICT: ticker=VEDL; call=drop; confidence=high; reason=demerger unresolved; source=https://www.bseindia.com/xml-data/corpfiling/AttachLive/x.pdf\n"
         "VERDICT: ticker=RELIANCE; call=keep; confidence=high; reason=great company\n"
         "VERDICT: ticker=NVDA; call=keep; confidence=high; reason=not even indian\n"
     )
@@ -62,7 +62,8 @@ def test_an_invented_name_cannot_reach_the_basket() -> None:
 def test_surviving_names_keep_their_deterministic_quantities_exactly() -> None:
     """The model's lever is presence, not weight — quantities come from the fixed-notional basket."""
     verdicts = parse_verdicts(
-        "VERDICT: ticker=VEDL; call=drop; confidence=medium; reason=demerger", _UNIVERSE
+        "VERDICT: ticker=VEDL; call=drop; confidence=medium; reason=demerger; source=https://www.bseindia.com/xml-data/corpfiling/AttachLive/x.pdf",
+        _UNIVERSE,
     )
     kept = survivors(_BASKET, verdicts)
     assert kept == {"TCS.NS": 7, "ITC.NS": 27}  # untouched quantities, one name removed
@@ -80,7 +81,8 @@ def test_no_verdicts_at_all_keeps_every_name() -> None:
 def test_a_name_the_model_ignored_is_kept() -> None:
     """Absence is keep. A silent model degrades to the deterministic screen, never to an empty book."""
     verdicts = parse_verdicts(
-        "VERDICT: ticker=VEDL; call=drop; confidence=low; reason=x", _UNIVERSE
+        "VERDICT: ticker=VEDL; call=drop; confidence=low; reason=x; source=https://www.bseindia.com/xml-data/corpfiling/AttachLive/x.pdf",
+        _UNIVERSE,
     )
     assert set(survivors(_BASKET, verdicts)) == {"TCS.NS", "ITC.NS"}  # TCS/ITC had no line
 
@@ -100,7 +102,7 @@ def test_prose_around_the_verdict_lines_is_ignored() -> None:
     """The model writes a short rationale first; only the contract lines are machine-read."""
     text = (
         "I searched for news on these names. VEDL's demerger is still unresolved.\n\n"
-        "VERDICT: ticker=VEDL; call=drop; confidence=high; reason=demerger unresolved\n"
+        "VERDICT: ticker=VEDL; call=drop; confidence=high; reason=demerger unresolved; source=https://www.bseindia.com/xml-data/corpfiling/AttachLive/x.pdf\n"
         "VERDICT: ticker=TCS; call=keep; confidence=medium; reason=IT cycle trough\n"
     )
     out = parse_verdicts(text, _UNIVERSE)
@@ -182,3 +184,27 @@ def test_stubbed_to_keep_everything_the_two_baskets_are_identical() -> None:
     system_basket = survivors(dict(_BASKET), verdicts)
     assert system_basket == shadow_basket
     assert list(system_basket.items()) == list(shadow_basket.items())
+
+
+def test_an_uncited_veto_is_demoted_to_keep() -> None:
+    """A DROP with no source URL is not obeyed — it is downgraded to KEEP.
+
+    The experiment's whole question is whether the AI's vetoes were legitimate. A veto whose only
+    evidence is a twelve-word reason cannot be told apart from a fabrication a year later, so it is
+    not evidence and must not move the book. The screen is the floor; the model may subtract from it
+    only *with something checkable attached*.
+    """
+    out = parse_verdicts(
+        "VERDICT: ticker=VEDL; call=drop; confidence=high; reason=I have a bad feeling", _UNIVERSE
+    )
+    assert out["VEDL.NS"].keep is True, "an uncited drop must not act"
+    assert out["VEDL.NS"].source == ""
+
+
+def test_a_non_url_source_does_not_count_as_a_citation() -> None:
+    """ "the BSE website" is not a citation. Only something fetchable is."""
+    out = parse_verdicts(
+        "VERDICT: ticker=VEDL; call=drop; confidence=high; reason=x; source=saw it on twitter",
+        _UNIVERSE,
+    )
+    assert out["VEDL.NS"].keep is True
