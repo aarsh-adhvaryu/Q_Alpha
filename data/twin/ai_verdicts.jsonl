@@ -1,0 +1,1 @@
+{"_key": "2026-09-01:__attempt__", "as_of": "2026-09-01", "detail": "cash \u20b9401 < floor", "kind": "attempt", "model": "claude-haiku-4-5", "prompt_version": "PR-8b", "raw": "", "status": "not_asked_cash_below_floor", "undeployed_cash": ""}

@@ -1,6 +1,33 @@
-# Twin decisions — 2026-08-31
+# Twin decisions — 2026-09-01
 
-- 2026-08-31 · TWIN_FULL · HOLD — no harvest worth its round trip, no breakdown, hedge unchanged
-- 2026-08-31 · TWIN_NO_AI · HOLD — no harvest worth its round trip, no breakdown, hedge unchanged
-- 2026-08-31 · TWIN_NO_HEDGE · HOLD — no harvest worth its round trip, no breakdown, hedge unchanged
-- 2026-08-31 · TWIN_NO_EXITS · HOLD — no harvest worth its round trip, no breakdown, hedge unchanged
+- 2026-09-01 · TWIN_FULL · HARVEST 15×ADANIGREEN.NS — banks ₹604 of loss against ₹132 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_FULL · HARVEST 9×HYUNDAI.NS — banks ₹743 of loss against ₹136 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_FULL · HARVEST 82×JIOFIN.NS — banks ₹184 of loss against ₹134 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_FULL · HARVEST 7×MUTHOOTFIN.NS — banks ₹1,375 of loss against ₹140 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_FULL · HARVEST 1×SHREECEM.NS — banks ₹559 of loss against ₹160 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_FULL · HARVEST 47×VBL.NS — banks ₹471 of loss against ₹132 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_FULL · HARVEST 65×VEDL.NS — banks ₹790 of loss against ₹124 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_FULL · EXIT 7×MUTHOOTFIN.NS — §4.7 breakdown: -16% vs market -17% — name-specific, not a market move
+- 2026-09-01 · TWIN_NO_AI · HARVEST 15×ADANIGREEN.NS — banks ₹604 of loss against ₹132 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_AI · HARVEST 9×HYUNDAI.NS — banks ₹743 of loss against ₹136 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_AI · HARVEST 82×JIOFIN.NS — banks ₹184 of loss against ₹134 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_AI · HARVEST 7×MUTHOOTFIN.NS — banks ₹1,375 of loss against ₹140 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_AI · HARVEST 1×SHREECEM.NS — banks ₹559 of loss against ₹160 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_AI · HARVEST 47×VBL.NS — banks ₹471 of loss against ₹132 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_AI · HARVEST 65×VEDL.NS — banks ₹790 of loss against ₹124 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_AI · EXIT 7×MUTHOOTFIN.NS — §4.7 breakdown: -16% vs market -17% — name-specific, not a market move
+- 2026-09-01 · TWIN_NO_HEDGE · HARVEST 15×ADANIGREEN.NS — banks ₹604 of loss against ₹132 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_HEDGE · HARVEST 9×HYUNDAI.NS — banks ₹743 of loss against ₹136 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_HEDGE · HARVEST 82×JIOFIN.NS — banks ₹184 of loss against ₹134 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_HEDGE · HARVEST 7×MUTHOOTFIN.NS — banks ₹1,375 of loss against ₹140 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_HEDGE · HARVEST 1×SHREECEM.NS — banks ₹559 of loss against ₹160 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_HEDGE · HARVEST 47×VBL.NS — banks ₹471 of loss against ₹132 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_HEDGE · HARVEST 65×VEDL.NS — banks ₹790 of loss against ₹124 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_HEDGE · EXIT 7×MUTHOOTFIN.NS — §4.7 breakdown: -16% vs market -17% — name-specific, not a market move
+- 2026-09-01 · TWIN_NO_EXITS · HARVEST 15×ADANIGREEN.NS — banks ₹604 of loss against ₹132 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_EXITS · HARVEST 9×HYUNDAI.NS — banks ₹743 of loss against ₹136 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_EXITS · HARVEST 82×JIOFIN.NS — banks ₹184 of loss against ₹134 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_EXITS · HARVEST 7×MUTHOOTFIN.NS — banks ₹1,375 of loss against ₹140 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_EXITS · HARVEST 1×SHREECEM.NS — banks ₹559 of loss against ₹160 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_EXITS · HARVEST 47×VBL.NS — banks ₹471 of loss against ₹132 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
+- 2026-09-01 · TWIN_NO_EXITS · HARVEST 65×VEDL.NS — banks ₹790 of loss against ₹124 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 211d to 31 March
