@@ -231,16 +231,16 @@ def test_the_gating_statistic_survives_a_contribution() -> None:
 def test_the_gate_reads_the_registered_window_not_the_first_flow_ever() -> None:
     """``months`` counted from the earliest flow on file — which predates the experiment.
 
-    The tradebook reaches back to 2026-06-15 (two IPO-era trades). A window registered to open on
-    2026-08-31 would therefore have reported "12 months" in June 2027, two months early, partly on
-    evidence from before anything was registered.
+    The tradebook reaches back to 2026-06-15 (two IPO-era trades). A window opening 2026-09-01 would
+    therefore have reported "12 months" around June 2027 — months early, and partly on evidence from
+    before anything was registered.
     """
     from qalpha.live.twin import EVALUATION_START, evaluation_months
 
-    assert date(2026, 8, 31) == EVALUATION_START
-    assert evaluation_months(date(2026, 8, 30)) == 0, "before the window opens, nothing has elapsed"
-    assert evaluation_months(date(2027, 6, 15)) == 10, "the June-2026 flow must not buy two months"
-    assert evaluation_months(date(2027, 8, 31)) == 12
+    assert date(2026, 9, 1) == EVALUATION_START
+    assert evaluation_months(date(2026, 8, 31)) == 0, "before the window opens, nothing has elapsed"
+    assert evaluation_months(date(2027, 6, 15)) == 9, "the June-2026 flow must not buy extra months"
+    assert evaluation_months(date(2027, 9, 1)) == 12
 
 
 def test_the_pre_registered_null_has_not_been_run_and_says_so() -> None:

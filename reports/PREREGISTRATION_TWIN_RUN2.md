@@ -1,8 +1,14 @@
 # Pre-registration — twin forward run 2
 
-**Recorded 2026-08-30. AMENDED the same day, before the window opened and before any in-window mark
-existed — see §0b.** The evaluation window opens **2026-08-31** (`twin.EVALUATION_START`) and closes
-twelve months later. Nothing below may change while it runs. A change to any of it is a new run,
+**Recorded 2026-08-30. AMENDED 2026-08-30/31, before the window opened and before any *valid*
+in-window mark existed — see §0b.** The evaluation window opens **2026-09-01**
+(`twin.EVALUATION_START`) and closes twelve months later.
+
+**Why the 1st and not the 31st.** The cron ran on 2026-08-31 against the *old* code — the mis-wired
+`BASELINE_EW` and the raw-value statistic — and committed a row. Opening the window on a day whose
+only observation was computed against the wrong bar would place a known-bad row inside the registered
+evidence. Both rows now on file (2026-08-30, 2026-08-31) are therefore **pre-window**, retained as the
+state-at-registration record and excluded from the statistic. The cost is one day. Nothing below may change while it runs. A change to any of it is a new run,
 re-registered, exactly as forward run 1 was voided rather than amended.
 
 **This is an amendment, not a voiding.** Forward run 1 was voided because it had *accrued marks*
