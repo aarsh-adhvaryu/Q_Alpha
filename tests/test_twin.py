@@ -7,6 +7,7 @@ anything, and an ablation being allowed to authorise something.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -16,6 +17,7 @@ import pytest
 
 from qalpha.accounting.costs import Side
 from qalpha.config import Config
+from qalpha.live.nav import unitized_nav
 from qalpha.live.track_record import Flow
 from qalpha.live.twin import (
     ALL_BOOKS,
@@ -136,20 +138,28 @@ def test_a_gap_is_unreadable_before_twelve_months() -> None:
 
 
 def test_a_gap_inside_the_null_band_is_not_a_result() -> None:
-    gap = compare(_marks(TWIN_FULL=1200, BASELINE=1000), null_p95=0.05)[0]
+    gap = compare(
+        _marks(TWIN_FULL=1200, BASELINE=1000),
+        null_p95=0.05,
+        navs={TWIN_FULL: 1.012, BASELINE: 1.010},
+    )[0]
     assert not gap.readable
     assert "null band" in gap.render()
 
 
 def test_a_gap_is_readable_only_when_old_enough_and_big_enough() -> None:
-    gap = compare(_marks(TWIN_FULL=90000, BASELINE=1000), null_p95=0.05)[0]
+    gap = compare(
+        _marks(TWIN_FULL=90000, BASELINE=1000),
+        null_p95=0.05,
+        navs={TWIN_FULL: 1.90, BASELINE: 1.01},
+    )[0]
     assert gap.readable
     assert "clearing" in gap.render()
 
 
 def test_without_a_null_nothing_is_readable() -> None:
     """The matched null has not been run. No bar means no verdict — never a bar of zero."""
-    gap = compare(_marks(TWIN_FULL=90000, BASELINE=1000))[0]
+    gap = compare(_marks(TWIN_FULL=90000, BASELINE=1000), navs={TWIN_FULL: 1.9, BASELINE: 1.0})[0]
     assert gap.null_p95 is None
     assert not gap.readable
     assert "has not been run" in gap.render()
@@ -187,25 +197,50 @@ def test_the_panel_separates_the_gate_from_the_diagnostics() -> None:
     assert md.index("The gate") < md.index("Diagnostics")  # the gate leads
 
 
-def test_the_gating_statistic_is_scale_free() -> None:
-    """The defect that retired the rupee floor: a bar in rupees does not survive a growing book.
+def test_the_gating_statistic_survives_a_contribution() -> None:
+    """The property the old test claimed and did not prove.
 
-    ``BACKTEST_NOISE_FLOOR`` was ₹84,11,106 — a p95 estimated over thirteen years and ₹78.5L of
-    contributions against NIFTYBEES, then applied to a ₹3L book over twelve months against the
-    equal-weight fund. It asked a ₹3 lakh book to beat luck by ₹84 lakh, so the gate could not open
-    at all. Log relative wealth cannot fail that way: ten times the money, identical statistic.
+    ``log_rel_wealth`` was once ``ln(V_left / V_right)`` on raw book values, described as
+    "scale-free". It is not. Identical contributions do not cancel in a ratio, they dilute it::
+
+        ln(110 / 100)             = 0.0953
+        ln((110+100) / (100+100)) = 0.0488
+
+    Nothing happened in the market and the measured lead halved — so a monthly SIP would have walked
+    the statistic toward zero all year. The old test multiplied two finished marks by ten and passed,
+    because that proves invariance under *multiplicative* scaling, which is not what a deposit does.
+
+    Both legs are now unitized NAVs, which are invariant to contributions by construction. This test
+    asserts the real property and, in its first half, demonstrates the failure it replaces.
     """
-    small = _marks(TWIN_FULL=20000, BASELINE_EW=10000)
-    big = {
-        name: BookMark(m.name, m.as_of, m.start, m.net_invested * 10, m.value * 10, m.rate)
-        for name, m in small.items()
-    }
-    g_small = compare(small, null_p95=0.05)[0].log_rel_wealth
-    g_big = compare(big, null_p95=0.05)[0].log_rel_wealth
-    assert g_small is not None and g_big is not None
-    assert g_small == pytest.approx(g_big)
-    # ...while the rupee gap it replaced moved by exactly the scale factor, which is the bug.
-    assert compare(big, null_p95=0.05)[0].rupees == compare(small, null_p95=0.05)[0].rupees * 10
+    # The defect, stated as arithmetic: raw values are NOT invariant to a shared deposit.
+    assert math.log(110 / 100) == pytest.approx(0.09531, abs=1e-5)
+    assert math.log(210 / 200) == pytest.approx(0.04879, abs=1e-5)
+
+    # A NAV is unmoved by money arriving: deposits buy units, they do not move the price per unit.
+    idx = pd.bdate_range("2026-09-01", periods=6)
+    flat_prices = pd.Series(1.0, index=idx)
+    no_flow = unitized_nav(flat_prices * 100.0, [])
+    # Same flat market, but ₹100 lands on day 3 — the book jumps, the NAV must not.
+    with_flow_values = pd.Series([100.0, 100.0, 200.0, 200.0, 200.0, 200.0], index=idx)
+    with_flow = unitized_nav(with_flow_values, [(idx[2].date(), 100.0)])
+    assert with_flow.iloc[-1] == pytest.approx(no_flow.iloc[-1])
+    assert with_flow.iloc[-1] == pytest.approx(with_flow.iloc[0]), "a deposit is not a return"
+
+
+def test_the_gate_reads_the_registered_window_not_the_first_flow_ever() -> None:
+    """``months`` counted from the earliest flow on file — which predates the experiment.
+
+    The tradebook reaches back to 2026-06-15 (two IPO-era trades). A window registered to open on
+    2026-08-31 would therefore have reported "12 months" in June 2027, two months early, partly on
+    evidence from before anything was registered.
+    """
+    from qalpha.live.twin import EVALUATION_START, evaluation_months
+
+    assert date(2026, 8, 31) == EVALUATION_START
+    assert evaluation_months(date(2026, 8, 30)) == 0, "before the window opens, nothing has elapsed"
+    assert evaluation_months(date(2027, 6, 15)) == 10, "the June-2026 flow must not buy two months"
+    assert evaluation_months(date(2027, 8, 31)) == 12
 
 
 def test_the_pre_registered_null_has_not_been_run_and_says_so() -> None:
@@ -218,7 +253,11 @@ def test_the_pre_registered_null_has_not_been_run_and_says_so() -> None:
     from qalpha.live.twin import NULL_P95_LOG_REL_WEALTH
 
     assert NULL_P95_LOG_REL_WEALTH is None
-    gap = compare(_marks(TWIN_FULL=900000, BASELINE_EW=1000), null_p95=NULL_P95_LOG_REL_WEALTH)[0]
+    gap = compare(
+        _marks(TWIN_FULL=900000, BASELINE_EW=1000),
+        null_p95=NULL_P95_LOG_REL_WEALTH,
+        navs={TWIN_FULL: 9.0, BASELINE_EW: 1.0},
+    )[0]
     assert not gap.readable, "a gap of any size is unreadable without a bar"
 
 
