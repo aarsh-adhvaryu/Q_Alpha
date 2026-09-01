@@ -39,6 +39,7 @@ from qalpha.data.ingest import load_parquet
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.live.deploy import advise_deploy_into_weakness
+from qalpha.live.nav import unitized_nav
 from qalpha.live.position_health import position_health
 from qalpha.live.price_integrity import repair_price_spikes
 
@@ -85,39 +86,12 @@ class Result:
         first" and then run ``cummax`` straight down the rupee curve, which strips nothing. Worse,
         ``backtest_phase4`` took ``pct_change()`` of that same curve to drive the hedge, so a ₹50,000
         deposit into an early ₹1,00,000 book registered as a **+50% one-day return**. Compounding
-        those produced the ×286.2 "terminal wealth" the hedge result was quoted against. It was never
-        a return multiple — it was the deposits, compounded as though they were performance.
+        those produced the ×286.2 "terminal wealth" the hedge result was quoted against.
 
-        **The method** is standard unitization, the same arithmetic a mutual fund uses to report a
-        NAV while money flows in and out. Hold a number of *units*; on a contribution day buy new
-        units at the prevailing price rather than inflating the price:
-
-            nav_t      = value_t / units_t
-            units_new  = units_prev + contribution / nav_at_contribution
-
-        A deposit then changes ``units`` and leaves ``nav`` untouched, so the series moves only when
-        the *investments* move. Drawdowns computed on it are what the holder actually felt, and
-        successive ratios are true returns, safe to compound or to hedge against.
+        The arithmetic lives in :func:`qalpha.live.nav.unitized_nav`, shared with the twin's GO
+        criterion 3 so the backtest and the live gate cannot disagree about what a return is.
         """
-        curve = self.equity_curve
-        if len(curve) < 2:
-            return curve
-        by_ts: dict[pd.Timestamp, float] = {}
-        for d, amount in self.flows:
-            ts = pd.Timestamp(d)
-            by_ts[ts] = by_ts.get(ts, 0.0) + float(amount)
-        units = 0.0
-        out: list[float] = []
-        for ts, value in curve.items():
-            added = by_ts.get(ts)
-            if added:
-                # ``value`` already contains today's deposit (it was credited before the mark), so
-                # the price the new units are bought at is the value *before* it arrived.
-                before = value - added
-                price = before / units if units > 0 and before > 0 else 1.0
-                units += added / price
-            out.append(value / units if units > 0 else 1.0)
-        return pd.Series(out, index=curve.index)
+        return unitized_nav(self.equity_curve, [(d, float(a)) for d, a in self.flows])
 
     def max_drawdown_pct(self) -> float:
         """Worst peak-to-trough fall of the *invested* book, contributions genuinely removed."""

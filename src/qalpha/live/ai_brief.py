@@ -143,6 +143,10 @@ class NameVerdict:
     keep: bool
     confidence: str  # "low" | "medium" | "high"
     reason: str
+    #: URL the model says it read. **A DROP without one is demoted to KEEP** by `parse_verdicts` —
+    #: a veto with no checkable source cannot be told apart from a hallucination a year later, and
+    #: distinguishing those is the only question this experiment exists to answer.
+    source: str = ""
 
 
 def build_verdict_prompt(candidates: list[Candidate]) -> str:
@@ -181,9 +185,13 @@ def build_verdict_prompt(candidates: list[Candidate]) -> str:
         "write 'no drops' if none).\n\n"
         "Then emit one line per candidate, and nothing else after them, exactly in this form:\n"
         f"{_VERDICT_PREFIX} ticker=<TICKER>; call=<keep|drop>; confidence=<low|medium|high>; "
-        "reason=<≤12 words>\n"
+        "reason=<≤12 words>; source=<URL you actually read, or - for keep>\n"
         f"(e.g. '{_VERDICT_PREFIX} ticker=VEDL; call=drop; confidence=medium; reason=demerger "
-        "restructuring still unresolved')\n\n"
+        "restructuring still unresolved; source=https://www.bseindia.com/...')\n\n"
+        "**A drop needs a source URL.** Prefer the primary filing — an NSE or BSE corporate "
+        "announcement, an exchange disclosure, a regulator's order. Reporting that only describes "
+        "such a document is weaker evidence than the document. A drop you cannot cite is not a "
+        "drop: say keep.\n\n"
         "Every candidate must get exactly one line. A name you say nothing about is kept."
     )
 
@@ -215,11 +223,21 @@ def parse_verdicts(text: str, universe: set[str]) -> dict[str, NameVerdict]:
         if raw_ticker not in bare or call not in {"keep", "drop"}:
             continue  # unknown name, or a call we cannot read → no verdict → the name is kept
         confidence = fields.get("confidence", "low").lower()
+        source = fields.get("source", "").strip()
+        if not source.lower().startswith(("http://", "https://")):
+            source = ""
+        keep = call == "keep"
+        if not keep and not source:
+            # An uncited veto is demoted, not obeyed. The screen is the floor and the model may only
+            # subtract from it *with evidence*; without a URL there is nothing to audit in 2027, so
+            # the safe reading of "drop, because I say so" is "keep".
+            keep = True
         out[bare[raw_ticker]] = NameVerdict(
             ticker=bare[raw_ticker],
-            keep=call == "keep",
+            keep=keep,
             confidence=confidence if confidence in {"low", "medium", "high"} else "low",
             reason=fields.get("reason", "")[:120],
+            source=source[:500],
         )
     return out
 
