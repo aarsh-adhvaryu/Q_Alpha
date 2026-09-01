@@ -103,6 +103,35 @@ jobs:
           git add data/autopilot/manual_injections.json 2>/dev/null || true  # only after a manual Add-money (git add is all-or-nothing → own line)
           git diff --staged --quiet || git commit -m "paper: daily mark $(date -u +%F) [skip ci]"
           git push
+      # A green cron that accrued nothing is the worst outcome: it looks healthy for months while the
+      # record stands still. Every step above is `continue-on-error` and twin.py is fail-soft by
+      # design (a stopped cron loses more days than a bad row), so nothing else would ever notice.
+      - name: Postcondition — today's mark must actually be on file
+        run: |
+          python3 - <<'CHECK'
+          import json, pathlib, subprocess, sys
+          from datetime import date, timezone, datetime
+          p = pathlib.Path("data/twin/history.jsonl")
+          if not p.exists():
+              sys.exit("FAIL: data/twin/history.jsonl does not exist - nothing is accruing")
+          rows = [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
+          if not rows:
+              sys.exit("FAIL: history.jsonl is empty")
+          latest = max(r["as_of"] for r in rows)
+          today = datetime.now(timezone.utc).date().isoformat()
+          print(f"latest recorded mark: {latest} (today {today}, {len(rows)} rows on file)")
+          if latest != today:
+              sys.exit(
+                  f"FAIL: no mark recorded for {today} - the twin ran but produced no row, "
+                  "so this day of evidence is lost. Check the twin step's log above."
+              )
+          committed = subprocess.run(
+              ["git", "log", "-1", "--format=%H", "--", str(p)],
+              capture_output=True, text=True).stdout.strip()
+          if not committed:
+              sys.exit("FAIL: history.jsonl has never been committed - it dies with the runner")
+          CHECK
+
       - name: Alert on pipeline failure
         if: failure()
         env:
