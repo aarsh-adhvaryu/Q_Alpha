@@ -1,22 +1,19 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment**: 🔴 Nifty closed -0.60% (24,029) and Sensex fell -0.49% (76,887) on renewed US-Iran military tensions pushing crude above $90/bbl, reviving inflation fears and triggering broad-based selling.
+**Sentiment**: 🟠 Benchmark indices extended losses to the second session as bank, auto, realty, and healthcare stocks weighed amid renewed US-Iran tension.
 
 **Drivers**:
-1. **Crude oil +2.6% to $85.5/bbl on Strait of Hormuz risk** — US military struck Iranian rocket launchers preparing to deploy mines, halting weeks of relative calm and reviving supply disruption fears. This pressures OMC (IOC, BPCL, ONGC) refining margins and lifts input costs for aviation (INDIGO), paints (ASIANPAINT), and chemical companies (PIDILITIND).
+1. Brent crude climbed above $91 per barrel on Tuesday, extending gains as renewed hostilities in the Middle East raised concerns; crude rose to 91.28 USD/Bbl on September 1, 2026, up 0.87% from the previous day → **OMC (IOC, BPCL, HPCL) upstream headwinds deepen; downstream refining margin compression; aviation/logistics input costs rise** (INDIGO, TRENT at risk).
+2. India's manufacturing sector expansion cooled slightly in August, while the economy beat estimates to grow 7.8% in the quarter through June → **growth resilience eclipsed by inflation signals; capex cycles under review** (INFRA heavyweights: LT, SIEMENS at inflection).
 
-2. **MSCI rebalancing (effective Sept 1)** — Adani Energy and Groww set for big inflows; Reliance and Jio Financial may face outflows. Late-session position adjustments could drive volatility across largecaps.
+**Watchlist names affected**: Maruti Suzuki shares fell more than 4%, making it the worst performer; Nestle India declined 4.01% and Asian Paints fell 3.42%. Also under pressure: INDIGO (fuel cost pass-through), RELIANCE (crude sensitivity), KOTAKBANK (auto exposure via NBFCs).
 
-**Watchlist names affected**: 
-Oil & energy pain: IOC, BPCL, ONGC. Index heavyweights under rebalancing pressure: RELIANCE. Losers from margin compression: ASIANPAINT (paint input costs), INDIGO (aviation fuel). Gainers from inflow: ADANIGREEN, ADANIENT.
+**Likely reaction** (qualitative read): Near-term **flat to down 0.2–0.6%** (confidence: *medium*). Benchmark indices likely to remain cautious on Tuesday, with buying momentum remaining weak and indices trading with a negative bias. Most exposed: **MARUTI, NESTLE** (downside to 1–2%), **INDIGO** (squeeze play), **RELIANCE** (consolidation).
 
-**Likely reaction** (next 1–2 sessions): Expect **flat to down 0.3–0.7%** on the index with **medium confidence**. Crude above $90 historically keeps equities cautious unless offsetting fiscal news emerges. RELIANCE likely faces selling (rebalancing + margin pressure), while INDIGO, ASIANPAINT show downside on cost headwinds. ADANIGREEN may attract tactical inflows pre-rebalancing.
+**Discretionary ideas**: None warranting satellite rules today; crude volatility near-term.
 
-**Discretionary ideas**:  
-None standing out — crude stabilization above $85 and rebalancing noise dominate near-term vectors; fundamentals neutral.
+**Risk note**: Geopolitical escalation beyond $95 Brent re-prices energy inflation; FPI outflow $28.9B YTD persists.
 
-**Risk note**: Further military escalation could disrupt shipping and tighten global energy supplies — tail risk to oil spike beyond $95.
+SIGNAL: lean=down; band=0.2..0.6; confidence=medium
 
-SIGNAL: lean=down; band=0.3..0.7; confidence=medium
-
-— 🤖 claude-haiku-4-5 · 54,601 in / 862 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 42,101 in / 808 out tokens · ✓ complete
