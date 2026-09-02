@@ -1,19 +1,23 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment**: 🟠 Benchmark indices extended losses to the second session as bank, auto, realty, and healthcare stocks weighed amid renewed US-Iran tension.
+**Sentiment:** 🔴 Sensex fell 0.49% to 76,570 on a day weighed by escalating Middle East tensions and surging crude.
 
-**Drivers**:
-1. Brent crude climbed above $91 per barrel on Tuesday, extending gains as renewed hostilities in the Middle East raised concerns; crude rose to 91.28 USD/Bbl on September 1, 2026, up 0.87% from the previous day → **OMC (IOC, BPCL, HPCL) upstream headwinds deepen; downstream refining margin compression; aviation/logistics input costs rise** (INDIGO, TRENT at risk).
-2. India's manufacturing sector expansion cooled slightly in August, while the economy beat estimates to grow 7.8% in the quarter through June → **growth resilience eclipsed by inflation signals; capex cycles under review** (INFRA heavyweights: LT, SIEMENS at inflection).
+**Drivers:**
+1. **US–Iran escalation → crude +5% to ~$95/bbl** — Tensions between US and Iran pushed crude higher and triggered broad-based selling, with the US engaging new attacks answered by Iranian strikes. Energy cost inflation hit airlines, logistics, paints.
+2. **Bond yields spike to 7% on global selloff** — India's 10-year government bond yield crossed 7% amid wider global bond-market sell-off and rising oil prices. Headwind for growth, realty, IT duration.
+3. **Sectoral weakness, especially IT & Realty** — Nifty Realty fell ~2%, IT declined 1.82%, Auto shed 1.78%.
 
-**Watchlist names affected**: Maruti Suzuki shares fell more than 4%, making it the worst performer; Nestle India declined 4.01% and Asian Paints fell 3.42%. Also under pressure: INDIGO (fuel cost pass-through), RELIANCE (crude sensitivity), KOTAKBANK (auto exposure via NBFCs).
+**Watchlist names affected:**
+- **Energy pain:** RELIANCE, BPCL, IOC, ONGC (refining margin compression, higher feedstock cost)
+- **Hawkish curve play:** HDFCBANK, ICICIBANK (duration sensitivity)
+- **Defensive rotation likely:** INFY, TCS (IT downturn but traditionally safe in risk-off), HINDUNILVR, BRITANNIA (FMCG resilience)
 
-**Likely reaction** (qualitative read): Near-term **flat to down 0.2–0.6%** (confidence: *medium*). Benchmark indices likely to remain cautious on Tuesday, with buying momentum remaining weak and indices trading with a negative bias. Most exposed: **MARUTI, NESTLE** (downside to 1–2%), **INDIGO** (squeeze play), **RELIANCE** (consolidation).
+**Likely reaction** (YOUR READ):
+Near-term lean **down** (−0.6 to −1.2%) with **medium** confidence over 1–2 sessions. Crude and yield volatility will dominate until clarity on Iran standoff. **RELIANCE, BPCL most likely to gap-down** on margin squeeze; **INFY, HDFCBANK defensively bid** but under pressure from rates. If Middle East truce talks resume (history: early April rally on Iran pause), fast bounce—watch for news.
 
-**Discretionary ideas**: None warranting satellite rules today; crude volatility near-term.
+**Risk note:**
+Strait of Hormuz disruption or Fed pivot uncertainty could trigger >2% down-days; domestic earnings support is presently muted by global macro headwinds.
 
-**Risk note**: Geopolitical escalation beyond $95 Brent re-prices energy inflation; FPI outflow $28.9B YTD persists.
+SIGNAL: lean=down; band=-0.6..-1.2; confidence=medium
 
-SIGNAL: lean=down; band=0.2..0.6; confidence=medium
-
-— 🤖 claude-haiku-4-5 · 42,101 in / 808 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 62,017 in / 892 out tokens · ✓ complete
