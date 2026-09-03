@@ -1,23 +1,22 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Sensex fell 0.49% to 76,570 on a day weighed by escalating Middle East tensions and surging crude.
+**Sentiment:** 🟠 Indian stock markets opened higher on Thursday, September 3, recovering after three consecutive sessions of losses, supported by positive global cues, easing crude oil prices, and sustained institutional buying. However, the Nifty50 and Sensex erased gains to settle lower as traders assessed the impact of a spike in oil prices and moves in bond yields on inflation.
 
 **Drivers:**
-1. **US–Iran escalation → crude +5% to ~$95/bbl** — Tensions between US and Iran pushed crude higher and triggered broad-based selling, with the US engaging new attacks answered by Iranian strikes. Energy cost inflation hit airlines, logistics, paints.
-2. **Bond yields spike to 7% on global selloff** — India's 10-year government bond yield crossed 7% amid wider global bond-market sell-off and rising oil prices. Headwind for growth, realty, IT duration.
-3. **Sectoral weakness, especially IT & Realty** — Nifty Realty fell ~2%, IT declined 1.82%, Auto shed 1.78%.
+1. **Oil volatility → yield/inflation concern**: Brent futures rose 1.07% to $96.24/bbl as of September 3, 2026. Elevated oil prices and US Treasury yields continued to weigh on demand for longer-dated bonds, with Benchmark Brent crude contract hovering around $95 per barrel amid concerns over supply disruption. This elevates imported inflation risk for energy-dependent India.
 
-**Watchlist names affected:**
-- **Energy pain:** RELIANCE, BPCL, IOC, ONGC (refining margin compression, higher feedstock cost)
-- **Hawkish curve play:** HDFCBANK, ICICIBANK (duration sensitivity)
-- **Defensive rotation likely:** INFY, TCS (IT downturn but traditionally safe in risk-off), HINDUNILVR, BRITANNIA (FMCG resilience)
+2. **RBI FX inflows & liquidity**: India bonds gained as RBI FX inflows lifted liquidity, spurring short-term debt buying, with the RBI expected to rely more on short-term liquidity management tools including sales of bills with four- to five-month maturities.
 
-**Likely reaction** (YOUR READ):
-Near-term lean **down** (−0.6 to −1.2%) with **medium** confidence over 1–2 sessions. Crude and yield volatility will dominate until clarity on Iran standoff. **RELIANCE, BPCL most likely to gap-down** on margin squeeze; **INFY, HDFCBANK defensively bid** but under pressure from rates. If Middle East truce talks resume (history: early April rally on Iran pause), fast bounce—watch for news.
+3. **Private banks & realty lead**: In broader markets, Nifty MidCap and Nifty SmallCap ended 0.37% and 1.2% higher respectively, with private bank and realty shares outperforming.
 
-**Risk note:**
-Strait of Hormuz disruption or Fed pivot uncertainty could trigger >2% down-days; domestic earnings support is presently muted by global macro headwinds.
+**Watchlist names affected:** Nifty Bank outperformed, rising 0.92% — HDFCBANK, ICICIBANK, KOTAKBANK, AXISBANK beneficiaries. Realty: LODHA, DLF. Energy shorts: RELIANCE, BPCL, IOC under pressure from high crude. ADANIPORTS also mentioned as gainer.
 
-SIGNAL: lean=down; band=-0.6..-1.2; confidence=medium
+**Likely reaction (1–2 sessions ahead):** *Lean* **flat to slightly down** (-0.2% to +0.3%); **confidence low–medium**. Oil's sticky >$95 keeps inflation narrative alive, capping index upside despite liquidity ease. Banks rally shallow; realty momentum fragile if yields stay elevated. Most likely movers: **KOTAKBANK** up on private bank rotation; **RELIANCE** and **BPCL** down on crude drag; realty weakness if yields harden further (watch **LODHA** for downside).
 
-— 🤖 claude-haiku-4-5 · 62,017 in / 892 out tokens · ✓ complete
+**Discretionary ideas:** None stand out with conviction. Oil geopolitics remain uncertain; RBI liquidity support is supportive but insufficient to offset yield headwinds *[satellite sleeve rules apply]*.
+
+**Risk note:** The selloff followed a global reassessment of inflation, fiscal burden and geopolitical risks as US-Iran hostilities escalated and the vital Strait of Hormuz remained shut. Further supply shocks or US yield spikes could accelerate downside.
+
+SIGNAL: lean=flat; band=-0.2..0.3; confidence=low
+
+— 🤖 claude-haiku-4-5 · 53,848 in / 1,079 out tokens · ✓ complete
