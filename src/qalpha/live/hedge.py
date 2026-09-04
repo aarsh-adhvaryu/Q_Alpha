@@ -31,10 +31,16 @@ COST_EVENT = 0.0003  # entry or exit (brokerage + STT-on-sell + exchange/GST/sta
 COST_ROLL = 0.0005  # monthly roll (close near + open next)
 FNO_TAX = 0.30  # F&O = non-speculative business income → slab; 30% high-bracket proxy on net gains
 
-#: Nifty futures contract size, in units of the index. **Verify against current NSE contract specs
-#: before quoting any rupee figure from it** — the exchange has revised this more than once, and a
-#: stale value silently mis-states the whole availability calculation below.
-NIFTY_LOT_SIZE = 75
+#: Nifty futures contract size, in units of the index.
+#:
+#: **Verified 2026-09-04: 65.** It was written as 75 days earlier and that was already wrong — NSE
+#: rebaselined index-derivative lot sizes at end-December 2025 to bring contract values back down as
+#: the index rose. The stale 75 overstated one contract's notional by 15%, and the book size needed
+#: to hedge by the same, which is exactly the silent mis-statement the warning here existed to
+#: prevent. Source: Zerodha's index-F&O lot-size page (NIFTY 65 / BANKNIFTY 30 / FINNIFTY 60).
+#: **Re-verify before quoting any rupee figure from it** — the exchange revises this whenever index
+#: levels drift far enough, and nothing in this repo will notice on its own.
+NIFTY_LOT_SIZE = 65
 #: The overlay's hedge ratio: the fraction of the book a live hedge is sized to offset. Matches the
 #: ``h`` the research overlay was validated at.
 HEDGE_RATIO = 0.5
