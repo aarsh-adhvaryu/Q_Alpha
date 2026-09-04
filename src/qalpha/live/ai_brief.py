@@ -121,6 +121,46 @@ def build_prompt(watchlist_lines: list[str]) -> str:
 #: one scalar lean for the whole index, has no ticker field, and drives a different (now-retired)
 #: mechanism. A per-name decision needs a per-name row.
 _VERDICT_PREFIX = "VERDICT:"
+
+#: Hosts whose documents are **primary evidence** — the exchange, the regulator, the filing itself.
+#: A veto that moves money has to rest on one of these.
+#:
+#: **Why this list exists.** The first real veto (2026-09-03, ADANIENSOL) dropped a name for "U.S.
+#: bribery charges against chairman" and cited ``stockanalysis.com/quote/nse/ADANIENSOL/`` — a stock
+#: *quote page*, which evidences nothing at all. The citation rule shipped days earlier checked that
+#: a URL was present, not that it supported the claim, so a well-formed link to an irrelevant page
+#: passed. The underlying claim may well be true; the point is that a year from now nobody could
+#: verify it from what was recorded, and verifying it is the entire purpose of the requirement.
+PRIMARY_SOURCE_HOSTS = frozenset(
+    {
+        "nseindia.com",
+        "archives.nseindia.com",
+        "nsearchives.nseindia.com",
+        "bseindia.com",
+        "sebi.gov.in",
+        "ibbi.gov.in",
+        "mca.gov.in",
+    }
+)
+
+
+def source_tier(url: str) -> str:
+    """``"primary"`` for an exchange/regulator document, ``"secondary"`` for anything else fetchable.
+
+    Deliberately host-based and deliberately short. A longer list of "reputable" outlets would be a
+    judgement call smuggled into a constant; the distinction that matters is *filing versus report*,
+    and only the former is something a later reader can check without trusting an intermediary.
+    """
+    if not url.lower().startswith(("http://", "https://")):
+        return "none"
+    host = url.split("//", 1)[-1].split("/", 1)[0].lower().removeprefix("www.")
+    return (
+        "primary"
+        if any(host == h or host.endswith("." + h) for h in PRIMARY_SOURCE_HOSTS)
+        else "secondary"
+    )
+
+
 _MAX_VERDICT_TOKENS = 2500  # ~15 candidates × a short reason each, plus the search preamble
 
 
@@ -143,10 +183,16 @@ class NameVerdict:
     keep: bool
     confidence: str  # "low" | "medium" | "high"
     reason: str
-    #: URL the model says it read. **A DROP without one is demoted to KEEP** by `parse_verdicts` —
-    #: a veto with no checkable source cannot be told apart from a hallucination a year later, and
-    #: distinguishing those is the only question this experiment exists to answer.
+    #: URL the model says it read. **A DROP not cited to a PRIMARY source is demoted to KEEP** by
+    #: `parse_verdicts` — a veto whose evidence cannot be re-read a year later is indistinguishable
+    #: from a hallucination, and distinguishing those is the only question this experiment asks.
     source: str = ""
+    #: ``"primary"`` (exchange/regulator) · ``"secondary"`` (reporting) · ``"none"``.
+    source_tier: str = "none"
+    #: True when the model said DROP and this was downgraded to KEEP for want of primary evidence.
+    #: Recorded rather than discarded: a demoted veto is a *lead*, and the count of them is itself
+    #: evidence about whether the model is finding real things it cannot cite.
+    demoted: bool = False
 
 
 def build_verdict_prompt(candidates: list[Candidate]) -> str:
@@ -188,10 +234,11 @@ def build_verdict_prompt(candidates: list[Candidate]) -> str:
         "reason=<≤12 words>; source=<URL you actually read, or - for keep>\n"
         f"(e.g. '{_VERDICT_PREFIX} ticker=VEDL; call=drop; confidence=medium; reason=demerger "
         "restructuring still unresolved; source=https://www.bseindia.com/...')\n\n"
-        "**A drop needs a source URL.** Prefer the primary filing — an NSE or BSE corporate "
-        "announcement, an exchange disclosure, a regulator's order. Reporting that only describes "
-        "such a document is weaker evidence than the document. A drop you cannot cite is not a "
-        "drop: say keep.\n\n"
+        "**A drop needs a link to the PRIMARY DOCUMENT.** That means nseindia.com, bseindia.com, "
+        "sebi.gov.in, ibbi.gov.in or mca.gov.in — the filing, disclosure or order itself. News "
+        "reporting *about* a filing does not count, and a stock quote or data page counts for "
+        "nothing at all. A drop cited anywhere else is recorded but NOT acted on, so if you cannot "
+        "find the document, say keep.\n\n"
         "Every candidate must get exactly one line. A name you say nothing about is kept."
     )
 
@@ -224,13 +271,15 @@ def parse_verdicts(text: str, universe: set[str]) -> dict[str, NameVerdict]:
             continue  # unknown name, or a call we cannot read → no verdict → the name is kept
         confidence = fields.get("confidence", "low").lower()
         source = fields.get("source", "").strip()
-        if not source.lower().startswith(("http://", "https://")):
+        tier = source_tier(source)
+        if tier == "none":
             source = ""
         keep = call == "keep"
-        if not keep and not source:
-            # An uncited veto is demoted, not obeyed. The screen is the floor and the model may only
-            # subtract from it *with evidence*; without a URL there is nothing to audit in 2027, so
-            # the safe reading of "drop, because I say so" is "keep".
+        # A veto acts only on PRIMARY evidence. Uncited, or cited to reporting rather than to the
+        # filing itself, it is demoted to KEEP and recorded as a lead. The screen is the floor; the
+        # model may subtract from it only with something a later reader can open and check.
+        demoted = not keep and tier != "primary"
+        if demoted:
             keep = True
         out[bare[raw_ticker]] = NameVerdict(
             ticker=bare[raw_ticker],
@@ -238,6 +287,8 @@ def parse_verdicts(text: str, universe: set[str]) -> dict[str, NameVerdict]:
             confidence=confidence if confidence in {"low", "medium", "high"} else "low",
             reason=fields.get("reason", "")[:120],
             source=source[:500],
+            source_tier=tier,
+            demoted=demoted,
         )
     return out
 

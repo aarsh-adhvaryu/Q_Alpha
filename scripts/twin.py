@@ -264,6 +264,12 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
         _log_attempt(market, "no_verdicts_parsed", f"{len(basket)} candidate(s)", raw=raw)
         return {}
     dropped = [t for t, v in verdicts.items() if not v.keep]
+    demoted = [t for t, v in verdicts.items() if v.demoted]
+    if demoted:
+        print(
+            f"[twin] {len(demoted)} veto(es) DEMOTED for want of a primary source {demoted} — "
+            "recorded as leads, not acted on"
+        )
     print(
         f"[twin] AI verdicts: {len(verdicts)} name(s), {len(dropped)} dropped "
         f"{dropped} · tokens in/out {usage.get('input', 0)}/{usage.get('output', 0)}"
@@ -295,6 +301,8 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
                     "confidence": v.confidence,
                     "reason": v.reason,
                     "source": v.source,
+                    "source_tier": v.source_tier,
+                    "demoted": v.demoted,
                 }
                 for t, v in verdicts.items()
             },
