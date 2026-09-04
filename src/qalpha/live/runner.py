@@ -30,7 +30,7 @@ import pandas as pd
 
 from qalpha.config import Config
 from qalpha.live.advisor import advise_harvest
-from qalpha.live.hedge import hedge_active, stress_gauge
+from qalpha.live.hedge import hedge_active, hedge_availability, stress_gauge
 from qalpha.live.policy import (
     DEPLOY,
     EXIT,
@@ -181,8 +181,12 @@ def _exits(book: TwinBook, policy: Policy, market: Market) -> list[Decision]:
 def _hedge(book: TwinBook, policy: Policy, market: Market) -> list[Decision]:
     """Short-index overlay while stress is elevated. Removed in TWIN_NO_HEDGE — the ablation.
 
-    Twin-only for years: no index derivative trades below ~₹15L of notional, so this book can hold a
-    fractional position the real account cannot buy (PLAN_REDESIGN §4b-i).
+    ⚠️ **This moves no money, and now says so.** The overlay needs a whole Nifty futures contract; a
+    ₹3L book cannot hold one, so ``TWIN_FULL − TWIN_NO_HEDGE`` is ₹0 **by construction**. That is the
+    same defect that left the AI ablation starved, and it must never be reported as a measured hedge
+    effect. Rather than silently emitting HEDGE_ON for a position nobody can take, the decision now
+    carries :func:`hedge_availability` — so the ₹0 is *explained*, and the reader is told the book
+    size at which hedging first becomes purchasable.
     """
     if not policy.use_hedge:
         return []
@@ -195,6 +199,11 @@ def _hedge(book: TwinBook, policy: Policy, market: Market) -> list[Decision]:
     if now == before:
         return []
     level = float(gauge.loc[: pd.Timestamp(market.as_of)].iloc[-1])
+    index_level = float(market.index_close.loc[: pd.Timestamp(market.as_of)].dropna().iloc[-1])
+    holdings = {t: q for t, q in book.portfolio.positions().items() if q > 0}
+    book_value = float(book.portfolio.holdings_value(market.prices)) if holdings else 0.0
+    avail = hedge_availability(book_value, index_level)
+    tail = "" if avail.available else f" — but {avail.render()}"
     return [
         Decision(
             on=market.as_of,
@@ -202,7 +211,7 @@ def _hedge(book: TwinBook, policy: Policy, market: Market) -> list[Decision]:
             action=HEDGE_ON if now else HEDGE_OFF,
             reason=(
                 f"stress gauge {level:.2f} {'≥' if now else '<'} τ={HEDGE_TAU} "
-                f"held {HEDGE_PERSIST} scans"
+                f"held {HEDGE_PERSIST} scans{tail}"
             ),
         )
     ]
