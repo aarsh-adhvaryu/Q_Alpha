@@ -152,10 +152,16 @@ Proposes. Never sizes, never executes.
 Sizing (`advise_deploy`), tax (`advisor`, §70, §112A), optimizer (`shrink`), corporate actions.
 All built. Two open items:
 
-- **Hedge is signal-only.** `runner._hedge` emits `HEDGE_ON`/`HEDGE_OFF` and moves no money, so
-  `TWIN_FULL − TWIN_NO_HEDGE` is ₹0 by construction. Either implement notional P&L (margin, roll,
-  expiry, 30% F&O business-income tax) or keep it a signal log. **It must not be reported as a
-  measured hedge effect.** Decision required; see §7 Phase C.
+- **Hedge: RESOLVED 2026-08-31 — the ₹0 is now explained, not accidental.** `runner._hedge` still
+  moves no money, and `TWIN_FULL − TWIN_NO_HEDGE` is still ₹0 by construction. Wiring
+  `apply_futures_hedge` in as-is would have replaced that with a worse number: it models a
+  *continuous* notional, so it would have simulated **0.16 of a futures contract**, and fractions of
+  a contract do not exist. Instead `hedge_availability` reports at **whole-lot granularity**, and
+  every hedge decision now carries it. At index 25,000 one contract is ₹18.75L of exposure, so
+  hedging half a book needs **V_min = lot × index / h = ₹37.5L** — an order of magnitude above the
+  current ₹3L book. The overlay is therefore not "untested", it is **not purchasable**, and the
+  system says so with the threshold at which that changes. Re-verify `NIFTY_LOT_SIZE` against NSE
+  contract specs before quoting any rupee figure from it.
 - **Crash / fall behaviour** already exists as `market_weakness` and `stress_gauge`. What is missing
   is that they *gate deployment* — a "deep" regime should change the tranche, which `scan.py` knows
   and the twin does not act on.
@@ -304,14 +310,20 @@ catches integration and operational defects, and it constrains everything built 
 
 ## 7. Phases — ordered by evidence, not ambition
 
-### Phase A — The governor and the gap it closes *(next)*
+### Phase A — The governor and the gaps it closes
 
-1. **Sector concentration measured on the book**, not the basket. Zero new data. Closes the defect
-   that most likely produced the VBL nudge.
-2. `Mandate` object + `RiskGovernor.veto()` — the rules of §L4 moved from prose to code.
-3. **Golden-day replay** proving the governor cannot be bypassed.
+1. ✅ **Sector concentration measured on the book**, not the basket (`live/governor.py`). Twelve
+   individually-compliant SIP baskets at slider 4 compound into a **36.9% POWER** book; the governor
+   flags 4 of those 12 months.
+2. ✅ **Valuation caution** (`live/valuation.py`) — the VBL gap. The nudge was *"Scrip PE is greater
+   than 50"*, and the screen ranks names **by** how far they fell, so a −38% fall from a P/E-80
+   valuation reads as a discount. Current P/E is one API call; only *historical point-in-time*
+   fundamentals are blocked. Threshold is the exchange's own, so nothing is invented.
+3. ✅ **Hedge availability** at whole-lot granularity (`live/hedge.py`).
+4. `Mandate` object + `RiskGovernor.veto()` — the rules of §L4 moved from prose to code. *(next)*
+5. **Golden-day replay** proving the governor cannot be bypassed. *(next)*
 
-*Why first: it is built from decisions already made, needs no new data, and converts conventions into
+*Why first: built from decisions already made, needs no new data, and converts conventions into
 invariants. A governor nobody can prove is unbypassable is prose again.*
 
 ### Phase B — The evidence spine
@@ -329,7 +341,6 @@ invariants. A governor nobody can prove is unbypassable is prose again.*
 9. Orchestrator → one `NO_ACTION` / `EXECUTE` / `HUMAN_REQUIRED` per day.
 10. Heartbeats + automatic safe shutdown: stale essential input ⇒ observation continues, recommendation
     and execution stop.
-11. **Hedge decision**: implement notional P&L or formally retire the ablation.
 12. Capability register on the dashboard.
 
 ### Phase D — Evidence that is still owed
