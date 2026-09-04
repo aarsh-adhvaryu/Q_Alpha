@@ -1,39 +1,41 @@
-# Twin decisions — 2026-09-03
+# Twin decisions — 2026-09-04
 
-- 2026-09-03 · TWIN_FULL · HARVEST 10×ADANIENSOL.NS — banks ₹112 of loss against ₹100 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_FULL · HARVEST 11×ADANIGREEN.NS — banks ₹141 of loss against ₹101 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_FULL · HARVEST 5×DMART.NS — banks ₹351 of loss against ₹131 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_FULL · HARVEST 36×VBL.NS — banks ₹285 of loss against ₹105 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_FULL · DEPLOY 92×WIPRO.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_FULL · DEPLOY 14×TATACONSUM.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_FULL · DEPLOY 14×MAXHEALTH.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_FULL · DEPLOY 23×HINDZINC.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_FULL · DEPLOY 1×VBL.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_NO_AI · HARVEST 10×ADANIENSOL.NS — banks ₹112 of loss against ₹100 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_AI · HARVEST 11×ADANIGREEN.NS — banks ₹141 of loss against ₹101 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_AI · HARVEST 5×DMART.NS — banks ₹351 of loss against ₹131 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_AI · HARVEST 36×VBL.NS — banks ₹285 of loss against ₹105 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_AI · DEPLOY 92×WIPRO.NS — market elevated; deploy-into-weakness from ₹59,988 idle
-- 2026-09-03 · TWIN_NO_AI · DEPLOY 14×TATACONSUM.NS — market elevated; deploy-into-weakness from ₹59,988 idle
-- 2026-09-03 · TWIN_NO_AI · DEPLOY 14×MAXHEALTH.NS — market elevated; deploy-into-weakness from ₹59,988 idle
-- 2026-09-03 · TWIN_NO_AI · DEPLOY 23×HINDZINC.NS — market elevated; deploy-into-weakness from ₹59,988 idle
-- 2026-09-03 · TWIN_NO_AI · DEPLOY 1×ADANIENSOL.NS — market elevated; deploy-into-weakness from ₹59,988 idle
-- 2026-09-03 · TWIN_NO_AI · DEPLOY 1×VBL.NS — market elevated; deploy-into-weakness from ₹59,988 idle
-- 2026-09-03 · TWIN_NO_HEDGE · HARVEST 10×ADANIENSOL.NS — banks ₹112 of loss against ₹100 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_HEDGE · HARVEST 11×ADANIGREEN.NS — banks ₹141 of loss against ₹101 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_HEDGE · HARVEST 5×DMART.NS — banks ₹351 of loss against ₹131 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_HEDGE · HARVEST 36×VBL.NS — banks ₹285 of loss against ₹105 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_HEDGE · DEPLOY 92×WIPRO.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_NO_HEDGE · DEPLOY 14×TATACONSUM.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_NO_HEDGE · DEPLOY 14×MAXHEALTH.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_NO_HEDGE · DEPLOY 23×HINDZINC.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_NO_HEDGE · DEPLOY 1×VBL.NS — market elevated; deploy-into-weakness from ₹59,988 idle; AI dropped ADANIENSOL.NS
-- 2026-09-03 · TWIN_NO_EXITS · HARVEST 10×ADANIENSOL.NS — banks ₹112 of loss against ₹100 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_EXITS · HARVEST 11×ADANIGREEN.NS — banks ₹141 of loss against ₹101 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_EXITS · HARVEST 5×DMART.NS — banks ₹351 of loss against ₹131 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_EXITS · HARVEST 19×INFY.NS — banks ₹188 of loss against ₹147 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_EXITS · HARVEST 36×VBL.NS — banks ₹285 of loss against ₹105 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 209d to 31 March
-- 2026-09-03 · TWIN_NO_EXITS · DEPLOY 64×WIPRO.NS — market elevated; deploy-into-weakness from ₹38,408 idle
-- 2026-09-03 · TWIN_NO_EXITS · DEPLOY 9×TATACONSUM.NS — market elevated; deploy-into-weakness from ₹38,408 idle
-- 2026-09-03 · TWIN_NO_EXITS · DEPLOY 9×MAXHEALTH.NS — market elevated; deploy-into-weakness from ₹38,408 idle
-- 2026-09-03 · TWIN_NO_EXITS · DEPLOY 15×HINDZINC.NS — market elevated; deploy-into-weakness from ₹38,408 idle
+- 2026-09-04 · TWIN_FULL · HARVEST 15×HCLTECH.NS — banks ₹395 of loss against ₹134 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_FULL · HARVEST 2×MARUTI.NS — banks ₹315 of loss against ₹171 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_FULL · HARVEST 14×MAXHEALTH.NS — banks ₹144 of loss against ₹99 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_FULL · HARVEST 14×TATACONSUM.NS — banks ₹131 of loss against ₹101 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_FULL · HARVEST 9×TCS.NS — banks ₹282 of loss against ₹143 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_FULL · DEPLOY 6×MUTHOOTFIN.NS — market elevated; deploy-into-weakness from ₹62,715 idle; AI dropped ADANIENSOL.NS, MAXHEALTH.NS
+- 2026-09-04 · TWIN_FULL · DEPLOY 4×DMART.NS — market elevated; deploy-into-weakness from ₹62,715 idle; AI dropped ADANIENSOL.NS, MAXHEALTH.NS
+- 2026-09-04 · TWIN_FULL · DEPLOY 36×VBL.NS — market elevated; deploy-into-weakness from ₹62,715 idle; AI dropped ADANIENSOL.NS, MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_AI · HARVEST 15×HCLTECH.NS — banks ₹395 of loss against ₹134 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_AI · HARVEST 2×MARUTI.NS — banks ₹315 of loss against ₹171 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_AI · HARVEST 14×MAXHEALTH.NS — banks ₹144 of loss against ₹99 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_AI · HARVEST 14×TATACONSUM.NS — banks ₹131 of loss against ₹101 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_AI · HARVEST 9×TCS.NS — banks ₹282 of loss against ₹143 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_AI · DEPLOY 6×MUTHOOTFIN.NS — market elevated; deploy-into-weakness from ₹61,325 idle
+- 2026-09-04 · TWIN_NO_AI · DEPLOY 4×DMART.NS — market elevated; deploy-into-weakness from ₹61,325 idle
+- 2026-09-04 · TWIN_NO_AI · DEPLOY 36×VBL.NS — market elevated; deploy-into-weakness from ₹61,325 idle
+- 2026-09-04 · TWIN_NO_AI · DEPLOY 9×ADANIENSOL.NS — market elevated; deploy-into-weakness from ₹61,325 idle
+- 2026-09-04 · TWIN_NO_AI · DEPLOY 1×MAXHEALTH.NS — market elevated; deploy-into-weakness from ₹61,325 idle
+- 2026-09-04 · TWIN_NO_HEDGE · HARVEST 15×HCLTECH.NS — banks ₹395 of loss against ₹134 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_HEDGE · HARVEST 2×MARUTI.NS — banks ₹315 of loss against ₹171 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_HEDGE · HARVEST 14×MAXHEALTH.NS — banks ₹144 of loss against ₹99 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_HEDGE · HARVEST 14×TATACONSUM.NS — banks ₹131 of loss against ₹101 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_HEDGE · HARVEST 9×TCS.NS — banks ₹282 of loss against ₹143 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_HEDGE · DEPLOY 6×MUTHOOTFIN.NS — market elevated; deploy-into-weakness from ₹62,715 idle; AI dropped ADANIENSOL.NS, MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_HEDGE · DEPLOY 4×DMART.NS — market elevated; deploy-into-weakness from ₹62,715 idle; AI dropped ADANIENSOL.NS, MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_HEDGE · DEPLOY 36×VBL.NS — market elevated; deploy-into-weakness from ₹62,715 idle; AI dropped ADANIENSOL.NS, MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_EXITS · HARVEST 15×HCLTECH.NS — banks ₹395 of loss against ₹134 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_EXITS · HARVEST 2×MARUTI.NS — banks ₹315 of loss against ₹171 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_EXITS · HARVEST 9×MAXHEALTH.NS — banks ₹93 of loss against ₹69 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_EXITS · HARVEST 9×TATACONSUM.NS — banks ₹85 of loss against ₹70 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_EXITS · HARVEST 9×TCS.NS — banks ₹282 of loss against ₹143 round trip; 1 FIFO lot(s), ₹0 of gain crossed; 208d to 31 March
+- 2026-09-04 · TWIN_NO_EXITS · DEPLOY 5×DMART.NS — market elevated; deploy-into-weakness from ₹82,697 idle; AI dropped MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_EXITS · DEPLOY 6×MUTHOOTFIN.NS — market elevated; deploy-into-weakness from ₹82,697 idle; AI dropped MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_EXITS · DEPLOY 41×VBL.NS — market elevated; deploy-into-weakness from ₹82,697 idle; AI dropped MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_EXITS · DEPLOY 7×TATACONSUM.NS — market elevated; deploy-into-weakness from ₹82,697 idle; AI dropped MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_EXITS · DEPLOY 38×WIPRO.NS — market elevated; deploy-into-weakness from ₹82,697 idle; AI dropped MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_EXITS · DEPLOY 10×HINDZINC.NS — market elevated; deploy-into-weakness from ₹82,697 idle; AI dropped MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_EXITS · DEPLOY 5×VEDL.NS — market elevated; deploy-into-weakness from ₹82,697 idle; AI dropped MAXHEALTH.NS
+- 2026-09-04 · TWIN_NO_EXITS · DEPLOY 5×JIOFIN.NS — market elevated; deploy-into-weakness from ₹82,697 idle; AI dropped MAXHEALTH.NS

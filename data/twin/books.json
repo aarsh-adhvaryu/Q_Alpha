@@ -79,34 +79,8 @@
         }
       ],
       "portfolio": {
-        "cash": "62715.31151123047211",
+        "cash": "108429.34119384766121",
         "lots": [
-          {
-            "acquisition_date": "2026-08-29",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "2334.89990234375",
-            "lot_id": "cee56951-a20d-485c-84a2-4262b52d3f2d",
-            "other_costs": "0.76",
-            "pool": "core",
-            "quantity_original": "9",
-            "quantity_remaining": "9",
-            "stamp_duty": "3.15",
-            "ticker": "TCS.NS"
-          },
-          {
-            "acquisition_date": "2026-08-29",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "1319.5",
-            "lot_id": "97de4b60-c034-4d03-8673-89e4841ac345",
-            "other_costs": "0.72",
-            "pool": "core",
-            "quantity_original": "15",
-            "quantity_remaining": "15",
-            "stamp_duty": "2.97",
-            "ticker": "HCLTECH.NS"
-          },
           {
             "acquisition_date": "2026-08-29",
             "broker_trade_id": null,
@@ -132,19 +106,6 @@
             "quantity_remaining": "15",
             "stamp_duty": "2.89",
             "ticker": "RELIANCE.NS"
-          },
-          {
-            "acquisition_date": "2026-09-02",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "12849.0",
-            "lot_id": "3c816fc3-7acf-4b86-9334-cdcc2c6a037f",
-            "other_costs": "0.93",
-            "pool": "core",
-            "quantity_original": "2",
-            "quantity_remaining": "2",
-            "stamp_duty": "3.85",
-            "ticker": "MARUTI.NS"
           },
           {
             "acquisition_date": "2026-09-02",
@@ -212,6 +173,19 @@
             "ticker": "VBL.NS"
           },
           {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "407.6000061035156",
+            "lot_id": "40de299d-7c41-4ed1-a3a9-e9153d840e89",
+            "other_costs": "0.53",
+            "pool": "core",
+            "quantity_original": "36",
+            "quantity_remaining": "36",
+            "stamp_duty": "2.20",
+            "ticker": "VBL.NS"
+          },
+          {
             "acquisition_date": "2026-09-03",
             "broker_trade_id": null,
             "brokerage": "0.00",
@@ -228,32 +202,6 @@
             "acquisition_date": "2026-09-03",
             "broker_trade_id": null,
             "brokerage": "0.00",
-            "buy_price": "1019.2000122070312",
-            "lot_id": "e7558be5-48e2-451a-920c-b36ec5d25a2b",
-            "other_costs": "0.51",
-            "pool": "core",
-            "quantity_original": "14",
-            "quantity_remaining": "14",
-            "stamp_duty": "2.14",
-            "ticker": "TATACONSUM.NS"
-          },
-          {
-            "acquisition_date": "2026-09-03",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "994.9000244140625",
-            "lot_id": "fe7888b0-6a3c-48f5-bf8e-a33cfb84c790",
-            "other_costs": "0.50",
-            "pool": "core",
-            "quantity_original": "14",
-            "quantity_remaining": "14",
-            "stamp_duty": "2.09",
-            "ticker": "MAXHEALTH.NS"
-          },
-          {
-            "acquisition_date": "2026-09-03",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
             "buy_price": "587.9500122070312",
             "lot_id": "b91c2bdc-1f39-48b9-85c4-3894202c9601",
             "other_costs": "0.48",
@@ -262,6 +210,32 @@
             "quantity_remaining": "23",
             "stamp_duty": "2.03",
             "ticker": "HINDZINC.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "2913.800048828125",
+            "lot_id": "c1c39165-da1c-4eb3-902e-b1360b904113",
+            "other_costs": "0.64",
+            "pool": "core",
+            "quantity_original": "6",
+            "quantity_remaining": "6",
+            "stamp_duty": "2.62",
+            "ticker": "MUTHOOTFIN.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "3770.0",
+            "lot_id": "9036028a-a248-4bfb-b690-dadd0f249c09",
+            "other_costs": "0.55",
+            "pool": "core",
+            "quantity_original": "4",
+            "quantity_remaining": "4",
+            "stamp_duty": "2.26",
+            "ticker": "DMART.NS"
           }
         ],
         "ltcg_by_fy": {}
@@ -283,34 +257,8 @@
         }
       ],
       "portfolio": {
-        "cash": "61325.19156005859711",
+        "cash": "93324.46147460937991",
         "lots": [
-          {
-            "acquisition_date": "2026-08-29",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "2334.89990234375",
-            "lot_id": "6473f16e-b075-4c53-bf05-27774324d7dc",
-            "other_costs": "0.76",
-            "pool": "core",
-            "quantity_original": "9",
-            "quantity_remaining": "9",
-            "stamp_duty": "3.15",
-            "ticker": "TCS.NS"
-          },
-          {
-            "acquisition_date": "2026-08-29",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "1319.5",
-            "lot_id": "84ddf00d-8640-446d-86e0-fa755da4b749",
-            "other_costs": "0.72",
-            "pool": "core",
-            "quantity_original": "15",
-            "quantity_remaining": "15",
-            "stamp_duty": "2.97",
-            "ticker": "HCLTECH.NS"
-          },
           {
             "acquisition_date": "2026-08-29",
             "broker_trade_id": null,
@@ -336,19 +284,6 @@
             "quantity_remaining": "15",
             "stamp_duty": "2.89",
             "ticker": "RELIANCE.NS"
-          },
-          {
-            "acquisition_date": "2026-09-02",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "12849.0",
-            "lot_id": "b6012239-8959-4781-b9e0-a5e209b0c7df",
-            "other_costs": "0.93",
-            "pool": "core",
-            "quantity_original": "2",
-            "quantity_remaining": "2",
-            "stamp_duty": "3.85",
-            "ticker": "MARUTI.NS"
           },
           {
             "acquisition_date": "2026-09-02",
@@ -416,6 +351,19 @@
             "ticker": "VBL.NS"
           },
           {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "407.6000061035156",
+            "lot_id": "ed69e314-428d-4e17-89bd-d6bccec3ebd2",
+            "other_costs": "0.53",
+            "pool": "core",
+            "quantity_original": "36",
+            "quantity_remaining": "36",
+            "stamp_duty": "2.20",
+            "ticker": "VBL.NS"
+          },
+          {
             "acquisition_date": "2026-09-03",
             "broker_trade_id": null,
             "brokerage": "0.00",
@@ -426,6 +374,19 @@
             "quantity_original": "1",
             "quantity_remaining": "1",
             "stamp_duty": "0.21",
+            "ticker": "ADANIENSOL.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "1409.5999755859375",
+            "lot_id": "4eba8c5a-d1d6-43a8-9465-b0e8bb518f4e",
+            "other_costs": "0.46",
+            "pool": "core",
+            "quantity_original": "9",
+            "quantity_remaining": "9",
+            "stamp_duty": "1.90",
             "ticker": "ADANIENSOL.NS"
           },
           {
@@ -442,29 +403,16 @@
             "ticker": "WIPRO.NS"
           },
           {
-            "acquisition_date": "2026-09-03",
+            "acquisition_date": "2026-09-04",
             "broker_trade_id": null,
             "brokerage": "0.00",
-            "buy_price": "1019.2000122070312",
-            "lot_id": "603f5537-476b-4d1c-b1d5-c971db34adac",
-            "other_costs": "0.51",
+            "buy_price": "984.7999877929688",
+            "lot_id": "5d5da768-5d3d-42f5-9dcb-2ce54e256574",
+            "other_costs": "0.04",
             "pool": "core",
-            "quantity_original": "14",
-            "quantity_remaining": "14",
-            "stamp_duty": "2.14",
-            "ticker": "TATACONSUM.NS"
-          },
-          {
-            "acquisition_date": "2026-09-03",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "994.9000244140625",
-            "lot_id": "08c7ea89-0bb8-486a-ab29-b0750a29042f",
-            "other_costs": "0.50",
-            "pool": "core",
-            "quantity_original": "14",
-            "quantity_remaining": "14",
-            "stamp_duty": "2.09",
+            "quantity_original": "1",
+            "quantity_remaining": "1",
+            "stamp_duty": "0.15",
             "ticker": "MAXHEALTH.NS"
           },
           {
@@ -479,6 +427,32 @@
             "quantity_remaining": "23",
             "stamp_duty": "2.03",
             "ticker": "HINDZINC.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "2913.800048828125",
+            "lot_id": "3f8971f7-8760-4797-83d6-3c94c0af8bbe",
+            "other_costs": "0.64",
+            "pool": "core",
+            "quantity_original": "6",
+            "quantity_remaining": "6",
+            "stamp_duty": "2.62",
+            "ticker": "MUTHOOTFIN.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "3770.0",
+            "lot_id": "1ac314dc-5f44-49a2-851e-0e8b4ac73b6a",
+            "other_costs": "0.55",
+            "pool": "core",
+            "quantity_original": "4",
+            "quantity_remaining": "4",
+            "stamp_duty": "2.26",
+            "ticker": "DMART.NS"
           }
         ],
         "ltcg_by_fy": {}
@@ -500,34 +474,8 @@
         }
       ],
       "portfolio": {
-        "cash": "82697.00274780273697",
+        "cash": "90228.39266235351963",
         "lots": [
-          {
-            "acquisition_date": "2026-08-29",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "2334.89990234375",
-            "lot_id": "ed171120-2de3-45dc-9ccd-a9d9b8a780ee",
-            "other_costs": "0.76",
-            "pool": "core",
-            "quantity_original": "9",
-            "quantity_remaining": "9",
-            "stamp_duty": "3.15",
-            "ticker": "TCS.NS"
-          },
-          {
-            "acquisition_date": "2026-08-29",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "1319.5",
-            "lot_id": "c149fa55-180e-4dc0-ab13-488fa729f656",
-            "other_costs": "0.72",
-            "pool": "core",
-            "quantity_original": "15",
-            "quantity_remaining": "15",
-            "stamp_duty": "2.97",
-            "ticker": "HCLTECH.NS"
-          },
           {
             "acquisition_date": "2026-08-29",
             "broker_trade_id": null,
@@ -558,19 +506,6 @@
             "acquisition_date": "2026-09-02",
             "broker_trade_id": null,
             "brokerage": "0.00",
-            "buy_price": "12849.0",
-            "lot_id": "bad4550c-6d38-444b-8ee8-578e113d018d",
-            "other_costs": "0.93",
-            "pool": "core",
-            "quantity_original": "2",
-            "quantity_remaining": "2",
-            "stamp_duty": "3.85",
-            "ticker": "MARUTI.NS"
-          },
-          {
-            "acquisition_date": "2026-09-02",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
             "buy_price": "23680.0",
             "lot_id": "6f52fd69-8e86-48e7-b35c-17f31c3dd4a1",
             "other_costs": "0.85",
@@ -594,6 +529,19 @@
             "ticker": "JIOFIN.NS"
           },
           {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "239.5",
+            "lot_id": "c6905b28-274a-4a4e-9e60-becec86164b7",
+            "other_costs": "0.05",
+            "pool": "core",
+            "quantity_original": "5",
+            "quantity_remaining": "5",
+            "stamp_duty": "0.18",
+            "ticker": "JIOFIN.NS"
+          },
+          {
             "acquisition_date": "2026-09-02",
             "broker_trade_id": null,
             "brokerage": "0.00",
@@ -604,6 +552,19 @@
             "quantity_original": "56",
             "quantity_remaining": "56",
             "stamp_duty": "2.27",
+            "ticker": "VEDL.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "272.1000061035156",
+            "lot_id": "172795ba-4e9f-47be-b8fa-a85fb82709ef",
+            "other_costs": "0.05",
+            "pool": "core",
+            "quantity_original": "5",
+            "quantity_remaining": "5",
+            "stamp_duty": "0.20",
             "ticker": "VEDL.NS"
           },
           {
@@ -633,30 +594,30 @@
             "ticker": "WIPRO.NS"
           },
           {
-            "acquisition_date": "2026-09-03",
+            "acquisition_date": "2026-09-04",
             "broker_trade_id": null,
             "brokerage": "0.00",
-            "buy_price": "1019.2000122070312",
-            "lot_id": "0eae3a2c-0a4f-46be-a121-d9ccfc9170a9",
-            "other_costs": "0.33",
+            "buy_price": "176.39999389648438",
+            "lot_id": "98a3b7e2-07e1-4d9c-b018-330320ce7cf4",
+            "other_costs": "0.25",
             "pool": "core",
-            "quantity_original": "9",
-            "quantity_remaining": "9",
-            "stamp_duty": "1.38",
-            "ticker": "TATACONSUM.NS"
+            "quantity_original": "38",
+            "quantity_remaining": "38",
+            "stamp_duty": "1.01",
+            "ticker": "WIPRO.NS"
           },
           {
-            "acquisition_date": "2026-09-03",
+            "acquisition_date": "2026-09-04",
             "broker_trade_id": null,
             "brokerage": "0.00",
-            "buy_price": "994.9000244140625",
-            "lot_id": "7f324507-589e-469b-8acb-9c8631795497",
-            "other_costs": "0.33",
+            "buy_price": "1010.0",
+            "lot_id": "2f2140fb-178e-456b-9a1c-e634756fee0d",
+            "other_costs": "0.26",
             "pool": "core",
-            "quantity_original": "9",
-            "quantity_remaining": "9",
-            "stamp_duty": "1.34",
-            "ticker": "MAXHEALTH.NS"
+            "quantity_original": "7",
+            "quantity_remaining": "7",
+            "stamp_duty": "1.06",
+            "ticker": "TATACONSUM.NS"
           },
           {
             "acquisition_date": "2026-09-03",
@@ -670,6 +631,58 @@
             "quantity_remaining": "15",
             "stamp_duty": "1.32",
             "ticker": "HINDZINC.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "601.0",
+            "lot_id": "3a39fb7a-f65d-4f88-b53b-929c641b2274",
+            "other_costs": "0.22",
+            "pool": "core",
+            "quantity_original": "10",
+            "quantity_remaining": "10",
+            "stamp_duty": "0.90",
+            "ticker": "HINDZINC.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "3770.0",
+            "lot_id": "4889ecad-151e-4c4b-a3c0-d18cd6b1a30f",
+            "other_costs": "0.68",
+            "pool": "core",
+            "quantity_original": "5",
+            "quantity_remaining": "5",
+            "stamp_duty": "2.83",
+            "ticker": "DMART.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "2913.800048828125",
+            "lot_id": "70732424-606d-4b37-bcff-4e16ada6f52f",
+            "other_costs": "0.64",
+            "pool": "core",
+            "quantity_original": "6",
+            "quantity_remaining": "6",
+            "stamp_duty": "2.62",
+            "ticker": "MUTHOOTFIN.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "407.6000061035156",
+            "lot_id": "78a17abb-e6fc-40a4-a76b-18282baa556d",
+            "other_costs": "0.61",
+            "pool": "core",
+            "quantity_original": "41",
+            "quantity_remaining": "41",
+            "stamp_duty": "2.51",
+            "ticker": "VBL.NS"
           }
         ],
         "ltcg_by_fy": {}
@@ -691,34 +704,8 @@
         }
       ],
       "portfolio": {
-        "cash": "62715.31151123047211",
+        "cash": "108429.34119384766121",
         "lots": [
-          {
-            "acquisition_date": "2026-08-29",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "2334.89990234375",
-            "lot_id": "d57f5989-3368-424d-b0e6-a75a2d420ba8",
-            "other_costs": "0.76",
-            "pool": "core",
-            "quantity_original": "9",
-            "quantity_remaining": "9",
-            "stamp_duty": "3.15",
-            "ticker": "TCS.NS"
-          },
-          {
-            "acquisition_date": "2026-08-29",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "1319.5",
-            "lot_id": "615b7be5-f1be-4c18-989c-8ad1f9c4e825",
-            "other_costs": "0.72",
-            "pool": "core",
-            "quantity_original": "15",
-            "quantity_remaining": "15",
-            "stamp_duty": "2.97",
-            "ticker": "HCLTECH.NS"
-          },
           {
             "acquisition_date": "2026-08-29",
             "broker_trade_id": null,
@@ -744,19 +731,6 @@
             "quantity_remaining": "15",
             "stamp_duty": "2.89",
             "ticker": "RELIANCE.NS"
-          },
-          {
-            "acquisition_date": "2026-09-02",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "12849.0",
-            "lot_id": "ee33f7b8-7531-436d-b34e-30b55ea7357c",
-            "other_costs": "0.93",
-            "pool": "core",
-            "quantity_original": "2",
-            "quantity_remaining": "2",
-            "stamp_duty": "3.85",
-            "ticker": "MARUTI.NS"
           },
           {
             "acquisition_date": "2026-09-02",
@@ -824,6 +798,19 @@
             "ticker": "VBL.NS"
           },
           {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "407.6000061035156",
+            "lot_id": "030b76cc-6c47-474b-bba1-d4bf41d5b173",
+            "other_costs": "0.53",
+            "pool": "core",
+            "quantity_original": "36",
+            "quantity_remaining": "36",
+            "stamp_duty": "2.20",
+            "ticker": "VBL.NS"
+          },
+          {
             "acquisition_date": "2026-09-03",
             "broker_trade_id": null,
             "brokerage": "0.00",
@@ -840,32 +827,6 @@
             "acquisition_date": "2026-09-03",
             "broker_trade_id": null,
             "brokerage": "0.00",
-            "buy_price": "1019.2000122070312",
-            "lot_id": "b6b87b61-3df9-484b-b53e-45648dd228b4",
-            "other_costs": "0.51",
-            "pool": "core",
-            "quantity_original": "14",
-            "quantity_remaining": "14",
-            "stamp_duty": "2.14",
-            "ticker": "TATACONSUM.NS"
-          },
-          {
-            "acquisition_date": "2026-09-03",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
-            "buy_price": "994.9000244140625",
-            "lot_id": "5e0b38e4-86f8-4302-b706-0f2718602700",
-            "other_costs": "0.50",
-            "pool": "core",
-            "quantity_original": "14",
-            "quantity_remaining": "14",
-            "stamp_duty": "2.09",
-            "ticker": "MAXHEALTH.NS"
-          },
-          {
-            "acquisition_date": "2026-09-03",
-            "broker_trade_id": null,
-            "brokerage": "0.00",
             "buy_price": "587.9500122070312",
             "lot_id": "715a08e3-815f-4b3a-bb8a-1a94fe58c121",
             "other_costs": "0.48",
@@ -874,11 +835,37 @@
             "quantity_remaining": "23",
             "stamp_duty": "2.03",
             "ticker": "HINDZINC.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "2913.800048828125",
+            "lot_id": "b5a52e18-5d24-4746-8e56-a1c8727623e7",
+            "other_costs": "0.64",
+            "pool": "core",
+            "quantity_original": "6",
+            "quantity_remaining": "6",
+            "stamp_duty": "2.62",
+            "ticker": "MUTHOOTFIN.NS"
+          },
+          {
+            "acquisition_date": "2026-09-04",
+            "broker_trade_id": null,
+            "brokerage": "0.00",
+            "buy_price": "3770.0",
+            "lot_id": "c8868f9f-f75d-430b-b2aa-29b583481393",
+            "other_costs": "0.55",
+            "pool": "core",
+            "quantity_original": "4",
+            "quantity_remaining": "4",
+            "stamp_duty": "2.26",
+            "ticker": "DMART.NS"
           }
         ],
         "ltcg_by_fy": {}
       }
     }
   },
-  "saved_at": "2026-09-03"
+  "saved_at": "2026-09-04"
 }

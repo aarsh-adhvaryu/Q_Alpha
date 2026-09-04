@@ -1,22 +1,20 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🟠 Indian stock markets opened higher on Thursday, September 3, recovering after three consecutive sessions of losses, supported by positive global cues, easing crude oil prices, and sustained institutional buying. However, the Nifty50 and Sensex erased gains to settle lower as traders assessed the impact of a spike in oil prices and moves in bond yields on inflation.
+**Sentiment**: 🟢 Indian equity benchmarks posted a strong recovery from the previous session's weakness and opened in the green on Friday amid strong global cues and firm buying in IT stocks.
 
-**Drivers:**
-1. **Oil volatility → yield/inflation concern**: Brent futures rose 1.07% to $96.24/bbl as of September 3, 2026. Elevated oil prices and US Treasury yields continued to weigh on demand for longer-dated bonds, with Benchmark Brent crude contract hovering around $95 per barrel amid concerns over supply disruption. This elevates imported inflation risk for energy-dependent India.
+**Drivers**:
+1. **Global risk-on mood** → Asian stocks rebounded as regional market sentiment got a boost from the rally on Wall Street as a recent run-up in bond yields eased further and big technology companies rallied. Reduces Fed-hike fears, supports risk appetite.
+2. **IT strength dominates** → IT stocks including TCS, Wipro, Tech Mahindra and Infosys advanced in early trade. Defensive rally overshadowing weakness elsewhere.
+3. **Headwinds in Energy/FMCG/Pharma** → Energy, FMCG, MNC and Pharma indices were trading in the red during early trade. Sector dispersion limits breadth.
 
-2. **RBI FX inflows & liquidity**: India bonds gained as RBI FX inflows lifted liquidity, spurring short-term debt buying, with the RBI expected to rely more on short-term liquidity management tools including sales of bills with four- to five-month maturities.
+**Watchlist names affected**:
+- **Gainers**: TCS, INFY, WIPRO, TECHM (IT rally); HDFCBANK, AXISBANK (modest banking stability).
+- **Under pressure**: RELIANCE, IOC, BPCL (Energy); ITC, GODREJCP (FMCG); SUNPHARMA, CIPLA (Pharma).
 
-3. **Private banks & realty lead**: In broader markets, Nifty MidCap and Nifty SmallCap ended 0.37% and 1.2% higher respectively, with private bank and realty shares outperforming.
+**Likely reaction** (near-term 1–2 sessions): Nifty settles at 23,898 after opening strength. Index likely to consolidate +0.2–0.6% range over next 1–2 days — IT support cushioning a pullback in cyclicals. Confidence: **medium**. TCS, INFY most likely to hold gains; BPCL, RELIANCE face profit-taking. Rotation risk if energy/FMCG don't stabilize.
 
-**Watchlist names affected:** Nifty Bank outperformed, rising 0.92% — HDFCBANK, ICICIBANK, KOTAKBANK, AXISBANK beneficiaries. Realty: LODHA, DLF. Energy shorts: RELIANCE, BPCL, IOC under pressure from high crude. ADANIPORTS also mentioned as gainer.
+**Risk note**: Sector dispersion and late-session selling in banking/realty suggest conviction may fade into close; watch for FII reversal if global cues weaken.
 
-**Likely reaction (1–2 sessions ahead):** *Lean* **flat to slightly down** (-0.2% to +0.3%); **confidence low–medium**. Oil's sticky >$95 keeps inflation narrative alive, capping index upside despite liquidity ease. Banks rally shallow; realty momentum fragile if yields stay elevated. Most likely movers: **KOTAKBANK** up on private bank rotation; **RELIANCE** and **BPCL** down on crude drag; realty weakness if yields harden further (watch **LODHA** for downside).
+SIGNAL: lean=up; band=0.2..0.6; confidence=medium
 
-**Discretionary ideas:** None stand out with conviction. Oil geopolitics remain uncertain; RBI liquidity support is supportive but insufficient to offset yield headwinds *[satellite sleeve rules apply]*.
-
-**Risk note:** The selloff followed a global reassessment of inflation, fiscal burden and geopolitical risks as US-Iran hostilities escalated and the vital Strait of Hormuz remained shut. Further supply shocks or US yield spikes could accelerate downside.
-
-SIGNAL: lean=flat; band=-0.2..0.3; confidence=low
-
-— 🤖 claude-haiku-4-5 · 53,848 in / 1,079 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 39,886 in / 784 out tokens · ✓ complete
