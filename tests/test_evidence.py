@@ -75,7 +75,7 @@ def _prov(trading_date: date = PURCHASE_DATE) -> Provenance:
         http_status=200,
         sha256="0" * 64,
         byte_length=1234,
-        trading_date=trading_date,
+        document_date=trading_date,
     )
 
 
@@ -100,7 +100,7 @@ def test_fixture_1_vbl_reads_pass_not_the_predicted_watch() -> None:
     a = assess("VBL.NS", rows, prov, as_of=PURCHASE_DATE)
     assert a.state == PASS
     assert a.indicators == ()
-    assert a.provenance is not None and a.provenance.trading_date == PURCHASE_DATE
+    assert a.provenance is not None and a.provenance.document_date == PURCHASE_DATE
 
 
 def test_the_pe_caution_does_fire_on_names_this_system_buys() -> None:
