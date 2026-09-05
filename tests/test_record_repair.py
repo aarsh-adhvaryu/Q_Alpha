@@ -41,7 +41,9 @@ _AS_OF = date(2026, 9, 5)
 def test_a_repeat_key_appends_a_revision_and_keeps_the_original(tmp_path: Path) -> None:
     p = tmp_path / "r.jsonl"
     _append_jsonl(p, [{"_key": "d1", "verdict": "drop", "rule": "url-present"}], key="_key")
-    total = _append_jsonl(p, [{"_key": "d1", "verdict": "keep", "rule": "primary-source"}], key="_key")
+    total = _append_jsonl(
+        p, [{"_key": "d1", "verdict": "keep", "rule": "primary-source"}], key="_key"
+    )
     assert total == 2, "the earlier belief must still be on file"
     lines = [line for line in p.read_text().splitlines() if line.strip()]
     assert len(lines) == 2
@@ -101,7 +103,11 @@ def test_attempt_rows_carry_the_unit_of_the_cash_field(tmp_path: Path) -> None:
     """Rows before 2026-09-05 hold a share count. The tag is how a reader tells them apart."""
     p = tmp_path / "v.jsonl"
     append_ai_attempt(
-        as_of=_AS_OF, status="verdicts_recorded", undeployed_cash="33165.60", cash_unit="INR", path=p
+        as_of=_AS_OF,
+        status="verdicts_recorded",
+        undeployed_cash="33165.60",
+        cash_unit="INR",
+        path=p,
     )
     import json
 
@@ -178,4 +184,6 @@ def test_stress_gauge_is_unaffected_because_it_reads_a_ratio() -> None:
 
     etf = _falling_index()
     as_index = etf * 100.0
-    assert np.allclose(stress_gauge(etf).to_numpy(), stress_gauge(as_index).to_numpy(), equal_nan=True)
+    assert np.allclose(
+        stress_gauge(etf).to_numpy(), stress_gauge(as_index).to_numpy(), equal_nan=True
+    )
