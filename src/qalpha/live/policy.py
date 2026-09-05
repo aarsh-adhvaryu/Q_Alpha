@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from qalpha.live.twin import TWIN_FULL, TWIN_NO_AI, TWIN_NO_EXITS, TWIN_NO_HEDGE
+from qalpha.live.twin import CORE_V1, TWIN_FULL, TWIN_NO_AI, TWIN_NO_EXITS, TWIN_NO_HEDGE
 
 #: What a book did on a day, in the log and on the panel.
 DEPLOY = "DEPLOY"
@@ -77,6 +77,34 @@ POLICIES: dict[str, Policy] = {
     TWIN_NO_HEDGE: Policy(TWIN_NO_HEDGE, use_hedge=False),
     TWIN_NO_EXITS: Policy(TWIN_NO_EXITS, use_exits=False),
 }
+
+
+#: **The frozen core treatment.** Deterministic screen, §4.7 exits, no AI, no hedge overlay.
+#:
+#: This is not an ablation and must never be added to :data:`POLICIES`. An ablation is defined
+#: relative to ``TWIN_FULL`` and therefore moves whenever ``TWIN_FULL`` moves; a book that answers
+#: "does the screen beat the fund?" over twelve months cannot afford to move at all. The AI, the
+#: evidence adapter and the governor version independently and none of them reaches this book.
+#:
+#: **Changing any field here ends CORE_V1 and starts CORE_V2 with a new clock.** Nothing else does.
+CORE_POLICY = Policy(CORE_V1, use_ai=False, use_hedge=False, use_exits=True)
+
+#: Every book that steps daily: the run-2 ablation family plus the independent core track.
+ALL_POLICIES: dict[str, Policy] = {**POLICIES, CORE_V1: CORE_POLICY}
+
+
+def assert_core_is_not_an_ablation(policies: dict[str, Policy] = POLICIES) -> None:
+    """``CORE_V1`` must stay out of the ablation family.
+
+    If it were in :data:`POLICIES` it would be asserted against ``TWIN_FULL`` as a single-factor
+    ablation, which it is not — and, worse, it would acquire the composite's identity, which is the
+    exact coupling it exists to break.
+    """
+    if CORE_V1 in policies:
+        raise ValueError(
+            f"{CORE_V1} is in the ablation family. It is a separate experiment with its own clock "
+            "and its own reset condition; it must not be defined relative to TWIN_FULL."
+        )
 
 
 def assert_single_factor_ablations(policies: dict[str, Policy] = POLICIES) -> None:

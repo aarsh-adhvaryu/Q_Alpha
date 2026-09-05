@@ -30,18 +30,22 @@ sys.path.insert(0, str(Path(__file__).parent))
 import pandas as pd
 from paper import _load_benchmark_series, _load_market
 
+from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.live.go_gate import Evidence, build_gate
-from qalpha.live.policy import POLICIES, Decision, decisions_markdown
+from qalpha.live.policy import ALL_POLICIES, Decision, decisions_markdown
 from qalpha.live.runner import Market, step
 from qalpha.live.twin import (
     AI_VERDICT_HISTORY,
-    AUTONOMOUS,
+    CORE_EVALUATION_START,
+    CORE_V1,
+    DECIDING,
     EVALUATION_START,
     NULL_P95_LOG_REL_WEALTH,
     REAL,
     TWIN_FULL,
     TWIN_HISTORY,
+    TwinBook,
     append_ai_attempt,
     append_ai_verdicts,
     append_history,
@@ -421,9 +425,27 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config):
         append_history(marks, [], as_of=market.as_of, gate_verdict=None)
     except Exception as exc:
         print(f"[twin] WARNING: values not recorded ({exc})", file=sys.stderr)
-    navs = navs_from_history(load_history())
+    # One NAV basis per track. A NAV unitized from run 2's start says nothing about a window that
+    # opens a week later, so the two are computed separately and namespaced — `compare` reads the
+    # track-prefixed key and never silently borrows the other track's.
+    rows = load_history()
+    navs = {f"run2:{k}": v for k, v in navs_from_history(rows).items()}
+    navs.update(
+        {f"core_v1:{k}": v for k, v in navs_from_history(rows, start=CORE_EVALUATION_START).items()}
+    )
     gaps = compare(marks, null_p95=NULL_P95_LOG_REL_WEALTH, navs=navs)
-    gating = next((g for g in gaps if g.gates), None)
+    # **Run 2 owns the GO gate.** Two pairs now carry `gates`, one per track, and picking whichever
+    # comes first in the list would have silently swapped the GO gate onto the newer experiment.
+    gating = next((g for g in gaps if g.gates and g.track == "run2"), None)
+    core = next((g for g in gaps if g.gates and g.track == "core_v1"), None)
+    if core is not None:
+        window = "not yet open" if core.months < 1 else f"{core.months} month(s)"
+        print(
+            f"[twin] core track: {core.left} vs {core.right} — {window} since "
+            f"{CORE_EVALUATION_START}, G = "
+            + ("n/a" if core.log_rel_wealth is None else f"{core.log_rel_wealth:+.5f}")
+            + "  (descriptive; the core gate opens at 12 months)"
+        )
     gate_gap = gating.rupees if gating else None
     gate_g = gating.log_rel_wealth if gating else None
     months = gating.months if gating else None
@@ -497,13 +519,31 @@ def cmd_daily(cfg: Config) -> int:
     # byte-identical by construction — TWIN_FULL − TWIN_NO_AI could only ever have read ₹0. The
     # verdicts are asked for HERE, outside `step`, because the runner must stay pure and replayable:
     # it consumes a decided map, it never calls anything.
+    # CORE_V1 is created once, and on purpose before its registered window opens: the deterministic
+    # entry completes first so the measured period is not dominated by a book sitting in cash beside
+    # a fully-invested fund. The window date is registered in advance and cannot be moved to suit a
+    # result. Any cash still idle when it opens stays visible in the record rather than corrected.
+    if CORE_V1 not in books:
+        from qalpha.live.twin import assert_identical_flows
+
+        seed_flows = books[REAL].flows
+        pf = Portfolio(cfg.cost, cfg.tax, cash=sum((f.amount for f in seed_flows), Decimal("0")))
+        books[CORE_V1] = TwinBook(name=CORE_V1, portfolio=pf, flows=list(seed_flows))
+        assert_identical_flows(list(books.values()))
+        save_books(books)
+        print(
+            f"[twin] CORE_V1 created with the identical flow set (₹{pf.cash:,.2f}). "
+            f"Its measured window opens {CORE_EVALUATION_START}; see "
+            "reports/PREREGISTRATION_CORE_V1.md"
+        )
+
     verdicts = _ai_verdicts(books, market, cfg)
     market = replace(market, ai_verdicts=verdict_calls(verdicts))
 
     decisions: list[Decision] = []
-    for name in AUTONOMOUS:
+    for name in DECIDING:
         if name in books:
-            decisions += step(books[name], POLICIES[name], market, cfg)
+            decisions += step(books[name], ALL_POLICIES[name], market, cfg)
     save_books(books)
 
     marks, gaps, gate = _marks_and_gate(books, market, cfg)
