@@ -108,3 +108,60 @@ Applied to the basket the live screen recommends today, using the archived 2026-
 
 Fixture 6 is the one that matters. If an unverified event can move the state, the verification guard
 is decorative.
+
+---
+
+## 9. Outcome — recorded 2026-09-05, after implementation
+
+**§1–§8 are unchanged.** No rule was edited after seeing a result.
+
+### A defect was caught during the build, before it shipped
+
+The first implementation took a boolean `announcements_consulted`, and the caller set it after
+fetching the **index**. Run against the basket the live screen recommends, it reported:
+
+```
+| VBL.NS | **PASS** | PASS | PASS |
+  PASS   corporate announcements — nothing material filed in the window
+```
+
+There were **8 filings in that window for VBL, and 17 for MUTHOOTFIN**. None had been downloaded,
+none read. "Nothing material filed" was false, and it was false on the surface that decides whether
+a name is eligible to buy.
+
+This is the codebase's signature defect exactly — a number, or here a state, labelled as something
+it is not. §6 of this pre-registration already required the distinction; the implementation had not
+honoured it.
+
+The boolean is replaced by `AnnouncementCoverage`, which records `filings_in_window`,
+`documents_read`, `extraction_ran` and `index_fetched`. **Anything short of full coverage is
+`UNKNOWN`.** The same run now reports:
+
+```
+  UNKNOWN  corporate announcements — 8 filing(s) in the window, 8 unread
+```
+
+### Fixture results
+
+| # | Fixture | Expected | Actual |
+|---|---|---|---|
+| 1 | `JIOFIN` carries the P/E > 50 caution | `WATCH` | `WATCH` |
+| 2 | `VBL` clear on the purchase date | `PASS` | `PASS` |
+| 3 | `BLISSGVS` at long-term ASM stage 4 | `BLOCK` | `BLOCK` |
+| 4 | exchange file missing, filings clean | `UNKNOWN` | `UNKNOWN` |
+| 5 | high-materiality verified event | `WATCH` | `WATCH` |
+| 6 | high-materiality **unverified** event | `PASS` | `PASS` |
+
+Fixtures 1–3 are measured against the archived `REG1_IND270826.csv`. Fixture 2 is not an
+endorsement of the trade: it means no dimension this version consults objected on that date.
+
+### The honest state of the basket today
+
+With the exchange feed read and the announcement pipeline **not yet running daily**, every candidate
+is `UNKNOWN`, because filings are listed and unread. That is correct and it is also the risk flagged
+before this was built: a gate that answers `HUMAN_REQUIRED` for everything trains the user to click
+through it.
+
+**So this object stays unwired until the announcement pipeline runs daily and coverage is real.**
+Shipping it into the decision path now would be shipping a gate that says "ask a human" eight times
+a day about names it has not looked at.
