@@ -86,9 +86,11 @@ four and only one is cheap.
 
 ---
 
-## What is true today (2026-09-04)
+## What is true today (2026-09-05)
 
-**23,169 lines · 42 live modules · 703 tests green.**
+**23,169 lines · 42 live modules · 703 tests green.** `main` is at the merge of PR #88; nothing is
+in flight. PRs #85 (twin preflight), #86 (SIP accounting), #87 (twin coherence) and #88 (Phase A
+governor + valuation + primary-source vetoes + this file) are all merged.
 
 ### The forward experiment — twin run 2
 
@@ -152,7 +154,7 @@ $$V_{\min} = \frac{\text{lot} \times \text{index}}{h} = ₹35.8\text{ lakh}$$
 against a ₹3L book. `hedge_availability` reports this on every hedge decision, so the ₹0 is
 *explained*. **Re-verify `NIFTY_LOT_SIZE` before quoting any rupee figure from it.**
 
-### The pre-trade governor (Phase A, in flight)
+### The pre-trade governor (Phase A — merged, PR #88)
 
 - **`live/governor.py`** — sector concentration measured on the **resulting book**, not the basket.
   The 30% cap was applied to the names chosen *that round*; at slider 3–4 a 30% cap cannot bind
@@ -160,6 +162,28 @@ against a ₹3L book. `hedge_availability` reports this on every hedge decision,
   POWER** book. Kite nudges on holdings at 50%; our cap was stricter on paper and weaker in practice.
 - **`live/valuation.py`** — current P/E and market cap, threshold **the exchange's own P/E > 50**.
   A check, never a factor: it does not re-rank or re-select.
+
+> ### ⚠️ The valuation check reads the wrong number, and would NOT have caught VBL
+>
+> Indian companies report **standalone** and **consolidated** results separately, and for a group
+> like VBL the two P/Es differ by a fifth. The exchange's caution was computed on **standalone**;
+> `yfinance` — our source — serves **consolidated**.
+>
+> | Basis | VBL P/E |
+> |---|---|
+> | Standalone TTM — *what NSE cautioned on* | **51.04** ← clears the >50 threshold |
+> | Consolidated TTM | 45.01 |
+> | yfinance trailing — **what we read** | **40.7** ← does not clear it |
+> | 5-year average | 78.2 |
+>
+> So the check mirrors the exchange's *threshold* while reading a *different source*, which is not
+> mirroring the exchange. On the run that motivated it, it flags JIOFIN (P/E 74) and misses VBL.
+>
+> **Decision: do NOT promote this to a veto.** Blocking a trade on a figure that contradicts the one
+> the user's own broker is showing him is worse than flagging. The bite is surgical enough that a
+> veto would not wreck the basket (1 of 8) — the problem is not force, it is that we re-derive the
+> exchange's conclusion from a source that disagrees with it. **The fix is to read NSE/BSE's actual
+> cautionary-message feed** (Phase B), not to re-derive it. Only then is promoting it a real option.
 
 ---
 
@@ -300,18 +324,41 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
 
 ## Open work, in order
 
-1. **Correct the README's out-of-sample claim** (gate 1). Ten minutes; the claim most likely to
-   over-authorise capital.
-2. **Generate the matched null** (≥1,000 draws, spec frozen). Criterion 3 reads ⚪ until it exists.
+**Start with 1 and 2.** They are small, and 2 is what stops the next integration defect shipping.
+
+1. **Correct the README's out-of-sample claim** (gate 1, `README.md` §5). Ten minutes; the claim most
+   likely to over-authorise capital. The configuration was selected *on* the holdout.
+2. **One golden-day replay** — data arrival → filings → recommendation → governor → approval → fake
+   execution → costs → mark → reconciliation, asserting the final portfolio exactly.
+
+   *Why this is now ahead of the null.* Every defect found in the 2026-08/09 sessions was an
+   **integration** failure — right function, wrong argument; a constant standing in for a
+   measurement; a source disagreeing with the one the broker uses. 700+ unit tests caught none of
+   them. And five of those defects were **introduced during those same sessions and caught hours
+   later by inspection**, which is luck dressed as process. The replay is the only test shape that
+   turns that luck into a gate. Build it before anything else is layered on.
 3. **`Mandate` + `RiskGovernor.veto()`** — the operating contract from prose into an object.
-4. **One golden-day replay** — data arrival → filings → recommendation → governor → approval → fake
-   execution → costs → mark → reconciliation, asserting the final portfolio exactly. The only test
-   shape that catches integration and operational defects.
-5. **Exchange evidence spine** — corporate announcements poll, T2T / IRP / suspension / RE lists.
-   Point the AI veto at filings rather than web search.
+4. **Generate the matched null** (≥1,000 draws, spec frozen). Criterion 3 reads ⚪ until it exists.
+   It has a real deadline — it must exist before the twin window closes (2027-09), and its spec is
+   frozen so producing it later cannot be tuned to the outcome.
+5. **Exchange evidence spine** — the **NSE/BSE cautionary-message feed first** (that is what caught
+   VBL and what `live/valuation.py` currently cannot reproduce), then corporate announcements, then
+   T2T / IRP / suspension / RE lists. Point the AI veto at filings rather than web search.
 6. Raw prices for execution and FIFO basis · date-dependent tax rates · `_cap_renorm` · dataset hashes.
 7. Only then: mid/small-cap, IPO, F&O — each a separate registered experiment with its own
    point-in-time universe. **No engine inherits another's authority.**
+
+### Do not disturb — the twin clock is running
+
+The window opened **2026-09-01** and closes twelve months later. **The treatment is frozen**: model
+`claude-haiku-4-5`, prompt `PR-8b`, the veto rule, `EVALUATION_START`. Changing any of them makes
+this run 3 and restarts the clock. The primary-source tightening merged on day 4 got latitude because
+it *narrows* a guard rather than altering selection, and it is recorded — treat that as the last such
+amendment.
+
+**Watch `demoted` in `data/twin/ai_verdicts.jsonl`.** If the model keeps finding things it cannot cite
+to a filing, that count says whether the primary-source bar is right or too strict, and it is the
+input to whether the veto ever graduates.
 
 ---
 
