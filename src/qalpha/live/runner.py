@@ -60,8 +60,14 @@ class Market:
 
     as_of: date
     prices: dict[str, Decimal]
+    #: The benchmark **price series** — in practice NIFTYBEES, an ETF trading near ₹276, not the
+    #: Nifty index level near 27,574. Correct for :func:`stress_gauge`, which reads a drawdown
+    #: *ratio* and is therefore scale-invariant. **Never a substitute for the index level.**
     index_close: pd.Series
     adj_close: pd.DataFrame
+    #: The actual Nifty index level, for anything that multiplies by a futures lot size. ``None``
+    #: when nothing supplies it, which must produce CANNOT ASSESS rather than a number.
+    index_level: float | None = None
     rebase_from: dict[str, date] | None = None
     exclude: set[str] | None = None
     #: Watchlist inputs for the deploy step. Absent → the book cannot deploy and says so.
@@ -199,11 +205,24 @@ def _hedge(book: TwinBook, policy: Policy, market: Market) -> list[Decision]:
     if now == before:
         return []
     level = float(gauge.loc[: pd.Timestamp(market.as_of)].iloc[-1])
-    index_level = float(market.index_close.loc[: pd.Timestamp(market.as_of)].dropna().iloc[-1])
     holdings = {t: q for t, q in book.portfolio.positions().items() if q > 0}
     book_value = float(book.portfolio.holdings_value(market.prices)) if holdings else 0.0
-    avail = hedge_availability(book_value, index_level)
-    tail = "" if avail.available else f" — but {avail.render()}"
+    # THE DEFECT THIS FIXES. Until 2026-09-05 this line read the last value of ``index_close`` and
+    # called it the index level. ``index_close`` is the NIFTYBEES ETF series, ~₹276 against a Nifty
+    # near 27,574 — a hundredfold error, straight into a lot-size multiplication. On a ₹3L book the
+    # runtime reported "hedge available: 8 lot(s) — one lot ₹17,923" when one lot is ₹17.9 *lakh*
+    # and the book can hold none. Worse, CLAUDE.md cited that very function as the thing which
+    # *explained* why TWIN_FULL − TWIN_NO_HEDGE is ₹0.
+    #
+    # An unknown index level is not a reason to invent one. Missing input → CANNOT ASSESS.
+    if market.index_level is None:
+        tail = (
+            " — hedge availability CANNOT BE ASSESSED: no Nifty index level supplied "
+            "(the benchmark series is an ETF price, not the index)"
+        )
+    else:
+        avail = hedge_availability(book_value, market.index_level)
+        tail = "" if avail.available else f" — but {avail.render()}"
     return [
         Decision(
             on=market.as_of,
