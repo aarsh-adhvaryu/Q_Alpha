@@ -83,3 +83,84 @@ to find which feed does carry the caution rather than to assume one does.
 Every fetch stores, before any parsing: the unmodified original bytes, the retrieval timestamp
 (UTC), the source URL, the HTTP status, and the SHA-256 of the raw file. An assessment that cannot
 name the document hash it was derived from is not evidence and must read `UNKNOWN`.
+
+---
+
+## 7. Outcome — recorded 2026-09-05, after the fetch
+
+**§1–§6 above are unchanged. Nothing in the prediction was edited after the data was seen.**
+
+### The transport works
+
+| Item | Result |
+|---|---|
+| Discovery | `https://www.nseindia.com/api/daily-reports?key=CM` lists the file |
+| Location | `https://nsearchives.nseindia.com/content/cm/REG1_INDDDMMYY.csv` |
+| Access | plain GET with a browser user-agent; no session, no cookie jar |
+| Size | ~600 KB/day, 3,140 securities, 60 indicator columns |
+| History | fetched back to 2025-07 without difficulty |
+
+**One correction to the circular's naming.** `REG_IND` and `REG1_IND` are both published. The P/E
+column exists **only in `REG1_IND`**; `REG_IND` carries 28 columns and none of them is the P/E
+caution. The adapter reads `REG1_IND`.
+
+### Fixture 1 — FAILED
+
+| | |
+|---|---|
+| Predicted | `WATCH` |
+| Actual | **`PASS`** |
+
+VBL's `Scrip PE is greater than 50 (4 trailing quarters)` column reads `100`, meaning clear, on
+2026-08-27. It is also clear on 2026-09-04, the day the twin bought 36 more shares.
+
+**The rule was not widened afterwards to make VBL appear.** The failure is recorded in
+`tests/test_evidence.py::test_fixture_1_vbl_reads_pass_not_the_predicted_watch`, which asserts the
+actual value and names the failed prediction in its docstring.
+
+### Why the failure is informative rather than fatal
+
+The indicator **does** fire on VBL, just not on the purchase date. Sampling the mid-month file:
+
+| Period | P/E > 50 caution on VBL |
+|---|---|
+| 2025-07 → 2025-12 | ACTIVE |
+| 2026-02 → 2026-04 | clear |
+| 2026-05 → 2026-06 | ACTIVE |
+| 2026-07 → 2026-08 | clear |
+
+So the adapter covers the case. The caution had lapsed roughly two months before the money went in,
+which is consistent with earnings having grown while the price fell — a de-rating from an expensive
+level rather than a business deteriorating. That is precisely the distinction the price-only screen
+cannot draw, and it is visible here.
+
+### What this means for the documented premise
+
+`CLAUDE.md` and `PLAN_SYSTEM.md` both state that Q-Alpha would have encouraged a trade on which
+*"Kite's own nudge said don't."* On 2026-08-27 the exchange was **not** cautioning on VBL. Either
+the nudge was seen earlier, in the 2026-05/06 window when the caution was live, or it was a
+different message. **This needs the user's recollection before either document is corrected.** It is
+flagged, not rewritten.
+
+### The adapter is not blind to the VBL class of problem
+
+On 2026-08-27, **532 of 3,140** securities carry the P/E caution. Five of them are names Q-Alpha has
+bought or shortlisted:
+
+`ADANIENSOL` · `DMART` · `JIOFIN` · `MAXHEALTH` · `SHREECEM`
+
+**`JIOFIN` is in the basket the live screen recommends today** and reads `WATCH`. So the first
+non-price input the system has ever had produces a live, actionable flag on the current
+recommendation, on its first run.
+
+### Fixtures 2–5
+
+| # | Fixture | Expected | Actual |
+|---|---|---|---|
+| 2 | `BLISSGVS`, long-term ASM stage 4 | `BLOCK` | `BLOCK` |
+| 3 | `20MICRONS`, no active indicator | `PASS` | `PASS` |
+| 4 | file absent, and file stale > 4 days | `UNKNOWN` | `UNKNOWN` |
+| 5 | seven unbuilt dimensions | `NOT_COVERED` | `NOT_COVERED` |
+
+Fixtures 2 and 3 were instantiated by applying the §4 rules mechanically to the file. The rules
+preceded the instances.
