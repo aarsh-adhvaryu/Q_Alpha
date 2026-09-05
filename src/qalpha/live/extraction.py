@@ -22,6 +22,7 @@ first, and for a while.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -246,7 +247,14 @@ def event_rows(events: Sequence[ExtractedEvent], *, as_of: date) -> list[dict[st
                 "extraction_version": e.extraction_version,
                 "verified": e.verified,
                 "kind": "event",
-                "_key": f"{e.doc_sha256[:16]}:{e.ticker}:{e.event_type}",
+                # The passage digest is in the key because a single filing can carry two events
+                # of the same type — two separate litigations, two board changes. Keyed on
+                # (document, ticker, type) alone they collided, and the second silently superseded
+                # the first as a "correction" that corrected nothing.
+                "_key": (
+                    f"{e.doc_sha256[:16]}:{e.ticker}:{e.event_type}:"
+                    f"{hashlib.sha256(normalise(e.passage).encode()).hexdigest()[:8]}"
+                ),
             }
         )
     return rows
