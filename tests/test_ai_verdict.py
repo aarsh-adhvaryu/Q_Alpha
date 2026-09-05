@@ -208,3 +208,52 @@ def test_a_non_url_source_does_not_count_as_a_citation() -> None:
         _UNIVERSE,
     )
     assert out["VEDL.NS"].keep is True
+
+
+def test_the_first_real_veto_would_not_have_acted_on_its_actual_citation() -> None:
+    """2026-09-03, ADANIENSOL — the case that motivated the source tiers.
+
+    The model dropped it for "U.S. bribery charges against chairman" and cited
+    stockanalysis.com/quote/nse/ADANIENSOL/ -- a stock QUOTE page, which evidences nothing. The claim
+    may well be true. The problem is that a year from now nobody could check it from what was
+    recorded, and checking it is the entire purpose of the requirement. The rule shipped days earlier
+    asked "is there a URL", not "does it support the claim", so a well-formed link to an irrelevant
+    page sailed through.
+
+    It is demoted, not discarded: the count of demoted vetoes is itself evidence about whether the
+    model is finding real things it cannot cite.
+    """
+    out = parse_verdicts(
+        "VERDICT: ticker=VEDL; call=drop; confidence=high; reason=US bribery charges; "
+        "source=https://stockanalysis.com/quote/nse/VEDL/",
+        _UNIVERSE,
+    )
+    v = out["VEDL.NS"]
+    assert v.keep is True, "a veto cited to a quote page must not move money"
+    assert v.demoted is True and v.source_tier == "secondary"
+    assert v.source, "the lead is kept on record, not thrown away"
+
+
+def test_a_veto_cited_to_the_exchange_acts() -> None:
+    """The distinction is filing versus report, not reputable versus disreputable."""
+    for url in (
+        "https://www.bseindia.com/xml-data/corpfiling/AttachLive/x.pdf",
+        "https://nsearchives.nseindia.com/corporate/x.pdf",
+        "https://www.sebi.gov.in/enforcement/orders/x.html",
+    ):
+        out = parse_verdicts(
+            f"VERDICT: ticker=VEDL; call=drop; confidence=high; reason=order; source={url}",
+            _UNIVERSE,
+        )
+        assert out["VEDL.NS"].keep is False, url
+        assert out["VEDL.NS"].source_tier == "primary"
+        assert out["VEDL.NS"].demoted is False
+
+
+def test_a_lookalike_host_is_not_treated_as_the_exchange() -> None:
+    """Suffix matching must not accept nseindia.com.evil.example."""
+    from qalpha.live.ai_brief import source_tier
+
+    assert source_tier("https://nseindia.com.evil.example/x") == "secondary"
+    assert source_tier("https://archives.nseindia.com/x") == "primary"
+    assert source_tier("not a url") == "none"

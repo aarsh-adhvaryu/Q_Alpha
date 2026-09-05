@@ -722,6 +722,8 @@ def append_ai_verdicts(
             "confidence": str(v.get("confidence", "")),
             "reason": str(v.get("reason", "")),
             "source": str(v.get("source", "")),
+            "source_tier": str(v.get("source_tier", "")),
+            "demoted": bool(v.get("demoted", False)),
             "price_at_decision": str(prices.get(ticker, "")),
             "model": model,
             "prompt_version": prompt_version,
