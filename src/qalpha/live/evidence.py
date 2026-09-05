@@ -101,7 +101,10 @@ class Provenance:
     http_status: int
     sha256: str
     byte_length: int
-    trading_date: date
+    #: The date the document *belongs to* — the trading day for a daily exchange file, the
+    #: dissemination date for a filing. Not the date we fetched it; that is ``retrieved_at_utc``,
+    #: and conflating the two is how a stale file passes a freshness check.
+    document_date: date
 
     def render(self) -> str:
         return (
@@ -238,7 +241,7 @@ def assess(
             ticker, UNKNOWN, detail="no regulatory-indicator file", not_covered=covered
         )
 
-    age = (as_of - provenance.trading_date).days
+    age = (as_of - provenance.document_date).days
     if age > STALENESS_TOLERANCE_DAYS:
         return Assessment(
             ticker,
@@ -313,7 +316,7 @@ def archive_paths(trading_date: date, *, directory: Path = ARCHIVE_DIR) -> tuple
 
 def write_archive(
     payload: bytes,
-    trading_date: date,
+    document_date: date,
     *,
     http_status: int,
     retrieved_at_utc: datetime | None = None,
@@ -322,16 +325,16 @@ def write_archive(
     """Persist the unmodified bytes plus their provenance sidecar. Returns the provenance."""
     import json
 
-    csv_path, prov_path = archive_paths(trading_date, directory=directory)
+    csv_path, prov_path = archive_paths(document_date, directory=directory)
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     csv_path.write_bytes(payload)
     prov = Provenance(
-        source_url=reg_ind_url(trading_date),
+        source_url=reg_ind_url(document_date),
         retrieved_at_utc=retrieved_at_utc or datetime.now(UTC),
         http_status=http_status,
         sha256=sha256_of(payload),
         byte_length=len(payload),
-        trading_date=trading_date,
+        document_date=document_date,
     )
     prov_path.write_text(
         json.dumps(
@@ -341,7 +344,7 @@ def write_archive(
                 "http_status": prov.http_status,
                 "bytes": prov.byte_length,
                 "sha256": prov.sha256,
-                "trading_date": prov.trading_date.isoformat(),
+                "document_date": prov.document_date.isoformat(),
             },
             indent=1,
         )
@@ -377,6 +380,9 @@ def load_archive(
         http_status=int(meta["http_status"]),
         sha256=str(meta["sha256"]),
         byte_length=int(meta["bytes"]),
-        trading_date=date.fromisoformat(str(meta.get("trading_date", trading_date.isoformat()))),
+        # Both keys are read: sidecars written before the rename carry ``trading_date``.
+        document_date=date.fromisoformat(
+            str(meta.get("document_date") or meta.get("trading_date") or trading_date.isoformat())
+        ),
     )
     return parse_reg_ind(payload.decode("utf-8", errors="replace")), prov
