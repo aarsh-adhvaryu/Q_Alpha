@@ -46,6 +46,8 @@ Twenty-odd instances now. A few, so the shape is unmistakable:
 | "worst fall −34.9%, drawdown matches the index" | **−47.5%**, eleven points *deeper* than the index |
 | a veto citing a source URL | a stock **quote page**, evidencing nothing |
 | `NIFTY_LOT_SIZE = 75` | 65 — stale three days after its own "verify this" comment was written |
+| "hedge available: 8 lot(s), one lot ₹17,923" | one lot is ₹17.9 **lakh** — an ETF price read as the index level |
+| "703 tests green", in this file | **678** — a progress line counted by eye, then quoted in three PRs |
 
 **700+ passing tests have caught none of them.** Unit tests verify that a function works. These are
 failures of *integration* (the right data reaching that function), *methodology* (the function
@@ -88,9 +90,23 @@ four and only one is cheap.
 
 ## What is true today (2026-09-05)
 
-**23,765 lines · 42 live modules · 757 tests green.** `main` is at the merge of PR #91.
-PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input) and **#91**
-(record repair). PR #92 adds `CORE_V1`.
+**24,347 lines · 44 live modules · 770 passed, 1 skipped.** `main` is at the merge of PR #92.
+PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
+(record repair) and **#92** (`CORE_V1`). PR #93 adds the announcement spine and the AI extractor.
+
+> **The test count in this file was wrong, and the PR bodies inherited it.** This file claimed
+> **703**; the true baseline at `5b18528` was **678 passed, 1 skipped** — measured, not counted off a
+> progress line. Every count reported during 2026-09-05 was therefore inflated by 25. Reconciled:
+>
+> | | Δ | total |
+> |---|---:|---:|
+> | baseline `5b18528` | — | **678** |
+> | #90 evidence adapter | +27 | 705 |
+> | #91 record repair | +12 | 717 |
+> | #92 `CORE_V1` | +15 | **732** = `main` |
+> | #93 announcements + extractor | +38 | **770** |
+>
+> Counting dots on a `pytest -q` progress line is not measuring. `pytest | grep passed` is.
 
 ### Two experiments now run side by side, and they must not be confused
 
@@ -315,7 +331,8 @@ backtest/     walk-forward engine · portfolio · baselines · metrics · signif
               decision.py = the shared decide_rebalance the live runner also calls
 live/         advisor (sell/raise-cash/deploy/harvest) · deploy (the buy screen) · position_health
               price_integrity · cooling_off · satellite · valuation · governor · hedge · nav
-              evidence (NSE regulatory-indicator adapter — reads, decides nothing yet)
+              evidence (NSE regulatory-indicator adapter) · announcements (filings + provenance)
+              extraction (the AI reports what a filing says; it decides nothing)
               twin · runner · policy · go_gate · verdicts · ai_brief · track_record · measures
               safety · scan · notify · auth · client · holdings · tradebook(+store) · taxpnl · ticker
 scripts/      twin.py (the cron) · paper.py · advisor.py · dashboard_app.py · backtest_* · exp_*
@@ -407,11 +424,12 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
 4. **Generate the matched null** (≥1,000 draws, spec frozen). Criterion 3 reads ⚪ until it exists.
    It has a real deadline — it must exist before the twin window closes (2027-09), and its spec is
    frozen so producing it later cannot be tuned to the outcome.
-5. **Exchange evidence spine** — ✅ the cautionary-message feed is read (`live/evidence.py`, PR #90)
-   but **wired to nothing**. Next: corporate announcements for held and candidate names, then point
-   the AI at fetched filings rather than four web searches. The AI's job changes from *judge* to
-   *extractor*: it reads supplied documents and returns events with passages, and deterministic
-   policy converts those to PASS/WATCH/BLOCK.
+5. **Exchange evidence spine** — ✅ cautionary-message feed (`live/evidence.py`, #90), ✅ corporate
+   announcements with the filing archived and hashed (`live/announcements.py`, #93), ✅ the AI moved
+   from *judge* to *extractor* (`live/extraction.py`, #93 — it reports what a document says and
+   every quote is checked against the stored bytes). **All three are wired to nothing.** Next: the
+   deterministic policy that turns verified events into PASS/WATCH/BLOCK, then a `PreTradeAssessment`
+   per candidate, then point the live veto at filings instead of four web searches.
 6. Raw prices for execution and FIFO basis · date-dependent tax rates · `_cap_renorm` · dataset hashes.
 7. Only then: mid/small-cap, IPO, F&O — each a separate registered experiment with its own
    point-in-time universe. **No engine inherits another's authority.**

@@ -15,6 +15,9 @@ dependencies = [
     "openpyxl>=3.1",
     "kiteconnect>=5.0",
     "python-dotenv>=1.0",
+    # Primary documents are PDFs. Pure-Python, no system libraries, works offline — an evidence
+    # spine that needs a native toolchain would not survive the CI runner it has to live on.
+    "pypdf>=5.0",
 ]
 
 [project.optional-dependencies]
