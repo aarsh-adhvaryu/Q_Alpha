@@ -90,9 +90,9 @@ four and only one is cheap.
 
 ## What is true today (2026-09-05)
 
-**24,347 lines · 44 live modules · 770 passed, 1 skipped.** `main` is at the merge of PR #92.
+**24,636 lines · 45 live modules · 791 passed, 1 skipped.** `main` is at the merge of PR #93.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
-(record repair) and **#92** (`CORE_V1`). PR #93 adds the announcement spine and the AI extractor.
+(record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor) and #94 (`PreTradeAssessment`) follow.
 
 > **The test count in this file was wrong, and the PR bodies inherited it.** This file claimed
 > **703**; the true baseline at `5b18528` was **678 passed, 1 skipped** — measured, not counted off a
@@ -104,7 +104,8 @@ PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-pri
 > | #90 evidence adapter | +27 | 705 |
 > | #91 record repair | +12 | 717 |
 > | #92 `CORE_V1` | +15 | **732** = `main` |
-> | #93 announcements + extractor | +38 | **770** |
+> | #93 announcements + extractor | +38 | 770 |
+> | #94 pre-trade assessment | +21 | **791** |
 >
 > Counting dots on a `pytest -q` progress line is not measuring. `pytest | grep passed` is.
 
@@ -333,6 +334,7 @@ live/         advisor (sell/raise-cash/deploy/harvest) · deploy (the buy screen
               price_integrity · cooling_off · satellite · valuation · governor · hedge · nav
               evidence (NSE regulatory-indicator adapter) · announcements (filings + provenance)
               extraction (the AI reports what a filing says; it decides nothing)
+              pretrade (may we buy this name? eligibility only — never a view on return)
               twin · runner · policy · go_gate · verdicts · ai_brief · track_record · measures
               safety · scan · notify · auth · client · holdings · tradebook(+store) · taxpnl · ticker
 scripts/      twin.py (the cron) · paper.py · advisor.py · dashboard_app.py · backtest_* · exp_*
@@ -425,11 +427,14 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
    It has a real deadline — it must exist before the twin window closes (2027-09), and its spec is
    frozen so producing it later cannot be tuned to the outcome.
 5. **Exchange evidence spine** — ✅ cautionary-message feed (`live/evidence.py`, #90), ✅ corporate
-   announcements with the filing archived and hashed (`live/announcements.py`, #93), ✅ the AI moved
-   from *judge* to *extractor* (`live/extraction.py`, #93 — it reports what a document says and
-   every quote is checked against the stored bytes). **All three are wired to nothing.** Next: the
-   deterministic policy that turns verified events into PASS/WATCH/BLOCK, then a `PreTradeAssessment`
-   per candidate, then point the live veto at filings instead of four web searches.
+   announcements archived and hashed (`live/announcements.py`, #93), ✅ the AI moved from *judge* to
+   *extractor* (`live/extraction.py`, #93), ✅ `PreTradeAssessment` combining them
+   (`live/pretrade.py`, #94). **All four are wired to nothing, deliberately.**
+
+   *Why unwired.* With filings listed but unread, every candidate reads `UNKNOWN` — correctly. A
+   gate that says `HUMAN_REQUIRED` eight times a day about names it has not opened trains the user
+   to click through it. **Next: run the announcement fetch + extraction daily so coverage is real**,
+   then wire the assessment, then point the live veto at filings instead of four web searches.
 6. Raw prices for execution and FIFO basis · date-dependent tax rates · `_cap_renorm` · dataset hashes.
 7. Only then: mid/small-cap, IPO, F&O — each a separate registered experiment with its own
    point-in-time universe. **No engine inherits another's authority.**
