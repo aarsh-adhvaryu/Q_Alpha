@@ -70,10 +70,28 @@ BASELINE = "BASELINE"
 #: the system beats a fund anyone can buy in five minutes. See reports/PHASE4_BACKTEST.md.
 BASELINE_EW = "BASELINE_EW"
 
+#: The deterministic core, and the only book whose treatment is frozen against *everything else*.
+#:
+#: **Why it is not simply ``TWIN_NO_AI``.** Every ``TWIN_*`` book is defined as the composite minus
+#: one flag, so its behaviour moves whenever the composite's does — wire the governor into
+#: ``TWIN_FULL`` and ``TWIN_NO_AI`` changes too. A book like that cannot hold a twelve-month clock,
+#: because each improvement to the system restarts it. That is the mechanism by which this project
+#: kept getting further from evidence the closer it got.
+#:
+#: ``CORE_V1`` inherits from nothing. It answers one question — *does the deterministic screen beat
+#: the fund anyone can buy?* — and **only a change to the screen or its ranking resets it.** The AI,
+#: the evidence adapter and the governor version independently and never touch it.
+CORE_V1 = "CORE_V1"
+
 #: Books that make their own decisions — the ones Phase 3 gives policies to.
 AUTONOMOUS = (TWIN_FULL, TWIN_NO_AI, TWIN_NO_HEDGE, TWIN_NO_EXITS)
+#: Every book that steps itself each day: the run-2 ablation family plus the core track.
+DECIDING = (*AUTONOMOUS, CORE_V1)
 #: Every book in the comparison, in report order.
-ALL_BOOKS = (REAL, *AUTONOMOUS, BASELINE_EW, BASELINE)
+ALL_BOOKS = (REAL, *AUTONOMOUS, CORE_V1, BASELINE_EW, BASELINE)
+
+#: The core track's gating pair. Separate clock, separate reset condition — see :data:`CORE_V1`.
+CORE_GATING_PAIR = (CORE_V1, BASELINE_EW)
 
 #: The only comparison that opens the GO gate — and it gates against the **harder** baseline.
 #: Gating against NIFTYBEES would let the system claim credit for the equal-weight premium it did
@@ -275,12 +293,28 @@ NULL_P95_LOG_REL_WEALTH: float | None = None
 #: The cost is one day; the alternative is twelve months of evidence whose first entry is wrong.
 EVALUATION_START = date(2026, 9, 1)
 
+#: When the **core-alpha** clock starts. Deliberately later than ``EVALUATION_START`` and deliberately
+#: forward-dated: 2026-09-01 to 2026-09-04 have already been observed, and starting a new experiment
+#: on days whose outcome is known is selection on the outcome. Registered in
+#: ``reports/PREREGISTRATION_CORE_V1.md`` before the first mark.
+CORE_EVALUATION_START = date(2026, 9, 8)
+
 
 def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
-    """Whole months of the registered window elapsed at ``as_of`` — never counted from a stray flow."""
+    """Whole months of the registered window elapsed at ``as_of`` — never counted from a stray flow.
+
+    **Day-aware, and it has to be.** Calendar-month subtraction alone reports a window that opened on
+    the 8th as one month old on the 1st, after 23 days. Run 2 opens on the 1st so it never noticed;
+    ``CORE_EVALUATION_START`` is 2026-09-08 and would have inherited a month it had not served. A
+    partial month rounds **down** — under-counting delays a gate, over-counting opens one early, and
+    only one of those errors can authorise capital.
+    """
     if as_of < start:
         return 0
-    return max(0, (as_of.year - start.year) * 12 + as_of.month - start.month)
+    months = (as_of.year - start.year) * 12 + as_of.month - start.month
+    if as_of.day < start.day:
+        months -= 1
+    return max(0, months)
 
 
 @dataclass(frozen=True)
@@ -290,8 +324,13 @@ class Gap:
     left: str
     right: str
     rupees: Decimal
-    gates: bool  # only TWIN_FULL − BASELINE_EW opens the GO gate; the rest describe
+    gates: bool  # this pair opens its own track's gate; the rest describe
     months: int
+    #: Which experiment this comparison belongs to. ``run2`` is the composite rehearsal registered in
+    #: PREREGISTRATION_TWIN_RUN2.md; ``core_v1`` is the deterministic screen's own clock. They have
+    #: different start dates and different reset conditions, so a gap from one is never evidence
+    #: about the other.
+    track: str = "run2"
     left_value: Decimal = Decimal("0")
     right_value: Decimal = Decimal("0")
     #: Unitized NAVs from ``EVALUATION_START`` — the gating statistic's actual inputs.
@@ -386,15 +425,17 @@ def compare(
     information about *him*, never a pass/fail on the system.
     """
     pairs = [
-        (TWIN_FULL, BASELINE_EW),  # the only gate — the purchasable alternative
-        (TWIN_FULL, BASELINE),  # reported: the do-nothing floor, never the bar
-        (TWIN_FULL, TWIN_NO_AI),
-        (TWIN_FULL, TWIN_NO_HEDGE),
-        (TWIN_FULL, TWIN_NO_EXITS),
-        (TWIN_FULL, REAL),
+        (CORE_V1, BASELINE_EW, "core_v1"),  # the core-alpha gate — its own clock
+        (TWIN_FULL, BASELINE_EW, "run2"),  # run 2's gate — the purchasable alternative
+        (TWIN_FULL, BASELINE, "run2"),  # reported: the do-nothing floor, never the bar
+        (TWIN_FULL, TWIN_NO_AI, "run2"),
+        (TWIN_FULL, TWIN_NO_HEDGE, "run2"),
+        (TWIN_FULL, TWIN_NO_EXITS, "run2"),
+        (CORE_V1, TWIN_FULL, "core_v1"),  # what the composite adds to the screen, descriptive
+        (TWIN_FULL, REAL, "run2"),
     ]
     out: list[Gap] = []
-    for left, right in pairs:
+    for left, right, track in pairs:
         if left not in marks or right not in marks:
             continue
         lm, rm = marks[left], marks[right]
@@ -403,13 +444,17 @@ def compare(
                 left=left,
                 right=right,
                 rupees=lm.gain - rm.gain,
-                gates=(left, right) == GATING_PAIR,
-                # The registered window, not "however far back the tradebook reaches".
-                months=evaluation_months(lm.as_of),
+                gates=(left, right) in {GATING_PAIR, CORE_GATING_PAIR},
+                track=track,
+                # Each track counts from its OWN registered start, never from the other's.
+                months=evaluation_months(
+                    lm.as_of,
+                    start=CORE_EVALUATION_START if track == "core_v1" else EVALUATION_START,
+                ),
                 left_value=lm.value,
                 right_value=rm.value,
-                left_nav=(navs or {}).get(left),
-                right_nav=(navs or {}).get(right),
+                left_nav=(navs or {}).get(f"{track}:{left}", (navs or {}).get(left)),
+                right_nav=(navs or {}).get(f"{track}:{right}", (navs or {}).get(right)),
                 null_p95=null_p95,
             )
         )

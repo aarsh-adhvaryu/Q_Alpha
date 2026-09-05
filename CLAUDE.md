@@ -88,9 +88,27 @@ four and only one is cheap.
 
 ## What is true today (2026-09-05)
 
-**23,169 lines · 42 live modules · 703 tests green.** `main` is at the merge of PR #88; nothing is
-in flight. PRs #85 (twin preflight), #86 (SIP accounting), #87 (twin coherence) and #88 (Phase A
-governor + valuation + primary-source vetoes + this file) are all merged.
+**23,765 lines · 42 live modules · 757 tests green.** `main` is at the merge of PR #91.
+PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input) and **#91**
+(record repair). PR #92 adds `CORE_V1`.
+
+### Two experiments now run side by side, and they must not be confused
+
+| | Question | Gated pair | Window | What resets it |
+|---|---|---|---|---|
+| **run 2** | can the whole system beat the fund? | `TWIN_FULL` vs `BASELINE_EW` | 2026-09-01 → 2027-09-01 | any behaviour change in any component |
+| **CORE_V1** | does the *screen* beat the fund? | `CORE_V1` vs `BASELINE_EW` | 2026-09-08 → 2027-09-08 | **only** a screen or ranking change |
+
+`CORE_V1` exists because every `TWIN_*` book is the composite minus one flag, so it moves whenever
+the composite moves — and a book that moves cannot carry a twelve-month clock. That is the mechanism
+by which this project kept getting *further* from evidence the closer it got to finished. The AI, the
+evidence adapter and the governor now version independently and none of them reaches `CORE_V1`.
+Registration: **[reports/PREREGISTRATION_CORE_V1.md](reports/PREREGISTRATION_CORE_V1.md)**.
+
+**Run 2 is reclassified as an operational rehearsal** (amendment §6 of its own pre-registration): its
+first four days ran under two different AI rules wearing one version label. Preserved in full, no row
+edited. Its gated pair was *not* moved, because moving a gate after observing results is selection on
+the outcome.
 
 ### The forward experiment — twin run 2
 
@@ -151,8 +169,21 @@ index ~27,574 one lot is **₹17.9L** of notional and hedging half a book needs
 
 $$V_{\min} = \frac{\text{lot} \times \text{index}}{h} = ₹35.8\text{ lakh}$$
 
-against a ₹3L book. `hedge_availability` reports this on every hedge decision, so the ₹0 is
-*explained*. **Re-verify `NIFTY_LOT_SIZE` before quoting any rupee figure from it.**
+against a ₹3L book.
+
+> ### ⚠️ This paragraph was wrong until 2026-09-05, and the function it cites was the reason
+>
+> `runner._hedge` passed `market.index_close` as the index level. That series is **NIFTYBEES, an ETF
+> near ₹276**, not the Nifty near 27,574 — a hundredfold error, straight into a lot-size
+> multiplication. Run on the real book it reported **"hedge available: 8 lot(s) — one lot ₹17,923"**
+> when one lot is ₹17.9 *lakh* and the book can hold none. So the ₹0 was **not** explained; the thing
+> claimed to explain it was asserting the opposite.
+>
+> `Market` now carries an explicit `index_level`, absent by default, and a missing one produces
+> **CANNOT BE ASSESSED** rather than an invented number. `index_close` remains the ETF series for
+> `stress_gauge`, which reads a drawdown *ratio* and is scale-free — a test pins that equivalence.
+
+**Re-verify `NIFTY_LOT_SIZE` before quoting any rupee figure from it.**
 
 ### The pre-trade governor (Phase A — merged, PR #88)
 
@@ -184,6 +215,39 @@ against a ₹3L book. `hedge_availability` reports this on every hedge decision,
 > veto would not wreck the basket (1 of 8) — the problem is not force, it is that we re-derive the
 > exchange's conclusion from a source that disagrees with it. **The fix is to read NSE/BSE's actual
 > cautionary-message feed** (Phase B), not to re-derive it. Only then is promoting it a real option.
+
+### The feed now exists, and it says the VBL premise needs checking (PR #90)
+
+`live/evidence.py` reads NSE's own daily regulatory-indicator file — the one the exchange populates
+the caution from. The transport is trivial: a plain GET at
+`nsearchives.nseindia.com/content/cm/REG1_INDDDMMYY.csv`, ~600 KB, 3,140 securities. **The P/E column
+exists only in `REG1_IND`, not the `REG_IND` the circular names.**
+
+**The pre-registered fixture failed.** `reports/PREREGISTRATION_EVIDENCE_V1.md` predicted, before the
+file was downloaded, that VBL would read `WATCH` on the 2026-08-27 purchase date. It reads **`PASS`**
+— NSE was not cautioning on VBL that day. The rule was not widened afterwards to make it appear.
+
+The indicator does fire on VBL, just not then:
+
+| Period | P/E > 50 on VBL |
+|---|---|
+| 2025-07 → 2025-12 | active |
+| 2026-02 → 2026-04 | clear |
+| 2026-05 → 2026-06 | active |
+| 2026-07 → 2026-08 | **clear** |
+
+Earnings grew while the price fell. That is a de-rating from an expensive level, and it is exactly
+the distinction the price-only screen cannot draw.
+
+> **⚠️ OPEN — needs the user, do not rewrite either document without him.** This file and
+> `PLAN_SYSTEM.md` both say Q-Alpha would have encouraged a trade on which *"Kite's own nudge said
+> don't."* On the purchase date the exchange was **not** cautioning on VBL. Either the nudge was seen
+> in the 2026-05/06 window, or it was a different message. **Ask before correcting the premise.**
+> The 51.04 standalone figure quoted above is likewise contradicted by NSE's own file for that date.
+
+On 2026-08-27, 532 of 3,140 securities carry the caution, five of them names this system has bought
+or shortlisted: ADANIENSOL, DMART, JIOFIN, MAXHEALTH, SHREECEM. **JIOFIN is in the basket the live
+screen recommends today.** The adapter is not wired into any decision path yet — that is Phase B.
 
 ---
 
@@ -251,6 +315,7 @@ backtest/     walk-forward engine · portfolio · baselines · metrics · signif
               decision.py = the shared decide_rebalance the live runner also calls
 live/         advisor (sell/raise-cash/deploy/harvest) · deploy (the buy screen) · position_health
               price_integrity · cooling_off · satellite · valuation · governor · hedge · nav
+              evidence (NSE regulatory-indicator adapter — reads, decides nothing yet)
               twin · runner · policy · go_gate · verdicts · ai_brief · track_record · measures
               safety · scan · notify · auth · client · holdings · tradebook(+store) · taxpnl · ticker
 scripts/      twin.py (the cron) · paper.py · advisor.py · dashboard_app.py · backtest_* · exp_*
@@ -327,7 +392,8 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
 **Start with 1 and 2.** They are small, and 2 is what stops the next integration defect shipping.
 
 1. **Correct the README's out-of-sample claim** (gate 1, `README.md` §5). Ten minutes; the claim most
-   likely to over-authorise capital. The configuration was selected *on* the holdout.
+   likely to over-authorise capital. The configuration was selected *on* the holdout. **Still not
+   done** — `README.md:215` still prints `1✅`.
 2. **One golden-day replay** — data arrival → filings → recommendation → governor → approval → fake
    execution → costs → mark → reconciliation, asserting the final portfolio exactly.
 
@@ -341,9 +407,11 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
 4. **Generate the matched null** (≥1,000 draws, spec frozen). Criterion 3 reads ⚪ until it exists.
    It has a real deadline — it must exist before the twin window closes (2027-09), and its spec is
    frozen so producing it later cannot be tuned to the outcome.
-5. **Exchange evidence spine** — the **NSE/BSE cautionary-message feed first** (that is what caught
-   VBL and what `live/valuation.py` currently cannot reproduce), then corporate announcements, then
-   T2T / IRP / suspension / RE lists. Point the AI veto at filings rather than web search.
+5. **Exchange evidence spine** — ✅ the cautionary-message feed is read (`live/evidence.py`, PR #90)
+   but **wired to nothing**. Next: corporate announcements for held and candidate names, then point
+   the AI at fetched filings rather than four web searches. The AI's job changes from *judge* to
+   *extractor*: it reads supplied documents and returns events with passages, and deterministic
+   policy converts those to PASS/WATCH/BLOCK.
 6. Raw prices for execution and FIFO basis · date-dependent tax rates · `_cap_renorm` · dataset hashes.
 7. Only then: mid/small-cap, IPO, F&O — each a separate registered experiment with its own
    point-in-time universe. **No engine inherits another's authority.**
