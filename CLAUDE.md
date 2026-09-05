@@ -48,6 +48,7 @@ Twenty-odd instances now. A few, so the shape is unmistakable:
 | `NIFTY_LOT_SIZE = 75` | 65 — stale three days after its own "verify this" comment was written |
 | "hedge available: 8 lot(s), one lot ₹17,923" | one lot is ₹17.9 **lakh** — an ETF price read as the index level |
 | "703 tests green", in this file | **678** — a progress line counted by eye, then quoted in three PRs |
+| gate row `pair: [TWIN_FULL, BASELINE_EW]`, gap `+₹10,000` | `CORE_V1`'s gap. Run 2's was **−₹4,000** — sign flipped, caught before the first cron |
 
 **700+ passing tests have caught none of them.** Unit tests verify that a function works. These are
 failures of *integration* (the right data reaching that function), *methodology* (the function
@@ -56,8 +57,10 @@ four and only one is cheap.
 
 ### Three rules that follow
 
-1. **When you fix a defect, grep for every other caller of the thing you fixed.** Twice now a correct
-   fix was applied at one call site and reasoned about as if applied to a concept.
+1. **When you fix a defect, grep for every other caller of the thing you fixed.** **Three times now**
+   a correct fix was applied at one call site and reasoned about as if applied to a concept. The
+   third was 2026-09-05: `next(g for g in gaps if g.gates)` was fixed in `scripts/twin.py` and left
+   untouched in `src/qalpha/live/twin.py:append_history`, which is the one that writes the record.
 2. **A test that asserts a source line pins that line's bug in place.** Assert the *property*. One
    test asserted the literal call that caused the +444% defect — the suite would have gone red if
    anyone had fixed it.
@@ -90,9 +93,10 @@ four and only one is cheap.
 
 ## What is true today (2026-09-05)
 
-**24,636 lines · 45 live modules · 791 passed, 1 skipped.** `main` is at the merge of PR #93.
+**24,753 lines · 45 live modules · 806 passed, 1 skipped.** `main` is at the merge of PR #94.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
-(record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor) and #94 (`PreTradeAssessment`) follow.
+(record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`) and #95 (integration
+repair) follow.
 
 > **The test count in this file was wrong, and the PR bodies inherited it.** This file claimed
 > **703**; the true baseline at `5b18528` was **678 passed, 1 skipped** — measured, not counted off a
@@ -106,6 +110,7 @@ PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-pri
 > | #92 `CORE_V1` | +15 | **732** = `main` |
 > | #93 announcements + extractor | +38 | 770 |
 > | #94 pre-trade assessment | +21 | **791** |
+> | #95 integration repair | +15 | **806** |
 >
 > Counting dots on a `pytest -q` progress line is not measuring. `pytest | grep passed` is.
 
@@ -126,6 +131,12 @@ Registration: **[reports/PREREGISTRATION_CORE_V1.md](reports/PREREGISTRATION_COR
 first four days ran under two different AI rules wearing one version label. Preserved in full, no row
 edited. Its gated pair was *not* moved, because moving a gate after observing results is selection on
 the outcome.
+
+**Run 2 no longer authorises anything (#95).** It keeps its statistic and loses its authority: an
+experiment declared methodologically invalid must never later produce a GO. `Gap.authorizes` is
+separate from `Gap.gates`, and **only `CORE_V1` vs `BASELINE_EW` authorises**. Until that book
+exists the GO gate has no gap and reads CANNOT ASSESS, which is the honest answer rather than a
+borrowed one.
 
 ### The forward experiment — twin run 2
 
@@ -435,6 +446,15 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
    gate that says `HUMAN_REQUIRED` eight times a day about names it has not opened trains the user
    to click through it. **Next: run the announcement fetch + extraction daily so coverage is real**,
    then wire the assessment, then point the live veto at filings instead of four web searches.
+
+   ⚠️ **The live veto has NOT been replaced.** `TWIN_FULL` still calls `basket_verdicts()` →
+   Anthropic web search, and its "primary source" rule still checks only the **hostname** — any NSE
+   URL qualifies, whether or not the page supports the claim. `extraction.py` is the safer design
+   and it is not running. Two AI paths exist; the weaker one is the live one.
+
+   Still owed on the announcement pipeline before it can be wired: **archive the index response
+   itself** (today an historical claim that nothing was filed cannot be proven), and **chunk long
+   filings** instead of truncating at 12,000 characters.
 6. Raw prices for execution and FIFO basis · date-dependent tax rates · `_cap_renorm` · dataset hashes.
 7. Only then: mid/small-cap, IPO, F&O — each a separate registered experiment with its own
    point-in-time universe. **No engine inherits another's authority.**
