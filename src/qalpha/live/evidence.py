@@ -242,6 +242,20 @@ def assess(
         )
 
     age = (as_of - provenance.document_date).days
+    if age < 0:
+        # A file dated AFTER the decision date is future data. Harmless today, because the live
+        # path only ever reads the latest file — and silently wrong in any historical replay, where
+        # it would let a name be judged on a caution the exchange had not yet published.
+        return Assessment(
+            ticker,
+            UNKNOWN,
+            provenance=provenance,
+            detail=(
+                f"file is dated {provenance.document_date}, after the decision date {as_of} — "
+                "future data, refused"
+            ),
+            not_covered=covered,
+        )
     if age > STALENESS_TOLERANCE_DAYS:
         return Assessment(
             ticker,
