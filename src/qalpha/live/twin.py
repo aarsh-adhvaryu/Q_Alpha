@@ -508,15 +508,20 @@ AI_VERDICT_HISTORY = Path("data/twin/ai_verdicts.jsonl")
 
 
 def _append_jsonl(path: Path, rows: Sequence[Mapping[str, object]], *, key: str) -> int:
-    """Append ``rows`` to a JSONL file, replacing any existing rows with the same ``key`` value.
+    """Append ``rows`` to a JSONL file. **A correction never deletes what it corrects.**
 
-    Same-day idempotence without ever losing a *different* day: the cron may run twice, or be
-    re-run by hand after a fix, and the second run must correct today's row rather than duplicate
-    it. Everything else is carried through untouched.
+    Until 2026-09-05 a same-key row *replaced* the row already on file. That is a rewrite wearing an
+    append's name: re-running the cron after changing the code silently substituted the new rule's
+    answer for the old rule's answer, on the same date, with nothing left to say it had happened.
+    The whole reason this file exists is that ``marks.json`` used to be rewritten daily.
 
-    **The guard is the point.** The rewrite is atomic (temp file + ``os.replace``), and it refuses
-    outright if it would end up shorter than what is already on disk minus today. A file whose whole
-    job is to be un-loseable must not be truncatable by a bug in the thing that writes it.
+    Now a repeat key is written as a **new row with ``revision`` incremented**, and every earlier
+    revision stays exactly where it was. Readers take the highest revision per key
+    (:func:`latest_by_key`); auditors get the entire sequence, including what was believed before.
+
+    **The guard is the point.** The rewrite is atomic (temp file + ``os.replace``) and it refuses
+    outright if the result would be shorter than what is already on disk. A file whose whole job is
+    to be un-loseable must not be truncatable by a bug in the thing that writes it.
     """
     import os
     import tempfile
@@ -535,10 +540,26 @@ def _append_jsonl(path: Path, rows: Sequence[Mapping[str, object]], *, key: str)
                 # than that one row, but never drop it silently.
                 print(f"[twin] WARNING: unparseable line in {path}, preserved as-is: {line[:80]}")
                 continue
-    superseded = {r[key] for r in rows if key in r}
-    kept = [r for r in existing if r.get(key) not in superseded]
-    out = kept + list(rows)
-    if len(out) < len(existing) - len(superseded):
+    highest: dict[object, int] = {}
+    for row in existing:
+        k = row.get(key)
+        if k is not None:
+            try:
+                highest[k] = max(highest.get(k, 0), int(str(row.get("revision", 0))))
+            except ValueError:
+                highest[k] = max(highest.get(k, 0), 0)
+    appended: list[dict[str, object]] = []
+    for incoming in rows:
+        fresh: dict[str, object] = dict(incoming)
+        k = fresh.get(key)
+        if k is None:
+            fresh.setdefault("revision", 0)
+        else:
+            fresh["revision"] = highest[k] + 1 if k in highest else 0
+            highest[k] = int(str(fresh["revision"]))
+        appended.append(fresh)
+    out = list(existing) + appended
+    if len(out) < len(existing):
         raise RuntimeError(
             f"refusing to write {path}: {len(out)} rows would replace {len(existing)}. "
             "This file is append-only; a shrink is a bug, not an update."
@@ -549,6 +570,29 @@ def _append_jsonl(path: Path, rows: Sequence[Mapping[str, object]], *, key: str)
             fh.write(json.dumps(row, sort_keys=True, default=str) + "\n")
     os.replace(tmp, path)
     return len(out)
+
+
+def latest_by_key(rows: Sequence[Mapping[str, object]], *, key: str) -> list[dict[str, object]]:
+    """The current view of an append-only record: highest ``revision`` per ``key``, order preserved.
+
+    Superseded revisions stay on file and stay readable — this only decides which one *counts*.
+    """
+    best: dict[object, dict[str, object]] = {}
+    order: list[object] = []
+    for row in rows:
+        k = row.get(key)
+        if k is None:
+            continue
+        if k not in best:
+            order.append(k)
+        try:
+            rev = int(str(row.get("revision", 0)))
+        except ValueError:
+            rev = 0
+        prior = best.get(k)
+        if prior is None or rev >= int(str(prior.get("revision", 0))):
+            best[k] = dict(row)
+    return [best[k] for k in order]
 
 
 def append_history(
@@ -591,7 +635,11 @@ def append_history(
 
 
 def load_history(path: Path = TWIN_HISTORY) -> list[dict[str, object]]:
-    """Every recorded day, oldest first. Missing file → empty list, never an exception."""
+    """Every recorded day, oldest first, at its **current revision**.
+
+    Superseded revisions remain on file; :func:`latest_by_key` decides which one counts. Missing
+    file → empty list, never an exception.
+    """
     if not path.exists():
         return []
     rows: list[dict[str, object]] = []
@@ -604,7 +652,7 @@ def load_history(path: Path = TWIN_HISTORY) -> list[dict[str, object]]:
         except json.JSONDecodeError:
             continue
     rows.sort(key=lambda r: str(r.get("as_of", "")))
-    return rows
+    return latest_by_key(rows, key="as_of")
 
 
 def navs_from_history(
@@ -671,6 +719,7 @@ def append_ai_attempt(
     model: str = "",
     prompt_version: str = "",
     undeployed_cash: str = "",
+    cash_unit: str = "",
     path: Path = AI_VERDICT_HISTORY,
 ) -> int:
     """Record that the AI step *happened*, whatever came of it. One row per eligible day.
@@ -684,6 +733,11 @@ def append_ai_attempt(
     ``raw`` keeps the model's actual response — the searched text behind the twelve-word reason.
     Without it a veto cannot be re-read later, and re-reading it is how a legitimate governance call
     is told apart from a fabrication.
+
+    ``cash_unit`` says what ``undeployed_cash`` is denominated in, and it exists because that field
+    silently was not money. Rows written before 2026-09-05 carry a **share count** and no
+    ``cash_unit``; rows from PR-8c onward carry rupees and say so. A number on a record that will be
+    read a year from now must be labelled as the thing that was computed.
     """
     row = {
         "as_of": as_of.isoformat(),
@@ -693,6 +747,7 @@ def append_ai_attempt(
         "model": model,
         "prompt_version": prompt_version,
         "undeployed_cash": undeployed_cash,
+        "cash_unit": cash_unit,
         "raw": raw[:20000],
         "_key": f"{as_of.isoformat()}:__attempt__",
     }

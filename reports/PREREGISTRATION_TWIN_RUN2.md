@@ -224,3 +224,52 @@ for the week after this run begins, and fixing them then voids nothing here.
 **Status at T=0 (2026-08-30):** gate **NOT YET**, 5 of 6 criteria not green. TWIN_FULL is behind
 BASELINE_EW by ₹514 (−0.17% relative wealth, G = −0.0017) — **descriptive only, 0 of 12 months**.
 No verdict before the locked 12-month evaluation.
+
+---
+
+## 6. Amendment, 2026-09-05 — run 2 is reclassified as an operational rehearsal
+
+**This is not a reset because the numbers disappointed. It is a reset because the treatment
+changed and the record cannot say when.**
+
+### What went wrong
+
+Three defects, found by audit on 2026-09-05, all of them in the *recording* rather than the
+strategy:
+
+1. **One version label covers two AI rules.** The primary-source tightening merged in PR #88 on
+   2026-09-04 changed when a veto acts, and `AI_PROMPT_VERSION` stayed `PR-8b`. Rows written on
+   2026-09-02/03/04 acted under the old rule — a `source=` URL merely had to be *present* — and
+   two of them dropped names on a CNBC and a TipRanks citation, neither of which the new rule
+   admits. Nothing in the file distinguishes the two regimes.
+2. **`undeployed_cash` was a share count.** It summed order *quantities* into a field named cash.
+   The record holds `"1"` and `"11"` where rupees were meant, so the cash drag caused by a veto —
+   the thing that separates selection skill from the cost of abstaining — cannot be recovered for
+   those days.
+3. **A same-day re-run overwrote the earlier row.** `_append_jsonl` replaced rows sharing a key, so
+   re-running the cron after a code change substituted the new answer for the old one on the same
+   date, silently.
+
+### What this amendment does
+
+- Run 2 (2026-09-01 → 2026-09-04) is **preserved in full** and reclassified as an **operational
+  rehearsal**: evidence that the pipeline runs end to end, not evidence about the strategy or the
+  AI. No row is deleted, edited, or back-filled.
+- The AI treatment is versioned `PR-8c` from 2026-09-05. `PR-8b` now means, unambiguously, the
+  pre-demotion rule. No acting verdict was recorded between the PR #88 merge and the bump, so the
+  split is clean.
+- `undeployed_cash` is rupees from `PR-8c` onward and carries a `cash_unit` tag. Untagged rows are
+  the legacy share counts and are to be read as such.
+- The record is append-only in fact and not only in name: a repeat key writes a new `revision` and
+  every earlier revision stays on file.
+
+### What is deliberately NOT decided here
+
+**The gated pair is unchanged.** It remains `TWIN_FULL` vs `BASELINE_EW`, as pre-registered in §1.
+Moving the gate to a different pair after observing four days of results would be selection on the
+outcome — the same defect as choosing `shrink` on the holdout — and it is not done here.
+
+The separate-tracks design, under which a core screen clock runs independently of the AI and
+governor versions, is a **new pre-registration with its own start date**. It does not get applied
+retroactively to a window that has already been observed, and it is not claimed to have existed
+from 2026-09-01.

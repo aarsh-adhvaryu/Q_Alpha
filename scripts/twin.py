@@ -78,7 +78,17 @@ EW_CSV = Path("data/universes/nifty50_membership_2026.csv")
 #: Pre-registered with the treatment, and frozen for the run: a prompt change is a second
 #: treatment, not an improvement. Recorded on every verdict row so a later reader knows which
 #: prompt produced which call.
-AI_PROMPT_VERSION = "PR-8b"  # +source= citation required for a DROP (2026-08-30)
+#: The AI treatment identifier. **Bump this whenever the prompt, the parser, the model or the
+#: evidence rule changes** — the label is what a later reader uses to tell one treatment from
+#: another, and a label that spans two rules makes the rows under it unusable.
+#:
+#: PR-8b (2026-08-30): a DROP required a ``source=`` URL to be *present*.
+#: PR-8c (2026-09-05): a DROP acts only on a PRIMARY source (nseindia/bseindia/sebi/ibbi/mca);
+#:   anything else is demoted to KEEP and recorded as a lead. That rule merged in PR #88 on
+#:   2026-09-04 **without bumping this constant**, so the label would have covered both rules.
+#:   No acting verdict was recorded between the merge and this bump, so PR-8b rows are all
+#:   pre-demotion and the split is clean.
+AI_PROMPT_VERSION = "PR-8c"
 
 
 def _tradebook() -> list[object]:
@@ -282,9 +292,23 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
         # TWIN_FULL − TWIN_NO_AI measures "the veto PLUS the cash drag it causes", not selection
         # skill alone. Recording the cash is what lets the two be separated afterwards instead of
         # being confounded forever.
+        # RUPEES, not share counts. Until 2026-09-05 this summed ``o`` — the *quantity* — so a
+        # veto on 11 shares of a ₹3,000 name was recorded as "11". Every row written before that
+        # date carries a share count in a field named cash, and the ``cash_unit`` tag below is what
+        # lets a later reader tell the two apart without guessing from magnitude.
         held_back = sum(
-            Decimal(str(o)) for t, o in basket.items() if verdicts.get(t) and not verdicts[t].keep
+            (
+                Decimal(str(qty)) * market.prices[t]
+                for t, qty in basket.items()
+                if verdicts.get(t) and not verdicts[t].keep and t in market.prices
+            ),
+            Decimal("0"),
         )
+        unpriced = [
+            t
+            for t, _ in basket.items()
+            if verdicts.get(t) and not verdicts[t].keep and t not in market.prices
+        ]
         append_ai_attempt(
             as_of=market.as_of,
             status="verdicts_recorded",
@@ -293,6 +317,9 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
             model=os.environ.get("ANTHROPIC_MODEL") or "claude-haiku-4-5",
             prompt_version=AI_PROMPT_VERSION,
             undeployed_cash=str(held_back),
+            cash_unit="INR"
+            if not unpriced
+            else f"INR_INCOMPLETE_missing_price:{','.join(unpriced)}",
         )
         n = append_ai_verdicts(
             {
