@@ -31,6 +31,20 @@ COST_EVENT = 0.0003  # entry or exit (brokerage + STT-on-sell + exchange/GST/sta
 COST_ROLL = 0.0005  # monthly roll (close near + open next)
 FNO_TAX = 0.30  # F&O = non-speculative business income → slab; 30% high-bracket proxy on net gains
 
+#: Nifty futures contract size, in units of the index.
+#:
+#: **Verified 2026-09-04: 65.** It was written as 75 days earlier and that was already wrong — NSE
+#: rebaselined index-derivative lot sizes at end-December 2025 to bring contract values back down as
+#: the index rose. The stale 75 overstated one contract's notional by 15%, and the book size needed
+#: to hedge by the same, which is exactly the silent mis-statement the warning here existed to
+#: prevent. Source: Zerodha's index-F&O lot-size page (NIFTY 65 / BANKNIFTY 30 / FINNIFTY 60).
+#: **Re-verify before quoting any rupee figure from it** — the exchange revises this whenever index
+#: levels drift far enough, and nothing in this repo will notice on its own.
+NIFTY_LOT_SIZE = 65
+#: The overlay's hedge ratio: the fraction of the book a live hedge is sized to offset. Matches the
+#: ``h`` the research overlay was validated at.
+HEDGE_RATIO = 0.5
+
 
 @dataclass(frozen=True)
 class HedgeResult:
@@ -142,4 +156,81 @@ def apply_futures_hedge(
         cost=total_cost,
         tax=total_tax,
         episodes=episodes,
+    )
+
+
+@dataclass(frozen=True)
+class HedgeAvailability:
+    """Whether this book can hold the smallest real hedge, and what it would take.
+
+    **Why this exists.** ``runner._hedge`` emitted ``HEDGE_ON``/``HEDGE_OFF`` and moved no money, so
+    ``TWIN_FULL − TWIN_NO_HEDGE`` was ₹0 **by construction** — the same defect that left the AI
+    ablation starved, in a second place. Wiring :func:`apply_futures_hedge` in as-is would have
+    replaced it with a different lie: that model uses a *continuous* notional, so it would have
+    simulated 0.16 of a futures contract. Fractions of a contract do not exist.
+
+    So the honest answer is neither "the hedge didn't help" nor a number from an impossible position.
+    It is: **at this book size the hedge is not purchasable, and here is the size at which it
+    becomes so.** The ₹0 stays ₹0 and is finally *explained*.
+    """
+
+    book_value: float
+    index_level: float
+    lot_size: int
+    hedge_ratio: float
+
+    @property
+    def lot_notional(self) -> float:
+        """Rupee exposure of one contract. This is the indivisible unit."""
+        return self.lot_size * self.index_level
+
+    @property
+    def lots_affordable(self) -> int:
+        """Whole contracts the target hedge would need — floor, because halves cannot be bought."""
+        if self.lot_notional <= 0:
+            return 0
+        return int((self.book_value * self.hedge_ratio) // self.lot_notional)
+
+    @property
+    def available(self) -> bool:
+        return self.lots_affordable >= 1
+
+    @property
+    def book_value_needed(self) -> float:
+        """Book value at which one whole contract first becomes holdable at this hedge ratio.
+
+            V_min = (lot_size × index) / h
+
+        Note this is **larger** than one lot's notional: hedging half a book with one contract needs
+        a book twice that contract's size.
+        """
+        return self.lot_notional / self.hedge_ratio if self.hedge_ratio > 0 else float("inf")
+
+    def render(self) -> str:
+        if self.available:
+            return (
+                f"hedge available: {self.lots_affordable} lot(s) — "
+                f"book ₹{self.book_value:,.0f}, one lot ₹{self.lot_notional:,.0f}"
+            )
+        return (
+            f"hedge UNAVAILABLE — book ₹{self.book_value:,.0f}; one lot is "
+            f"₹{self.lot_notional:,.0f} of notional, so hedging {self.hedge_ratio:.0%} of the book "
+            f"needs ₹{self.book_value_needed:,.0f}. Not a judgement about hedging: the smallest "
+            f"contract that exists is larger than this book can use."
+        )
+
+
+def hedge_availability(
+    book_value: float,
+    index_level: float,
+    *,
+    lot_size: int = NIFTY_LOT_SIZE,
+    hedge_ratio: float = HEDGE_RATIO,
+) -> HedgeAvailability:
+    """Can this book hold one whole futures contract at the target hedge ratio?"""
+    return HedgeAvailability(
+        book_value=book_value,
+        index_level=index_level,
+        lot_size=lot_size,
+        hedge_ratio=hedge_ratio,
     )
