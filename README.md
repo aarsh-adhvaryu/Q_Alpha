@@ -46,6 +46,13 @@ realistic Zerodha costs and Indian FIFO capital-gains tax**, vs the Nifty 50 **t
 | Nifty 50 TRI (dividends reinvested) | 14.5% | 0.98 | beaten by **+3.7%/yr** |
 | Equal-weight 1/N | 17.7% | 1.09 | beaten by **+0.5%/yr** |
 
+> ⚠️ **These are in-sample figures.** The winning configuration was selected by requiring it to beat
+> 1/N on the 2025–26 holdout, which spends the holdout — see the gate-1 box in §5. The margin over
+> 1/N is **+0.5%/yr**, and equal-weighting explains most of the gap over the cap-weighted index.
+> Sharpe assumes a risk-free rate of **zero**: harmless for the comparison, since every row is
+> computed the same way, and inflated as an absolute number. Rupee figures reproduce to about half a
+> percent between runs until dataset hashes are pinned.
+
 **Why beating "1/N" matters:** equal-weighting every stock (1/N) is famously hard to beat — most
 published strategies lose to it once costs and taxes are honest. Clearing that bar **in-sample, on a
 genuinely unseen 2025–26 holdout, AND across every rolling 3-year holding window** (it never had a
@@ -102,6 +109,10 @@ beats the index net of everything (14.6% → 18.2% with later refinements).
    This "anchor-to-1/N" shrinkage is the only optimizer change that beat 1/N **in-sample, on the
    holdout, AND across all rolling 3-year windows.** Pure min-variance and pure score-tilt both lost.
 
+   ⚠️ **That sentence is the selection criterion, not an independent result.** Requiring a variant to
+   clear the holdout is what *chose* this one, so the holdout is validation data and the headline is
+   in-sample. See the gate-1 box in §5.
+
 **The honest takeaway:** the edge is **tax-and-friction discipline + a modest robust return tilt**, not
 stock-picking genius. Tax-aware portfolio construction for *Indian* retail (FIFO, LTCG/STCG, the
 ₹1.25L annual exemption) is genuinely under-explored — the academic literature is almost entirely US.
@@ -125,6 +136,16 @@ fixed **honestly** rather than tuned to look good:
    was flat (0.7%) while 1/N made 7.1%. We diagnosed the cause (the tax gate had *ossified* the book —
    only 5 rebalances ever, coasting on stale 2013–19 winners), fixed it (`force_refresh`), and added
    shrinkage — which then beat 1/N on the holdout too (8.1% vs 7.1%). **We published the failure.**
+
+   ⚠️ **And this is exactly why the headline is not out-of-sample.** Diagnosing on the holdout and
+   then selecting the variant that clears it spends the holdout. The honest reading: 2025–26 was a
+   *second development set*, and the project has had no untouched test period since. The forward
+   twin is the replacement, and it will not report until 2027-09.
+
+   **`force_refresh` also disabled the thing it was fixing.** In `decision.py:183` the gate is
+   `execute = first or under_invested or force_refresh or (drift_ok and benefit_ok)` — with
+   `force_refresh=True` the §4.6 benefit term **never decides**. Tax is still charged; the gate
+   simply stops gating. Low turnover comes from the annual cadence, not from the tax test.
 5. **Did not tune to win.** A gate-multiplier sweep showed no value generalizes out-of-sample, so we
    left it at the spec default. The iron rule: never tune parameters to manufacture a "GO."
 
@@ -185,8 +206,11 @@ cash (manually, via the dashboard's Add-money button — credited equally to all
 **executes the Add-money advisor's own buy
 list** on itself (deploy-into-weakness, ₹0-tax buys, sizing paced by market weakness × a fixed rule
 over an LLM's daily market read — the AI supplies a *lean*, deterministic code acts on it), evaluates
-the **§4.6 tax-benefit gate every day** (it rebalances when the benefit beats 2× cost+tax — this week
-or in six months, the market decides, not a calendar — and logs every refusal with its reason), and
+the **§4.6 tax-benefit gate every day** (designed to rebalance when the benefit beats 2× cost+tax —
+this week or in six months, the market decides, not a calendar — and to log every refusal with its
+reason). ⚠️ **As configured it does not decide:** `force_refresh=True` short-circuits the benefit
+term (`decision.py:183`), so what actually runs is a scheduled refresh that *charges* tax rather
+than a gate that *weighs* it. Low turnover comes from the annual cadence. It also
 carries the research-validated **tax-free hedge overlay as a daily measurement** (hedged-vs-unhedged
 return + drawdown, computed on both the System book *and*, read-only, the untouched GO book).
 
@@ -210,19 +234,42 @@ around. Real money never auto-trades; the human places every order — that rule
 
 ## 5. Where it stands — the §14 scorecard (10 gates to real money)
 
-`1✅ 2✅ 3✅ 4✅ 5🟡 6⏳ 7✅ 8✅ 9🟡 10✅`
+`1🔴 2✅ 3✅ 4✅ 5🟡 6⏳ 7✅ 8✅ 9🟡 10✅`
 
-- **✅ done:** strategy beats baselines net of cost+tax, out-of-sample (1) · no look-ahead (2) ·
-  survivorship-free universe (3) · FIFO tax reconciled to the paise vs a real Tax P&L (4) · risk
-  controls (7,8) · the deterministic advisor + dashboard (10).
+> ### 🔴 Gate 1 was marked `✅ out-of-sample`. It is not, and this corrects it.
+>
+> The winning configuration (`shrink`) was chosen by a rule that **requires it to beat 1/N on the
+> 2025–26 holdout** — `scripts/exp_breadth.py:104` reads
+> `verdict = "BEATS 1/N both" if (ci > 17.7 and ch > nc)`, where `ch` is the holdout return. A
+> variant that lost on the holdout was not selected.
+>
+> That makes the holdout **validation data, not a test set.** §3.4 below narrates the sequence
+> honestly — the holdout failed, the cause was diagnosed, shrinkage was added, and it then cleared
+> the holdout — but the label on the scorecard contradicted the story underneath it. The headline
+> **18.2% CAGR is an in-sample figure.**
+>
+> **What would clear gate 1:** the forward twin run (`CORE_V1` vs a purchasable equal-weight fund),
+> registered in `reports/PREREGISTRATION_CORE_V1.md`, whose window closes 2027-09-08. That is the
+> only clean out-of-sample route this project has, and it is why the clock matters.
+>
+> **Also unproven:** the screen the real money actually runs (`advise_deploy_into_weakness`) shares
+> no selection code with the validated funnel and **has never been backtested out-of-sample at all**.
+> Its worst backtested fall is **−47.5%**, against the index's −36.3%, and it runs with no stop-loss.
+
+- **✅ done:** no look-ahead (2) · survivorship-free universe (3) · FIFO tax reconciled to the paise
+  vs a real Tax P&L (4) · risk controls (7,8) · the deterministic advisor + dashboard (10).
+- **🔴 not met:** gate 1 — the headline is in-sample; see the box above.
 - **🟡 awaiting one real event each:** crit-4 final hardening wants a real *multi-lot/loss* sell to
   reconcile; crit-5 wants one real corporate action on the account (the engine + wiring are done and
   tested); crit-9 wants one *scheduled* (not manually-triggered) cron firing.
 - **⏳ pure waiting:** crit-6, the ~6-month forward paper run surviving ≥1 volatility event. No
   simulation can replace it.
 
-**There is no unbuilt engineering on the critical path.** What remains is calendar time and real-world
-events.
+**What remains is calendar time, real-world events, and the evidence spine.** An earlier version of
+this line read *"there is no unbuilt engineering on the critical path"*, which stopped being true
+once gate 1 was corrected: the forward twin is now the only route to an out-of-sample result, and the
+non-price evidence layer that would have flagged an expensive-and-falling name is built but **not yet
+wired to any decision**. See `CLAUDE.md` for the current open list.
 
 ### ⚠️ Real money went in before the gate opened (2026-08-27)
 
