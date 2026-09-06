@@ -106,3 +106,22 @@ That is expected and is not a defect.
 
 Book not yet created. Window not open. `NULL_P95_LOG_REL_WEALTH` is `None`. No verdict before
 2027-09-08.
+
+---
+
+## 9. Recorded deviation — 2026-09-06
+
+§6 said the book would be created **2026-09-05**, three days before the window opens, so the
+deterministic entry could complete before measurement started.
+
+**It was not, and the window is not being moved.** 2026-09-05 was a Saturday and 2026-09-06 a
+Sunday; the cron runs weekdays only, so the first run that can create `CORE_V1` is **Monday
+2026-09-07** — one day before the window opens on Tuesday 2026-09-08, not three.
+
+The entry will therefore still be completing when the clock starts, and the first days will carry a
+cash drag against a fully-invested `BASELINE_EW`.
+
+**No adjustment is made for it.** §6 already says any cash still idle when the window opens stays in
+the record rather than being corrected for, and moving a registered date because the calendar was
+inconvenient is the beginning of moving one because the result is. The deviation is recorded here
+and the date stands.

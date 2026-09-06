@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=ADANIENSOL",
+ "retrieved_at_utc": "2026-09-06T05:53:12Z",
+ "http_status": 200,
+ "bytes": 607874,
+ "sha256": "a3a3ce247d62e22ae06910b8f8c0aa7a6a5c685c05a90c2fe5562b9974dd998f",
+ "document_date": "2026-09-06",
+ "symbol": "ADANIENSOL",
+ "kind": "announcement_index"
+}
