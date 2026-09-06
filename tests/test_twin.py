@@ -243,22 +243,56 @@ def test_the_gate_reads_the_registered_window_not_the_first_flow_ever() -> None:
     assert evaluation_months(date(2027, 9, 1)) == 12
 
 
-def test_the_pre_registered_null_has_not_been_run_and_says_so() -> None:
-    """A bar that does not exist must read CANNOT ASSESS, never a silent bar of zero.
+def test_the_null_matches_the_committed_report() -> None:
+    """The bar in code and the bar in the record must be the same number.
 
-    Forward run 1 was voided because no bar existed and nobody noticed until afterwards. The
-    specification is frozen in ``twin.NULL_P95_LOG_REL_WEALTH``'s docstring; the value stays ``None``
-    until a matched null is actually generated, and ``None`` blocks.
+    The previous version of this test asserted ``NULL_P95_LOG_REL_WEALTH is None`` — a test of a
+    *state*, which went red the moment the state legitimately changed and would have gone green
+    again if someone deleted the value. This asserts the *property*: whatever the constant says, it
+    is what ``scripts/exp_null.py`` actually produced and committed.
     """
+    import json
+    from pathlib import Path as _Path
+
     from qalpha.live.twin import NULL_P95_LOG_REL_WEALTH
 
-    assert NULL_P95_LOG_REL_WEALTH is None
-    gap = compare(
-        _marks(TWIN_FULL=900000, BASELINE_EW=1000),
-        null_p95=NULL_P95_LOG_REL_WEALTH,
-        navs={TWIN_FULL: 9.0, BASELINE_EW: 1.0},
-    )[0]
-    assert not gap.readable, "a gap of any size is unreadable without a bar"
+    report = _Path("reports/NULL_MATCHED.json")
+    if not report.exists():  # pragma: no cover - the report ships with the repo
+        pytest.skip("null report not present")
+    recorded = json.loads(report.read_text())
+    assert NULL_P95_LOG_REL_WEALTH is not None
+    assert abs(NULL_P95_LOG_REL_WEALTH - recorded["p95_abs_log_rel_wealth"]) < 5e-7
+    assert recorded["draws"] >= 1000, "the specification requires at least 1,000 draws"
+
+
+def test_the_null_is_a_null_and_not_a_bug() -> None:
+    """Random selection must beat the fund about half the time and average about zero.
+
+    The first run of the generator returned mean G = −0.68 with **0 of 20** draws beating the fund,
+    because the value series applied the final basket across the whole window. A null where nothing
+    ever wins is not a null; it is a bug reporting itself. These are the two numbers that catch it.
+    """
+    import json
+    from pathlib import Path as _Path
+
+    report = _Path("reports/NULL_MATCHED.json")
+    if not report.exists():  # pragma: no cover
+        pytest.skip("null report not present")
+    r = json.loads(report.read_text())
+    assert 0.40 <= r["fraction_beating_the_fund"] <= 0.60
+    assert abs(r["mean_log_rel_wealth"]) < 0.01
+
+
+def test_a_missing_null_still_blocks() -> None:
+    """``None`` remains CANNOT ASSESS, never a silent bar of zero. Forward run 1 died of this."""
+    from qalpha.live.go_gate import CANNOT_ASSESS, Evidence, build_gate
+
+    gate = build_gate(
+        Evidence(months_of_flows=12, log_rel_wealth=0.5, null_p95=None, gap_vs_ew_baseline=None),
+        as_of=date(2027, 9, 8),
+    )
+    beats = next(c for c in gate.criteria if "equal-weight fund" in c.name)
+    assert beats.verdict == CANNOT_ASSESS
 
 
 def test_the_gate_is_the_purchasable_alternative_not_the_index() -> None:

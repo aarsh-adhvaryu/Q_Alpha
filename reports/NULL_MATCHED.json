@@ -1,0 +1,30 @@
+{
+  "specification": "PREREGISTRATION_TWIN_RUN2.md \u00a72 / PREREGISTRATION_CORE_V1.md \u00a74",
+  "generated_on": "2026-09-06",
+  "draws": 2000,
+  "attempts": 2000,
+  "seed": 20260906,
+  "names_per_deploy": 15,
+  "opening": "300000",
+  "monthly": "50000",
+  "months": 12,
+  "panel": "data/historical/prices_pit_2026.parquet",
+  "membership": "data/universes/nifty50_membership_2026.csv",
+  "window_starts": [
+    "2012-01-02",
+    "2025-08-26"
+  ],
+  "p95_abs_log_rel_wealth": 0.07187720644875338,
+  "mean_log_rel_wealth": 0.0011063543990522656,
+  "median_log_rel_wealth": 0.0009024753479829771,
+  "p05_log_rel_wealth": -0.05910764766214485,
+  "p95_log_rel_wealth": 0.06002572641610484,
+  "std_log_rel_wealth": 0.03609963025700672,
+  "fraction_beating_the_fund": 0.512,
+  "expected_edge_log_per_year": 0.00423909070576672,
+  "bar_as_multiple_of_edge": 16.955807610102323,
+  "power_in_one_12m_window": 0.03048925771631128,
+  "false_positive_rate": 0.05,
+  "years_to_detect_at_95pc": 196.20704729958632,
+  "one_year_outperformance_needed": 0.07452339141938258
+}
