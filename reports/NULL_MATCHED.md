@@ -110,3 +110,68 @@ uv run python scripts/exp_null.py --draws 2000 --seed 20260906
 ```
 
 Deterministic given the seed, the panel and the membership table, all named in the JSON.
+
+---
+
+## 6. ⛔ WITHDRAWN, 2026-09-06 — the bar was not matched to `CORE_V1`
+
+`NULL_P95_LOG_REL_WEALTH` is back to **`None`**. Criterion 3 reads ⚪ CANNOT ASSESS, which blocks the
+gate. That is the honest state, and it is what should have been true all along.
+
+The value was computed to *a* specification. It was not computed to **`CORE_V1`'s**.
+
+### The four mismatches, each measured
+
+**1. The two pre-registrations specify different statistics.**
+Run 2 §2 says p95 of $|G|$. `CORE_V1` §4 says p95 of $G$. They differ by 20%:
+
+| | |
+|---|---:|
+| p95 of \|G\| — implemented, matches run 2 | 0.0719 |
+| p95 of G — what `CORE_V1` §4 registers | 0.0600 |
+
+I wrote the `CORE_V1` line. One statistic has to be registered in both documents.
+
+**2. A one-sided gate tested against a two-sided bar.**
+`go_gate` tests `log_rel_wealth > null_p95`. Against a $|G|$ bar the true false-positive rate is
+**2.32%**, not the 5% §2 of this report claimed. The gate's own message says "±0.0719 null band",
+which is two-sided language wrapped around a one-sided test.
+
+**3. The null diversified into essentially the whole index.** ← the serious one
+
+Twelve deployments × 15 fresh random picks with no sells ends up holding **~50 of 51 members**.
+`CORE_V1` holds a capped basket. Tracking error against the equal-weight fund, measured over 300
+windows:
+
+| Basket | sd(G) | p95(\|G\|) |
+|---|---:|---:|
+| 8 names — what the live screen deploys | 0.0812 | **0.1624** |
+| 15 names — the policy cap | 0.0527 | **0.1055** |
+| ~50 names — **what the null actually built** | 0.0360 | **0.0719** |
+
+**The bar was 1.5×–2.3× too low.** Too low is the dangerous direction: it makes noise look like
+skill.
+
+**4. `CORE_V1` can sell and the null never does.** `CORE_POLICY` has `use_exits=True`, so the live
+book realises capital gains the null never charges.
+
+### What this does to the power finding
+
+It makes it worse, not better. §2's conclusion stands and strengthens: at a correctly matched
+p95(|G|) ≈ 0.105 the bar is **~25× the claimed edge**, and the chance of criterion 3 firing in
+twelve months falls to roughly **1%**.
+
+The qualitative result — *twelve months cannot resolve this effect size* — was right. The number
+attached to it was not.
+
+### What must happen before a value is set again
+
+1. Register **one** statistic in both pre-registrations, and match the gate's sidedness to it.
+2. Make the generator hold `CORE_V1`'s **capped** basket, not an accumulating one.
+3. Let it sell when `use_exits` would, so realised tax appears on both legs.
+4. Only then recompute — and **before** the window opens, so there is still no observation to tune
+   toward.
+
+**Until then `CORE_V1` should not be treated as authorizing.** Letting tomorrow's cron start a
+twelve-month clock on an unmatched statistic would convert an open implementation question into a
+permanent experiment.

@@ -276,20 +276,27 @@ MIN_MONTHS_FOR_A_VERDICT = 12
 #:
 #: ``None`` until that null has been run — and ``None`` means the criterion reads CANNOT ASSESS, never
 #: a pass. A bar that does not exist must never be silently treated as a bar of zero.
-#: **Generated 2026-09-06 from 2,000 draws** — `reports/NULL_MATCHED.json`, produced by
-#: `scripts/exp_null.py` to the specification frozen in PREREGISTRATION_TWIN_RUN2.md §2. Computed
-#: **before `CORE_V1`'s window opened**, so there was no observation to tune it toward.
+#: ⛔ **WITHDRAWN 2026-09-06, hours after being set.** The value 0.071877 was computed to a
+#: specification, but **not to CORE_V1's**, and four mismatches were found on review. It is back to
+#: ``None``, which reads ⚪ CANNOT ASSESS and blocks the gate — the honest state.
 #:
-#: ⚠️ **The bar is 17× the edge the backtest claims.** Random selection through identical machinery
-#: produces |G| up to 0.0719 over twelve months; the headline's advantage over the equal-weight fund
-#: is 0.0042/yr. If that edge is entirely real, criterion 3 fires in a 12-month window **3.0% of the
-#: time — less often than the 5% false-positive rate it was set to control.** Clearing it needs a
-#: 7.5% one-year gap; detecting the claimed edge at 95% needs ~196 years.
+#: 1. **The two pre-registrations specify different statistics.** Run 2 §2 says p95 of |G|; CORE_V1
+#:    §4 says p95 of G. They differ by 20% (0.0719 vs 0.0600). I wrote the CORE_V1 line.
+#: 2. **A one-sided gate against a two-sided bar.** ``go_gate`` tests ``log_rel_wealth > null_p95``,
+#:    so the real false-positive rate is **2.32%**, not the 5% the report claimed.
+#: 3. **The null diversifies into ~50 of 51 index members** — 12 deployments × 15 fresh random picks
+#:    with no sells — while CORE_V1 holds a capped basket. Measured tracking error: a 15-name book
+#:    is **sd 0.053, p95|G| 0.105**; an 8-name book is **sd 0.081, p95|G| 0.162**; the null produced
+#:    **sd 0.036, p95|G| 0.072**. So the bar was **1.5×–2.3× too low**.
+#: 4. **CORE_V1 has ``use_exits=True`` and can sell; the null never sells**, so it charges no
+#:    realised tax the live book would pay.
 #:
-#: **This value is not to be adjusted.** It was computed to a frozen spec and it is correct. What it
-#: shows is that a twelve-month window cannot resolve this effect size, which is a fact about the
-#: test, not a reason to move it. See reports/NULL_MATCHED.md.
-NULL_P95_LOG_REL_WEALTH: float | None = 0.071877
+#: A bar that is too low is the dangerous direction: it makes noise look like skill. Fixing it makes
+#: the power problem worse, not better — at p95|G| ≈ 0.105 the bar is ~25× the claimed edge.
+#:
+#: **Do not set a value here until the generator matches CORE_V1's actual policy** and one statistic
+#: is registered in both documents. See reports/NULL_MATCHED.md §6.
+NULL_P95_LOG_REL_WEALTH: float | None = None
 
 #: The day the registered 12-month window opens. **Immutable once the clock starts.**
 #:

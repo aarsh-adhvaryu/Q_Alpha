@@ -260,9 +260,35 @@ def test_the_null_matches_the_committed_report() -> None:
     if not report.exists():  # pragma: no cover - the report ships with the repo
         pytest.skip("null report not present")
     recorded = json.loads(report.read_text())
-    assert NULL_P95_LOG_REL_WEALTH is not None
+    if NULL_P95_LOG_REL_WEALTH is None:
+        # A withdrawn or ungenerated bar is a valid state: it reads CANNOT ASSESS and blocks.
+        return
+    assert not recorded.get("withdrawn"), (
+        "the constant is set from a report marked withdrawn — a bar that was found not to match "
+        "the experiment must never be in force"
+    )
     assert abs(NULL_P95_LOG_REL_WEALTH - recorded["p95_abs_log_rel_wealth"]) < 5e-7
     assert recorded["draws"] >= 1000, "the specification requires at least 1,000 draws"
+
+
+def test_a_withdrawn_null_is_not_in_force() -> None:
+    """The invariant that matters: a withdrawn bar and a live constant cannot coexist.
+
+    On 2026-09-06 a value was set and withdrawn hours later, because it was matched to *a*
+    specification and not to ``CORE_V1``'s — the null diversified into ~50 of 51 index members
+    while ``CORE_V1`` holds a capped basket, making the bar 1.5–2.3× too low. Too low is the
+    dangerous direction: it makes noise look like skill.
+    """
+    import json
+    from pathlib import Path as _Path
+
+    from qalpha.live.twin import NULL_P95_LOG_REL_WEALTH
+
+    report = _Path("reports/NULL_MATCHED.json")
+    if not report.exists():  # pragma: no cover
+        pytest.skip("null report not present")
+    if json.loads(report.read_text()).get("withdrawn"):
+        assert NULL_P95_LOG_REL_WEALTH is None
 
 
 def test_the_null_is_a_null_and_not_a_bug() -> None:
