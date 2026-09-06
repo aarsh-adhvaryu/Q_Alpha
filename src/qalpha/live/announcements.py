@@ -177,12 +177,21 @@ def extract_text(payload: bytes) -> str:
     events rather than events about a document nobody could read.
     """
     import io
+    import logging
 
     try:
         from pypdf import PdfReader
 
-        reader = PdfReader(io.BytesIO(payload))
-        return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+        # pypdf logs a font-encoding warning per embedded font per page. Real filings carry several,
+        # so an unattended run drowns its own output. The warnings are cosmetic: text still extracts.
+        noisy = logging.getLogger("pypdf")
+        previous = noisy.level
+        noisy.setLevel(logging.ERROR)
+        try:
+            reader = PdfReader(io.BytesIO(payload))
+            return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+        finally:
+            noisy.setLevel(previous)
     except Exception:
         return ""
 
@@ -278,6 +287,74 @@ def _urlopen_fetch(url: str, *, timeout: float = 30.0) -> tuple[int, bytes]:
         return int(exc.code), b""
     except Exception:
         return 0, b""
+
+
+def index_paths(symbol: str, as_of: date, *, directory: Path = ARCHIVE_DIR) -> tuple[Path, Path]:
+    """``(json_path, provenance_path)`` for one name's index on one day."""
+    base = directory / symbol.removesuffix(".NS") / "index"
+    return base / f"{as_of:%Y-%m-%d}.json", base / f"{as_of:%Y-%m-%d}.provenance.json"
+
+
+def write_index(
+    payload: bytes,
+    symbol: str,
+    as_of: date,
+    *,
+    http_status: int,
+    retrieved_at_utc: datetime | None = None,
+    directory: Path = ARCHIVE_DIR,
+) -> Provenance:
+    """Archive the **index response itself**, not only the filings it points at.
+
+    Without this, a later claim that a name filed nothing on a given day rests on nobody's record —
+    the filings we downloaded prove what *was* there, never what was not. An absence is only
+    evidence if the thing that showed the absence was kept.
+    """
+    json_path, prov_path = index_paths(symbol, as_of, directory=directory)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_bytes(payload)
+    prov = Provenance(
+        source_url=index_url(symbol),
+        retrieved_at_utc=retrieved_at_utc or datetime.now(UTC),
+        http_status=http_status,
+        sha256=sha256_of(payload),
+        byte_length=len(payload),
+        document_date=as_of,
+    )
+    prov_path.write_text(
+        json.dumps(
+            {
+                "source_url": prov.source_url,
+                "retrieved_at_utc": prov.retrieved_at_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "http_status": prov.http_status,
+                "bytes": prov.byte_length,
+                "sha256": prov.sha256,
+                "document_date": prov.document_date.isoformat(),
+                "symbol": symbol.removesuffix(".NS"),
+                "kind": "announcement_index",
+            },
+            indent=1,
+        )
+        + "\n"
+    )
+    return prov
+
+
+def fetch_and_archive_index(
+    symbol: str,
+    as_of: date,
+    *,
+    fetch: FetchFn | None = None,
+    directory: Path = ARCHIVE_DIR,
+) -> tuple[list[Announcement] | None, Provenance | None]:
+    """Fetch one name's index and keep the response. ``(None, None)`` when the fetch failed."""
+    status, body = (fetch or _urlopen_fetch)(index_url(symbol))
+    if status != 200 or not body:
+        return None, None
+    prov = write_index(body, symbol, as_of, http_status=status, directory=directory)
+    return parse_index(
+        body.decode("utf-8", errors="replace"), symbol=symbol.removesuffix(".NS")
+    ), prov
 
 
 def fetch_index(symbol: str, *, fetch: FetchFn | None = None) -> list[Announcement] | None:

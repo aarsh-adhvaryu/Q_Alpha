@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=MAXHEALTH",
+ "retrieved_at_utc": "2026-09-06T05:53:35Z",
+ "http_status": 200,
+ "bytes": 523895,
+ "sha256": "bf154bb9ff9f4f0483833f9d6d467c8f456f62d1583b7a6ec6ced357e5c48783",
+ "document_date": "2026-09-06",
+ "symbol": "MAXHEALTH",
+ "kind": "announcement_index"
+}

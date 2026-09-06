@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=WIPRO",
+ "retrieved_at_utc": "2026-09-06T05:54:01Z",
+ "http_status": 200,
+ "bytes": 2529243,
+ "sha256": "1a54dd537b70a34ccbd2241439eb3f913d941bea45bed23fc6f2021d9a7466f4",
+ "document_date": "2026-09-06",
+ "symbol": "WIPRO",
+ "kind": "announcement_index"
+}
