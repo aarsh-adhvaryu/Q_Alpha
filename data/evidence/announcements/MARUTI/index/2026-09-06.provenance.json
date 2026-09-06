@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=MARUTI",
+ "retrieved_at_utc": "2026-09-06T05:53:33Z",
+ "http_status": 200,
+ "bytes": 1436120,
+ "sha256": "3241e365abfd30955f161224ff0e92f93bfb5aba62957074099448b8e2622bfe",
+ "document_date": "2026-09-06",
+ "symbol": "MARUTI",
+ "kind": "announcement_index"
+}

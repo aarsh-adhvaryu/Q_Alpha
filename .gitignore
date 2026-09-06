@@ -46,3 +46,16 @@ secrets/
 # Notebooks scratch
 .ipynb_checkpoints/
 pytest.log
+
+# Evidence corpus: raw primary documents and full index responses are re-fetchable from
+# nsearchives.nseindia.com by the URL in their provenance sidecar, and the sidecar's SHA-256 is what
+# proves which bytes were read. Tracking the bytes themselves would add ~90MB on the first run and
+# grow daily. The sidecars ARE tracked — they are the audit trail.
+data/evidence/announcements/**/*.pdf
+data/evidence/announcements/**/index/*.json
+data/evidence/reg_ind/*.csv
+# ...except the documents the test-suite reads back, which must ship with the repo:
+!data/evidence/reg_ind/REG1_IND270826.csv
+!data/evidence/reg_ind/REG1_IND040926.csv
+!data/evidence/announcements/VBL/1067*.pdf
+!data/evidence/**/*.provenance.json

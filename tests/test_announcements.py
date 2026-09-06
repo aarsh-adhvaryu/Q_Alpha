@@ -19,6 +19,7 @@ from qalpha.live.announcements import (
     since,
     write_document,
 )
+from qalpha.live.evidence import sha256_of
 
 ARCHIVED = Path("data/evidence/announcements/VBL")
 
@@ -182,3 +183,45 @@ def test_the_committed_vbl_filings_read_back_and_verify() -> None:
     assert all(
         d.provenance.source_url.startswith("https://nsearchives.nseindia.com/") for d in docs
     )
+
+
+# --- the index response itself is evidence --------------------------------------------------------
+
+
+def test_the_index_response_is_archived_with_its_hash(tmp_path: Path) -> None:
+    """An absence is only evidence if the thing that showed the absence was kept.
+
+    The filings we download prove what *was* there. Only the index proves what was **not**.
+    """
+    from qalpha.live.announcements import fetch_and_archive_index, index_paths
+
+    body = json.dumps([_row()]).encode()
+    anns, prov = fetch_and_archive_index(
+        "VBL.NS", date(2026, 9, 6), fetch=lambda _u: (200, body), directory=tmp_path
+    )
+    assert anns is not None and len(anns) == 1
+    assert prov is not None and prov.sha256 == sha256_of(body)
+    json_path, prov_path = index_paths("VBL.NS", date(2026, 9, 6), directory=tmp_path)
+    assert json_path.read_bytes() == body
+    meta = json.loads(prov_path.read_text())
+    assert meta["kind"] == "announcement_index" and meta["symbol"] == "VBL"
+
+
+def test_an_empty_index_is_still_archived(tmp_path: Path) -> None:
+    """ "Nothing was filed" is a claim, and it needs the response that supports it."""
+    from qalpha.live.announcements import fetch_and_archive_index, index_paths
+
+    anns, prov = fetch_and_archive_index(
+        "VBL.NS", date(2026, 9, 6), fetch=lambda _u: (200, b"[]"), directory=tmp_path
+    )
+    assert anns == [] and prov is not None
+    assert index_paths("VBL.NS", date(2026, 9, 6), directory=tmp_path)[0].exists()
+
+
+def test_a_failed_index_fetch_archives_nothing_and_returns_none(tmp_path: Path) -> None:
+    from qalpha.live.announcements import fetch_and_archive_index, index_paths
+
+    assert fetch_and_archive_index(
+        "VBL.NS", date(2026, 9, 6), fetch=lambda _u: (503, b""), directory=tmp_path
+    ) == (None, None)
+    assert not index_paths("VBL.NS", date(2026, 9, 6), directory=tmp_path)[0].exists()

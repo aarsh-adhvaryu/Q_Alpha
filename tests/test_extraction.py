@@ -15,6 +15,7 @@ from qalpha.live.extraction import (
     EVENT_TYPES,
     EXTRACTION_VERSION,
     build_prompt,
+    chunks_for,
     event_rows,
     extract,
     normalise,
@@ -169,35 +170,75 @@ def test_prose_around_the_event_lines_is_ignored() -> None:
 
 
 def test_the_prompt_forbids_recommendation() -> None:
-    prompt = build_prompt([_doc()])
+    prompt = build_prompt(chunks_for(_doc()))
     assert "DO NOT recommend" in prompt
     assert "should be bought, held or sold" in prompt
 
 
 def test_the_prompt_carries_the_document_text_and_its_hash() -> None:
-    prompt = build_prompt([_doc()])
+    prompt = build_prompt(chunks_for(_doc()))
     assert "Acme Bottling" in prompt and "a" * 64 in prompt
 
 
 def test_the_prompt_offers_silence_as_a_valid_answer() -> None:
-    assert "Silence is a valid answer" in build_prompt([_doc()])
+    assert "Silence is a valid answer" in build_prompt(chunks_for(_doc()))
 
 
 def test_every_event_type_is_named_in_the_prompt() -> None:
-    prompt = build_prompt([_doc()])
+    prompt = build_prompt(chunks_for(_doc()))
     assert all(t in prompt for t in EVENT_TYPES)
 
 
-def test_a_long_document_is_truncated_and_says_so() -> None:
-    doc = _doc(text="x" * 20_000)
-    assert doc.truncated and "[document truncated]" in build_prompt([doc])
+def test_a_long_document_is_chunked_rather_than_truncated() -> None:
+    """Truncation meant the tail was never read while coverage counted it as read."""
+    doc = _doc(text="x" * 30_000)
+    parts = chunks_for(doc)
+    assert len(parts) > 1
+    assert "".join(p.text for p in parts).count("x") >= 30_000, "every character reaches a prompt"
+    assert all(p.total == len(parts) for p in parts)
+
+
+def test_chunks_overlap_so_a_boundary_fact_survives_whole() -> None:
+    from qalpha.live.extraction import CHUNK_OVERLAP
+
+    parts = chunks_for(_doc(text="y" * 30_000))
+    assert parts[0].text[-CHUNK_OVERLAP:] == parts[1].text[:CHUNK_OVERLAP]
+
+
+def test_a_short_document_is_one_whole_chunk() -> None:
+    parts = chunks_for(_doc())
+    assert len(parts) == 1 and parts[0].label == "whole" and parts[0].text == TEXT
+
+
+def test_batches_never_split_a_chunk() -> None:
+    from qalpha.live.extraction import batch_chunks
+
+    parts = chunks_for(_doc(text="z" * 60_000))
+    batches = batch_chunks(parts)
+    assert sum(len(b) for b in batches) == len(parts)
+    assert all(b for b in batches)
+
+
+def test_every_chunk_of_a_long_filing_reaches_the_model() -> None:
+    doc = _doc(text="q" * 40_000)
+    seen: list[str] = []
+
+    def _gen(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        seen.append(prompt)
+        return "", {}
+
+    extract([doc], generate=_gen, model="m")
+    total = sum(p.count("q") for p in seen)
+    assert total >= 40_000, "the tail must not be dropped"
 
 
 # --- the run ----------------------------------------------------------------------------------
 
 
 def test_extract_returns_nothing_when_there_is_nothing_to_read() -> None:
-    assert extract([], generate=lambda m, p: ("", {}), model="m") == ([], 0, "", {})
+    events, discarded, raw, usage = extract([], generate=lambda m, p: ("", {}), model="m")
+    assert (events, discarded, raw) == ([], 0, "")
+    assert usage["calls"] == 0 and usage["failed_batches"] == 0
 
 
 def test_a_failed_call_yields_no_events_and_says_why() -> None:
@@ -206,8 +247,30 @@ def test_a_failed_call_yields_no_events_and_says_why() -> None:
     def _boom(model: str, prompt: str) -> tuple[str, dict[str, int]]:
         raise RuntimeError("quota exceeded")
 
-    events, discarded, raw, _ = extract([_doc()], generate=_boom, model="m")
+    events, discarded, raw, usage = extract([_doc()], generate=_boom, model="m")
     assert events == [] and discarded == 0 and "quota exceeded" in raw
+    assert usage["failed_batches"] == 1, "a caller must be able to refuse to claim coverage"
+
+
+def test_one_failed_batch_does_not_lose_the_others() -> None:
+    calls = {"n": 0}
+
+    def _flaky(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("transient")
+        return _line(), {}
+
+    doc = _doc(text=TEXT + "w" * 40_000)
+    events, _, _, usage = extract([doc], generate=_flaky, model="m")
+    assert usage["failed_batches"] == 1 and usage["calls"] >= 1
+    assert len(events) == 1
+
+
+def test_the_same_event_found_in_overlapping_chunks_is_recorded_once() -> None:
+    doc = _doc(text=TEXT + "p" * 30_000)
+    events, _, _, _ = extract([doc], generate=lambda m, p: (_line(), {}), model="m")
+    assert len(events) == 1
 
 
 def test_extract_verifies_end_to_end() -> None:

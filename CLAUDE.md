@@ -93,10 +93,10 @@ four and only one is cheap.
 
 ## What is true today (2026-09-05)
 
-**24,753 lines · 45 live modules · 806 passed, 1 skipped.** `main` is at the merge of PR #94.
+**25,320 lines · 45 live modules · 815 passed, 1 skipped.** `main` is at the merge of PR #96.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
-(record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`) and #95 (integration
-repair) follow.
+(record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
+repair), #96 (README gate-1 correction) and #97 (the daily shadow spine) follow.
 
 > **The test count in this file was wrong, and the PR bodies inherited it.** This file claimed
 > **703**; the true baseline at `5b18528` was **678 passed, 1 skipped** — measured, not counted off a
@@ -110,7 +110,8 @@ repair) follow.
 > | #92 `CORE_V1` | +15 | **732** = `main` |
 > | #93 announcements + extractor | +38 | 770 |
 > | #94 pre-trade assessment | +21 | **791** |
-> | #95 integration repair | +15 | **806** |
+> | #95 integration repair | +15 | 806 |
+> | #97 daily evidence spine | +9 | **815** |
 >
 > Counting dots on a `pytest -q` progress line is not measuring. `pytest | grep passed` is.
 
@@ -346,6 +347,7 @@ live/         advisor (sell/raise-cash/deploy/harvest) · deploy (the buy screen
               evidence (NSE regulatory-indicator adapter) · announcements (filings + provenance)
               extraction (the AI reports what a filing says; it decides nothing)
               pretrade (may we buy this name? eligibility only — never a view on return)
+scripts/       evidence.py — the daily shadow spine (archive → extract → report; changes nothing)
               twin · runner · policy · go_gate · verdicts · ai_brief · track_record · measures
               safety · scan · notify · auth · client · holdings · tradebook(+store) · taxpnl · ticker
 scripts/      twin.py (the cron) · paper.py · advisor.py · dashboard_app.py · backtest_* · exp_*
@@ -440,21 +442,30 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
 5. **Exchange evidence spine** — ✅ cautionary-message feed (`live/evidence.py`, #90), ✅ corporate
    announcements archived and hashed (`live/announcements.py`, #93), ✅ the AI moved from *judge* to
    *extractor* (`live/extraction.py`, #93), ✅ `PreTradeAssessment` combining them
-   (`live/pretrade.py`, #94). **All four are wired to nothing, deliberately.**
+   (`live/pretrade.py`, #94), ✅ **running daily in shadow** (`scripts/evidence.py`, #97 — archives
+   the index response, every filing, and renders `reports/pretrade.md`). **It changes nothing.**
 
    *Why unwired.* With filings listed but unread, every candidate reads `UNKNOWN` — correctly. A
    gate that says `HUMAN_REQUIRED` eight times a day about names it has not opened trains the user
    to click through it. **Next: run the announcement fetch + extraction daily so coverage is real**,
    then wire the assessment, then point the live veto at filings instead of four web searches.
 
+   The corpus itself is **gitignored** — ~90 MB on the first run, growing daily. Every document is
+   re-fetchable from `nsearchives.nseindia.com` by the URL in its provenance sidecar, and the
+   sidecar's SHA-256 is what proves which bytes were read. **The sidecars, the event log and the
+   coverage log are tracked; they are the audit trail.**
+
    ⚠️ **The live veto has NOT been replaced.** `TWIN_FULL` still calls `basket_verdicts()` →
    Anthropic web search, and its "primary source" rule still checks only the **hostname** — any NSE
    URL qualifies, whether or not the page supports the claim. `extraction.py` is the safer design
    and it is not running. Two AI paths exist; the weaker one is the live one.
 
-   Still owed on the announcement pipeline before it can be wired: **archive the index response
-   itself** (today an historical claim that nothing was filed cannot be proven), and **chunk long
-   filings** instead of truncating at 12,000 characters.
+   ✅ Both of the pipeline's remaining contract gaps are closed: the **index response is archived**
+   (an absence is only evidence if the thing that showed it was kept), and long filings are
+   **chunked, not truncated**, so "read" means read.
+
+   Still owed before it may be wired to a decision: real coverage on a run of days, and a
+   golden-day replay proving the path end to end.
 6. Raw prices for execution and FIFO basis · date-dependent tax rates · `_cap_renorm` · dataset hashes.
 7. Only then: mid/small-cap, IPO, F&O — each a separate registered experiment with its own
    point-in-time universe. **No engine inherits another's authority.**
