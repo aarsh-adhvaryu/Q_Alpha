@@ -26,5 +26,8 @@
   "power_in_one_12m_window": 0.03048925771631128,
   "false_positive_rate": 0.05,
   "years_to_detect_at_95pc": 196.20704729958632,
-  "one_year_outperformance_needed": 0.07452339141938258
+  "one_year_outperformance_needed": 0.07452339141938258,
+  "withdrawn": true,
+  "withdrawn_on": "2026-09-06",
+  "withdrawn_because": "not matched to CORE_V1: |G| vs G across the two pre-registrations; a one-sided gate against a two-sided bar (true alpha 2.32%, not 5%); the null accumulates ~50 of 51 members while CORE_V1 holds a capped basket, so the bar is 1.5-2.3x too low; and CORE_V1 can sell while the null never does. See reports/NULL_MATCHED.md section 6."
 }
