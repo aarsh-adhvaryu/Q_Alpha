@@ -64,6 +64,7 @@ jobs:
       # committed export and says so rather than marking a book with no flows.
       - name: The twin — step the autonomous books, mark all five, grade the gate (fail-soft)
         continue-on-error: true
+        timeout-minutes: 25
         env:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           TRADEBOOK_GIST_ID: ${{ secrets.TRADEBOOK_GIST_ID }}
@@ -81,6 +82,11 @@ jobs:
       # here can never delay the thing that actually accrues evidence.
       - name: Evidence spine — archive filings, extract events, render the pre-trade report (shadow)
         continue-on-error: true
+        # A HANG HERE WOULD COST THE DAY'S RECORD. This step downloads dozens of PDFs and makes ~33
+        # model calls; `continue-on-error` covers a failure but not a stall, and a stalled step runs
+        # out the job before `Commit the track record` ever executes. The twin has already produced
+        # its row by this point, so capping this protects the thing that actually accrues evidence.
+        timeout-minutes: 20
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: uv run python scripts/evidence.py daily
