@@ -50,6 +50,8 @@ Twenty-odd instances now. A few, so the shape is unmistakable:
 | "703 tests green", in this file | **678** — a progress line counted by eye, then quoted in three PRs |
 | a shadow report reading `EXECUTE` over the screen's basket | **alphabetically ordered, one share each**, funded by a budget the screen never saw |
 | the anchor order, 393 units for ₹108,365.82 | left **₹0.18** to pay ~₹325 of charges — it could not have filled |
+| "25 of 25 filings read" | **25 of 30** — the cap sliced the window, then counted the slice |
+| a benchmark window with no data, reported `0.0%` | unmeasured. Flat and unknown are not the same market |
 | gate row `pair: [TWIN_FULL, BASELINE_EW]`, gap `+₹10,000` | `CORE_V1`'s gap. Run 2's was **−₹4,000** — sign flipped, caught before the first cron |
 
 **700+ passing tests have caught none of them.** Unit tests verify that a function works. These are
@@ -88,6 +90,9 @@ four and only one is cheap.
 - **Pre-registration before any experiment; negatives get published.**
 - **Flag, don't veto** on the buy list — user decision, still standing. Selection stays deterministic.
 - **All four gates green before every commit**: `ruff`, `ruff format`, `mypy --strict`, `pytest`.
+- **Panels are written atomically.** `save_parquet` writes a temp file and `os.replace`s it, and
+  refuses an empty frame. A direct `to_parquet` left a truncated panel when the step was killed, and
+  the price refresh is the *first* step in the cron — every later step would then read the fragment.
 - **Always branch + PR.** The harness blocks self-merges; the user clicks merge. Merging to `main`
   auto-deploys Streamlit.
 
@@ -95,7 +100,7 @@ four and only one is cheap.
 
 ## What is true today (2026-09-06)
 
-**26,274 lines · 46 live modules · 885 passed.** `main` is at the merge of PR #102.
+**26,368 lines · 46 live modules · 896 passed.** `main` is at the merge of PR #103.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
 (record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
 repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the golden-day replay) and #99 (the matched null) follow.
@@ -118,7 +123,8 @@ repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the 
 > | #99 matched null | +2 | 828 |
 > | #100 null withdrawn | +1 | 829 |
 > | #101 the decision loop | +21 | 850 |
-> | #103 caller repair | +35 | **885** |
+> | #103 caller repair | +35 | 885 |
+> | #104 pre-open repairs | +11 | **896** |
 >
 > Counting dots on a `pytest -q` progress line is not measuring. `pytest | grep passed` is.
 
@@ -530,6 +536,11 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
    Still owed before it may be wired to a decision: real coverage on a run of days, and a
    golden-day replay proving the path end to end.
 6. Raw prices for execution and FIFO basis · date-dependent tax rates · `_cap_renorm` · dataset hashes.
+
+   **Still open on the evidence spine, none of it breaking:** documents are gitignored so only a hash
+   and a URL survive if the exchange replaces a filing; the same document is re-extracted daily for
+   its whole window, roughly 10× the needed model calls; and `CORE_V2`'s question is undecided, which
+   is what blocks repairing the null.
 7. Only then: mid/small-cap, IPO, F&O — each a separate registered experiment with its own
    point-in-time universe. **No engine inherits another's authority.**
 

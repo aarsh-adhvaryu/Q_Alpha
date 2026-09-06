@@ -1,6 +1,6 @@
 # Pre-trade evidence — 2026-09-06
 
-_Generated 2026-09-06 11:08 UTC. **Shadow mode: this changes nothing.** No book, basket or order is affected, and the CORE_V1 clock is untouched._
+_Generated 2026-09-06 11:33 UTC. **Shadow mode: this changes nothing.** No book, basket or order is affected, and the CORE_V1 clock is untouched._
 
 Coverage: **0 of 16** name(s) fully read · exchange file `21bc965e4d69a4a3…`
 

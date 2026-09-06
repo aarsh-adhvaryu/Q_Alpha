@@ -144,6 +144,12 @@ def _out_of_favour_names(as_of: date) -> str:
 def _benchmark_return_pct(bench: pd.Series, start: date, as_of: date) -> float | None:
     """TRI return over the book's live window (start→as_of), for the digest book-vs-TRI line."""
     hist = bench.dropna()
+    if hist.empty:
+        return None
+    # A window that begins after the series ends is not a flat market, it is an unmeasured one.
+    # Both slices would otherwise land on the same final bar and report a confident 0.0%.
+    if pd.Timestamp(start) > hist.index[-1]:
+        return None
     b_start = hist.loc[: pd.Timestamp(start)]
     b_end = hist.loc[: pd.Timestamp(as_of)]
     if b_start.empty or b_end.empty:
