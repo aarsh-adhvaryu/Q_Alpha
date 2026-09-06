@@ -1,9 +1,9 @@
 {
  "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=HINDZINC",
- "retrieved_at_utc": "2026-09-06T10:08:06Z",
+ "retrieved_at_utc": "2026-09-06T11:08:47Z",
  "http_status": 200,
- "bytes": 786252,
- "sha256": "dd045db21ffb565931cc4d0866c2873e10d89c8092e2bc82d8d12894c5cdd570",
+ "bytes": 786931,
+ "sha256": "bd2b4210ccbd7b7c3b3296ef038c04e38506c3b0d9b6f6d142b4283c933ff218",
  "document_date": "2026-09-06",
  "symbol": "HINDZINC",
  "kind": "announcement_index"

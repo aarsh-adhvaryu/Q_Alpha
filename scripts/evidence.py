@@ -21,9 +21,11 @@ anything, and this job is what makes it real.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -142,98 +144,123 @@ def _fetch_reg_ind(as_of: date) -> tuple[dict[str, dict[str, str]], Provenance |
     return {}, None
 
 
-def _candidates(cfg: Config, as_of: date) -> list[str]:
-    """The names to cover: what the screen would buy today, plus everything currently held."""
-    from paper import _load_benchmark_series, _load_market  # noqa: F401
+@dataclass(frozen=True)
+class ScreenBasket:
+    """What the deterministic screen actually proposed, with its ranking and sizing intact."""
+
+    orders: list[ProposedOrder]
+    held: list[str]
+    cash: Decimal
+    sector_of: dict[str, str]
+    prices: dict[str, Decimal]
+
+    @property
+    def tickers(self) -> list[str]:
+        """Names to gather evidence on: the screen's picks in rank order, then what is held."""
+        seen: dict[str, None] = {}
+        for order in self.orders:
+            seen.setdefault(order.ticker, None)
+        for ticker in self.held:
+            seen.setdefault(ticker, None)
+        return list(seen)
+
+
+def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
+    """Run the screen **as the policy specifies, against the real book and the real cash.**
+
+    ### The defect this replaces
+
+    The previous version ran the screen against a fabricated ₹1,00,000 on an *empty* portfolio,
+    took the correctly ranked and sized orders it returned, **discarded the rank and the quantity on
+    the very next line**, merged the bare tickers with current holdings, and returned them
+    ``sorted()`` — alphabetically. The decision loop was then handed **one share** of each, in
+    alphabetical order, funded by a *different* budget: the book's actual idle cash.
+
+    So the report read EXECUTE over a ranking the screen never produced, at sizes it never chose,
+    against money it was never shown. Every unit test passed, because they hand correctly ranked and
+    sized candidates straight to ``propose`` and none of them exercises this function. Right
+    function, wrong argument — the exact class the golden-day replay exists to catch, and could not,
+    because nothing tested the caller.
+
+    ### Why a rejected name is not backfilled with the next stock
+
+    Replacing a rejected pick requires re-running the screen without it, which **re-sizes the whole
+    basket**. ``max_names`` is part of the frozen policy: a screen asked for a different number of
+    names is a different screen, and measuring it would stop measuring the thing under test. So a
+    rejected name shrinks the basket and its money goes to the anchor. The anchor is the
+    replacement, and it is an honest one.
+    """
+
+    from paper import _load_benchmark_series
 
     from qalpha.backtest.portfolio import Portfolio
     from qalpha.data.ingest import load_parquet
     from qalpha.live.deploy import advise_deploy_into_weakness
-    from qalpha.live.twin import REAL, load_books
+    from qalpha.live.twin import CORE_V1, TWIN_FULL, load_books
 
-    names: list[str] = []
+    held: list[str] = []
+    portfolio: Portfolio | None = None
+    cash = Decimal("0")
     try:
         books = load_books(cfg)
-        for book in books.values():
-            names += [t for t, q in book.portfolio.positions().items() if q > 0]
-        if REAL in books:
-            pass
+        book = books.get(CORE_V1) or books.get(TWIN_FULL)
+        if book is not None:
+            portfolio = book.portfolio
+            cash = book.portfolio.cash
+            held = sorted(t for t, q in book.portfolio.positions().items() if q > 0)
     except Exception as exc:
-        print(f"[evidence] could not read books ({exc}) — covering the screen's basket only")
+        print(f"[evidence] could not read the books ({exc}) — no screen basket today")
 
     try:
-        prices = load_parquet("data/historical/prices_watchlist.parquet")
+        panel = load_parquet("data/historical/prices_watchlist.parquet")
         wl = pd.read_csv("data/universes/nifty100_watchlist.csv")
         sector_of = dict(zip(wl["ticker"], wl["sector"], strict=False))
-        watchlist = [t for t in wl["ticker"] if t in prices.adj_close.columns]
-        pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("100000"))
+        watchlist = [t for t in wl["ticker"] if t in panel.adj_close.columns]
+    except Exception as exc:
+        print(f"[evidence] no watchlist panel ({exc}) — covering held names only")
+        return ScreenBasket([], held, cash, {}, {})
+
+    marks: dict[str, Decimal] = {}
+    for ticker in set(watchlist) | set(held) | {ANCHOR_TICKER}:
+        if ticker in panel.adj_close.columns:
+            series = panel.adj_close[ticker].dropna()
+            if len(series):
+                marks[ticker] = Decimal(str(float(series.iloc[-1])))
+    if ANCHOR_TICKER not in marks:
+        try:
+            bench = _load_benchmark_series().dropna()
+            if len(bench):
+                marks[ANCHOR_TICKER] = Decimal(str(float(bench.iloc[-1])))
+        except Exception:
+            pass
+
+    if portfolio is None or cash <= 0:
+        return ScreenBasket([], held, cash, sector_of, marks)
+
+    try:
         advice = advise_deploy_into_weakness(
-            pf,
-            Decimal("100000"),
+            portfolio,
+            cash,
             watchlist,
             sector_of,
-            prices,
+            panel,
             _load_benchmark_series(),
-            min(as_of, pd.Timestamp(prices.adj_close.index.max()).date()),
+            min(as_of, pd.Timestamp(panel.adj_close.index.max()).date()),
             max_names=cfg.deploy_policy.max_names_default,
             spend_idle_cash=False,
         )
-        names += [o.ticker for o in advice.deploy.buy_orders]
     except Exception as exc:
-        print(f"[evidence] could not run the screen ({exc}) — covering held names only")
-    return sorted(dict.fromkeys(names))
+        print(f"[evidence] the screen did not run ({exc}) — covering held names only")
+        return ScreenBasket([], held, cash, sector_of, marks)
 
-
-def _market_context(
-    cfg: Config, tickers: Sequence[str]
-) -> tuple[dict[str, Decimal], dict[str, str], dict[str, int]]:
-    """Latest marks, sectors and current holdings for the shadow decision.
-
-    Every value is read or left absent — **nothing is defaulted**. A ticker with no mark simply does
-    not appear, which downstream becomes an unpriced holding and a HUMAN_REQUIRED rather than a
-    silent zero.
-    """
-    prices: dict[str, Decimal] = {}
-    sectors: dict[str, str] = {}
-    holdings: dict[str, int] = {}
-    # The budget is the book's ACTUAL idle cash, never a nominal figure. A shadow decision made
-    # against invented money would show what the system would do with money it does not have.
-    cash = Decimal("0")
-    try:
-        import pandas as pd
-
-        from qalpha.data.ingest import load_parquet
-
-        panel = load_parquet("data/historical/prices_watchlist.parquet")
-        wl = pd.read_csv("data/universes/nifty100_watchlist.csv")
-        sectors = dict(zip(wl["ticker"], wl["sector"], strict=False))
-        for ticker in set(tickers) | {ANCHOR_TICKER}:
-            if ticker in panel.adj_close.columns:
-                series = panel.adj_close[ticker].dropna()
-                if len(series):
-                    prices[ticker] = Decimal(str(float(series.iloc[-1])))
-    except Exception as exc:
-        print(f"[evidence] no price panel ({exc}) — the shadow decision will read UNKNOWN")
-    if ANCHOR_TICKER not in prices:
-        try:
-            from paper import _load_benchmark_series
-
-            bench = _load_benchmark_series().dropna()
-            if len(bench):
-                prices[ANCHOR_TICKER] = Decimal(str(float(bench.iloc[-1])))
-        except Exception:
-            pass
-    try:
-        from qalpha.live.twin import CORE_V1, load_books
-
-        books = load_books(cfg)
-        book = books.get(CORE_V1) or books.get("TWIN_FULL")
-        if book is not None:
-            holdings = {t: int(q) for t, q in book.portfolio.positions().items() if q > 0}
-            cash = book.portfolio.cash
-    except Exception:
-        pass
-    return prices, sectors, holdings, cash
+    # Rank AND quantity preserved. The screen orders by allocated weight, so index 0 is its
+    # strongest preference, and the quantity is the one it sized. Nothing downstream changes either.
+    orders = [
+        ProposedOrder(str(o.ticker), int(o.quantity), Decimal(str(o.price)), rank=i)
+        for i, o in enumerate(advice.deploy.buy_orders)
+        if int(o.quantity) > 0
+    ]
+    return ScreenBasket(orders, held, cash, sector_of, marks)
 
 
 def _cover_name(
@@ -316,17 +343,39 @@ def _record_gaps(as_of: date) -> None:
     )
 
 
+def _budget_is_new(cash: Decimal) -> bool:
+    """Has the deployable money changed since the last decision we recorded?
+
+    A shadow proposal that never executes sees the same idle cash every day. Logging it daily would
+    inflate the cohort with repeats of one decision — and a count of observations is exactly the
+    thing the cohort exists to be trusted on.
+    """
+    if not DECISION_LOG.exists():
+        return True
+    last = ""
+    for line in DECISION_LOG.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            try:
+                last = str(json.loads(line).get("budget", ""))
+            except json.JSONDecodeError:
+                continue
+    return last != str(cash)
+
+
 def cmd_daily(cfg: Config, as_of: date) -> int:
     print(f"[evidence] shadow run for {as_of} — observes candidates, changes nothing")
     _record_gaps(as_of)
 
     rows, exchange_prov = _fetch_reg_ind(as_of)
-    tickers = _candidates(cfg, as_of)
+    basket = _screen_basket(cfg, as_of)
+    tickers = basket.tickers
     if not tickers:
         print("[evidence] no candidates and no holdings — nothing to cover")
         return 0
     print(
-        f"[evidence] covering {len(tickers)} name(s), filings since {as_of - timedelta(days=LOOKBACK_DAYS)}"
+        f"[evidence] covering {len(tickers)} name(s) — {len(basket.orders)} screened "
+        f"(₹{sum((o.value for o in basket.orders), Decimal('0')):,.0f} of ₹{basket.cash:,.0f} cash), "
+        f"{len(basket.held)} held · filings since {as_of - timedelta(days=LOOKBACK_DAYS)}"
     )
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
@@ -389,37 +438,38 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
         tickers, exchange=exchange, events=events, coverage=coverage, unverified=unverified
     )
 
-    prices_by_ticker, sector_by_ticker, held_now, idle_cash = _market_context(cfg, tickers)
-    # The decision loop, in shadow. This is what the product would actually do today: walk the
-    # ranking, skip what does not clear, replace it with the next name, and park the remainder in
-    # the anchor rather than leaving it idle. It changes nothing — no book, no basket, no order.
-    ranked = [
-        ProposedOrder(t, 1, prices_by_ticker.get(t, Decimal("0")), rank=i)
-        for i, t in enumerate(tickers)
-        if prices_by_ticker.get(t)
-    ]
     proposal = propose(
         as_of=as_of,
-        candidates=ranked,
-        target_names=cfg.deploy_policy.max_names_default,
-        holdings=held_now,
-        prices=prices_by_ticker,
-        sector_of=sector_by_ticker,
+        candidates=basket.orders,
+        target_names=len(basket.orders),
+        holdings=dict.fromkeys(basket.held, 1),
+        prices=basket.prices,
+        sector_of=basket.sector_of,
         exchange=exchange,
         events=events,
         coverage=coverage,
         unverified=unverified,
-        budget=idle_cash,
-        anchor_price=prices_by_ticker.get(ANCHOR_TICKER),
+        budget=basket.cash,
+        anchor_price=basket.prices.get(ANCHOR_TICKER),
     )
-    try:
-        rows = decision_rows(proposal)
-        if rows:
-            n = _append_jsonl(DECISION_LOG, rows, key="_key")
-            print(f"[evidence] {len(rows)} decision(s) recorded → {DECISION_LOG} ({n} on file)")
-    except Exception as exc:
-        print(f"[evidence] WARNING: decisions not recorded ({exc})", file=sys.stderr)
     print(f"[evidence] shadow decision: {proposal.outcome} — {proposal.reason}")
+
+    # THE SAME CASH IS NOT A NEW OBSERVATION. This runs daily against whatever is idle, so without
+    # this guard the cohort would fill with the same names re-"decided" every day and look like many
+    # observations when it is one. A decision is recorded only when the money behind it changed.
+    if _budget_is_new(basket.cash):
+        try:
+            rows = [{**r, "budget": str(basket.cash)} for r in decision_rows(proposal)]
+            if rows:
+                n = _append_jsonl(DECISION_LOG, rows, key="_key")
+                print(f"[evidence] {len(rows)} decision(s) recorded → {DECISION_LOG} ({n} on file)")
+        except Exception as exc:
+            print(f"[evidence] WARNING: decisions not recorded ({exc})", file=sys.stderr)
+    else:
+        print(
+            f"[evidence] budget unchanged at ₹{basket.cash:,.0f} — not recorded again; "
+            "the same cash re-examined is not a new observation"
+        )
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     complete = sum(1 for c in coverage.values() if c.complete)

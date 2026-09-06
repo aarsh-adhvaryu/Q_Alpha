@@ -79,34 +79,67 @@ def test_each_track_is_recorded_under_its_own_pair(tmp_path: Path) -> None:
 
 
 def test_the_gate_row_names_the_pair_it_was_actually_computed_from(tmp_path: Path) -> None:
-    """It used to write the module constant GATING_PAIR regardless of which gap it had read."""
+    """It used to write the module constant GATING_PAIR regardless of which gap it had read.
+
+    The property, whatever is authorizing: the gate row's pair is the authorizing gap's pair, or
+    ``None`` when nothing authorizes. It is never a constant picked in a different place.
+    """
+    from qalpha.live.twin import AUTHORIZING_PAIR
+
     marks = _marks()
-    append_history(
-        marks, compare(marks), as_of=AS_OF, gate_verdict="NOT YET", path=tmp_path / "h.jsonl"
-    )
+    gaps = compare(marks)
+    append_history(marks, gaps, as_of=AS_OF, gate_verdict="NOT YET", path=tmp_path / "h.jsonl")
     gate = json.loads((tmp_path / "h.jsonl").read_text().splitlines()[0])["gate"]
-    assert gate["pair"] == [CORE_V1, BASELINE_EW]
-    assert gate["authorizes"] is True
+    authorizing = next((g for g in gaps if g.authorizes), None)
+    if authorizing is None:
+        assert gate["pair"] is None and gate["authorizes"] is False
+    else:
+        assert gate["pair"] == [authorizing.left, authorizing.right]
+        assert (authorizing.left, authorizing.right) == AUTHORIZING_PAIR
 
 
 def test_the_gate_numbers_match_the_authorising_track_exactly(tmp_path: Path) -> None:
+    """Gate numbers come from the authorizing track and from nowhere else."""
     marks = _marks()
-    append_history(
-        marks, compare(marks), as_of=AS_OF, gate_verdict="NOT YET", path=tmp_path / "h.jsonl"
-    )
+    gaps = compare(marks)
+    append_history(marks, gaps, as_of=AS_OF, gate_verdict="NOT YET", path=tmp_path / "h.jsonl")
     row = json.loads((tmp_path / "h.jsonl").read_text().splitlines()[0])
-    core = row["tracks"]["core_v1"]
-    assert (row["gate"]["rupees"], row["gate"]["months"]) == (core["rupees"], core["months"])
+    authorizing = next((g for g in gaps if g.authorizes), None)
+    if authorizing is None:
+        assert row["gate"]["rupees"] is None and row["gate"]["months"] is None
+        # ...and every track's statistic is still recorded, so nothing is lost by not authorizing.
+        assert set(row["tracks"]) == {"core_v1", "run2"}
+    else:
+        track = row["tracks"][authorizing.track]
+        assert (row["gate"]["rupees"], row["gate"]["months"]) == (track["rupees"], track["months"])
 
 
 def test_a_rehearsal_never_authorises() -> None:
     """An experiment declared methodologically invalid must never later produce a GO."""
     gaps = compare(_marks())
     run2 = next(g for g in gaps if g.track == "run2" and g.gates)
-    core = next(g for g in gaps if g.track == "core_v1" and g.gates)
     assert run2.gates and not run2.authorizes
-    assert core.gates and core.authorizes
-    assert len([g for g in gaps if g.authorizes]) == 1
+
+
+def test_at_most_one_pair_can_ever_authorise() -> None:
+    """Two authorizing pairs would mean two GO gates, and the first in a list would win by accident."""
+    assert len([g for g in compare(_marks()) if g.authorizes]) <= 1
+
+
+def test_nothing_authorises_today_and_the_core_pair_still_records() -> None:
+    """CORE_V1 was retired from authority on 2026-09-06 and kept as a descriptive track.
+
+    Its null was withdrawn for not matching the experiment. Leaving the pair flagged authorizing
+    would have let any replacement null make a window that started *before* its question was
+    settled retroactively authorizing.
+    """
+    from qalpha.live.twin import AUTHORIZING_PAIR
+
+    gaps = compare(_marks())
+    assert AUTHORIZING_PAIR is None
+    assert not any(g.authorizes for g in gaps)
+    core = next(g for g in gaps if g.track == "core_v1" and g.gates)
+    assert core.gates and not core.authorizes, "still measured, no longer authorizing"
 
 
 def test_without_the_core_book_nothing_authorises(tmp_path: Path) -> None:
