@@ -70,6 +70,19 @@ PROPOSE_EXIT = "PROPOSE_EXIT"
 #: cost, tax and staying invested, not about selection.
 ANCHOR_TICKER = "NIFTYBEES.NS"
 
+#: Headroom kept back when sizing the anchor, so the order can pay for itself.
+#:
+#: **The defect this fixes.** The anchor spent the entire remainder: 393 units × ₹275.74 = ₹108,365.82
+#: against ₹108,366, leaving **₹0.18** for roughly ₹325 of brokerage, stamp duty, exchange and GST
+#: charges. The displayed order could not have filled at the size displayed — a number on an order
+#: surface that was not the number the account could execute.
+#:
+#: A flat buffer rather than the exact model on purpose: the exact cost is computed by the execution
+#: accountant at fill time, and duplicating that arithmetic here would create a second answer to the
+#: same question. This only has to be **conservative**, and Zerodha delivery friction is well under
+#: it. Leftover pennies stay as cash, which is correct.
+ANCHOR_COST_HEADROOM = Decimal("0.005")
+
 
 class _HasOrderFields(Protocol):
     ticker: str
@@ -148,7 +161,7 @@ class DayProposal:
             lines += ["", f"**Total ₹{self.value:,.2f}**", ""]
         if self.skipped:
             lines.append(
-                f"**{len(self.skipped)} candidate(s) skipped and replaced automatically:**"
+                f"**{len(self.skipped)} candidate(s) skipped — their money went to the anchor:**"
             )
             lines += [f"- {c.ticker} — {c.reason}" for c in self.skipped]
             lines.append("")
@@ -339,7 +352,8 @@ def propose(
     remainder = budget - spent
     anchor_value = Decimal("0")
     if anchor_price is not None and anchor_price > 0 and remainder >= anchor_price:
-        qty = int(remainder / anchor_price)
+        # Size against the price PLUS headroom, so the fill and its charges both fit the remainder.
+        qty = int(remainder / (anchor_price * (Decimal("1") + ANCHOR_COST_HEADROOM)))
         if qty > 0:
             taken.append(
                 ProposedOrder(anchor_ticker, qty, anchor_price, rank=9_999, is_anchor=True)
@@ -368,7 +382,7 @@ def propose(
     picked = len([o for o in taken if not o.is_anchor])
     reason = f"{picked} name(s) cleared every check"
     if skipped:
-        reason += f", {skipped} skipped and replaced automatically"
+        reason += f", {skipped} skipped"
     if anchor_value > 0:
         reason += f", ₹{anchor_value:,.0f} to the anchor"
     return DayProposal(

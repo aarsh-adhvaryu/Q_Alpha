@@ -48,6 +48,8 @@ Twenty-odd instances now. A few, so the shape is unmistakable:
 | `NIFTY_LOT_SIZE = 75` | 65 — stale three days after its own "verify this" comment was written |
 | "hedge available: 8 lot(s), one lot ₹17,923" | one lot is ₹17.9 **lakh** — an ETF price read as the index level |
 | "703 tests green", in this file | **678** — a progress line counted by eye, then quoted in three PRs |
+| a shadow report reading `EXECUTE` over the screen's basket | **alphabetically ordered, one share each**, funded by a budget the screen never saw |
+| the anchor order, 393 units for ₹108,365.82 | left **₹0.18** to pay ~₹325 of charges — it could not have filled |
 | gate row `pair: [TWIN_FULL, BASELINE_EW]`, gap `+₹10,000` | `CORE_V1`'s gap. Run 2's was **−₹4,000** — sign flipped, caught before the first cron |
 
 **700+ passing tests have caught none of them.** Unit tests verify that a function works. These are
@@ -91,9 +93,9 @@ four and only one is cheap.
 
 ---
 
-## What is true today (2026-09-05)
+## What is true today (2026-09-06)
 
-**26,197 lines · 46 live modules · 850 passed, 1 skipped.** `main` is at the merge of PR #100.
+**26,274 lines · 46 live modules · 885 passed.** `main` is at the merge of PR #102.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
 (record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
 repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the golden-day replay) and #99 (the matched null) follow.
@@ -115,7 +117,8 @@ repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the 
 > | #98 golden-day replay | +11 | 826 |
 > | #99 matched null | +2 | 828 |
 > | #100 null withdrawn | +1 | 829 |
-> | #101 the decision loop | +21 | **850** |
+> | #101 the decision loop | +21 | 850 |
+> | #103 caller repair | +35 | **885** |
 >
 > Counting dots on a `pytest -q` progress line is not measuring. `pytest | grep passed` is.
 
@@ -483,8 +486,17 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
    and `UNKNOWN` freeze additions and **never sell**, because selling realises tax and this screen
    buys names that are already down.
 
-   Today's shadow run: instead of 19 questions and ₹0 deployed, one order — ₹108,366 to the anchor,
-   with all 19 skips logged and priced. Still shadow; it changes no book.
+   ⚠️ **Its first scheduled caller was wrong, and #103 repaired it.** `_candidates` ran the screen
+   against a fabricated ₹1,00,000 on an *empty* portfolio, then **discarded the rank and the
+   quantity on the next line**, merged bare tickers with holdings and returned them `sorted()`.
+   `propose` was handed one share of each in alphabetical order, funded by different money. Eleven
+   tests passed throughout, because they hand `propose` good data and **nothing tested the caller**
+   — the class the golden day exists to catch, missed because I wrote the replay the same way.
+
+   Now: the screen runs on the real book and the real cash at the policy's `max_names`, and its rank
+   and sizing survive. A rejected name is **not** backfilled with the next stock — that would need a
+   re-run at a different basket size, and a screen asked for a different number of names is a
+   different screen. **The anchor is the replacement.**
 
 4. **`Mandate` + `RiskGovernor.veto()`** — the operating contract from prose into an object.
 4. ⛔ **The matched null was generated and WITHDRAWN** (#99, then #100). It showed the gate is underpowered by
@@ -529,11 +541,14 @@ this run 3 and restarts the clock. The primary-source tightening merged on day 4
 it *narrows* a guard rather than altering selection, and it is recorded — treat that as the last such
 amendment.
 
-**The cohort record.** `data/evidence/decisions.jsonl` now stores every candidate considered with
+**The cohort record.** `data/evidence/decisions.jsonl` (added to the workflow's commit step in
+#103 — before that it was written every run and thrown away) stores every candidate considered with
 its rank, price and verdict — taken or skipped. A portfolio yields one observation a year; 15 names
 across 12 deployments yields 180, and the skipped names become the control group instead of
 vanishing. That is the only route to enough observations to learn anything: at a 2%/name effect it
-is ~7 years, at 3% ~3 years, against 955 years for the portfolio-level question.
+is ~7 years, at 3% ~3 years, against 955 years for the portfolio-level question. A decision is
+recorded **only when the deployable cash changes**: a shadow that never executes sees the same idle
+money daily, and logging it every day would fill the cohort with one decision wearing many dates.
 
 **Watch `demoted` in `data/twin/ai_verdicts.jsonl`.** If the model keeps finding things it cannot cite
 to a filing, that count says whether the primary-source bar is right or too strict, and it is the

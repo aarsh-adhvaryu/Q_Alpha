@@ -112,6 +112,9 @@ jobs:
           # provenance); the sidecars, the event log and the coverage log ARE the audit trail.
           git add data/evidence/**/*.provenance.json 2>/dev/null || true
           git add data/evidence/events.jsonl data/evidence/coverage.jsonl 2>/dev/null || true
+          # The cohort record. Without this line it was written every run and thrown away, so the
+          # thing the decision loop exists to accumulate never accumulated.
+          git add data/evidence/decisions.jsonl 2>/dev/null || true
           git add reports/pretrade.md 2>/dev/null || true
           # ⛔ The auto-pilot books below are ARCHIVED (reports/ARCHIVE_2026-08-28.md) and their step
           # is `if: false`. These lines stay one release so a stale working copy cannot resurrect

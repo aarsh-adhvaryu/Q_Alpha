@@ -93,6 +93,19 @@ ALL_BOOKS = (REAL, *AUTONOMOUS, CORE_V1, BASELINE_EW, BASELINE)
 #: The core track's gating pair. Separate clock, separate reset condition — see :data:`CORE_V1`.
 CORE_GATING_PAIR = (CORE_V1, BASELINE_EW)
 
+#: ⛔ **Nothing authorizes a GO today, and that is deliberate.**
+#:
+#: ``CORE_V1`` held this until 2026-09-06, when its null was withdrawn for not matching the
+#: experiment it was meant to bar. A withdrawn null being ``None`` only stops the gate *passing*;
+#: the pair was still flagged authorizing, so installing any replacement null later would have made
+#: a window that **started before its question and statistic were settled** retroactively
+#: authorizing. That is how an operational rehearsal turns into evidence nobody registered.
+#:
+#: ``CORE_V1`` therefore runs as a **descriptive operational track**: it steps, marks and records,
+#: and it grants nothing. Set this to a pair only when that pair's question, statistic and matched
+#: null are all frozen *before* its window opens.
+AUTHORIZING_PAIR: tuple[str, str] | None = None
+
 #: The only comparison that opens the GO gate — and it gates against the **harder** baseline.
 #: Gating against NIFTYBEES would let the system claim credit for the equal-weight premium it did
 #: not create; a system that cannot beat the best cheap passive alternative should not run.
@@ -477,7 +490,7 @@ def compare(
                 rupees=lm.gain - rm.gain,
                 gates=(left, right) in {GATING_PAIR, CORE_GATING_PAIR},
                 track=track,
-                authorizes=(left, right) == CORE_GATING_PAIR,
+                authorizes=(AUTHORIZING_PAIR is not None and (left, right) == AUTHORIZING_PAIR),
                 # Each track counts from its OWN registered start, never from the other's.
                 months=evaluation_months(
                     lm.as_of,
