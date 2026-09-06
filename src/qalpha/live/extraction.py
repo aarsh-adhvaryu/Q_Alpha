@@ -24,12 +24,12 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
-from qalpha.live.announcements import SourceDocument
+from qalpha.live.announcements import MAX_DOCUMENT_CHARS, SourceDocument
 
 #: Bump on any change to the prompt, the parser, the verification rule or the event vocabulary.
 #: A label that spans two rules makes every row under it unusable — that already happened once, to
@@ -65,6 +65,67 @@ GenerateFn = Callable[[str, str], tuple[str, dict[str, int]]]
 
 _EVENT_PREFIX = "EVENT:"
 _MIN_PASSAGE_CHARS = 20
+
+#: Characters of overlap between consecutive chunks, so a fact straddling a boundary still appears
+#: whole in at least one of them.
+CHUNK_OVERLAP = 500
+#: Document text per model call. Chunks are packed up to this; a chunk is never split across calls.
+PROMPT_CHAR_BUDGET = 24_000
+
+
+@dataclass(frozen=True)
+class DocumentChunk:
+    """One slice of a filing, carrying the whole document with it.
+
+    **Chunking exists so that "read" can be true.** The prompt has a character budget, so a long
+    filing used to be truncated and the tail was never looked at — while the coverage accounting
+    counted the document as read. Splitting it means every character reaches the model in some call.
+
+    Verification still runs against the **full** document text, so a quote that straddles a chunk
+    boundary verifies anyway.
+    """
+
+    document: SourceDocument
+    text: str
+    index: int
+    total: int
+
+    @property
+    def label(self) -> str:
+        return f"{self.index + 1} of {self.total}" if self.total > 1 else "whole"
+
+
+def chunks_for(document: SourceDocument) -> list[DocumentChunk]:
+    """Split one filing into overlapping chunks that fit the prompt budget."""
+    text = document.text
+    size = MAX_DOCUMENT_CHARS
+    if len(text) <= size:
+        return [DocumentChunk(document=document, text=text, index=0, total=1)]
+    step = max(1, size - CHUNK_OVERLAP)
+    slices = [text[i : i + size] for i in range(0, len(text), step)]
+    slices = [c for c in slices if c.strip()]
+    return [
+        DocumentChunk(document=document, text=c, index=i, total=len(slices))
+        for i, c in enumerate(slices)
+    ]
+
+
+def batch_chunks(
+    chunks: Sequence[DocumentChunk], *, budget: int = PROMPT_CHAR_BUDGET
+) -> list[list[DocumentChunk]]:
+    """Pack chunks into calls without ever splitting one. A single oversized chunk gets its own call."""
+    batches: list[list[DocumentChunk]] = []
+    current: list[DocumentChunk] = []
+    used = 0
+    for chunk in chunks:
+        if current and used + len(chunk.text) > budget:
+            batches.append(current)
+            current, used = [], 0
+        current.append(chunk)
+        used += len(chunk.text)
+    if current:
+        batches.append(current)
+    return batches
 
 
 @dataclass(frozen=True)
@@ -114,7 +175,7 @@ def verify_passage(passage: str, document_text: str) -> bool:
     return normalise(passage) in normalise(document_text)
 
 
-def build_prompt(documents: Sequence[SourceDocument]) -> str:
+def build_prompt(chunks: Sequence[DocumentChunk]) -> str:
     """The extraction prompt. It asks for description and forbids recommendation."""
     header = (
         "You are reading corporate filings from the National Stock Exchange of India.\n\n"
@@ -133,15 +194,15 @@ def build_prompt(documents: Sequence[SourceDocument]) -> str:
         "is preferred over a weak event.\n\n"
     )
     body = []
-    for i, doc in enumerate(documents, 1):
-        ann = doc.announcement
+    for i, chunk in enumerate(chunks, 1):
+        ann = chunk.document.announcement
         body.append(
-            f"--- DOCUMENT {i} ---\n"
+            f"--- DOCUMENT {i} (part {chunk.label}) ---\n"
             f"ticker: {ann.symbol}\n"
             f"subject: {ann.subject}\n"
             f"disseminated: {ann.disseminated_at:%Y-%m-%d %H:%M}\n"
-            f"sha256: {doc.provenance.sha256}\n"
-            f"text:\n{doc.excerpt}\n" + ("[document truncated]\n" if doc.truncated else "")
+            f"sha256: {chunk.document.provenance.sha256}\n"
+            f"text:\n{chunk.text}\n"
         )
     return header + "\n".join(body)
 
@@ -265,18 +326,82 @@ def extract(
     *,
     generate: GenerateFn,
     model: str,
-) -> tuple[list[ExtractedEvent], int, str, Mapping[str, int]]:
-    """Run one extraction. Returns ``(events, discarded, raw_response, usage)``.
+) -> tuple[list[ExtractedEvent], int, str, dict[str, int]]:
+    """Extract over **every character** of every document. ``(events, discarded, raw, usage)``.
 
-    Fail-soft: any error yields no events and the raw error text, because an extraction that did not
-    happen must look different from one that found nothing, and neither may look like approval.
+    Long filings are chunked, not truncated, so "read" means read. Events found twice in
+    overlapping chunks are collapsed on (ticker, type, normalised passage).
+
+    Fail-soft **per batch**: a call that raises contributes no events and its error text, and is
+    counted in ``usage["failed_batches"]`` so a caller can refuse to claim coverage it did not get.
+    An extraction that did not happen must look different from one that found nothing, and neither
+    may look like approval.
     """
     if not documents:
-        return [], 0, "", {}
-    prompt = build_prompt(documents)
-    try:
-        raw, usage = generate(model, prompt)
-    except Exception as exc:
-        return [], 0, f"extraction failed: {exc}", {}
-    events, discarded = parse_events(raw, documents, model=model)
-    return events, discarded, raw, usage
+        return [], 0, "", {"input": 0, "output": 0, "calls": 0, "failed_batches": 0}
+    all_chunks = [c for doc in documents for c in chunks_for(doc)]
+    events: list[ExtractedEvent] = []
+    discarded = 0
+    raws: list[str] = []
+    usage: dict[str, int] = {"input": 0, "output": 0, "calls": 0, "failed_batches": 0}
+    for batch in batch_chunks(all_chunks):
+        try:
+            raw, call_usage = generate(model, build_prompt(batch))
+        except Exception as exc:
+            raws.append(f"extraction failed: {exc}")
+            usage["failed_batches"] += 1
+            continue
+        raws.append(raw)
+        usage["calls"] += 1
+        for field in ("input", "output"):
+            usage[field] += int(call_usage.get(field, 0))
+        # Verified against the WHOLE documents, never just this batch's slices, so a quote spanning
+        # a chunk boundary still resolves to the document it came from.
+        found, dropped = parse_events(raw, documents, model=model)
+        events.extend(found)
+        discarded += dropped
+    seen: set[tuple[str, str, str]] = set()
+    unique: list[ExtractedEvent] = []
+    for event in events:
+        key = (event.ticker, event.event_type, normalise(event.passage))
+        if key not in seen:
+            seen.add(key)
+            unique.append(event)
+    return unique, discarded, "\n\n".join(raws), usage
+
+
+#: Output cap per extraction call. Events are one short line each; this is generous for a batch.
+MAX_OUTPUT_TOKENS = 3000
+DEFAULT_MODEL = "claude-haiku-4-5"
+
+
+def default_generate(api_key: str, *, max_tokens: int = MAX_OUTPUT_TOKENS) -> GenerateFn:
+    """The real model call for extraction — **with no tools, deliberately**.
+
+    The veto path gives the model web search. This one must not have it. The whole point is that
+    the model reads documents this repo fetched, hashed and kept, so that every claim it makes can
+    be checked against bytes on disk. Handing it a search tool would let a passage come from
+    somewhere nobody archived, and the verification guard would silently have nothing to check
+    against.
+
+    Lazy-imports the SDK so the module and its pure tests load without the ``ai`` extra installed.
+    """
+
+    def generate(model_id: str, prompt: str) -> tuple[str, dict[str, int]]:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model=model_id,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        if resp.stop_reason == "refusal":
+            return "", {}
+        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        return text, {
+            "input": int(getattr(resp.usage, "input_tokens", 0) or 0),
+            "output": int(getattr(resp.usage, "output_tokens", 0) or 0),
+        }
+
+    return generate

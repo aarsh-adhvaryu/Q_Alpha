@@ -74,6 +74,17 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: uv run python scripts/twin.py daily
 
+      # The evidence spine, in SHADOW. Fetches the exchange's regulatory-indicator file and every
+      # candidate's corporate filings, archives them with hashes, extracts events from the documents
+      # (never from a web search), and renders a pre-trade report. It touches no book, no basket and
+      # no order, and CORE_V1's clock is untouched by design. It runs AFTER the twin so a failure
+      # here can never delay the thing that actually accrues evidence.
+      - name: Evidence spine — archive filings, extract events, render the pre-trade report (shadow)
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run python scripts/evidence.py daily
+
       - name: Commit the track record
         run: |
           git config user.name "github-actions[bot]"
@@ -91,6 +102,11 @@ jobs:
           # defect these files were added to fix. Own line: `git add` is all-or-nothing.
           git add data/twin/history.jsonl 2>/dev/null || true
           git add data/twin/ai_verdicts.jsonl 2>/dev/null || true
+          # The evidence spine. The raw corpus is gitignored (re-fetchable by the URL in its
+          # provenance); the sidecars, the event log and the coverage log ARE the audit trail.
+          git add data/evidence/**/*.provenance.json 2>/dev/null || true
+          git add data/evidence/events.jsonl data/evidence/coverage.jsonl 2>/dev/null || true
+          git add reports/pretrade.md 2>/dev/null || true
           # ⛔ The auto-pilot books below are ARCHIVED (reports/ARCHIVE_2026-08-28.md) and their step
           # is `if: false`. These lines stay one release so a stale working copy cannot resurrect
           # them by committing a file the cron no longer writes.

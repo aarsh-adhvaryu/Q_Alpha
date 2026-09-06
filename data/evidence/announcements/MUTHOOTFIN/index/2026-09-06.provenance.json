@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=MUTHOOTFIN",
+ "retrieved_at_utc": "2026-09-06T05:53:37Z",
+ "http_status": 200,
+ "bytes": 737245,
+ "sha256": "0d41e57ad944b3e173110c84066b246011e3844a35b16940c2376c22faa8495e",
+ "document_date": "2026-09-06",
+ "symbol": "MUTHOOTFIN",
+ "kind": "announcement_index"
+}
