@@ -93,7 +93,7 @@ four and only one is cheap.
 
 ## What is true today (2026-09-05)
 
-**26197 lines · 46 live modules · 850 passed, 1 skipped.** `main` is at the merge of PR #100.
+**26,197 lines · 46 live modules · 850 passed, 1 skipped.** `main` is at the merge of PR #100.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
 (record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
 repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the golden-day replay) and #99 (the matched null) follow.
