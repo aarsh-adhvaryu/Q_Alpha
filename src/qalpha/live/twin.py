@@ -115,6 +115,11 @@ class TwinBook:
     name: str
     portfolio: Portfolio
     flows: list[Flow] = field(default_factory=list)
+    #: The last date this book's policy was stepped. **Guards a re-run from acting twice.** The
+    #: cron saves books mid-job; if a later stage fails and the job is retried, stepping again would
+    #: re-execute that day's paper decisions — buying the same basket a second time — and the
+    #: append-only record would show one day's flows twice. Compared, never trusted to a lock file.
+    stepped_through: date | None = None
 
     @property
     def net_invested(self) -> Decimal:
@@ -331,6 +336,12 @@ class Gap:
     #: different start dates and different reset conditions, so a gap from one is never evidence
     #: about the other.
     track: str = "run2"
+    #: **May this comparison open the GO gate?** Distinct from :attr:`gates`, which only says the
+    #: pair is its own track's registered statistic. Run 2's treatment changed inside its window —
+    #: two AI rules under one version label — so it was reclassified an operational rehearsal, and
+    #: an experiment declared methodologically invalid must never later authorise capital. It keeps
+    #: its statistic and loses its authority.
+    authorizes: bool = False
     left_value: Decimal = Decimal("0")
     right_value: Decimal = Decimal("0")
     #: Unitized NAVs from ``EVALUATION_START`` — the gating statistic's actual inputs.
@@ -446,6 +457,7 @@ def compare(
                 rupees=lm.gain - rm.gain,
                 gates=(left, right) in {GATING_PAIR, CORE_GATING_PAIR},
                 track=track,
+                authorizes=(left, right) == CORE_GATING_PAIR,
                 # Each track counts from its OWN registered start, never from the other's.
                 months=evaluation_months(
                     lm.as_of,
@@ -655,7 +667,32 @@ def append_history(
     computed downstream — drawdown, tracking error, the significance of the gap — is recoverable from
     these, and recoverable *retroactively*, which is the whole point of keeping them.
     """
-    gating = next((g for g in gaps if g.gates), None)
+
+    def _stat(g: Gap | None) -> dict[str, object]:
+        # ``pair`` is read off the gap itself. It used to be the module constant GATING_PAIR while
+        # the numbers came from ``next(g for g in gaps if g.gates)`` — and once CORE_V1 existed that
+        # picked the *core* comparison, so the row would have carried core numbers under a
+        # TWIN_FULL label beside a run-2 verdict. A label must name the thing that was computed.
+        if g is None:
+            return {
+                "pair": None,
+                "rupees": None,
+                "log_rel_wealth": None,
+                "months": None,
+                "null_p95": None,
+                "authorizes": False,
+            }
+        return {
+            "pair": [g.left, g.right],
+            "rupees": str(g.rupees),
+            "log_rel_wealth": g.log_rel_wealth,
+            "months": g.months,
+            "null_p95": g.null_p95,
+            "authorizes": g.authorizes,
+        }
+
+    by_track = {g.track: g for g in gaps if g.gates}
+    authorizing = next((g for g in gaps if g.authorizes), None)
     row: dict[str, object] = {
         "as_of": as_of.isoformat(),
         "books": {
@@ -667,14 +704,11 @@ def append_history(
             }
             for name, m in sorted(marks.items())
         },
-        "gate": {
-            "verdict": gate_verdict,
-            "pair": list(GATING_PAIR),
-            "rupees": str(gating.rupees) if gating else None,
-            "log_rel_wealth": gating.log_rel_wealth if gating else None,
-            "months": gating.months if gating else None,
-            "null_p95": gating.null_p95 if gating else None,
-        },
+        # Every track's own statistic, each labelled with the pair it was actually computed from.
+        "tracks": {name: _stat(g) for name, g in sorted(by_track.items())},
+        # The GO gate. Its numbers come from the AUTHORISING track and nothing else; run 2 is a
+        # rehearsal and contributes a statistic here only through ``tracks`` above.
+        "gate": {"verdict": gate_verdict, **_stat(authorizing)},
     }
     return _append_jsonl(path, [row], key="as_of")
 
@@ -853,6 +887,9 @@ def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
             name: {
                 "portfolio": book.portfolio.to_state(),
                 "flows": [{"on": f.on.isoformat(), "amount": str(f.amount)} for f in book.flows],
+                "stepped_through": (
+                    book.stepped_through.isoformat() if book.stepped_through else None
+                ),
             }
             for name, book in books.items()
         },
@@ -873,6 +910,11 @@ def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
                 Flow(on=date.fromisoformat(f["on"]), amount=Decimal(f["amount"]))
                 for f in entry["flows"]
             ],
+            stepped_through=(
+                date.fromisoformat(entry["stepped_through"])
+                if entry.get("stepped_through")
+                else None
+            ),
         )
         for name, entry in raw["books"].items()
     }

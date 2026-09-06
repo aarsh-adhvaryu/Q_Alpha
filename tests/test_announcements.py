@@ -137,8 +137,14 @@ def test_a_failed_download_stores_nothing(tmp_path: Path) -> None:
     assert not document_paths(_ann(), directory=tmp_path)[0].exists()
 
 
-def test_fetch_index_returns_nothing_on_a_bad_status() -> None:
-    assert fetch_index("VBL", fetch=lambda _u: (403, b"")) == []
+def test_a_failed_index_fetch_is_none_not_empty() -> None:
+    """``None`` = we could not check. ``[]`` = the exchange returned nothing. Different facts."""
+    assert fetch_index("VBL", fetch=lambda _u: (403, b"")) is None
+    assert fetch_index("VBL", fetch=lambda _u: (0, b"")) is None
+
+
+def test_a_successful_empty_index_is_an_empty_list() -> None:
+    assert fetch_index("VBL", fetch=lambda _u: (200, b"[]")) == []
 
 
 def _tiny_pdf() -> bytes:

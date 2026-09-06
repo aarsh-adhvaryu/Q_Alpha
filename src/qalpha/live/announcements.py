@@ -229,6 +229,13 @@ class SourceDocument:
 
     @property
     def truncated(self) -> bool:
+        """Did the model see less than the whole filing?
+
+        A truncated document is **not a document that was read**. The prompt carries
+        :data:`MAX_DOCUMENT_CHARS`, so anything past that was never looked at, and counting it as
+        covered would assert we had checked text nobody sent. Chunking long filings across several
+        calls is the real fix; until then this flag keeps the coverage honest.
+        """
         return len(self.text) > MAX_DOCUMENT_CHARS
 
 
@@ -273,11 +280,17 @@ def _urlopen_fetch(url: str, *, timeout: float = 30.0) -> tuple[int, bytes]:
         return 0, b""
 
 
-def fetch_index(symbol: str, *, fetch: FetchFn | None = None) -> list[Announcement]:
-    """The exchange's announcement index for one name. Empty on any failure, never a stale cache."""
+def fetch_index(symbol: str, *, fetch: FetchFn | None = None) -> list[Announcement] | None:
+    """The exchange's announcement index for one name.
+
+    **``None`` means the fetch failed; ``[]`` means the exchange returned nothing.** Those are
+    different facts and collapsing them is how "we could not check" becomes "nothing was filed" —
+    the same substitution that made an unread filing list read as a clean bill of health. A caller
+    that treats ``None`` as empty has reintroduced the defect.
+    """
     status, body = (fetch or _urlopen_fetch)(index_url(symbol))
     if status != 200 or not body:
-        return []
+        return None
     return parse_index(body.decode("utf-8", errors="replace"), symbol=symbol.removesuffix(".NS"))
 
 

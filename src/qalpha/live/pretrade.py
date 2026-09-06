@@ -142,8 +142,11 @@ class AnnouncementCoverage:
 
     #: Filings the exchange lists for this name inside the window.
     filings_in_window: int = 0
-    #: Filings archived, hash-verified and text-extracted.
+    #: Filings archived, hash-verified, text-extracted **and sent to the model in full**.
     documents_read: int = 0
+    #: Filings whose text exceeded the prompt budget, so the model saw only part of them. A partial
+    #: read is not a read: counting it as covered asserts we checked text nobody sent.
+    documents_truncated: int = 0
     #: Did an extraction actually run over those documents? Archiving is not reading either.
     extraction_ran: bool = False
     #: Was the index reachable at all? ``False`` means we know nothing, not that nothing was filed.
@@ -155,6 +158,7 @@ class AnnouncementCoverage:
             self.index_fetched
             and self.extraction_ran
             and self.documents_read >= self.filings_in_window
+            and self.documents_truncated == 0
         )
 
 
@@ -171,11 +175,15 @@ def _announcement_dimension(
         return Dimension(ANNOUNCEMENTS, UNKNOWN, "announcement index unreachable"), ()
     if not coverage.complete:
         unread = max(0, coverage.filings_in_window - coverage.documents_read)
-        why = (
-            f"{coverage.filings_in_window} filing(s) in the window, {unread} unread"
-            if unread
-            else "documents archived but no extraction ran"
-        )
+        if unread:
+            why = f"{coverage.filings_in_window} filing(s) in the window, {unread} unread"
+        elif coverage.documents_truncated:
+            why = (
+                f"{coverage.documents_truncated} filing(s) exceeded the prompt budget — "
+                "the model saw only part of them"
+            )
+        else:
+            why = "documents archived but no extraction ran"
         return Dimension(ANNOUNCEMENTS, UNKNOWN, why), ()
     verified = [e for e in events if e.verified]
     flagged = tuple(e for e in verified if e.materiality == _FLAGGING_MATERIALITY)
