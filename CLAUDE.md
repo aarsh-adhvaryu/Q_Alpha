@@ -93,10 +93,10 @@ four and only one is cheap.
 
 ## What is true today (2026-09-05)
 
-**25,320 lines · 45 live modules · 815 passed, 1 skipped.** `main` is at the merge of PR #96.
+**25,562 lines · 46 live modules · 826 passed, 1 skipped.** `main` is at the merge of PR #97.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
 (record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
-repair), #96 (README gate-1 correction) and #97 (the daily shadow spine) follow.
+repair), #96 (README gate-1 correction), #97 (the daily shadow spine) and #98 (the golden-day replay) follow.
 
 > **The test count in this file was wrong, and the PR bodies inherited it.** This file claimed
 > **703**; the true baseline at `5b18528` was **678 passed, 1 skipped** — measured, not counted off a
@@ -111,7 +111,8 @@ repair), #96 (README gate-1 correction) and #97 (the daily shadow spine) follow.
 > | #93 announcements + extractor | +38 | 770 |
 > | #94 pre-trade assessment | +21 | **791** |
 > | #95 integration repair | +15 | 806 |
-> | #97 daily evidence spine | +9 | **815** |
+> | #97 daily evidence spine | +9 | 815 |
+> | #98 golden-day replay | +11 | **826** |
 >
 > Counting dots on a `pytest -q` progress line is not measuring. `pytest | grep passed` is.
 
@@ -347,6 +348,7 @@ live/         advisor (sell/raise-cash/deploy/harvest) · deploy (the buy screen
               evidence (NSE regulatory-indicator adapter) · announcements (filings + provenance)
               extraction (the AI reports what a filing says; it decides nothing)
               pretrade (may we buy this name? eligibility only — never a view on return)
+              pipeline (the join: screen → evidence → pre-trade → governor → ONE outcome a day)
 scripts/       evidence.py — the daily shadow spine (archive → extract → report; changes nothing)
               twin · runner · policy · go_gate · verdicts · ai_brief · track_record · measures
               safety · scan · notify · auth · client · holdings · tradebook(+store) · taxpnl · ticker
@@ -426,16 +428,23 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
 1. **Correct the README's out-of-sample claim** (gate 1, `README.md` §5). Ten minutes; the claim most
    likely to over-authorise capital. The configuration was selected *on* the holdout. **Still not
    done** — `README.md:215` still prints `1✅`.
-2. **One golden-day replay** — data arrival → filings → recommendation → governor → approval → fake
-   execution → costs → mark → reconciliation, asserting the final portfolio exactly.
+2. ✅ **The golden-day replay exists** (`tests/test_golden_day.py`, #98). Data → evidence →
+   recommendation → governor → execution → costs → mark → reconciliation, asserting **cash to the
+   paisa** (`₹90,820.31`, costs `₹92.69`). It runs on the real archived exchange file and the real
+   archived filings, and it exercises `live/pipeline.py` — the join those parts were built for.
+   **`governor.py` finally has a caller.**
 
-   *Why this is now ahead of the null.* Every defect found in the 2026-08/09 sessions was an
+   *Why it was ahead of the null.* Every defect found in the 2026-08/09 sessions was an
    **integration** failure — right function, wrong argument; a constant standing in for a
    measurement; a source disagreeing with the one the broker uses. 700+ unit tests caught none of
    them. And five of those defects were **introduced during those same sessions and caught hours
    later by inspection**, which is luck dressed as process. The replay is the only test shape that
    turns that luck into a gate. Build it before anything else is layered on.
-3. **`Mandate` + `RiskGovernor.veto()`** — the operating contract from prose into an object.
+3. **Wire `live/pipeline.py` into a surface.** It is exercised only by the golden day today, on
+   purpose: with filings listed-but-unread every candidate reads `UNKNOWN`, so wiring it now would
+   produce `HUMAN_REQUIRED` every day about names nothing has opened. **Wire it once the shadow
+   record shows real coverage over a run of days** — and note that doing so does *not* reset
+   `CORE_V1`, whose clock moves only on a screen change. Then `Mandate` + `RiskGovernor.veto()`.
 4. **Generate the matched null** (≥1,000 draws, spec frozen). Criterion 3 reads ⚪ until it exists.
    It has a real deadline — it must exist before the twin window closes (2027-09), and its spec is
    frozen so producing it later cannot be tuned to the outcome.
