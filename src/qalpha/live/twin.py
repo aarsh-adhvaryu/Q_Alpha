@@ -276,7 +276,20 @@ MIN_MONTHS_FOR_A_VERDICT = 12
 #:
 #: ``None`` until that null has been run — and ``None`` means the criterion reads CANNOT ASSESS, never
 #: a pass. A bar that does not exist must never be silently treated as a bar of zero.
-NULL_P95_LOG_REL_WEALTH: float | None = None
+#: **Generated 2026-09-06 from 2,000 draws** — `reports/NULL_MATCHED.json`, produced by
+#: `scripts/exp_null.py` to the specification frozen in PREREGISTRATION_TWIN_RUN2.md §2. Computed
+#: **before `CORE_V1`'s window opened**, so there was no observation to tune it toward.
+#:
+#: ⚠️ **The bar is 17× the edge the backtest claims.** Random selection through identical machinery
+#: produces |G| up to 0.0719 over twelve months; the headline's advantage over the equal-weight fund
+#: is 0.0042/yr. If that edge is entirely real, criterion 3 fires in a 12-month window **3.0% of the
+#: time — less often than the 5% false-positive rate it was set to control.** Clearing it needs a
+#: 7.5% one-year gap; detecting the claimed edge at 95% needs ~196 years.
+#:
+#: **This value is not to be adjusted.** It was computed to a frozen spec and it is correct. What it
+#: shows is that a twelve-month window cannot resolve this effect size, which is a fact about the
+#: test, not a reason to move it. See reports/NULL_MATCHED.md.
+NULL_P95_LOG_REL_WEALTH: float | None = 0.071877
 
 #: The day the registered 12-month window opens. **Immutable once the clock starts.**
 #:
