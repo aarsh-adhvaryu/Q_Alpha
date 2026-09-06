@@ -216,8 +216,27 @@ def test_extract_verifies_end_to_end() -> None:
     assert len(events) == 1 and discarded == 1
 
 
+def test_two_events_of_one_type_in_one_document_do_not_collide() -> None:
+    """Keyed on (document, ticker, type) alone the second silently superseded the first."""
+    text = (
+        "The company reports a first proceeding before the tribunal in Mumbai concerning tax. "
+        "The company reports a second proceeding before the tribunal in Delhi concerning duty."
+    )
+    raw = "\n".join(
+        _line(type="litigation", passage=p)
+        for p in (
+            "a first proceeding before the tribunal in Mumbai concerning tax",
+            "a second proceeding before the tribunal in Delhi concerning duty",
+        )
+    )
+    events, discarded = parse_events(raw, [_doc(text=text)], model="m")
+    assert discarded == 0 and len(events) == 2
+    keys = {r["_key"] for r in event_rows(events, as_of=date(2026, 9, 5))}
+    assert len(keys) == 2, "same document, same type, different passages — two rows, not one"
+
+
 def test_event_rows_key_on_the_document_so_a_rerun_corrects(tmp_path: object) -> None:
     events, _ = parse_events(_line(), [_doc()], model="m")
     (row,) = event_rows(events, as_of=date(2026, 9, 5))
-    assert row["_key"] == f"{'a' * 16}:VBL:acquisition"
+    assert row["_key"].startswith(f"{'a' * 16}:VBL:acquisition:")
     assert row["verified"] is True and row["kind"] == "event"

@@ -40,7 +40,6 @@ from qalpha.live.twin import (
     CORE_EVALUATION_START,
     CORE_V1,
     DECIDING,
-    EVALUATION_START,
     NULL_P95_LOG_REL_WEALTH,
     REAL,
     TWIN_FULL,
@@ -395,8 +394,13 @@ def cmd_seed(cfg: Config) -> int:
     return 0
 
 
-def _marks_and_gate(books: dict, market: Market, cfg: Config):
-    """Mark every book, add both baselines, and grade the gate on what is actually known."""
+def _marks_and_gate(books: dict, market: Market, cfg: Config, *, persist: bool = True):
+    """Mark every book, add both baselines, and grade the gate on what is actually known.
+
+    ``persist=False`` makes this **genuinely read-only**. ``twin.py status`` is documented as a
+    read-only view and called this with the default, so merely *looking* at the twin appended a
+    history row — a reporting command mutating the append-only evidence record.
+    """
     from qalpha.live.tradebook import replay_tradebook
 
     marks = {n: mark(b, market.prices, market.as_of) for n, b in books.items() if n != REAL}
@@ -421,10 +425,11 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config):
     # the value path — so today's values are recorded first, the NAVs are read back out of the
     # append-only record, and only then can the gap be computed. `append_history` replaces a row with
     # the same date, so the second write below completes today's row rather than duplicating it.
-    try:
-        append_history(marks, [], as_of=market.as_of, gate_verdict=None)
-    except Exception as exc:
-        print(f"[twin] WARNING: values not recorded ({exc})", file=sys.stderr)
+    if persist:
+        try:
+            append_history(marks, [], as_of=market.as_of, gate_verdict=None)
+        except Exception as exc:
+            print(f"[twin] WARNING: values not recorded ({exc})", file=sys.stderr)
     # One NAV basis per track. A NAV unitized from run 2's start says nothing about a window that
     # opens a week later, so the two are computed separately and namespaced — `compare` reads the
     # track-prefixed key and never silently borrows the other track's.
@@ -434,27 +439,44 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config):
         {f"core_v1:{k}": v for k, v in navs_from_history(rows, start=CORE_EVALUATION_START).items()}
     )
     gaps = compare(marks, null_p95=NULL_P95_LOG_REL_WEALTH, navs=navs)
-    # **Run 2 owns the GO gate.** Two pairs now carry `gates`, one per track, and picking whichever
-    # comes first in the list would have silently swapped the GO gate onto the newer experiment.
-    gating = next((g for g in gaps if g.gates and g.track == "run2"), None)
-    core = next((g for g in gaps if g.gates and g.track == "core_v1"), None)
-    if core is not None:
-        window = "not yet open" if core.months < 1 else f"{core.months} month(s)"
+    # **RUN 2 NO LONGER AUTHORISES.** Its treatment changed inside its own window — two AI rules
+    # under one version label — so it was reclassified an operational rehearsal. An experiment
+    # declared methodologically invalid must never later produce a GO, so it keeps its statistic
+    # (recorded under `tracks`) and loses its authority. The GO gate reads the authorising track
+    # only, which is CORE_V1. Until that book exists the gate has no gap and says CANNOT ASSESS,
+    # which is the honest answer rather than a borrowed one.
+    rehearsal = next((g for g in gaps if g.gates and g.track == "run2"), None)
+    authorizing = next((g for g in gaps if g.authorizes), None)
+    if rehearsal is not None:
         print(
-            f"[twin] core track: {core.left} vs {core.right} — {window} since "
-            f"{CORE_EVALUATION_START}, G = "
-            + ("n/a" if core.log_rel_wealth is None else f"{core.log_rel_wealth:+.5f}")
-            + "  (descriptive; the core gate opens at 12 months)"
+            f"[twin] rehearsal (non-authorising): {rehearsal.left} vs {rehearsal.right} — G = "
+            + ("n/a" if rehearsal.log_rel_wealth is None else f"{rehearsal.log_rel_wealth:+.5f}")
         )
-    gate_gap = gating.rupees if gating else None
-    gate_g = gating.log_rel_wealth if gating else None
-    months = gating.months if gating else None
+    if authorizing is None:
+        print("[twin] GO gate: no authorising track yet — CORE_V1 not created, gap CANNOT ASSESS")
+    else:
+        window_note = "not yet open" if authorizing.months < 1 else f"{authorizing.months} month(s)"
+        print(
+            f"[twin] GO gate reads {authorizing.left} vs {authorizing.right} — {window_note} "
+            f"since {CORE_EVALUATION_START}, G = "
+            + (
+                "n/a"
+                if authorizing.log_rel_wealth is None
+                else f"{authorizing.log_rel_wealth:+.5f}"
+            )
+        )
+    gate_gap = authorizing.rupees if authorizing else None
+    gate_g = authorizing.log_rel_wealth if authorizing else None
+    months = authorizing.months if authorizing else None
     # Criterion 2 measures the fall THIS BOOK LIVED THROUGH — from the first cash flow, not a
     # trailing year. A -14.8% drop that happened before the money went in tests nothing, and the
     # first run of this file reported exactly that as a green.
     # The registered window, not the first flow ever recorded — criterion 2 must test the fall this
     # *experiment* lived through, and the tradebook reaches back before the experiment began.
-    start = max(EVALUATION_START, flows[0].on) if flows else EVALUATION_START
+    # The AUTHORISING window. Criterion 2 must test the fall the gating experiment lived through,
+    # and that experiment is now CORE_V1, whose clock opens later than run 2's.
+    gate_start = CORE_EVALUATION_START
+    start = max(gate_start, flows[0].on) if flows else gate_start
     window = market.index_close.loc[pd.Timestamp(start) : pd.Timestamp(market.as_of)]
     worst = float((window / window.cummax() - 1).min()) if len(window) > 1 else None
     gate = build_gate(
@@ -540,10 +562,20 @@ def cmd_daily(cfg: Config) -> int:
     verdicts = _ai_verdicts(books, market, cfg)
     market = replace(market, ai_verdicts=verdict_calls(verdicts))
 
+    # SAME-DAY IDEMPOTENCE. The cron saves books part-way through; if a later stage fails and the
+    # job is retried, stepping again would re-execute today's paper decisions — buying the same
+    # basket twice and showing one day's flows twice in an append-only record. A book already
+    # stepped through `as_of` is skipped, so a retry completes the *rest* of the day's work.
     decisions: list[Decision] = []
+    already = [n for n in DECIDING if n in books and books[n].stepped_through == market.as_of]
+    if already:
+        print(f"[twin] already stepped {market.as_of} for {', '.join(already)} — not re-deciding")
     for name in DECIDING:
-        if name in books:
-            decisions += step(books[name], ALL_POLICIES[name], market, cfg)
+        book = books.get(name)
+        if book is None or book.stepped_through == market.as_of:
+            continue
+        decisions += step(book, ALL_POLICIES[name], market, cfg)
+        book.stepped_through = market.as_of
     save_books(books)
 
     marks, gaps, gate = _marks_and_gate(books, market, cfg)
@@ -594,7 +626,7 @@ def cmd_status(cfg: Config) -> int:
     if market is None:
         print("[twin] no market data.")
         return 0
-    marks, gaps, gate = _marks_and_gate(books, market, cfg)
+    marks, gaps, gate = _marks_and_gate(books, market, cfg, persist=False)
     print(comparison_markdown(marks, gaps))
     print()
     print(gate.render())
