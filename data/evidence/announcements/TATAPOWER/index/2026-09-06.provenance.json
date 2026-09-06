@@ -1,9 +1,9 @@
 {
  "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=TATAPOWER",
- "retrieved_at_utc": "2026-09-06T10:08:21Z",
+ "retrieved_at_utc": "2026-09-06T11:08:54Z",
  "http_status": 200,
- "bytes": 1869456,
- "sha256": "b31f8d2b024ac420248882632629d71704a792cca5fc1b39d251a6033701e46c",
+ "bytes": 1870874,
+ "sha256": "07639a1afce081b37170c9d89951681311b3d6f83980ef64701a0f85d627375c",
  "document_date": "2026-09-06",
  "symbol": "TATAPOWER",
  "kind": "announcement_index"

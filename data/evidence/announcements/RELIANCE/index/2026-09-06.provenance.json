@@ -1,9 +1,9 @@
 {
  "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=RELIANCE",
- "retrieved_at_utc": "2026-09-06T10:08:17Z",
+ "retrieved_at_utc": "2026-09-06T11:08:51Z",
  "http_status": 200,
- "bytes": 2882839,
- "sha256": "c6d0374e0084b35d2e60d73d8e7bf2887ed82a87bf3e424ccdc59efe6b954d3b",
+ "bytes": 2888554,
+ "sha256": "cf132e28bef0bf573d4c683abf0bf139e254d39b4bbd60a43a3fc04d94d38a3a",
  "document_date": "2026-09-06",
  "symbol": "RELIANCE",
  "kind": "announcement_index"
