@@ -167,29 +167,28 @@ Raw book values are *not* contribution-invariant — identical deposits dilute a
 cancelling in it ($\ln(110/100)=0.095$ but $\ln(210/200)=0.049$), so a monthly SIP would walk the
 statistic toward zero. Unitized NAVs are invariant by construction (`live/nav.py`).
 
-`NULL_P95_LOG_REL_WEALTH` is **`0.071877`** — generated 2026-09-06 from 2,000 draws
-(`reports/NULL_MATCHED.md`), **before `CORE_V1`'s window opened**, so no observation existed to tune
-it toward.
+`NULL_P95_LOG_REL_WEALTH` is **`None`** again. A value was generated on 2026-09-06 and **withdrawn
+hours later**: it was matched to *a* specification, not to `CORE_V1`'s.
 
-> ### ⚠️ The bar is 17× the edge the strategy claims, and that changes what the gate can mean
+> ### ⛔ Four mismatches, and the bar was too LOW — the dangerous direction
 >
 > | | |
 > |---|---:|
-> | the bar, p95 of \|G\| | **0.0719** |
-> | the backtest's edge over the **gating** benchmark (18.2% vs 17.7%) | **0.0042/yr** |
-> | **P(criterion 3 fires in 12 months, if that edge is entirely real)** | **3.0%** |
-> | P(false positive, by construction) | 5.0% |
-> | one-year gap that would clear it | 7.5% |
-> | years to detect the claimed edge at 95% | ~196 |
+> | run 2 §2 registers p95 of \|G\|; `CORE_V1` §4 registers p95 of G | 0.0719 vs 0.0600 |
+> | the gate is **one-sided** against that two-sided bar, so true α is | **2.32%**, not 5% |
+> | the null accumulates **~50 of 51 members**; `CORE_V1` holds a capped basket | |
+> | measured p95(\|G\|): 8 names / 15 names / the null's ~50 | 0.162 / 0.106 / **0.072** |
+> | `CORE_V1` has `use_exits=True` and can sell; the null never does | no realised tax |
 >
-> **You are likelier to clear it by luck than by having the edge.** A 15-name basket tracks the
-> 50-name equal-weight fund with ~3.6% annual noise; twelve months is one observation of a 0.42%
-> signal inside it.
+> **The bar was 1.5×–2.3× too low.** Fixing it makes §2's power finding worse: at ≈0.105 the bar is
+> ~25× the claimed edge and criterion 3 fires about 1% of the time.
 >
-> **The bar is not being adjusted** — it was computed to a frozen spec and it is correct. What it
-> shows is that a twelve-month window cannot resolve this effect size, which is a fact about the
-> test. Three options are laid out in `reports/NULL_MATCHED.md` §4; **the choice is the user's and
-> must be recorded before 2026-09-08.**
+> The qualitative result — *twelve months cannot resolve this effect size* — was right. The number
+> was not. `reports/NULL_MATCHED.md` §6 lists what must happen before a value is set again.
+>
+> **⚠️ `CORE_V1` should not be treated as authorizing until this is repaired.** Its clock starts
+> 2026-09-08; letting it start on an unmatched statistic converts an open implementation question
+> into a permanent experiment.
 
 **The record is append-only.** `data/twin/history.jsonl` (one row/day: every book's value, net
 invested, XIRR, the gate) and `data/twin/ai_verdicts.jsonl` (every AI attempt *and* verdict, with
@@ -467,7 +466,7 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
    produce `HUMAN_REQUIRED` every day about names nothing has opened. **Wire it once the shadow
    record shows real coverage over a run of days** — and note that doing so does *not* reset
    `CORE_V1`, whose clock moves only on a screen change. Then `Mandate` + `RiskGovernor.veto()`.
-4. ✅ **The matched null exists** (2,000 draws, #99). It also showed the gate is underpowered by
+4. ⛔ **The matched null was generated and WITHDRAWN** (#99, then #100). It showed the gate is underpowered by
    ~17×. **Open decision, before 2026-09-08:** accept that criterion 3 will not go green, re-register
    a longer window, or change the question to non-inferiority — `reports/NULL_MATCHED.md` §4.
 5. **Exchange evidence spine** — ✅ cautionary-message feed (`live/evidence.py`, #90), ✅ corporate
