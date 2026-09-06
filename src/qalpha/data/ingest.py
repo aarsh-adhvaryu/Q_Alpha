@@ -80,9 +80,39 @@ def download_prices(tickers: list[str], start: str, end: str | None = None) -> p
 
 
 def save_parquet(df: pd.DataFrame, path: str | Path = DEFAULT_PARQUET) -> Path:
+    """Write a price panel **atomically**: temp file in the same directory, then ``os.replace``.
+
+    **Why this is not a style preference.** ``to_parquet`` straight onto the destination leaves a
+    truncated file if the process dies mid-write, and the daily cron can die mid-write — the job has
+    step timeouts and GitHub cancels runs. The price refresh is the *first* step in the chain, so a
+    half-written panel is then read by the mark, the twin and the evidence run, all of which would
+    proceed on it rather than fail. ``os.replace`` on the same filesystem is atomic, so a reader
+    sees either the previous panel or the new one and never a fragment.
+
+    The append-only twin record already writes this way for exactly this reason. This is the same
+    guarantee, extended to the file every other step depends on.
+
+    An empty frame is refused outright: overwriting a good panel with nothing is the worst outcome
+    available, and a refresh that produced no rows is a failure, not a result.
+    """
+    import os
+    import tempfile
+
+    if df.empty:
+        raise ValueError(
+            f"refusing to write an empty panel to {path} — a refresh that produced no rows is a "
+            "failed download, and overwriting a good panel with it loses the only copy"
+        )
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(out, index=False)
+    fd, tmp = tempfile.mkstemp(dir=str(out.parent), suffix=".parquet.tmp")
+    os.close(fd)
+    try:
+        df.to_parquet(tmp, index=False)
+        os.replace(tmp, out)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
     return out
 
 

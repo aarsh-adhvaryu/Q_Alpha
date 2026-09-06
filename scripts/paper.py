@@ -149,7 +149,20 @@ def _generate_dashboard(
 
 
 def _as_of(prices: PriceData, arg: str | None) -> date:
-    return date.fromisoformat(arg) if arg else prices.dates[-1].date()
+    """The valuation date, **clamped to the panel**.
+
+    ``--as-of`` past the last bar would mark the book against prices that do not exist, and every
+    figure downstream would be reported as of a date nothing was priced on. Marking is never
+    extrapolation: the answer is the last date there is data for, and it says so.
+    """
+    last = prices.dates[-1].date()
+    if not arg:
+        return last
+    asked = date.fromisoformat(arg)
+    if asked > last:
+        print(f"[paper] --as-of {asked} is past the panel; marking at {last} instead")
+        return last
+    return asked
 
 
 def _print_plan(
