@@ -85,6 +85,12 @@ COVERAGE_LOG = Path("data/evidence/coverage.jsonl")
 #: 2026-09-05.
 LOOKBACK_DAYS = 10
 
+#: How far back to read for a name **never covered before**. Ten days of history is not a basis for
+#: judging a company: an auditor resignation from day eleven would simply be invisible, and the name
+#: would read clean because nobody looked. A first sighting reads a year; every day after that reads
+#: :data:`LOOKBACK_DAYS`, because by then the gap is genuinely small.
+BOOTSTRAP_DAYS = 365
+
 #: Cap on documents fetched per name per run. A first run on a name with years of filings would
 #: otherwise download hundreds; the window bounds it in practice and this bounds the pathological
 #: case. **Hitting it makes coverage incomplete, which reads UNKNOWN — it never silently passes.**
@@ -263,6 +269,26 @@ def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
     return ScreenBasket(orders, held, cash, sector_of, marks)
 
 
+def _seen_before(ticker: str) -> bool:
+    """Has this name ever been covered? A first sighting gets a year, not ten days."""
+    if not COVERAGE_LOG.exists():
+        return False
+    for line in COVERAGE_LOG.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            if json.loads(line).get("ticker") == ticker:
+                return True
+        except json.JSONDecodeError:
+            continue
+    return False
+
+
+def _window_days(ticker: str) -> int:
+    """The assessment window for this name, in days. Recorded, never assumed by a reader."""
+    return LOOKBACK_DAYS if _seen_before(ticker) else BOOTSTRAP_DAYS
+
+
 def _cover_name(
     ticker: str, as_of: date, cutoff: date, generate: object | None, model: str
 ) -> tuple[AnnouncementCoverage, list[ExtractedEvent], int]:
@@ -272,8 +298,17 @@ def _cover_name(
         print(f"  {ticker:<16} index UNREACHABLE — dimension reads UNKNOWN")
         return AnnouncementCoverage(), [], 0
 
-    window = since(anns, cutoff, limit=MAX_DOCUMENTS_PER_NAME)
-    with_docs = [a for a in window if a.has_document]
+    # COUNT THE WHOLE WINDOW, FETCH ONLY A CAPPED SLICE OF IT. The previous version sliced and
+    # counted the same list, so a name with 30 filings reported "25 read of 25" and read as fully
+    # covered. The cap is a fetch budget, never a redefinition of what was filed — and a name that
+    # exceeds it is INCOMPLETE, which is UNKNOWN, which is the honest answer.
+    in_window = [a for a in since(anns, cutoff) if a.has_document]
+    with_docs = in_window[:MAX_DOCUMENTS_PER_NAME]
+    if len(in_window) > len(with_docs):
+        print(
+            f"  {ticker:<16} {len(in_window)} filings in the window, fetching the newest "
+            f"{MAX_DOCUMENTS_PER_NAME} — coverage stays INCOMPLETE"
+        )
     stored: list[Announcement] = []
     for ann in with_docs:
         if fetch_document(ann) is not None:
@@ -296,7 +331,8 @@ def _cover_name(
         extraction_ran = True  # nothing filed: there was nothing to extract, and that is complete
 
     coverage = AnnouncementCoverage(
-        filings_in_window=len(with_docs),
+        # The true window size, not the capped slice. This is the number that decides completeness.
+        filings_in_window=len(in_window),
         documents_read=len(docs),
         documents_truncated=truncated,
         extraction_ran=extraction_ran,
@@ -387,12 +423,18 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
             "stays incomplete and every name reads UNKNOWN, which is the honest answer."
         )
 
-    cutoff = as_of - timedelta(days=LOOKBACK_DAYS)
     coverage: dict[str, AnnouncementCoverage] = {}
+    windows: dict[str, int] = {}
     events: dict[str, list[ExtractedEvent]] = {}
     unverified: dict[str, int] = {}
     for ticker in tickers:
-        cov, found, bad = _cover_name(ticker, as_of, cutoff, generate, model)
+        days = _window_days(ticker)
+        windows[ticker] = days
+        if days != LOOKBACK_DAYS:
+            print(
+                f"  {ticker:<16} first sighting — reading {days} days of filings, not {LOOKBACK_DAYS}"
+            )
+        cov, found, bad = _cover_name(ticker, as_of, as_of - timedelta(days=days), generate, model)
         coverage[ticker] = cov
         events[ticker] = found
         unverified[ticker] = bad
@@ -419,6 +461,9 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
                     "extraction_ran": c.extraction_ran,
                     "index_fetched": c.index_fetched,
                     "complete": c.complete,
+                    # The window this verdict actually covers. Without it a reader cannot tell a
+                    # ten-day look from a year's, and both would print the same word.
+                    "window_days": windows.get(t, LOOKBACK_DAYS),
                     "extraction_version": EXTRACTION_VERSION,
                     "_key": f"{as_of.isoformat()}:{t}",
                 }

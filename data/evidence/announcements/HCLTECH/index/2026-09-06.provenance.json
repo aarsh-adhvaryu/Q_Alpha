@@ -1,9 +1,9 @@
 {
  "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=HCLTECH",
- "retrieved_at_utc": "2026-09-06T11:08:40Z",
+ "retrieved_at_utc": "2026-09-06T11:32:52Z",
  "http_status": 200,
- "bytes": 2097907,
- "sha256": "e15ba724beec91db95d6f2a8cfb389be60da726961ac6c13e4e80298ee881101",
+ "bytes": 2097221,
+ "sha256": "39c68f2ead8c63be01eae524871bc780cb8bfb364c7f7de7a3018407f27aede5",
  "document_date": "2026-09-06",
  "symbol": "HCLTECH",
  "kind": "announcement_index"
