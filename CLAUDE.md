@@ -93,7 +93,7 @@ four and only one is cheap.
 
 ## What is true today (2026-09-05)
 
-**25,899 lines · 46 live modules · 828 passed, 1 skipped.** `main` is at the merge of PR #98.
+**26197 lines · 46 live modules · 850 passed, 1 skipped.** `main` is at the merge of PR #100.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
 (record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
 repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the golden-day replay) and #99 (the matched null) follow.
@@ -113,7 +113,9 @@ repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the 
 > | #95 integration repair | +15 | 806 |
 > | #97 daily evidence spine | +9 | 815 |
 > | #98 golden-day replay | +11 | 826 |
-> | #99 matched null | +2 | **828** |
+> | #99 matched null | +2 | 828 |
+> | #100 null withdrawn | +1 | 829 |
+> | #101 the decision loop | +21 | **850** |
 >
 > Counting dots on a `pytest -q` progress line is not measuring. `pytest | grep passed` is.
 
@@ -369,7 +371,7 @@ live/         advisor (sell/raise-cash/deploy/harvest) · deploy (the buy screen
               evidence (NSE regulatory-indicator adapter) · announcements (filings + provenance)
               extraction (the AI reports what a filing says; it decides nothing)
               pretrade (may we buy this name? eligibility only — never a view on return)
-              pipeline (the join: screen → evidence → pre-trade → governor → ONE outcome a day)
+              pipeline (the loop: rank → skip → replace → anchor → ONE outcome a day)
 scripts/       evidence.py — the daily shadow spine (archive → extract → report; changes nothing)
               twin · runner · policy · go_gate · verdicts · ai_brief · track_record · measures
               safety · scan · notify · auth · client · holdings · tradebook(+store) · taxpnl · ticker
@@ -461,11 +463,30 @@ write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read
    them. And five of those defects were **introduced during those same sessions and caught hours
    later by inspection**, which is luck dressed as process. The replay is the only test shape that
    turns that luck into a gate. Build it before anything else is layered on.
-3. **Wire `live/pipeline.py` into a surface.** It is exercised only by the golden day today, on
-   purpose: with filings listed-but-unread every candidate reads `UNKNOWN`, so wiring it now would
-   produce `HUMAN_REQUIRED` every day about names nothing has opened. **Wire it once the shadow
-   record shows real coverage over a run of days** — and note that doing so does *not* reset
-   `CORE_V1`, whose clock moves only on a screen change. Then `Mandate` + `RiskGovernor.veto()`.
+3. ✅ **The decision loop no longer hands company uncertainty back to the user** (#101).
+
+   *The defect it fixed.* `propose` had five exit paths and **four were `HUMAN_REQUIRED`**. A
+   rejected candidate was dropped with nothing replacing it and the cash sat idle. Run against the
+   live basket it asked nineteen questions and bought nothing. Honest and useless are not opposites.
+
+   Now: walk the ranking, skip what does not clear, **take the next name instead**, and put the
+   remainder in the anchor (`NIFTYBEES`) so money is never idle. `HUMAN_REQUIRED` is reserved for
+   the **account or the feed** — an unpriced holding, a wholly dead evidence feed, a broker
+   mismatch. Never "I could not read one filing".
+
+   **The governor filters, it does not stop.** A name that would breach a cap is skipped and the
+   next considered. And the cap is only enforced once the book spans ≥ 4 sectors, because a 30% cap
+   needs four to be satisfiable and below that it rejects *everything*, including the first buy
+   into an empty book.
+
+   **Holdings get different rules from purchases.** `BLOCK` proposes an exit for approval; `WATCH`
+   and `UNKNOWN` freeze additions and **never sell**, because selling realises tax and this screen
+   buys names that are already down.
+
+   Today's shadow run: instead of 19 questions and ₹0 deployed, one order — ₹108,366 to the anchor,
+   with all 19 skips logged and priced. Still shadow; it changes no book.
+
+4. **`Mandate` + `RiskGovernor.veto()`** — the operating contract from prose into an object.
 4. ⛔ **The matched null was generated and WITHDRAWN** (#99, then #100). It showed the gate is underpowered by
    ~17×. **Open decision, before 2026-09-08:** accept that criterion 3 will not go green, re-register
    a longer window, or change the question to non-inferiority — `reports/NULL_MATCHED.md` §4.
@@ -507,6 +528,12 @@ The window opened **2026-09-01** and closes twelve months later. **The treatment
 this run 3 and restarts the clock. The primary-source tightening merged on day 4 got latitude because
 it *narrows* a guard rather than altering selection, and it is recorded — treat that as the last such
 amendment.
+
+**The cohort record.** `data/evidence/decisions.jsonl` now stores every candidate considered with
+its rank, price and verdict — taken or skipped. A portfolio yields one observation a year; 15 names
+across 12 deployments yields 180, and the skipped names become the control group instead of
+vanishing. That is the only route to enough observations to learn anything: at a 2%/name effect it
+is ~7 years, at 3% ~3 years, against 955 years for the portfolio-level question.
 
 **Watch `demoted` in `data/twin/ai_verdicts.jsonl`.** If the model keeps finding things it cannot cite
 to a filing, that count says whether the primary-source bar is right or too strict, and it is the

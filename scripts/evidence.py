@@ -60,6 +60,12 @@ from qalpha.live.extraction import (
     event_rows,
     extract,
 )
+from qalpha.live.pipeline import (
+    ANCHOR_TICKER,
+    ProposedOrder,
+    decision_rows,
+    propose,
+)
 from qalpha.live.pretrade import (
     AnnouncementCoverage,
     assess_basket,
@@ -68,6 +74,7 @@ from qalpha.live.pretrade import (
 from qalpha.live.twin import _append_jsonl
 
 EVENT_LOG = Path("data/evidence/events.jsonl")
+DECISION_LOG = Path("data/evidence/decisions.jsonl")
 REPORT = Path("reports/pretrade.md")
 COVERAGE_LOG = Path("data/evidence/coverage.jsonl")
 
@@ -175,6 +182,58 @@ def _candidates(cfg: Config, as_of: date) -> list[str]:
     except Exception as exc:
         print(f"[evidence] could not run the screen ({exc}) — covering held names only")
     return sorted(dict.fromkeys(names))
+
+
+def _market_context(
+    cfg: Config, tickers: Sequence[str]
+) -> tuple[dict[str, Decimal], dict[str, str], dict[str, int]]:
+    """Latest marks, sectors and current holdings for the shadow decision.
+
+    Every value is read or left absent — **nothing is defaulted**. A ticker with no mark simply does
+    not appear, which downstream becomes an unpriced holding and a HUMAN_REQUIRED rather than a
+    silent zero.
+    """
+    prices: dict[str, Decimal] = {}
+    sectors: dict[str, str] = {}
+    holdings: dict[str, int] = {}
+    # The budget is the book's ACTUAL idle cash, never a nominal figure. A shadow decision made
+    # against invented money would show what the system would do with money it does not have.
+    cash = Decimal("0")
+    try:
+        import pandas as pd
+
+        from qalpha.data.ingest import load_parquet
+
+        panel = load_parquet("data/historical/prices_watchlist.parquet")
+        wl = pd.read_csv("data/universes/nifty100_watchlist.csv")
+        sectors = dict(zip(wl["ticker"], wl["sector"], strict=False))
+        for ticker in set(tickers) | {ANCHOR_TICKER}:
+            if ticker in panel.adj_close.columns:
+                series = panel.adj_close[ticker].dropna()
+                if len(series):
+                    prices[ticker] = Decimal(str(float(series.iloc[-1])))
+    except Exception as exc:
+        print(f"[evidence] no price panel ({exc}) — the shadow decision will read UNKNOWN")
+    if ANCHOR_TICKER not in prices:
+        try:
+            from paper import _load_benchmark_series
+
+            bench = _load_benchmark_series().dropna()
+            if len(bench):
+                prices[ANCHOR_TICKER] = Decimal(str(float(bench.iloc[-1])))
+        except Exception:
+            pass
+    try:
+        from qalpha.live.twin import CORE_V1, load_books
+
+        books = load_books(cfg)
+        book = books.get(CORE_V1) or books.get("TWIN_FULL")
+        if book is not None:
+            holdings = {t: int(q) for t, q in book.portfolio.positions().items() if q > 0}
+            cash = book.portfolio.cash
+    except Exception:
+        pass
+    return prices, sectors, holdings, cash
 
 
 def _cover_name(
@@ -330,6 +389,38 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
         tickers, exchange=exchange, events=events, coverage=coverage, unverified=unverified
     )
 
+    prices_by_ticker, sector_by_ticker, held_now, idle_cash = _market_context(cfg, tickers)
+    # The decision loop, in shadow. This is what the product would actually do today: walk the
+    # ranking, skip what does not clear, replace it with the next name, and park the remainder in
+    # the anchor rather than leaving it idle. It changes nothing — no book, no basket, no order.
+    ranked = [
+        ProposedOrder(t, 1, prices_by_ticker.get(t, Decimal("0")), rank=i)
+        for i, t in enumerate(tickers)
+        if prices_by_ticker.get(t)
+    ]
+    proposal = propose(
+        as_of=as_of,
+        candidates=ranked,
+        target_names=cfg.deploy_policy.max_names_default,
+        holdings=held_now,
+        prices=prices_by_ticker,
+        sector_of=sector_by_ticker,
+        exchange=exchange,
+        events=events,
+        coverage=coverage,
+        unverified=unverified,
+        budget=idle_cash,
+        anchor_price=prices_by_ticker.get(ANCHOR_TICKER),
+    )
+    try:
+        rows = decision_rows(proposal)
+        if rows:
+            n = _append_jsonl(DECISION_LOG, rows, key="_key")
+            print(f"[evidence] {len(rows)} decision(s) recorded → {DECISION_LOG} ({n} on file)")
+    except Exception as exc:
+        print(f"[evidence] WARNING: decisions not recorded ({exc})", file=sys.stderr)
+    print(f"[evidence] shadow decision: {proposal.outcome} — {proposal.reason}")
+
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     complete = sum(1 for c in coverage.values() if c.complete)
     REPORT.write_text(
@@ -339,6 +430,8 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
         f"Coverage: **{complete} of {len(tickers)}** name(s) fully read"
         + ("" if exchange_prov is None else f" · exchange file `{exchange_prov.sha256[:16]}…`")
         + "\n\n"
+        + proposal.render()
+        + "\n\n---\n\n"
         + basket_markdown(report, as_of=as_of)
         + "\n\n## Detail\n\n```\n"
         + "\n\n".join(a.render() for a in report.values())
