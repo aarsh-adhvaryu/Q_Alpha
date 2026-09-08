@@ -275,10 +275,19 @@ def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
 
 
 def _already_extracted() -> set[str]:
-    """Document hashes the extractor has already read at the **current** version.
+    """Document hashes whose findings are **on file** at the current extractor version.
 
     A version bump re-reads everything on purpose: EX-1 rated routine results `high` because the
     prompt never said material to whom, so its findings are not the findings EX-2 would produce.
+
+    **A row alone is not enough.** It must carry ``events_recorded`` — written only after the events
+    it counts were durably appended (see :func:`_mark_extracted`). Rows without that field were
+    written by the version of this script that marked documents read *before* persisting anything,
+    so they attest to nothing; they are re-read, which costs tokens and loses no evidence.
+
+    That is not hypothetical. On 2026-09-08 ``extracted.jsonl`` carried **199 rows at EX-2 while
+    events.jsonl held 193 events, every one of them EX-1** — 199 documents recorded as read whose
+    findings existed nowhere. Under the old rule every one of them was a permanent cache hit.
     """
     if not EXTRACTED_LOG.exists():
         return set()
@@ -290,15 +299,31 @@ def _already_extracted() -> set[str]:
             row = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if row.get("extraction_version") == EXTRACTION_VERSION:
+        if row.get("extraction_version") == EXTRACTION_VERSION and "events_recorded" in row:
             out.add(str(row.get("sha256", "")))
     return out
 
 
-def _mark_extracted(hashes: object) -> None:
-    """Record that these documents have been read, so tomorrow does not read them again."""
+def _mark_extracted(hashes: object, *, events_recorded: int) -> None:
+    """Record that these documents were read **and that their findings reached the log**.
+
+    Call this LAST — after the events and the coverage row are on disk. The receipt is written after
+    the thing it is a receipt for, so an interruption can only ever lose the receipt, never the
+    evidence. The reverse ordering is what produced the 199 orphaned rows above: the mark was
+    durable per name inside the loop while the events waited in memory for the loop to finish, and
+    anything that stopped the run in between turned unread documents into permanent cache hits.
+
+    ``events_recorded`` is the count for this batch, and **zero is a real answer** — a filing that
+    genuinely says nothing a shareholder need worry about is a no-event receipt, which is different
+    from a document nobody read.
+    """
     rows = [
-        {"sha256": h, "extraction_version": EXTRACTION_VERSION, "_key": f"{EXTRACTION_VERSION}:{h}"}
+        {
+            "sha256": h,
+            "extraction_version": EXTRACTION_VERSION,
+            "events_recorded": events_recorded,
+            "_key": f"{EXTRACTION_VERSION}:{h}",
+        }
         for h in hashes
     ]
     if not rows:
@@ -307,6 +332,22 @@ def _mark_extracted(hashes: object) -> None:
         _append_jsonl(EXTRACTED_LOG, rows, key="_key")
     except Exception as exc:
         print(f"[evidence] WARNING: extraction ledger not updated ({exc})", file=sys.stderr)
+
+
+def _persist_events(events: list[ExtractedEvent], as_of: date) -> bool:
+    """Append one name's events to the log. ``True`` only if they are durably on disk.
+
+    Returns True for an empty list: nothing to write is not a failure, and the caller still needs to
+    write a no-event receipt for the documents it read.
+    """
+    if not events:
+        return True
+    try:
+        _append_jsonl(EVENT_LOG, event_rows(events, as_of=as_of), key="_key")
+        return True
+    except Exception as exc:
+        print(f"[evidence] WARNING: events not recorded ({exc})", file=sys.stderr)
+        return False
 
 
 def _seen_before(ticker: str) -> bool:
@@ -376,8 +417,11 @@ def _cover_name(
     done = _already_extracted()
     fresh = [d for d in docs if d.provenance.sha256 not in done]
     if docs and not fresh:
-        # Every document in this window has been through the extractor already. Its findings are on
-        # file in events.jsonl; re-reading them would cost the same tokens for the same answer.
+        # Every document in this window carries a receipt proving its findings reached events.jsonl
+        # (``_already_extracted`` only counts rows that do). Re-reading would cost the same tokens
+        # for the same answer. This branch used to assume that rather than check it, so a poisoned
+        # cache produced `complete: true` with no events on file — unread reading as clean, which is
+        # the fifteenth row of the table in CLAUDE.md.
         extraction_ran = True
         docs_to_read: list[SourceDocument] = []
     else:
@@ -388,8 +432,13 @@ def _cover_name(
         events, unverified = found, discarded
         if not extraction_ran:
             print(f"  {ticker:<16} extraction had {usage['failed_batches']} failed batch(es)")
+        # ORDER IS THE WHOLE FIX. Events first, receipt second — and no receipt at all if the events
+        # did not land. An interruption here can lose a receipt, which costs one re-read tomorrow.
+        # It can no longer lose the evidence while keeping the receipt, which cost 199 documents.
+        elif _persist_events(found, as_of):
+            _mark_extracted([d.provenance.sha256 for d in docs_to_read], events_recorded=len(found))
         else:
-            _mark_extracted(d.provenance.sha256 for d in docs_to_read)
+            extraction_ran = False  # the findings are not on file, so this name is NOT covered
     elif generate is None:
         pass  # reported once for the whole run, not once per name
     else:
@@ -504,15 +553,12 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
         events[ticker] = found
         unverified[ticker] = bad
 
+    # Events are already on disk — ``_cover_name`` persists each name's findings before it writes
+    # that name's receipt. This used to be the single bulk write for the whole run, which is what
+    # made every event in the run depend on the last name finishing.
     all_events = [e for found in events.values() for e in found]
     if all_events:
-        try:
-            n = _append_jsonl(EVENT_LOG, event_rows(all_events, as_of=as_of), key="_key")
-            print(
-                f"[evidence] {len(all_events)} event(s) recorded → {EVENT_LOG} ({n} rows on file)"
-            )
-        except Exception as exc:
-            print(f"[evidence] WARNING: events not recorded ({exc})", file=sys.stderr)
+        print(f"[evidence] {len(all_events)} event(s) recorded → {EVENT_LOG}")
 
     try:
         _append_jsonl(
