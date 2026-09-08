@@ -40,7 +40,7 @@ engine has been reconciled against exactly one real sale — single lot, all sho
 Multi-lot, long-term and loss set-off are unit-tested and have never met a broker statement. The
 first time you sell something complicated, that number needs checking by hand.
 
-## 3. What runs by itself
+## 3. What runs by itself — and how to make it run now
 
 One scheduled job, weekdays at 12:23 UTC. It refreshes prices, marks the paper books, runs the twin
 experiment, collects exchange filings, and commits the record. It is fail-soft everywhere and has a
@@ -48,6 +48,22 @@ postcondition that goes red if the day's record is missing or incomplete.
 
 **If it fails you get a Telegram alert.** If you get one, nothing is on fire: no money moves on that
 job. It means a day of evidence is missing.
+
+**The 12:23 UTC schedule is not a schedule.** Of the 60 scheduled runs since 2026-06-15, **none**
+started within fifteen minutes of it — median delay 2.4 hours, worst 10.1. GitHub queues scheduled
+workflows behind paid load and says outright that it may drop them. So do not read "it has not run
+by 6pm IST" as a fault; it usually lands between 19:30 and 21:30 IST.
+
+**To run it now**, either:
+
+- **In the dashboard** — sidebar → **▶ Run the daily job now**. It starts within seconds. This needs
+  `GITHUB_TOKEN` in the app's secrets with the **actions: write** scope (a classic token needs
+  `workflow`; a fine-grained one needs *Actions: read and write* on this repo). The sidebar then
+  shows whether a run is queued, running, or finished, with a link to it.
+- **From a terminal** — `gh workflow run paper.yml`, then `gh run watch`.
+
+Both start the *same* job on GitHub, which is the point: it has the credentials and it commits the
+record. Running the steps on your own machine would produce a day's evidence that never leaves it.
 
 ## 4. What the buy screen shows you
 

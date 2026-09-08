@@ -59,6 +59,30 @@ BAD = "#d03b3b"
 SERIES_BOOK = ACCENT  # the portfolio's own line
 SERIES_BENCH = MUTED  # the index it is measured against — recessive by design
 
+# --- the dark steps ---------------------------------------------------------------------------
+# Selected for the dark surface, not flipped from the light ones. A palette that is merely inverted
+# produces greens that vibrate and greys that vanish; these are the documented dark steps of the
+# same ramps, each clearing 3:1 against #1a1a19. `theme.dark` in .streamlit/config.toml carries the
+# matching values for Streamlit's own chrome, so the two halves of the page change together.
+D_INK = "#ffffff"
+D_INK_2 = "#c3c2b7"
+D_MUTED = "#898781"
+D_LINE = "#2c2c2a"
+D_LINE_2 = "#383835"
+D_SURFACE = "#1a1a19"
+D_PLANE = "#0d0d0d"
+D_SURFACE_2 = "#232321"  # table headers and footers, one step off the surface
+D_HOVER = "#242628"
+D_BAR = "#22252c"  # lighter than the plane on dark, or the bar disappears into the page
+D_ACCENT = "#3987e5"
+D_GOOD_INK = "#0ca30c"  # 5.19:1 on the dark surface — the mark colour is legible as text here
+D_WARN_INK = "#fab219"  # 9.49:1 on dark; on white the same step needs darkening to #8a6100
+D_SERIOUS_INK = "#ec835a"
+D_BAD_INK = "#e66767"
+
+L_SURFACE_2 = "#fafaf8"
+L_HOVER = "#f7f9fc"
+
 _TONE_INK: dict[str, str] = {
     "neutral": INK_2,
     "good": GOOD_INK,
@@ -337,11 +361,33 @@ def stylesheet() -> str:
 :root {{
   --qa-ink:{INK}; --qa-ink-2:{INK_2}; --qa-muted:{MUTED};
   --qa-line:{LINE}; --qa-line-2:{LINE_2};
-  --qa-surface:{SURFACE}; --qa-plane:{PLANE}; --qa-bar:{BAR};
-  --qa-accent:{ACCENT}; --qa-good:{GOOD}; --qa-good-ink:{GOOD_INK};
+  --qa-surface:{SURFACE}; --qa-surface-2:{L_SURFACE_2}; --qa-hover:{L_HOVER};
+  --qa-plane:{PLANE}; --qa-bar:{BAR};
+  --qa-accent:{ACCENT}; --qa-good:{GOOD};
+  --qa-good-ink:{GOOD_INK}; --qa-warn-ink:{_TONE_INK["warn"]};
+  --qa-serious-ink:{_TONE_INK["serious"]}; --qa-bad-ink:{BAD};
   --qa-warn:{WARN}; --qa-serious:{SERIOUS}; --qa-bad:{BAD};
-  --qa-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --qa-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --qa-num: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}}
+
+/* Dark mode follows the viewer's system setting, which is also what Streamlit follows when
+   `theme.base` is left unset — so both halves of the page flip on the same signal and cannot
+   disagree. Leave Streamlit's own Appearance menu on "Use system setting"; forcing it to Dark
+   there while the OS says light would turn Streamlit's chrome dark and leave these panels behind,
+   because Streamlit exposes no DOM attribute a stylesheet can read. Only the tokens change here —
+   every rule below is written against them, so there is one place where dark is defined. */
+@media (prefers-color-scheme: dark) {{
+  :root {{
+    --qa-ink:{D_INK}; --qa-ink-2:{D_INK_2}; --qa-muted:{D_MUTED};
+    --qa-line:{D_LINE}; --qa-line-2:{D_LINE_2};
+    --qa-surface:{D_SURFACE}; --qa-surface-2:{D_SURFACE_2}; --qa-hover:{D_HOVER};
+    --qa-plane:{D_PLANE}; --qa-bar:{D_BAR};
+    --qa-accent:{D_ACCENT}; --qa-good:{GOOD};
+    --qa-good-ink:{D_GOOD_INK}; --qa-warn-ink:{D_WARN_INK};
+    --qa-serious-ink:{D_SERIOUS_INK}; --qa-bad-ink:{D_BAD_INK};
+    --qa-warn:{WARN}; --qa-serious:{SERIOUS}; --qa-bad:{BAD};
+  }}
 }}
 
 /* ---- page plane: tighter than Streamlit's default, wider, and flat ---- */
@@ -422,9 +468,9 @@ hr {{ border-color: var(--qa-line); margin: 0.85rem 0; }}
 
 /* ---- semantic ink ---- */
 .qa-good {{ color:var(--qa-good-ink); }}
-.qa-bad {{ color:var(--qa-bad); }}
-.qa-warn {{ color:{_TONE_INK["warn"]}; }}
-.qa-serious {{ color:{_TONE_INK["serious"]}; }}
+.qa-bad {{ color:var(--qa-bad-ink); }}
+.qa-warn {{ color:var(--qa-warn-ink); }}
+.qa-serious {{ color:var(--qa-serious-ink); }}
 .qa-info {{ color:var(--qa-accent); }}
 .qa-neutral {{ color:var(--qa-ink-2); }}
 
@@ -439,15 +485,15 @@ hr {{ border-color: var(--qa-line); margin: 0.85rem 0; }}
 .qa-table-wrap {{ border:1px solid var(--qa-line); border-radius:3px; overflow-x:auto;
   background:var(--qa-surface); }}
 .qa-table {{ width:100%; border-collapse:collapse; font-size:.78rem; }}
-.qa-table thead th {{ background:#fafaf8; color:var(--qa-muted); font-weight:600;
+.qa-table thead th {{ background:var(--qa-surface-2); color:var(--qa-muted); font-weight:600;
   font-size:.63rem; letter-spacing:.09em; text-transform:uppercase; padding:.42rem .7rem;
   border-bottom:1px solid var(--qa-line); white-space:nowrap; }}
 .qa-table tbody td {{ padding:.4rem .7rem; border-bottom:1px solid var(--qa-line);
   color:var(--qa-ink); white-space:nowrap; font-variant-numeric: tabular-nums; }}
 .qa-table tbody tr:last-child td {{ border-bottom:0; }}
-.qa-table tbody tr:hover td {{ background:#f7f9fc; }}
+.qa-table tbody tr:hover td {{ background:var(--qa-hover); }}
 .qa-table tfoot td {{ padding:.42rem .7rem; border-top:1px solid var(--qa-line-2);
-  background:#fafaf8; font-variant-numeric: tabular-nums; }}
+  background:var(--qa-surface-2); font-variant-numeric: tabular-nums; }}
 .qa-table .qa-right {{ text-align:right; }}
 .qa-table .qa-left {{ text-align:left; }}
 .qa-table .qa-strong {{ font-weight:650; }}
@@ -506,10 +552,10 @@ hr {{ border-color: var(--qa-line); margin: 0.85rem 0; }}
 
 [data-testid="stDataFrame"] {{ border-radius:3px; }}
 [data-testid="stDataFrame"] > div {{
-  --gdg-border-color: {LINE}; --gdg-horizontal-border-color: {LINE};
-  --gdg-bg-header: #fafaf8; --gdg-bg-header-hovered: #f2f2ef;
-  --gdg-text-header: {MUTED}; --gdg-text-dark: {INK}; --gdg-accent-color: {ACCENT};
-  --gdg-font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --gdg-border-color: var(--qa-line); --gdg-horizontal-border-color: var(--qa-line);
+  --gdg-bg-header: var(--qa-surface-2); --gdg-bg-header-hovered: var(--qa-hover);
+  --gdg-text-header: var(--qa-muted); --gdg-text-dark: var(--qa-ink);
+  --gdg-accent-color: var(--qa-accent);
   --gdg-cell-horizontal-padding: 10;
 }}
 

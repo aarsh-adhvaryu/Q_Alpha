@@ -46,8 +46,10 @@ def test_dashboard_renders_the_system_view() -> None:
     assert any(("Live" in lbl) or ("Zerodha" in lbl) for lbl in labels)
     # And the instrument row renders — the book's headline figure, not a bare page of prose.
     assert "qa-tile-value" in page
-    # The core-GO expander carries the validated book's "Today" brief (unchanged underneath).
-    assert any("Today — what to do" in m.value for m in at.markdown)
+    # The System tab IS the twin now, and it says in plain words what the twin is for before it
+    # shows a single number — the complaint that retired the essay version (2026-09-08).
+    assert "What this is." in page and "What it is for." in page
+    assert "What it means today: nothing." in page, "the caveat is stated once, up front"
 
 
 # The advisor lives behind the Kite login gate on the 🔴 Live tab, which ``AppTest`` cannot pass
@@ -156,31 +158,31 @@ def test_the_sell_advisor_still_computes_on_the_real_money_surface() -> None:
 # ---- one book, one number (PLAN_TRUST_REPAIR.md PR-4 — fixes T2.2, T2.3) -------------------------
 
 
-def test_the_headline_tile_reads_the_same_source_as_the_chart_beneath_it() -> None:
-    """T2.3: the tile re-marked equity live while the chart read the committed curve.
+def test_the_headline_tiles_read_the_same_source_as_the_report_beneath_them() -> None:
+    """T2.3, carried over to the surface that still exists.
 
-    One book, two numbers, one screen. This asserts the tile's value is the committed curve's last
-    mark — the same series the chart, the GO scorecard and the freshness panel all read.
+    The original defect: the ₹2L core's tile re-marked equity live while the chart under it read the
+    committed curve — one book, two numbers, one screen. That view was deleted on 2026-09-08, but
+    the shape is now the twin's: four tiles above a generated report. So the assertion moves rather
+    than being dropped. Every tile value must be a figure the cron committed in ``marks.json``.
     """
     import json
-
-    raw = json.loads(_BOOK.read_text(encoding="utf-8"))
-    committed = float(raw["equity_curve"][-1]["equity"])
-
     import re
+
+    marks = json.loads((Path("data/twin/marks.json")).read_text(encoding="utf-8"))
+    committed = {f"₹{float(r['Value']):,.0f}" for r in marks["books"]}
 
     at = AppTest.from_file(str(_APP), default_timeout=90).run()
     assert not at.exception
     page = " ".join(m.value for m in at.markdown)
-    # The tile's VALUE, not merely the number appearing somewhere in the prose — the whole point is
-    # that the figure standing at the top of the page is the committed mark.
     values = re.findall(r'class="qa-tile-value">([^<]*)<', page)
-    assert any(f"₹{committed:,.0f}" == v for v in values), (
-        f"no tile shows the committed mark ₹{committed:,.0f}; tiles were {values}"
+    assert values, "the twin standings must render tiles"
+    assert set(values) <= committed, (
+        f"a tile shows a figure the cron never committed: {sorted(set(values) - committed)}"
     )
-    # And the tile is named for what it contains — it is inclusive of cash, beside a cash tile.
+    # And each tile is named for what the book IS, not for its codename.
     labels = re.findall(r'class="qa-tile-label">([^<]*)<', page)
-    assert any("Book value" in lbl and "cash" in lbl for lbl in labels)
+    assert "The fund to beat" in labels and "The screen" in labels
 
 
 def test_every_headline_return_arrives_with_a_window() -> None:
@@ -397,18 +399,26 @@ def test_the_twin_panel_is_on_the_system_tab() -> None:
     assert "_mtime_date" not in src
 
 
-def test_the_archived_autopilot_panel_says_it_is_archived() -> None:
-    """A superseded panel that silently vanishes is worse than one labelled frozen."""
+def test_the_system_tab_is_the_twin_and_nothing_else() -> None:
+    """Both collapsed panels are gone at the user's instruction (2026-09-08).
+
+    The archived auto-pilot books were frozen and their cron step is ``if: false``, so that panel
+    could only ever show the same numbers again. The validated ₹2L core keeps being marked daily in
+    ``data/paper/book.json`` — the cron is untouched — it simply no longer has a view. Deleting a
+    view does not delete a book, and this asserts exactly that split.
+    """
     import inspect
 
     import dashboard_app
 
     src = inspect.getsource(dashboard_app._system_tab)
-    assert "Archived — the auto-pilot books" in src
-    assert "will not move" in src
-    # Collapsed into an expander rather than deleted: a panel that silently vanishes leaves the
-    # reader wondering what happened to it. Its verdict travels with it.
-    assert "System − Shadow = ₹0.00" in src
+    assert "Archived — the auto-pilot books" not in src
+    assert "official GO gate" not in src
+    assert "_twin_panel" in src
+    assert not hasattr(dashboard_app, "_core_go_expander"), "the expander itself must be gone"
+    # The book it used to render is still marked by the cron — the workflow still commits it.
+    workflow = Path(__file__).resolve().parent.parent / ".github/workflows/paper.yml"
+    assert "data/paper/book.json" in workflow.read_text(encoding="utf-8")
 
 
 def test_the_orphaned_add_money_queue_is_retired() -> None:
