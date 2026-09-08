@@ -346,15 +346,28 @@ def stylesheet() -> str:
 
 /* ---- page plane: tighter than Streamlit's default, wider, and flat ---- */
 html, body, [data-testid="stAppViewContainer"] {{ background: var(--qa-plane); }}
-[data-testid="stHeader"] {{ background: transparent; height: 2.25rem; }}
+/* Do NOT set a height on the header. It carries Streamlit's own toolbar (share, edit, menu) and
+   is sticky, so a height shorter than the toolbar drops the page content underneath it — the
+   instrument bar's right-hand chips ended up sitting behind those icons. Let it size itself and
+   give it the plane colour so it reads as part of the page. */
+[data-testid="stHeader"] {{ background: var(--qa-plane); }}
 [data-testid="stMainBlockContainer"], .block-container {{
-  padding: 0.6rem 1.6rem 4rem; max-width: 1480px;
+  padding: 1rem 1.6rem 4rem; max-width: 1480px;
 }}
-[data-testid="stAppViewContainer"] * {{ font-family: var(--qa-sans); }}
+/* The page font is set by `theme.font` in .streamlit/config.toml, NOT here. A blanket
+   font-family rule on this container's descendants also repaints Streamlit's icon spans, whose
+   glyphs are LIGATURES in "Material Symbols Rounded" — with another family in front, the ligature
+   never forms and the icon renders as its own name: the sidebar arrow came out as the literal text
+   "double_arrow_right", the uploader read "uploadUpload". This rule restores the icon font and is
+   deliberately !important, so no later rule here can make that mistake again. */
+[data-testid="stIconMaterial"], [data-testid="stIconMaterial"] * {{
+  font-family: "Material Symbols Rounded" !important;
+  font-feature-settings: "liga" !important;
+}}
 [data-testid="stSidebar"] {{ background: var(--qa-surface); border-right: 1px solid var(--qa-line); }}
 [data-testid="stVerticalBlock"] {{ gap: 0.55rem; }}
 [data-testid="stHorizontalBlock"] {{ gap: 0.75rem; }}
-hr, [data-testid="stDivider"] hr {{ border-color: var(--qa-line); margin: 0.85rem 0; }}
+hr {{ border-color: var(--qa-line); margin: 0.85rem 0; }}
 
 /* ---- the instrument bar ---- */
 .qa-bar {{
@@ -468,12 +481,20 @@ hr, [data-testid="stDivider"] hr {{ border-color: var(--qa-line); margin: 0.85re
 .stTabs [data-baseweb="tab-highlight"] {{ background-color: var(--qa-accent); height:2px; }}
 .stTabs [data-baseweb="tab-border"] {{ display:none; }}
 
-[data-testid="stAlert"] {{ border-radius:2px; border-left:3px solid var(--qa-line-2);
+/* The coloured box is stAlertContainer; stAlert is only its outer wrapper, which is why the
+   first version of these rules changed nothing on screen. The kind lives on the INNER element
+   (stAlertContentSuccess / …Warning / …Error / …Info, built at runtime), so the container is
+   selected through it. */
+[data-testid="stAlertContainer"] {{ border-radius:2px; border-left:3px solid var(--qa-line-2);
   font-size:.8rem; padding:.5rem .75rem; }}
-[data-testid="stAlertContentSuccess"] {{ border-left-color: var(--qa-good); }}
-[data-testid="stAlertContentWarning"] {{ border-left-color: var(--qa-warn); }}
-[data-testid="stAlertContentError"] {{ border-left-color: var(--qa-bad); }}
-[data-testid="stAlertContentInfo"] {{ border-left-color: var(--qa-accent); }}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) {{
+  border-left-color: var(--qa-good); }}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) {{
+  border-left-color: var(--qa-warn); }}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) {{
+  border-left-color: var(--qa-bad); }}
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) {{
+  border-left-color: var(--qa-accent); }}
 
 [data-testid="stExpander"] details {{ border:1px solid var(--qa-line); border-radius:3px;
   background: var(--qa-surface); }}

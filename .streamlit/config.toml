@@ -31,6 +31,13 @@ orangeColor = "#ec835a"
 baseRadius = "small"
 buttonRadius = "small"
 baseFontSize = 14
+
+# The page font. It belongs HERE, not in a CSS rule: Streamlit applies this as its own body-font
+# token and leaves its icon font alone. A blanket `font-family` rule in the stylesheet also repaints
+# the Material Symbols icon spans, whose glyphs are ligatures — the sidebar arrow then renders as
+# the literal text "double_arrow_right". Fixed 2026-09-08 after it shipped.
+font = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif"
+codeFont = "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
 showWidgetBorder = true
 showSidebarBorder = true
 
