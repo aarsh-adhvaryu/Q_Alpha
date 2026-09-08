@@ -114,3 +114,62 @@ def test_no_archive_within_tolerance_reads_as_a_gap_not_a_clean_bill() -> None:
 
 def test_an_empty_basket_renders_nothing() -> None:
     assert flags_markdown([], as_of=AS_OF) == ""
+
+
+# --- "clear" must mean the filings were read ------------------------------------------------------
+
+
+def _coverage(tmp_path: Path, **over: object) -> Path:
+    row: dict[str, object] = {
+        "as_of": "2026-08-27",
+        "ticker": "VBL.NS",
+        "complete": True,
+        "extraction_version": EXTRACTION_VERSION,
+    }
+    row.update(over)
+    p = tmp_path / "coverage.jsonl"
+    p.write_text(json.dumps(row) + "\n")
+    return p
+
+
+def test_a_fully_covered_name_counts_as_read(tmp_path: Path) -> None:
+    from qalpha.live.flags import filings_read
+
+    assert filings_read(["VBL.NS"], as_of=AS_OF, path=_coverage(tmp_path)) == {"VBL"}
+
+
+def test_an_incomplete_row_does_not_count_as_read(tmp_path: Path) -> None:
+    """A row is written every run, including the ones where nothing was read."""
+    from qalpha.live.flags import filings_read
+
+    path = _coverage(tmp_path, complete=False)
+    assert filings_read(["VBL.NS"], as_of=AS_OF, path=path) == set()
+
+
+def test_an_old_extraction_version_does_not_count_as_read(tmp_path: Path) -> None:
+    from qalpha.live.flags import filings_read
+
+    path = _coverage(tmp_path, extraction_version="EX-1")
+    assert filings_read(["VBL.NS"], as_of=AS_OF, path=path) == set()
+
+
+def test_a_stale_coverage_row_does_not_count_as_read(tmp_path: Path) -> None:
+    from qalpha.live.flags import filings_read
+
+    path = _coverage(tmp_path, as_of="2026-01-01")
+    assert filings_read(["VBL.NS"], as_of=AS_OF, path=path) == set()
+
+
+def test_an_unread_name_is_never_listed_as_clear() -> None:
+    """THE DEFECT. With no current-version coverage, every name read as Clear.
+
+    The module docstring in `flags.py` says an absent warning and no warning are different facts and
+    only one of them is reassuring. The code said otherwise, on the surface the user places orders
+    from.
+    """
+    if load_archive(AS_OF)[1] is None:  # pragma: no cover
+        return
+    panel = flags_markdown(["VBL.NS"], as_of=AS_OF)
+    assert "Filings NOT read" in panel and "VBL" in panel
+    assert "not a clean bill" in panel
+    assert "Clear (exchange" not in panel
