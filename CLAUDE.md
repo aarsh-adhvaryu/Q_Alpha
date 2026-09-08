@@ -567,32 +567,9 @@ input to whether the veto ever graduates.
 
 ---
 
-## 🛑 The build is closed (2026-09-08)
-
-**[OPERATING.md](OPERATING.md) is the page the user runs this from.** Read it before proposing any
-change: it tells him what to do, what to ignore and when to come back, and it is the only document
-he needs.
-
-Two known faults are recorded there rather than fixed, deliberately, because both live in the
-**shadow** layer and neither touches the surface he acts on — verified: `pipeline`, `pretrade`,
-`extraction`, `announcements` and `evidence` appear nowhere in `dashboard_app.py`, which calls
-`advise_deploy_into_weakness` directly.
-
-1. **The evidence spine runs after the twin deploys**, so it only ever screens leftover change. On
-   2026-09-07 it saw ₹377 and proposed one share. The cohort record it produces is near-worthless
-   until it assesses before deployment, or against the next contribution.
-2. **Materiality is read as newsworthiness, not risk.** 77 of 193 extracted events came back `high`,
-   mostly routine results — "revenue up 10%", "EBITDA grew 8%". A high-materiality event triggers
-   `WATCH`, which skips the name, so *good* news would reject a candidate. The prompt never defines
-   material as **adverse to a holder**.
-
-Do not restart the build to fix these unless the user asks. He stopped on purpose.
-
----
-
 ## Reading order for a new session
 
-**[OPERATING.md](OPERATING.md)** → this file → **[PLAN_SYSTEM.md](PLAN_SYSTEM.md)** (target architecture) →
+This file → **[PLAN_SYSTEM.md](PLAN_SYSTEM.md)** (target architecture) →
 **[reports/PREREGISTRATION_TWIN_RUN2.md](reports/PREREGISTRATION_TWIN_RUN2.md)** (what is frozen and
 why) → `README.md` (the front door, and note the out-of-sample claim above) → `Q_alpha.md` (the spec).
 
