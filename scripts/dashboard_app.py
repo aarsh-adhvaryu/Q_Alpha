@@ -2228,6 +2228,16 @@ def _add_money_advisor(
         # The ADVICE object is cached, not its markdown: the rendered string cannot be turned back
         # into orders, and the basket file needs the orders (§2b).
         st.markdown(advice.render())
+        # What the exchange and the filings say about these names, at the moment it matters rather
+        # than in a report nobody opens. FLAGS, NOT VETOES: nothing here changed the basket above.
+        try:
+            from qalpha.live.flags import flags_markdown
+
+            panel = flags_markdown([o.ticker for o in advice.deploy.buy_orders], as_of=as_of)
+            if panel:
+                st.markdown(panel)
+        except Exception as exc:
+            st.caption(f"Evidence panel unavailable ({exc}). The basket above is unaffected.")
         st.caption(
             "This suggestion stays put through the 30s auto-refresh — press the button again "
             "for fresh prices."

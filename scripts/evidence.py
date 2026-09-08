@@ -37,6 +37,7 @@ import pandas as pd
 from qalpha.config import Config
 from qalpha.live.announcements import (
     Announcement,
+    SourceDocument,
     documents_for,
     fetch_and_archive_index,
     fetch_document,
@@ -77,6 +78,10 @@ from qalpha.live.twin import _append_jsonl
 
 EVENT_LOG = Path("data/evidence/events.jsonl")
 DECISION_LOG = Path("data/evidence/decisions.jsonl")
+#: Documents already put through the extractor, keyed on their content hash. Without it the same
+#: filing is re-read every day of its window — measured at ~33 model calls a day, roughly ten times
+#: what is needed, because a 10-day window re-presents the same documents ten times.
+EXTRACTED_LOG = Path("data/evidence/extracted.jsonl")
 REPORT = Path("reports/pretrade.md")
 COVERAGE_LOG = Path("data/evidence/coverage.jsonl")
 
@@ -269,6 +274,41 @@ def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
     return ScreenBasket(orders, held, cash, sector_of, marks)
 
 
+def _already_extracted() -> set[str]:
+    """Document hashes the extractor has already read at the **current** version.
+
+    A version bump re-reads everything on purpose: EX-1 rated routine results `high` because the
+    prompt never said material to whom, so its findings are not the findings EX-2 would produce.
+    """
+    if not EXTRACTED_LOG.exists():
+        return set()
+    out: set[str] = set()
+    for line in EXTRACTED_LOG.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("extraction_version") == EXTRACTION_VERSION:
+            out.add(str(row.get("sha256", "")))
+    return out
+
+
+def _mark_extracted(hashes: object) -> None:
+    """Record that these documents have been read, so tomorrow does not read them again."""
+    rows = [
+        {"sha256": h, "extraction_version": EXTRACTION_VERSION, "_key": f"{EXTRACTION_VERSION}:{h}"}
+        for h in hashes
+    ]
+    if not rows:
+        return
+    try:
+        _append_jsonl(EXTRACTED_LOG, rows, key="_key")
+    except Exception as exc:
+        print(f"[evidence] WARNING: extraction ledger not updated ({exc})", file=sys.stderr)
+
+
 def _seen_before(ticker: str) -> bool:
     """Has this name ever been covered? A first sighting gets a year, not ten days."""
     if not COVERAGE_LOG.exists():
@@ -319,12 +359,23 @@ def _cover_name(
     events: list[ExtractedEvent] = []
     unverified = 0
     extraction_ran = False
-    if generate is not None and docs:
-        found, discarded, _raw, usage = extract(docs, generate=generate, model=model)  # type: ignore[arg-type]
+    done = _already_extracted()
+    fresh = [d for d in docs if d.provenance.sha256 not in done]
+    if docs and not fresh:
+        # Every document in this window has been through the extractor already. Its findings are on
+        # file in events.jsonl; re-reading them would cost the same tokens for the same answer.
+        extraction_ran = True
+        docs_to_read: list[SourceDocument] = []
+    else:
+        docs_to_read = fresh
+    if generate is not None and docs_to_read:
+        found, discarded, _raw, usage = extract(docs_to_read, generate=generate, model=model)  # type: ignore[arg-type]
         extraction_ran = usage.get("failed_batches", 0) == 0
         events, unverified = found, discarded
         if not extraction_ran:
             print(f"  {ticker:<16} extraction had {usage['failed_batches']} failed batch(es)")
+        else:
+            _mark_extracted(d.provenance.sha256 for d in docs_to_read)
     elif generate is None:
         pass  # reported once for the whole run, not once per name
     else:

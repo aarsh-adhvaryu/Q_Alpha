@@ -52,6 +52,8 @@ pytest.log
 # proves which bytes were read. Tracking the bytes themselves would add ~90MB on the first run and
 # grow daily. The sidecars ARE tracked — they are the audit trail.
 data/evidence/announcements/**/*.pdf
+# ...but the extracted TEXT is tracked: it is what survives if NSE withdraws a document.
+!data/evidence/announcements/**/*.txt.gz
 data/evidence/announcements/**/index/*.json
 data/evidence/reg_ind/*.csv
 # ...except the documents the test-suite reads back, which must ship with the repo:

@@ -45,18 +45,37 @@ postcondition that goes red if the day's record is missing or incomplete.
 **If it fails you get a Telegram alert.** If you get one, nothing is on fire: no money moves on that
 job. It means a day of evidence is missing.
 
-## 4. What to ignore
+## 4. What the buy screen shows you
 
-**`reports/pretrade.md`.** It is a shadow report and it does not feed anything you act on. Two things
-in it are known to be wrong: it runs *after* the twin has already deployed, so it only ever sees
-leftover change, and it labels routine good news like "revenue up 10%" as high-materiality, which
-would flag a name you have no reason to avoid. It is a research surface, not advice.
+Under the basket, the dashboard prints **what the exchange and the filings say** about those exact
+names: any NSE caution or surveillance condition, and any high-concern event found in a real filing
+in the last 30 days, with a link to the filing itself.
 
-**The GO gate.** It reads NOT YET and it will keep reading NOT YET. It was built to answer "has this
+```
+⚠️ What the exchange and the filings say
+
+- JIOFIN — 🟡 exchange: Scrip PE is greater than 50 (4 trailing quarters)
+- BLISSGVS — 🔴 exchange: trade-to-trade series BE; Long Term ASM stage 4
+
+Clear: VBL, TCS, MARUTI.
+```
+
+**These are flags, not vetoes.** Nothing there removed a name from the basket. The screen chose it,
+and whether to buy it is your call.
+
+It tells you how old the exchange file is. If it says the names have **not** been checked, that is a
+gap and not a clean bill — the daily job is not archiving, and that is worth a look.
+
+## 5. What to ignore
+
+**`reports/pretrade.md`.** A research surface. Anything from it that matters is already on the buy
+screen.
+
+**The GO gate.** It reads NOT YET and will keep reading NOT YET. It was built to answer "has this
 beaten a cheap index fund by more than luck", and the matched null showed that question needs
-roughly 200 years of data at this effect size to answer. It is not a countdown to anything.
+roughly 200 years of data at this effect size. It is not a countdown to anything.
 
-## 5. What this system is, honestly
+## 6. What this system is, honestly
 
 It buys large Indian companies that have fallen furthest below their one-year high, spreads them
 across sectors, does the FIFO and capital-gains arithmetic properly, and keeps you invested rather
@@ -78,7 +97,7 @@ Two things it will not do, and no system can:
   index's −36.3%. You are paid extra return for taking extra risk, and nobody has yet watched this
   system live through a fall.
 
-## 6. When to come back
+## 7. When to come back
 
 Open the repo again when one of these happens:
 
@@ -88,7 +107,7 @@ Open the repo again when one of these happens:
 | A holding has a split, bonus, demerger or buyback | **no corporate action has ever been reconciled live** |
 | A Telegram failure alert repeats for more than two days | the record is accruing holes |
 | The market falls hard and you want to know what it did | nobody has watched this system fall |
-| You want the shadow evidence layer wired in | it needs the two faults in §4 fixed first |
+| You want a flag to actually block a name | that is a veto, and flag-don't-veto is a rule with a reason |
 
 Until one of those, the answer to "should I change something" is no. The strongest proven result in
 this whole project is that **trading less beat trading more**, net of cost and tax, across every

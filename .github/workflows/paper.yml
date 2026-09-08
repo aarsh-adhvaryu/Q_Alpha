@@ -58,6 +58,27 @@ jobs:
         if: false
         continue-on-error: true # a fake-money measurement must never red the paper cron
         run: uv run python scripts/autopilot.py daily
+      # The evidence spine, in SHADOW. **Runs BEFORE the twin, on purpose.** It used to run after,
+      # by which time the twin had already spent the book's cash — so the spine only ever screened
+      # the leftover change (₹377 on 2026-09-07, a one-share proposal) and its cohort record was
+      # near-worthless. Assessing the basket the twin is ABOUT to buy is the whole point.
+      # It stays continue-on-error and capped, so it still cannot delay or block the twin.
+      # Fetches the exchange's regulatory-indicator file and every
+      # candidate's corporate filings, archives them with hashes, extracts events from the documents
+      # (never from a web search), and renders a pre-trade report. It touches no book, no basket and
+      # no order, and CORE_V1's clock is untouched by design. It runs AFTER the twin so a failure
+      # here can never delay the thing that actually accrues evidence.
+      - name: Evidence spine — archive filings, extract events, render the pre-trade report (shadow)
+        continue-on-error: true
+        # A HANG HERE WOULD COST THE DAY'S RECORD. This step downloads dozens of PDFs and makes ~33
+        # model calls; `continue-on-error` covers a failure but not a stall, and a stalled step runs
+        # out the job before `Commit the track record` ever executes. The twin has already produced
+        # its row by this point, so capping this protects the thing that actually accrues evidence.
+        timeout-minutes: 20
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run python scripts/evidence.py daily
+
       # The twin: five books on the user's real cash flows, four of them autonomous. This replaces
       # the auto-pilot step above. Fake money — no broker client is imported and nothing can place an
       # order. GIST_TOKEN reads the private tradebook master; without it the runner falls back to a
@@ -74,22 +95,6 @@ jobs:
           # for twelve months, which is precisely what the missing env block would have done.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: uv run python scripts/twin.py daily
-
-      # The evidence spine, in SHADOW. Fetches the exchange's regulatory-indicator file and every
-      # candidate's corporate filings, archives them with hashes, extracts events from the documents
-      # (never from a web search), and renders a pre-trade report. It touches no book, no basket and
-      # no order, and CORE_V1's clock is untouched by design. It runs AFTER the twin so a failure
-      # here can never delay the thing that actually accrues evidence.
-      - name: Evidence spine — archive filings, extract events, render the pre-trade report (shadow)
-        continue-on-error: true
-        # A HANG HERE WOULD COST THE DAY'S RECORD. This step downloads dozens of PDFs and makes ~33
-        # model calls; `continue-on-error` covers a failure but not a stall, and a stalled step runs
-        # out the job before `Commit the track record` ever executes. The twin has already produced
-        # its row by this point, so capping this protects the thing that actually accrues evidence.
-        timeout-minutes: 20
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: uv run python scripts/evidence.py daily
 
       - name: Commit the track record
         run: |
