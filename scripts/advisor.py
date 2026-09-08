@@ -193,6 +193,11 @@ def main(argv: list[str] | None = None) -> int:
             index_close,
             as_of,
             tilt=args.tilt,
+            # HARD BUDGET, matching OPERATING.md: "Add money → type the amount. The number you type
+            # is a hard budget." Without this the True default makes it ``portfolio.cash + amount``,
+            # so `--amount 50000` against a ₹3L balance advises a ₹3.5L basket. Found 2026-09-08 by
+            # the gate-2 audit, which read every caller instead of the two I had in mind.
+            spend_idle_cash=False,
         )
         print(advice.render())
         return 0
