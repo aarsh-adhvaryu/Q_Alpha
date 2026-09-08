@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=VEDL",
+ "retrieved_at_utc": "2026-09-08T06:28:46Z",
+ "http_status": 200,
+ "bytes": 1555896,
+ "sha256": "743d3cf471f88d6bc5ebc74b336070fbf1b95ff91f4e6a8f13818a101bab5312",
+ "document_date": "2026-09-08",
+ "symbol": "VEDL",
+ "kind": "announcement_index"
+}

@@ -34,7 +34,14 @@ from qalpha.live.announcements import MAX_DOCUMENT_CHARS, SourceDocument
 #: Bump on any change to the prompt, the parser, the verification rule or the event vocabulary.
 #: A label that spans two rules makes every row under it unusable — that already happened once, to
 #: ``PR-8b``, and cost the first four days of the run.
-EXTRACTION_VERSION = "EX-1"
+#: EX-1 (2026-09-05): asked for "material events" and never said material *to whom*. The model read
+#: it as newsworthy and returned 77 of 193 events at ``high`` — mostly routine results, "revenue up
+#: 10%", "EBITDA grew 8%". Since a high-materiality event triggers ``WATCH``, **good news rejected
+#: candidates**. The model was answering the question it was asked.
+#: EX-2 (2026-09-08): materiality is defined as **concern to someone who owns the stock**, with the
+#: routine cases named as explicitly NOT material. Nothing about the model changed; the instruction
+#: did.
+EXTRACTION_VERSION = "EX-2"
 
 EVENT_LOG = Path("data/evidence/events.jsonl")
 
@@ -182,6 +189,26 @@ def build_prompt(chunks: Sequence[DocumentChunk]) -> str:
         "Extract material events. DO NOT recommend, rank, rate, or advise. Do not say whether a "
         "stock should be bought, held or sold — that decision is made elsewhere by rules, and an "
         "opinion here would be discarded.\n\n"
+        "WHAT 'MATERIALITY' MEANS HERE — read this before rating anything:\n"
+        "Materiality is **how much this should worry someone who already owns the shares**. It is "
+        "NOT how newsworthy, how large, or how interesting the item is.\n\n"
+        "  high   — a reason to stop and think before buying more: a regulator or court acting "
+        "against the company or its officers, insolvency, an auditor resigning or qualifying, a "
+        "default or downgrade, promoter pledges rising sharply, a large related-party transaction, "
+        "a plant or business shut down, guidance withdrawn or cut sharply, a restatement.\n"
+        "  medium — worth knowing, not alarming on its own: a change of key management, a "
+        "moderate acquisition or divestment, a fundraise, an ordinary rating affirmation.\n"
+        "  low    — routine disclosure.\n\n"
+        "THESE ARE NOT MATERIAL, whatever the numbers involved. Rate them 'low' or omit them:\n"
+        "  - quarterly or annual results, however good or bad the growth\n"
+        "  - revenue, EBITDA, margin or profit figures on their own\n"
+        "  - dividends, bonuses, splits and record dates\n"
+        "  - analyst or investor meet intimations, presentations, transcripts\n"
+        "  - trading-window closures, newspaper publications, compliance certificates\n"
+        "  - a contract win, expansion or investment, however large\n\n"
+        "**Good news is never high materiality.** A company growing 10% is not a reason to worry "
+        "about owning it. If the only thing a filing says is that the business did well, it is "
+        "'low'.\n\n"
         "For every material event, emit one line in EXACTLY this format:\n\n"
         "EVENT: ticker=<SYMBOL>; type=<TYPE>; date=<YYYY-MM-DD or ->; materiality=<high|medium|low>; "
         'passage="<VERBATIM QUOTE FROM THE DOCUMENT>"; summary=<one clause>; uncertainty=<one clause or ->\n\n'

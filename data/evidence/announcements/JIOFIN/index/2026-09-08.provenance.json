@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=JIOFIN",
+ "retrieved_at_utc": "2026-09-08T06:28:08Z",
+ "http_status": 200,
+ "bytes": 190235,
+ "sha256": "0deafd61321391d78b836f664f693df66995ee253c9445944a9e0cb5d8707f9f",
+ "document_date": "2026-09-08",
+ "symbol": "JIOFIN",
+ "kind": "announcement_index"
+}

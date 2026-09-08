@@ -100,7 +100,7 @@ four and only one is cheap.
 
 ## What is true today (2026-09-06)
 
-**26,368 lines · 46 live modules · 896 passed.** `main` is at the merge of PR #103.
+**26656 lines · 47 live modules · 908 passed.** `main` is at the merge of PR #104.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
 (record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
 repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the golden-day replay) and #99 (the matched null) follow.
@@ -567,9 +567,36 @@ input to whether the veto ever graduates.
 
 ---
 
+## 🛑 The build is closed (2026-09-08)
+
+**[OPERATING.md](OPERATING.md) is the page the user runs this from.** Read it before proposing any
+change: it tells him what to do, what to ignore and when to come back, and it is the only document
+he needs.
+
+**Both faults found on 2026-09-07 are now fixed**, and the evidence layer is on the buy surface as
+**flags, never vetoes** (`live/flags.py`, rendered under the basket in `dashboard_app.py`).
+
+1. **The spine ran after the twin deployed**, so it only ever screened leftover change — ₹377 on
+   2026-09-07, a one-share proposal. It now runs **before** the twin in `paper.yml`.
+2. **Materiality was read as newsworthiness.** EX-1 asked for "material events" and never said
+   material *to whom*, so 77 of 193 came back `high` — "revenue up 10%", "EBITDA grew 8%" — and a
+   high event triggers `WATCH`, which skips a name. **Good news rejected candidates.** EX-2 defines
+   materiality as *concern to someone who owns the shares* and names the routine cases as explicitly
+   not material. `pretrade` acts only on the current version, so EX-1 rows stay on file and cannot
+   act.
+
+Also closed: documents are re-read only once (an extraction ledger keyed on content hash — the same
+filing was being re-read every day of its window, ~10× the needed calls), and the **extracted text
+is archived gzipped and tracked**, so a passage stays checkable if NSE withdraws a document.
+
+The build is finished. Do not reopen it unless the user asks or one of OPERATING.md §7's
+triggers fires.
+
+---
+
 ## Reading order for a new session
 
-This file → **[PLAN_SYSTEM.md](PLAN_SYSTEM.md)** (target architecture) →
+**[OPERATING.md](OPERATING.md)** → this file → **[PLAN_SYSTEM.md](PLAN_SYSTEM.md)** (target architecture) →
 **[reports/PREREGISTRATION_TWIN_RUN2.md](reports/PREREGISTRATION_TWIN_RUN2.md)** (what is frozen and
 why) → `README.md` (the front door, and note the out-of-sample claim above) → `Q_alpha.md` (the spec).
 
