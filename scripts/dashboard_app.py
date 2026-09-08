@@ -12,13 +12,16 @@ acts in his own broker. Live holdings carry no purchase dates, so live tax is ap
 **upload a Zerodha Console tradebook CSV** in the Live view — that replays exact dated FIFO lots
 (criterion 4) and switches the page to exact-tax mode; otherwise it shows the short-term caveat.
 
-TWO tabs = the whole thing on one screen. **🧠 The system** — ONE fake-money book running everything
-on its own advice (cash in → AI-paced deploys into weakness → tax-gated real-world rebalancing →
-hedge readout in stress), vs a no-AI shadow and a buy-and-hold baseline with identical cash flows;
-the validated ₹2L core (the official GO gate) runs untouched in an expander underneath. **🔴 Live
-(Zerodha)** — the real account + the interactive advisor; the human places every order. The AI only
-paces deploy size via a fixed rule and never computes a number — the validated engine is always the
-calculator (rule (a) intact).
+TWO tabs. **The system** — the twin: eight fake-money books run on the user's real cash flows, so
+the screen, the AI, the hedge and the exits can each be measured against an equal-weight fund and
+against each other. **Live · Zerodha** — the real account + the interactive advisor; the human
+places every order. The AI only paces deploy size via a fixed rule and never computes a number — the
+validated engine is always the calculator (rule (a) intact).
+
+Trimmed 2026-09-08 at the user's instruction. Two collapsed panels are gone: the archived auto-pilot
+books (frozen, their cron step is ``if: false``) and the validated ₹2L core's full view. **The core
+book is not gone** — the cron still marks it daily into ``data/paper/book.json`` and still commits
+it; it simply no longer has a screen. Deleting a view does not delete a book.
 """
 
 from __future__ import annotations
@@ -47,29 +50,20 @@ from qalpha.live.advisor import advise_harvest, advise_raise_cash, advise_sell
 from qalpha.live.basket import BUY, SELL, BasketOrder
 from qalpha.live.dashboard import (
     BUY_ADVICE_ON_REAL_MONEY,
-    _benchmark_return_pct,
     buy_advice_blocked_markdown,
     buy_advice_scope_note,
     buy_advice_withheld_markdown,
-    glossary_markdown,
-    go_readiness_markdown,
     health_panel_markdown,
     live_pm_brief_markdown,
     ltcg_safe_sell_note,
     paper_freshness,
-    performance_read,
-    plain_summary_markdown,
     source_freshness,
     sources_freshness_markdown,
-    systemic_risk_markdown,
-    today_brief_markdown,
     watchlist_is_stale,
 )
 from qalpha.live.gist_store import find_gist_id, load_gist_file, save_gist_file
-from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.holdings import LiveHoldings
-from qalpha.live.measures import ReturnMeasure, measures_table, window_mismatch_note
-from qalpha.live.paper import PaperBook, _prices_on
+from qalpha.live.paper import PaperBook
 from qalpha.live.position_health import position_health
 from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
 
@@ -78,6 +72,7 @@ TWIN_DASHBOARD_MD = Path("reports/twin_dashboard.md")
 TWIN_DECISIONS_MD = Path("reports/twin_decisions.md")
 TWIN_BOOKS_JSON = Path("data/twin/books.json")
 TWIN_MARKS_JSON = Path("data/twin/marks.json")
+TWIN_HISTORY_JSONL = Path("data/twin/history.jsonl")
 AI_BRIEF_MD = Path("reports/ai_brief.md")
 SYSTEM_TRACK_CSV = Path("data/autopilot/system_track.csv")
 
@@ -398,6 +393,82 @@ def _load_live(cfg: Config, as_of: date) -> LiveHoldings | None:
         return None
 
 
+def _run_control() -> None:
+    """Start the daily job from the app, and say where the last one got to.
+
+    The schedule is not a schedule. Across the 60 scheduled runs since 2026-06-15, **none started
+    within fifteen minutes of the 12:23 UTC cron line** — median delay 2.4 hours, worst 10.1, and
+    GitHub is explicit that it may drop scheduled runs entirely under load. So the record's
+    completeness stops depending on GitHub's queue: this button dispatches the same workflow, and it
+    starts immediately.
+
+    It runs the job **on GitHub**, not in this container, on purpose. The Streamlit host is
+    disposable and has no credentials for the twin's gist or the model; a run here would produce a
+    record that dies with the container — which is the defect the committed-history rule exists to
+    prevent. Fail-soft: no token, or a token without the scope, prints what to fix and nothing else.
+    """
+    import urllib.error
+    import urllib.request
+
+    from qalpha.live.workflow import dispatch_error, dispatch_request, parse_runs, runs_request
+    from qalpha.live.workflow import status_line as _status_line
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Daily job**")
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if not token:
+        st.sidebar.caption(
+            "Set `GITHUB_TOKEN` (scope **actions: write**) in the app's secrets to start a run from "
+            "here. Without it, run `gh workflow run paper.yml` from a terminal."
+        )
+        return
+
+    def _get_runs() -> list:
+        url, headers = runs_request(token)
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=10) as r:
+            return parse_runs(json.load(r))
+
+    if st.sidebar.button("▶ Run the daily job now", use_container_width=True):
+        url, headers, body = dispatch_request(token)
+        try:
+            req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                code = resp.status
+            note = dispatch_error(code)
+            if note:
+                st.sidebar.error(note)
+            else:
+                # 204 with no body: GitHub accepted it and tells you nothing else. Say exactly that
+                # rather than "started", which would claim more than the response supports.
+                st.sidebar.success(
+                    "Dispatched. GitHub accepts this without returning a run id, so the line below "
+                    "is the confirmation — it turns to *queued* within a few seconds."
+                )
+        except urllib.error.HTTPError as exc:
+            st.sidebar.error(dispatch_error(exc.code))
+        except Exception as exc:  # network, DNS, timeout — never take the page down
+            st.sidebar.error(f"Could not reach GitHub: {exc}")
+
+    try:
+        runs = _get_runs()
+    except Exception as exc:
+        st.sidebar.caption(f"Run history unavailable: {exc}")
+        return
+    text, tone = _status_line(runs, datetime.now(UTC))
+    st.sidebar.markdown(
+        ui.chip(
+            ui.Chip(
+                {"good": "ran today", "warn": "not yet", "bad": "failed", "info": "running"}[tone],
+                tone=tone,
+            )
+        ),
+        unsafe_allow_html=True,
+    )
+    st.sidebar.caption(text)
+    if runs and runs[0].url:
+        st.sidebar.caption(f"[Open the run on GitHub]({runs[0].url})")
+
+
 def _page_header(book: PaperBook, as_of: date) -> None:
     """The instrument bar and the fact strip under it — what this page is, and what it is standing on.
 
@@ -616,49 +687,6 @@ def _satellite_section(portfolio: Portfolio, prices_dec: dict[str, Decimal], as_
         st.markdown(report.render())
 
 
-def _systemic_risk_view(benchmark: pd.Series, as_of: date) -> None:
-    """Read-only systemic-risk watch — like the paper book, a record you watch; it never acts."""
-    st.markdown(systemic_risk_markdown(benchmark, as_of))
-
-
-def _logs_view(book: PaperBook, as_of: date) -> None:
-    """Autonomous run log + freshness — proof the headless pipeline works when nobody's watching.
-
-    The daily weekday cron marks the book and commits the track record with no human or Streamlit
-    open; this view just reads the audit trail it leaves behind (``data/paper/run_log.jsonl``).
-    """
-    from qalpha.live.runlog import health_markdown, load_runs
-
-    st.header("🧾 System health & autonomous run log")
-    st.caption(
-        "The strategy pipeline runs headless on a weekday cron — it does the work and persists it "
-        "whether or not this page is open. This is its audit trail; the live Zerodha view is the only "
-        "on-demand part (Kite needs your daily login)."
-    )
-    fresh = paper_freshness(book, as_of)
-    (st.success if not fresh.is_stale else st.warning)(fresh.note)
-    runs = load_runs()
-    if not runs:
-        st.info("No autonomous runs logged yet — the cron hasn't recorded one (or fresh checkout).")
-        return
-    st.markdown(health_markdown(runs, tail=30))
-
-
-def _go_readiness_view(book: PaperBook, benchmark: pd.Series, as_of: date) -> None:
-    """The autonomous GO verdict — counts down on real criteria, flips to GO when the evidence clears."""
-    sc = build_scorecard(book.equity_curve, benchmark, as_of)
-    badge = {"GO": "🟢", "READY": "🟢", "NO-GO": "🔴", "NOT YET": "🟡"}[sc.verdict]
-    st.header(f"{badge} Real-money readiness: {sc.verdict}")
-    st.caption(
-        "Deterministic — no AI, no human judgement. GO appears the moment every criterion clears "
-        "(earlier than 6 months if it does); a blocking failure shows NO-GO."
-    )
-    for c in sc.criteria:
-        st.markdown(f"{c.icon} **{c.name}** — {c.detail}")
-    st.divider()
-    st.markdown(go_readiness_markdown(book, benchmark, as_of))
-
-
 def _live_health_view(
     portfolio: Portfolio, prices: PriceData, wl_prices: PriceData | None, as_of: date
 ) -> None:
@@ -685,169 +713,6 @@ def _live_health_view(
             "Advisory only — this never sells, and a 🟠 is not a reason to act. It exists so a "
             "holding cannot quietly fall apart between the times you look."
         )
-
-
-def _position_health_view(book: PaperBook, prices: PriceData, as_of: date) -> None:
-    """Mid-cycle watch — flags a holding breaking down between the slow rebalances. Advisory only."""
-    st.header("🩺 Position health (between rebalances)")
-    st.caption(
-        "The core rebalances slowly (annual) — this watches your holdings in between and flags any "
-        "name in a sustained, *idiosyncratic* breakdown (not a market-wide dip). It never sells."
-    )
-    held = list(book.portfolio.positions())
-    if not held:
-        st.info("No holdings yet — nothing to watch.")
-        return
-    st.markdown(health_panel_markdown(_guarded_health(prices.adj_close, held, as_of)))
-
-
-def _plain_summary(
-    book: PaperBook,
-    prices: PriceData,
-    benchmark: pd.Series,
-    universe: Universe,
-    sector_of: dict[str, str],
-    as_of: date,
-) -> str:
-    """Compute the plain-English summary inputs from the engines and render the everyday-words panel."""
-    from qalpha.live.deploy import market_weakness
-
-    ret = book.total_return_pct(prices, as_of)
-    bench = _benchmark_return_pct(benchmark, book.start_date, as_of)
-    plan = book.plan(prices, universe, sector_of, as_of)
-    verdict = build_scorecard(book.equity_curve, benchmark, as_of).verdict
-    return plain_summary_markdown(
-        book_return_pct=ret,
-        benchmark_return_pct=bench,
-        market_level=market_weakness(benchmark, as_of).level,
-        go_verdict=verdict,
-        action_needed=plan.has_orders,
-    )
-
-
-def _today_brief(
-    book: PaperBook,
-    prices: PriceData,
-    benchmark: pd.Series,
-    universe: Universe,
-    sector_of: dict[str, str],
-    as_of: date,
-) -> str:
-    """Assemble the one-screen 'what to do today' brief from the engines (no Kite, never trades)."""
-    from qalpha.live.deploy import market_weakness
-
-    plan = book.plan(prices, universe, sector_of, as_of)
-    if plan.has_orders:
-        core_action = f"⚠️ Rebalance due — {len(plan.proposed_orders)} order(s) to approve below."
-    else:
-        core_action = plan.decision.reason
-    w = market_weakness(benchmark, as_of)
-    hedge_note = (
-        "no systemic stress — no hedge indicated."
-        if w.level == "normal"
-        else "stress elevated — consider the research-proven tax-free futures hedge (informational)."
-    )
-    held = list(book.portfolio.positions())
-    if held:
-        rep = _guarded_health(prices.adj_close, held, as_of)
-        flagged = [h for h in rep.holdings if h.level != "healthy"]
-        health_note = (
-            "all holdings healthy — nothing to sell."
-            if not flagged
-            else f"{len(flagged)} holding(s) flagged — see 🩺 Position health below."
-        )
-    else:
-        health_note = "no holdings yet."
-    go = build_scorecard(book.equity_curve, benchmark, as_of).verdict
-    return today_brief_markdown(
-        as_of,
-        core_action=core_action,
-        market_level=w.level,
-        market_drawdown=w.drawdown,
-        market_note=w.note,
-        hedge_note=hedge_note,
-        health_note=health_note,
-        go_verdict=go,
-    )
-
-
-def _system_chart() -> None:
-    """Return-% over time: the System book, its no-AI shadow, and the buy-and-hold baseline."""
-    from autopilot import SYSTEM_TRACK_CSV
-
-    if not SYSTEM_TRACK_CSV.exists():
-        return
-    df = pd.read_csv(SYSTEM_TRACK_CSV)
-    if len(df) < 2:
-        st.caption("📈 The chart appears once there are a few daily marks.")
-        return
-    series = pd.DataFrame({"date": pd.to_datetime(df["date"])}).set_index("date")
-    series["🧠 System"] = df["system_return_pct"].to_numpy()
-    series["System, AI off"] = df["shadow_return_pct"].to_numpy()
-    series["NIFTYBEES baseline"] = df["baseline_return_pct"].to_numpy()
-    st.line_chart(series, height=260)
-    st.caption("Return % since start. Fake money · low-power until months accrue.")
-
-
-def _system_holdings(labels: dict[str, str]) -> None:
-    """What each book actually holds right now (system/shadow via the qalpha ledger; baseline flat)."""
-    import json as _json
-
-    from autopilot import BASELINE_PATH, SHADOW_BOOK_PATH, SYSTEM_BOOK_PATH
-
-    from qalpha.live.paper import PaperBook as PaperBookCls
-
-    tabs = st.tabs(list(labels.values()))
-    cfg = Config()
-    for tab, key in zip(tabs, labels, strict=True):
-        with tab:
-            rows: list[dict[str, object]] = []
-            if key in ("system", "shadow"):
-                path = SYSTEM_BOOK_PATH if key == "system" else SHADOW_BOOK_PATH
-                if path.exists():
-                    port = PaperBookCls.load(path, cfg).portfolio
-                    rows = [
-                        {"Ticker": t, "Shares": int(q)} for t, q in sorted(port.positions().items())
-                    ]
-            elif BASELINE_PATH.exists():
-                holds = _json.loads(BASELINE_PATH.read_text(encoding="utf-8")).get("holdings", {})
-                rows = [{"Ticker": t, "Shares": int(q)} for t, q in sorted(holds.items())]
-            if rows:
-                st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-            else:
-                st.caption("No holdings yet.")
-
-
-def _core_go_expander(
-    book: PaperBook,
-    prices: PriceData,
-    universe: Universe,
-    sector_of: dict[str, str],
-    benchmark: pd.Series,
-    as_of: date,
-) -> None:
-    """The validated ₹2L core — the official criterion-6 GO gate. It keeps running untouched
-    underneath the System book; this expander is its full, unchanged view."""
-    with st.expander("🎯 The official GO gate — the validated ₹2L core underneath (unchanged)"):
-        st.info(_plain_summary(book, prices, benchmark, universe, sector_of, as_of))
-        st.markdown(_today_brief(book, prices, benchmark, universe, sector_of, as_of))
-        st.caption(
-            f"Notional paper book (no real money) · as of **{as_of}** · decisions from the validated "
-            "engine — this page never trades. The real-money GO rides THIS book (its clean annual-"
-            "cadence run is the evidence); the System book above is the full system being proven."
-        )
-        # Two books, two funding histories, two windows, one screen — the confusion this fixes.
-        _two_book_window_note(book)
-        _paper_overview(book, prices, benchmark, universe, sector_of, as_of)
-        _go_readiness_view(book, benchmark, as_of)
-        with st.expander("🩺 Position health — between-rebalance watch"):
-            _position_health_view(book, prices, as_of)
-        with st.expander("🛡 Systemic risk — hedge watch"):
-            _systemic_risk_view(benchmark, as_of)
-        with st.expander("🧾 Logs & system health — autonomous run trail"):
-            _logs_view(book, as_of)
-        with st.expander("📖 Jargon, in plain English"):
-            st.markdown(glossary_markdown())
 
 
 def _twin_prices() -> dict:
@@ -909,6 +774,143 @@ def _basket_download(orders: list, label: str, key: str) -> None:
         )
 
 
+#: What each book IS, in the user's language. The codenames are the repo's; this is what they mean
+#: to someone deciding whether any of it is worth keeping. Without this the panel is eight rows of
+#: SHOUTING_SNAKE_CASE and no way in.
+_TWIN_PLAIN = {
+    "REAL": "your Zerodha account, replayed from the tradebook",
+    "CORE_V1": "the screen you actually buy from — nothing else switched on",
+    "TWIN_FULL": "the whole system, running itself",
+    "TWIN_NO_AI": "the whole system with the AI switched off",
+    "TWIN_NO_HEDGE": "the whole system with the hedge switched off",
+    "TWIN_NO_EXITS": "the whole system with the exits switched off",
+    "BASELINE_EW": "an equal-weight fund — the thing worth beating",
+    "BASELINE": "NIFTYBEES — doing nothing at all",
+}
+#: The four worth a tile. The rest are ablations and belong in the table, not at the top of a screen.
+_TWIN_HEADLINE = ("REAL", "CORE_V1", "TWIN_FULL", "BASELINE_EW")
+_TWIN_TILE_LABEL = {
+    "REAL": "Your account",
+    "CORE_V1": "The screen",
+    "TWIN_FULL": "The full system",
+    "BASELINE_EW": "The fund to beat",
+}
+
+
+def _twin_standings(as_of: date) -> None:
+    """Where each book stands — four tiles and one table, instead of nine paragraphs.
+
+    Reads ``marks.json``, which the cron writes, rather than recomputing: a panel that recomputes
+    shows numbers that disagree with the report in the expander beneath it, and one book with two
+    numbers on one screen is this repo's oldest defect.
+    """
+    if not TWIN_MARKS_JSON.exists():
+        return
+    try:
+        saved = json.loads(TWIN_MARKS_JSON.read_text(encoding="utf-8"))
+        rows = {str(r["Book"]): r for r in saved["books"]}
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        return
+    if not rows:
+        return
+
+    fund = rows.get("BASELINE_EW")
+    tiles = []
+    for name in _TWIN_HEADLINE:
+        row = rows.get(name)
+        if row is None:
+            continue
+        gain = float(row["Gain"])
+        # Against the fund, because "up 2%" means nothing on its own — the question is always
+        # whether it beat the thing you could have bought instead. The fund's own tile shows its
+        # return rather than a zero gap against itself.
+        if fund is not None and name != "BASELINE_EW":
+            vs = float(gain) - float(fund["Gain"])
+            delta, tone = ui.change_delta(vs, suffix=" vs the fund")
+        else:
+            delta, tone = (
+                f"{ui.delta_glyph(gain)} {ui.pct(float(row['Return %']))}",
+                ui.tone_for(gain),
+            )
+        tiles.append(
+            ui.Tile(
+                label=_TWIN_TILE_LABEL[name],
+                value=ui.inr(float(row["Value"])),
+                delta=delta,
+                delta_tone=tone,
+                note=_TWIN_PLAIN.get(name, ""),
+            )
+        )
+    if tiles:
+        st.markdown(ui.tile_row(tiles), unsafe_allow_html=True)
+
+    columns = [
+        ui.Column("Book"),
+        ui.Column("What it is"),
+        ui.Column("Worth today", "right"),
+        ui.Column("Gain", "right"),
+        ui.Column("vs the fund", "right"),
+    ]
+    table_rows = []
+    for name in (
+        "REAL",
+        "CORE_V1",
+        "TWIN_FULL",
+        "TWIN_NO_AI",
+        "TWIN_NO_HEDGE",
+        "TWIN_NO_EXITS",
+        "BASELINE_EW",
+        "BASELINE",
+    ):
+        row = rows.get(name)
+        if row is None:
+            continue
+        gain = float(row["Gain"])
+        vs = None if fund is None or name == "BASELINE_EW" else gain - float(fund["Gain"])
+        table_rows.append(
+            ui.Row(
+                cells=[
+                    ui.Cell(name, strong=name in _TWIN_HEADLINE),
+                    ui.Cell(_TWIN_PLAIN.get(name, "")),
+                    ui.Cell(ui.inr(float(row["Value"]))),
+                    ui.Cell(
+                        f"{ui.delta_glyph(gain)} {ui.signed_inr(gain)}", tone=ui.tone_for(gain)
+                    ),
+                    ui.Cell(
+                        "—" if vs is None else f"{ui.delta_glyph(vs)} {ui.signed_inr(vs)}",
+                        tone="neutral" if vs is None else ui.tone_for(vs),
+                    ),
+                ],
+                muted=name not in _TWIN_HEADLINE,
+            )
+        )
+    st.markdown(ui.table(columns, table_rows), unsafe_allow_html=True)
+    st.caption(
+        f"Window: **{_twin_window_start() or '?'} → {saved.get('as_of', as_of)}** — every book on "
+        "the same rupees, the same days. Gains are measured against **net money in**, not against a "
+        "starting balance, because the money arrived in instalments and a balance would count the "
+        "deposits as performance."
+    )
+
+
+def _twin_window_start() -> str | None:
+    """The date the books were seeded, from the append-only record the cron writes.
+
+    A return with no window attached is how ₹1,677 was once reported as ₹4,01,677: the number was
+    right and the period it covered was never stated, so the reader supplied their own.
+    """
+    try:
+        lines = TWIN_HISTORY_JSONL.read_text(encoding="utf-8").splitlines()
+        row = json.loads(lines[-1])
+        for book in (row.get("books") or {}).values():
+            start = book.get("start")
+            if start:
+                return str(start)
+    except (OSError, ValueError, KeyError, IndexError, json.JSONDecodeError):
+        pass
+    return None
+
+
 def _twin_panel(as_of: date) -> None:
     """The twin: five books on the user's real cash flows, and the six-criterion GO gate.
 
@@ -917,11 +919,22 @@ def _twin_panel(as_of: date) -> None:
     quiet day produce the same page**, which is how a forward run died unnoticed for 38 days, so the
     freshness line comes first and an unseeded twin says so explicitly instead of rendering blank.
     """
-    st.header("🧪 The twin — is the system actually working?")
-    st.caption(
-        "Five fake-money books on **your real cash flows**, four of them autonomous. Your Zerodha "
-        "account is the state source and is never traded. Only **TWIN_FULL vs the equal-weight "
-        "fund** opens the gate; everything else describes."
+    st.markdown(
+        ui.section("The twin", note="is the system adding anything?"), unsafe_allow_html=True
+    )
+    # Said ONCE, in three sentences. The generated report used to repeat a forty-word disclaimer
+    # after every single comparison — nine times on one screen — and the effect of saying it nine
+    # times is that it is read zero times.
+    st.markdown(
+        "**What this is.** Eight fake-money books are run on *your* real cash flows — the same "
+        "rupees, on the same days — so they can be compared with each other and with your actual "
+        "account. Your Zerodha account is only ever *read*; none of these books can place an order.\n\n"
+        "**What it is for.** To find out whether any of the machinery is worth having: whether the "
+        "screen beats an ordinary equal-weight fund, and whether the AI, the hedge and the exits "
+        "each earn their place.\n\n"
+        "**What it means today: nothing.** No pair here authorises anything — the bar that would "
+        "make a gap meaningful was withdrawn on 2026-09-06 as wrongly matched, and the clock has "
+        "not run long enough regardless. Read the table as a diary, not a scoreboard."
     )
 
     if not TWIN_BOOKS_JSON.exists():
@@ -945,8 +958,11 @@ def _twin_panel(as_of: date) -> None:
     fresh = sources_freshness_markdown([source_freshness("Twin books", saved_at, as_of)])
     (st.warning if "⚠️" in fresh else st.caption)(fresh)
 
+    _twin_standings(as_of)
+
     if TWIN_DASHBOARD_MD.exists():
-        st.markdown(TWIN_DASHBOARD_MD.read_text(encoding="utf-8"))
+        with st.expander("The full generated report — every comparison, with its caveats"):
+            st.markdown(TWIN_DASHBOARD_MD.read_text(encoding="utf-8"))
     else:
         st.info("Seeded, but no daily run has written a dashboard yet.")
 
@@ -972,12 +988,14 @@ def _twin_panel(as_of: date) -> None:
             saved = json.loads(TWIN_MARKS_JSON.read_text(encoding="utf-8"))
             frame = pd.DataFrame(saved["books"])
             if not frame.empty:
-                st.subheader("Every book, same rupees, same days")
-                st.bar_chart(frame.set_index("Book")["Return %"], height=260)
+                st.markdown(
+                    ui.section("Every book, same rupees, same days"), unsafe_allow_html=True
+                )
+                st.bar_chart(frame.set_index("Book")["Return %"], height=260, color=ui.ACCENT)
                 st.caption(
                     "Return against **net money in** — the one denominator every book shares. "
-                    "Bars this close together are noise: the gate needs a gap larger than "
-                    "±₹83,62,315 *and* twelve months of history."
+                    "Bars this close together are noise. There is no bar to clear: the matched "
+                    "null was withdrawn, so no gap here can be called bigger than luck."
                 )
         except (OSError, ValueError, KeyError):
             pass
@@ -1025,32 +1043,16 @@ def _system_tab(
     benchmark: pd.Series,
     as_of: date,
 ) -> None:
-    """🧠 The system — ONE fake-money book running everything the system can do, on its own advice:
-    cash in → AI-paced deploys into weakness → tax-gated (real-world, not calendar) rebalancing →
-    hedge readout in stress. Vs a no-AI shadow and a buy-and-hold baseline with identical cash flows.
+    """The system tab: the twin, and the freshness of the files it is drawn from. Nothing else.
+
+    It used to carry two more collapsed panels — the archived auto-pilot books and the ₹2L core's
+    full view — and the user's verdict on that was that it had become essays nobody reads. Both are
+    gone; the ₹2L core keeps being marked by the cron regardless.
+
     **Fake money — nothing here ever places a real trade.**"""
 
     _twin_panel(as_of)
     _tab1_sources_panel(as_of)
-    st.divider()
-    with st.expander("📜 Archived — the auto-pilot books (frozen 2026-08-26)"):
-        st.caption(
-            "The System / Shadow / Baseline books are archived "
-            "(`reports/ARCHIVE_2026-08-28.md`) and their cron step is switched off, so these figures "
-            "are frozen and will not move. Superseded by the twin above, which runs on your **real "
-            "cash flows** rather than a wallet you top up by hand.\n\n"
-            "Their verdict, recorded: **System − Shadow = ₹0.00 on all 7 marks** (the AI issued no "
-            "verdicts, so the treatment was never applied) and **System − Baseline = −₹3,894** on a "
-            "run far too short to mean anything either way."
-        )
-        st.caption(
-            "Collapsed rather than deleted, for one release: a panel that silently vanishes leaves "
-            "the reader wondering what happened to it."
-        )
-
-    # --- The validated core (the official GO gate) — running untouched underneath ---
-    st.divider()
-    _core_go_expander(book, prices, universe, sector_of, benchmark, as_of)
 
 
 def main() -> None:
@@ -1066,6 +1068,7 @@ def main() -> None:
 
     if st.sidebar.button("🔄 Reload data"):
         st.cache_resource.clear()
+    _run_control()
     book, prices, universe, sector_of, benchmark = _load()
     cfg = Config()
     as_of = prices.dates[-1].date()
@@ -1152,210 +1155,6 @@ def _streamed_prices(
         return merged, label
     except Exception:
         return prices_dec, "⏱ polling"
-
-
-def _paper_overview(
-    book: PaperBook,
-    prices: PriceData,
-    benchmark: pd.Series,
-    universe: Universe,
-    sector_of: dict[str, str],
-    as_of: date,
-) -> None:
-    prices_dec = _prices_on(prices, as_of)
-
-    # T2.3 — the tile and the chart beneath it must read the SAME source. This tile used to re-mark
-    # equity live against the host's price panel while the chart, the GO scorecard and the freshness
-    # panel all read the cron-committed curve, so one book showed two different numbers on one
-    # screen. The committed curve is the book of record (it is the criterion-6 evidence), so the tile
-    # reads that; any live drift is shown separately, and labelled as such, rather than silently
-    # replacing it.
-    curve = book.equity_curve
-    marked_on = date.fromisoformat(str(curve[-1]["date"])) if curve else as_of
-    book_value = (
-        Decimal(str(curve[-1]["equity"])) if curve else book.portfolio.market_value(prices_dec)
-    )
-    starting = book.starting_capital
-    ret = float((book_value - starting) / starting * 100) if starting > 0 else 0.0
-    bench = _benchmark_return_pct(benchmark, book.start_date, as_of)
-
-    headline = ReturnMeasure(
-        label="Validated ₹2L core",
-        pct=ret,
-        basis="starting_capital",
-        start=book.start_date,
-        end=marked_on,
-        denominator=f"₹{starting:,.0f}",
-    )
-    # The instrument row. Every tile carries its own basis on the line beneath it, because a bare
-    # rupee figure on this page has twice been read as something it was not.
-    st.markdown(
-        ui.tile_row(
-            [
-                ui.Tile(
-                    label="Book value (incl. cash)",
-                    value=ui.inr(book_value),
-                    delta=f"{ui.delta_glyph(ret)} {ui.pct(ret)}",
-                    delta_tone=ui.tone_for(ret),
-                    note=f"against the {ui.inr(starting)} it started with",
-                ),
-                ui.Tile(
-                    label="Nifty 50 TRI",
-                    value=ui.pct(bench) if bench is not None else "—",
-                    delta=(
-                        f"{ui.delta_glyph(bench)} same window"
-                        if bench is not None
-                        else "not measured"
-                    ),
-                    delta_tone=ui.tone_for(bench) if bench is not None else "neutral",
-                    note=(
-                        f"{book.start_date:%d %b %Y} → {marked_on:%d %b %Y}"
-                        if bench is not None
-                        else "no index data for this window — unmeasured, not flat"
-                    ),
-                ),
-                ui.Tile(
-                    label="Of which cash",
-                    value=ui.inr(book.portfolio.cash),
-                    note="uninvested — included in book value above",
-                ),
-                ui.Tile(
-                    label="Realised tax to date",
-                    value=ui.inr(book.realized_tax()),
-                    note="capital-gains tax the book has actually incurred",
-                ),
-            ]
-        ),
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        f"Both figures cover **{book.start_date} → {marked_on}**. "
-        f"Return is measured against {headline.basis_text} ({headline.denominator}); the Nifty 50 "
-        "TRI is the same window. — " + performance_read(ret, bench)
-    )
-
-    # The other bases are real and they disagree; they belong behind a note, not scattered on screen
-    # as bare percentages (T2.2). Exactly one headline above.
-    _how_measured_note(book, curve, marked_on, ret)
-
-    live_value = book.portfolio.market_value(prices_dec)
-    if curve and abs(live_value - book_value) > Decimal("1"):
-        st.caption(
-            f"ℹ️ Re-marked against this host's price panel right now the book would be "
-            f"₹{live_value:,.0f} ({float((live_value - book_value) / book_value * 100):+.2f}% vs the "
-            f"committed mark). The committed mark above is the book of record — this line exists so "
-            "the difference is visible rather than silently swapped in."
-        )
-
-    plan = book.plan(prices, universe, sector_of, as_of)
-    if plan.has_orders:
-        st.warning(f"**Action suggested — {plan.decision.reason}**")
-        st.table(
-            pd.DataFrame(
-                [
-                    {"Side": o.side.name, "Ticker": o.ticker, "Qty": str(o.quantity)}
-                    for o in plan.proposed_orders
-                ]
-            )
-        )
-    else:
-        st.success(f"Hold — {plan.decision.reason}.")
-
-    # Chart above, table below, both full width. Side by side, the eight-column holdings table was
-    # squeezed into two fifths of the page and every rupee figure wrapped.
-    st.markdown(
-        ui.section(
-            "Equity vs Nifty 50 TRI", note=f"{book.start_date:%d %b %Y} → {marked_on:%d %b %Y}"
-        ),
-        unsafe_allow_html=True,
-    )
-    _equity_chart(book, benchmark)
-    st.markdown(ui.section("Holdings"), unsafe_allow_html=True)
-    st.markdown(
-        _holdings_table(_holdings_frame(book.portfolio, prices_dec, as_of)), unsafe_allow_html=True
-    )
-    st.caption(_LTCG_SAFE_LEGEND)
-
-
-def _how_measured_note(book: PaperBook, curve: list, marked_on: date, headline_pct: float) -> None:
-    """The "how this is measured" expander — every other basis, named, in one place (T2.2).
-
-    Three numbers existed for this one book (+0.95% vs starting capital, +1.26% and +1.30% vs the
-    first equity mark), differing only by the ₹611.92 of day-one trading cost that sits between the
-    denominators. All three were correct and none was labelled, which is what made them read as a
-    contradiction. One is promoted to the headline; the rest live here with the reason they differ.
-    """
-    if not curve:
-        return
-    first_mark = Decimal(str(curve[0]["equity"]))
-    starting = book.starting_capital
-    last = Decimal(str(curve[-1]["equity"]))
-    measures = [
-        ReturnMeasure(
-            "Headline",
-            headline_pct,
-            "starting_capital",
-            book.start_date,
-            marked_on,
-            f"₹{starting:,.0f}",
-        ),
-        ReturnMeasure(
-            "Since the first mark",
-            float((last - first_mark) / first_mark * 100) if first_mark > 0 else 0.0,
-            "first_mark",
-            date.fromisoformat(str(curve[0]["date"])),
-            marked_on,
-            f"₹{first_mark:,.0f}",
-        ),
-    ]
-    cost = starting - first_mark
-    with st.expander("ℹ️ How this is measured — and why you may see a different number elsewhere"):
-        st.markdown(measures_table(measures))
-        st.markdown(
-            f"Both are right. They differ by the **₹{cost:,.2f}** of trading cost paid on day one: "
-            "the headline counts it against the book (you handed over "
-            f"₹{starting:,.0f} and this is what it is worth now), while the first-mark basis starts "
-            "counting *after* it was spent. The headline is the stricter of the two, which is why it "
-            "is the one on the tile.\n\n"
-            "The hedge overlay report quotes the first-mark basis, so a small difference there is "
-            "this, not a disagreement about the book."
-        )
-
-
-def _two_book_window_note(book: PaperBook) -> None:
-    """Say plainly that the two books on this screen are disjoint and cover different windows (T2.1).
-
-    The System book is ₹2L core + ₹2L of dashboard Add-money and started 2026-07-10; the GO book is
-    ₹2L funded once on 2026-06-12 and never topped up. Structurally disjoint, differently funded,
-    28 days apart — and until now nothing on the page said so, which is why two honest numbers read
-    as a contradiction.
-    """
-    from autopilot import BASELINE_PATH
-
-    from qalpha.live.autopilot import Book
-
-    if not BASELINE_PATH.exists():
-        return
-    import json as _json
-
-    try:
-        other = Book.from_dict(_json.loads(BASELINE_PATH.read_text(encoding="utf-8")))
-    except (ValueError, KeyError, OSError):
-        return
-    if other.start_date is None or other.start_date == book.start_date:
-        return
-    note = window_mismatch_note(
-        [
-            ReturnMeasure("The System book above", 0.0, "contributed", other.start_date, None),
-            ReturnMeasure("This validated core", 0.0, "starting_capital", book.start_date, None),
-        ]
-    )
-    if note:
-        st.caption(
-            note.replace(" — ", " — ", 1)
-            + " They are also **separate books**: this one was funded ₹2L once and never topped up; "
-            "the System book above is ₹2L plus everything you have added since."
-        )
 
 
 def _tab1_sources_panel(as_of: date) -> None:
@@ -2557,29 +2356,6 @@ def _lots_frame(
                 }
             )
     return pd.DataFrame(rows), split
-
-
-def _equity_chart(book: PaperBook, benchmark: pd.Series) -> None:
-    curve = book.equity_curve
-    if len(curve) < 2:
-        st.info("Track record begins — not enough daily marks to chart yet.")
-        return
-    eq = pd.Series(
-        {pd.Timestamp(p["date"]): float(p["equity"]) for p in curve}, name="Q-Alpha"
-    ).sort_index()
-    # Rebase the TRI to the book's starting equity so the two lines are comparable.
-    window = benchmark[(benchmark.index >= eq.index[0]) & (benchmark.index <= eq.index[-1])]
-    chart = pd.DataFrame({"Q-Alpha": eq})
-    if len(window) >= 2:
-        rebased = window / float(window.iloc[0]) * float(eq.iloc[0])
-        chart["Nifty 50 TRI"] = rebased.reindex(eq.index, method="ffill")
-    # One series is the point and the other is context, so the book gets the hue and the index
-    # recedes to grey — not two competing colours. Streamlit draws the legend, so identity is never
-    # carried by colour alone.
-    if len(chart.columns) == 2:
-        st.line_chart(chart, height=300, color=[ui.SERIES_BOOK, ui.SERIES_BENCH])
-    else:
-        st.line_chart(chart, height=300, color=ui.SERIES_BOOK)
 
 
 if __name__ == "__main__":
