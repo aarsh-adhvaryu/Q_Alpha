@@ -26,6 +26,10 @@ from qalpha.live.evidence import assess as exchange_assess
 from qalpha.live.extraction import EXTRACTION_VERSION
 
 EVENT_LOG = Path("data/evidence/events.jsonl")
+COVERAGE_LOG = Path("data/evidence/coverage.jsonl")
+
+#: A coverage row older than this cannot speak for today's basket.
+MAX_COVERAGE_AGE_DAYS = 4
 
 #: How far back to look for an archived exchange file before giving up. The exchange publishes on
 #: trading days, so a Monday reads Friday's; beyond this the file is too old to speak for today and
@@ -36,6 +40,44 @@ MAX_FILE_AGE_DAYS = 4
 #: should worry someone who already owns the shares* — not how newsworthy it is. EX-1 rated routine
 #: results `high` and is ignored here by version.
 SHOWN_CONCERN = {"high"}
+
+
+def filings_read(tickers: Iterable[str], *, as_of: date, path: Path = COVERAGE_LOG) -> set[str]:
+    """Names whose filings were **actually read**, at the current extractor, recently enough.
+
+    ### Why this exists, and why its absence was the worst defect in this file
+
+    The panel used to call a name "clear" whenever the exchange passed and no current-version event
+    mentioned it. With zero EX-2 events on file — which is the state after every version bump — that
+    made **every** name clear, including names whose filings had never been opened. The module
+    docstring in this very file says an absent warning and no warning are different facts and only
+    one of them is reassuring. The code said otherwise.
+
+    A name counts as read only when the day's coverage row says ``complete``, was produced by the
+    current extraction version, and is no older than :data:`MAX_COVERAGE_AGE_DAYS`.
+    """
+    if not path.exists():
+        return set()
+    wanted = {t.removesuffix(".NS") for t in tickers}
+    cutoff = (as_of - timedelta(days=MAX_COVERAGE_AGE_DAYS)).isoformat()
+    read: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not row.get("complete"):
+            continue
+        if row.get("extraction_version") != EXTRACTION_VERSION:
+            continue
+        if str(row.get("as_of", "")) < cutoff:
+            continue
+        ticker = str(row.get("ticker", "")).removesuffix(".NS")
+        if ticker in wanted:
+            read.add(ticker)
+    return read
 
 
 def _latest_exchange_file(
@@ -110,13 +152,18 @@ def flags_markdown(tickers: Sequence[str], *, as_of: date, lookback_days: int = 
         )
         return "\n".join(lines)
 
+    read = filings_read(tickers, as_of=as_of)
     flagged: list[str] = []
     clean: list[str] = []
+    unread: list[str] = []
     for ticker in tickers:
         verdict = exchange_assess(ticker, rows, prov, as_of=as_of)
-        events = concerns.get(ticker.removesuffix(".NS"), [])
+        bare = ticker.removesuffix(".NS")
+        events = concerns.get(bare, [])
         if verdict.state == PASS and not events:
-            clean.append(ticker)
+            # Clear on the exchange and nothing found in the filings — but "nothing found" only
+            # means something if the filings were read. Otherwise this is a gap wearing a tick.
+            (clean if bare in read else unread).append(ticker)
             continue
         bits: list[str] = []
         if verdict.state == BLOCK:
@@ -134,8 +181,20 @@ def flags_markdown(tickers: Sequence[str], *, as_of: date, lookback_days: int = 
         lines += flagged
     else:
         lines.append("Nothing flagged on any name in this basket.")
+    if unread:
+        lines += [
+            "",
+            "⚪ **Filings NOT read for: "
+            + ", ".join(t.removesuffix(".NS") for t in unread)
+            + ".** The exchange lists nothing against them, and nobody has opened their filings. "
+            "That is a gap, not a clean bill.",
+        ]
     if clean:
-        lines += ["", f"_Clear: {', '.join(t.removesuffix('.NS') for t in clean)}._"]
+        lines += [
+            "",
+            f"_Clear (exchange **and** filings read): "
+            f"{', '.join(t.removesuffix('.NS') for t in clean)}._",
+        ]
     stamp = "today's" if age == 0 else f"{age}-day-old"
     lines += [
         "",
