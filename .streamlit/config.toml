@@ -5,41 +5,30 @@
 # generated. `ui.stylesheet()` styles everything else. Both read from one palette, so they cannot
 # drift into two looks on one screen.
 #
-# Committed to `light` deliberately. This is a single-operator instrument panel and Kite's own
-# default is light; a half-supported dark mode where Streamlit's chrome flips but the hand-written
-# panels do not would be worse than either.
+# LIGHT AND DARK, both selected. `base` is deliberately UNSET: with no base, Streamlit follows the
+# viewer's system colour scheme, which is the same signal `ui.stylesheet()`'s
+# `@media (prefers-color-scheme: dark)` block follows — so both halves of the page flip together and
+# cannot disagree. Leave Streamlit's own Appearance menu on "Use system setting"; forcing Dark there
+# while the OS says light flips Streamlit's chrome and leaves the hand-drawn panels behind, because
+# Streamlit exposes no DOM attribute a stylesheet can read.
+#
+# The dark values are the documented dark STEPS of the same ramps, not the light ones inverted. An
+# inverted palette produces greens that vibrate and greys that vanish.
 
 [theme]
-base = "light"
-primaryColor = "#2a78d6"              # categorical slot 1 — the accent, and the book's own series
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f4f4f2"  # the page plane behind the cards
-textColor = "#0b0b0b"
-linkColor = "#2a78d6"
-borderColor = "#e1e0d9"               # the hairline everything is ruled with
-dataframeBorderColor = "#e1e0d9"
-dataframeHeaderBackgroundColor = "#fafaf8"
-
-# Status steps. Reserved for state — never reused as a series colour.
-greenColor = "#0ca30c"
-redColor = "#d03b3b"
-yellowColor = "#fab219"
-orangeColor = "#ec835a"
-
-# Dense, squared-off, terminal-ish. Radius "small" rather than none: fully square edges read as
-# unfinished on Streamlit's widgets, which are drawn for a rounded look.
-baseRadius = "small"
+# Mode-independent: shape, density and type.
+baseRadius = "small"        # not "none" — Streamlit's widgets are drawn for a rounded look
 buttonRadius = "small"
 baseFontSize = 14
-
-# The page font. It belongs HERE, not in a CSS rule: Streamlit applies this as its own body-font
-# token and leaves its icon font alone. A blanket `font-family` rule in the stylesheet also repaints
-# the Material Symbols icon spans, whose glyphs are ligatures — the sidebar arrow then renders as
-# the literal text "double_arrow_right". Fixed 2026-09-08 after it shipped.
-font = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif"
-codeFont = "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
 showWidgetBorder = true
 showSidebarBorder = true
+
+# The page font belongs HERE, not in a CSS rule. A blanket `font-family` rule in the stylesheet also
+# repaints Streamlit's Material Symbols icon spans, whose glyphs are ligatures — the sidebar arrow
+# then renders as the literal text "double_arrow_right". That shipped on 2026-09-08; this is the
+# mechanism that exists for it.
+font = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif"
+codeFont = "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
 
 # The validated categorical order (blue, orange, aqua, yellow, magenta, green, violet, red). Charts
 # that want emphasis-plus-context — the equity curve against its index — pass their own two colours
@@ -66,3 +55,34 @@ chartSequentialColors = [
   "#256abf",
   "#1c5cab",
 ]
+
+[theme.light]
+primaryColor = "#2a78d6"              # categorical slot 1 — the accent, and the book's own series
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f4f2"  # the page plane behind the cards
+textColor = "#0b0b0b"
+linkColor = "#2a78d6"
+borderColor = "#e1e0d9"               # the hairline everything is ruled with
+dataframeBorderColor = "#e1e0d9"
+dataframeHeaderBackgroundColor = "#fafaf8"
+# Status steps. Reserved for state — never reused as a series colour.
+greenColor = "#0ca30c"
+redColor = "#d03b3b"
+yellowColor = "#fab219"
+orangeColor = "#ec835a"
+
+[theme.dark]
+primaryColor = "#3987e5"              # the dark step of the same blue ramp
+backgroundColor = "#1a1a19"
+secondaryBackgroundColor = "#0d0d0d"
+textColor = "#ffffff"
+linkColor = "#3987e5"
+borderColor = "#2c2c2a"
+dataframeBorderColor = "#2c2c2a"
+dataframeHeaderBackgroundColor = "#232321"
+# Same four status steps: all clear 3:1 on #1a1a19 and stay distinct from the dark categorical
+# slots, so a status colour still cannot impersonate a series.
+greenColor = "#0ca30c"
+redColor = "#d03b3b"
+yellowColor = "#fab219"
+orangeColor = "#ec835a"
