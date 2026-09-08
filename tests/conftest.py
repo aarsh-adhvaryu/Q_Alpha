@@ -76,7 +76,11 @@ def dashboard_sandbox(tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
     from datetime import date as _date
 
     root = Path(__file__).resolve().parent.parent
-    for rel in ("data/paper", "data/autopilot", "data/universes", "reports"):
+    # data/twin is REQUIRED, not optional: the System tab is now the twin panel and nothing else,
+    # so without these files every AppTest renders an unseeded "run twin.py seed" notice and the
+    # whole tab goes untested. That is the shape of defect this repo keeps finding — a test suite
+    # that is a caller, supplied with data no real run would have.
+    for rel in ("data/paper", "data/autopilot", "data/universes", "data/twin", "reports"):
         src = root / rel
         if src.exists():
             shutil.copytree(src, tmp_path / rel, dirs_exist_ok=True)
