@@ -1,8 +1,12 @@
 # Operating Q-Alpha
 
-**The build is closed. This is the page you use it from.** Everything else in this repo is
-background: how it was built, what was tried, what failed and why. You do not need any of it to run
-the thing.
+**This is the page you use it from.** Everything else in this repo is background. How it was built, what was tried and what failed lives
+elsewhere; you do not need any of it to run the thing.
+
+**The build is not "closed".** It said so here for two days and that was not true — four defects
+were found afterwards, one of which made this very page's evidence panel call a company "clear"
+when nobody had read its filings. What is true is narrower and more useful: **nothing here places
+an order, every path to your money runs through you, and the monthly loop below works.**
 
 Nothing here places an order. Nothing ever will. You place every order yourself.
 
@@ -70,6 +74,9 @@ gap and not a clean bill — the daily job is not archiving, and that is worth a
 
 **`reports/pretrade.md`.** A research surface. Anything from it that matters is already on the buy
 screen.
+
+**Any name the panel has not marked clear *and* has not flagged.** It will say "Filings NOT read"
+for those. That is the honest state, not a warning about the company.
 
 **The GO gate.** It reads NOT YET and will keep reading NOT YET. It was built to answer "has this
 beaten a cheap index fund by more than luck", and the matched null showed that question needs

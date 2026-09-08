@@ -1,8 +1,14 @@
 # CLAUDE.md
 
-Guidance for Claude Code (and humans) working in this repo. **Rewritten 2026-09-04 from scratch** —
-the previous version had accreted fifteen months of dated session logs and most of it was stale. This
-file now describes *what is true*, not what happened. History lives in git and in `reports/`.
+Guidance for Claude Code (and humans) working in this repo. **Rewritten 2026-09-08 from scratch.**
+
+The previous version was itself a from-scratch rewrite on 2026-09-04, at 328 lines, done because the
+file had accreted fifteen months of session log. Four days of patching took it to 615 lines with
+headings that contradicted their own content — one said *"the build is closed"* above text explaining
+it was not, another said *"this is not a bug to fix"* above the description of the bug being fixed.
+
+The same rule applies again, and it is the point of this file: **describe what is true, not what
+happened.** History is in git and in `reports/`.
 
 ---
 
@@ -10,22 +16,22 @@ file now describes *what is true*, not what happened. History lives in git and i
 
 **₹5,00,000 of real money is in the user's Zerodha account** (since 2026-08-27): ₹1,00,000 opening
 basket across 8 names, then ₹50,000/month. **He places every order himself. Nothing here has ever
-auto-traded and nothing ever will.**
+auto-traded and nothing ever will.** Verified: zero call sites place an order.
 
 **He invested before the system's own gate opened, knowingly, with the evidence in front of him.**
-Do not re-litigate that decision. Do not soften a red because money is committed. The honest framing
-he was given and which still stands: *plan at the index's ~11–12%, treat the backtest's excess as
-unproven upside, size the first year as tuition.*
+Do not re-litigate that decision. Do not soften a red because money is committed. The framing he was
+given and which still stands: *plan at the index's ~11–12%, treat the backtest's excess as unproven
+upside, size the first year as tuition.*
 
-**The GO gate is shut.** It reads **NOT YET, 0 of 12 months**, with four criteria at ⚪ CANNOT ASSESS
-because nothing has checked them. Never describe this system as validated for real money.
+**Nothing authorizes a GO.** `AUTHORIZING_PAIR` is `None` and every criterion reads ⚪ CANNOT ASSESS.
+That is deliberate, not a countdown. Never describe this system as validated for real money.
 
 ### The user
 
-Not a trader and does not want to become one. He wants a system that does the research and hands him
-**one** of three things a day — `NO_ACTION`, `EXECUTE` (one bounded order to approve), or
-`HUMAN_REQUIRED`. He wants to understand the maths as it is built (formula → example → why), not to
-analyse earnings reports himself. Target architecture: **[PLAN_SYSTEM.md](PLAN_SYSTEM.md)**.
+Not a trader and does not want to become one. He wants the system to do the research and hand him
+one bounded decision. He wants to understand the maths as it is built (formula → example → why), not
+to analyse earnings reports himself. **[OPERATING.md](OPERATING.md) is the page he runs this from** —
+read it before proposing any change.
 
 ---
 
@@ -35,42 +41,40 @@ analyse earnings reports himself. Target architecture: **[PLAN_SYSTEM.md](PLAN_S
 not.** Not arithmetic errors — the arithmetic is almost always right. The *label* is wrong, or the
 *input* is wrong, on a surface where the label becomes an order.
 
-Twenty-odd instances now. A few, so the shape is unmistakable:
-
 | Said | Was |
 |---|---|
 | "ahead by ₹4,01,677 (+444%)" | ₹1,677 (+1.2%) — parked SIP cash counted as performance |
 | "Deploy ₹100,000" | a ₹5,97,418 basket — 84% of the opening position in one stock |
 | `BASELINE_EW`, the equal-weight fund | NIFTYBEES minus a fee — *easier* than the do-nothing baseline |
-| "the hedge costs 21.5% of ×286.2 terminal wealth" | ×8.4 — the ×286 was 13 years of deposits compounded as returns |
+| "the hedge costs 21.5% of ×286.2 terminal wealth" | ×8.4 — 13 years of deposits compounded as returns |
 | "worst fall −34.9%, drawdown matches the index" | **−47.5%**, eleven points *deeper* than the index |
 | a veto citing a source URL | a stock **quote page**, evidencing nothing |
-| `NIFTY_LOT_SIZE = 75` | 65 — stale three days after its own "verify this" comment was written |
-| "hedge available: 8 lot(s), one lot ₹17,923" | one lot is ₹17.9 **lakh** — an ETF price read as the index level |
+| `NIFTY_LOT_SIZE = 75` | 65 — stale three days after its own "verify this" comment |
+| "hedge available: 8 lot(s), one lot ₹17,923" | one lot is ₹17.9 **lakh** — an ETF price read as the index |
 | "703 tests green", in this file | **678** — a progress line counted by eye, then quoted in three PRs |
-| a shadow report reading `EXECUTE` over the screen's basket | **alphabetically ordered, one share each**, funded by a budget the screen never saw |
+| a shadow report reading `EXECUTE` over the screen's basket | **alphabetical, one share each**, funded by a budget the screen never saw |
 | the anchor order, 393 units for ₹108,365.82 | left **₹0.18** to pay ~₹325 of charges — it could not have filled |
 | "25 of 25 filings read" | **25 of 30** — the cap sliced the window, then counted the slice |
 | a benchmark window with no data, reported `0.0%` | unmeasured. Flat and unknown are not the same market |
-| gate row `pair: [TWIN_FULL, BASELINE_EW]`, gap `+₹10,000` | `CORE_V1`'s gap. Run 2's was **−₹4,000** — sign flipped, caught before the first cron |
+| "Clear" on the buy screen | **nobody had read that company's filings** |
+| "The build is closed" | four defects were found that same day |
 
-**700+ passing tests have caught none of them.** Unit tests verify that a function works. These are
+**Passing tests have caught almost none of them.** Unit tests verify that a function works. These are
 failures of *integration* (the right data reaching that function), *methodology* (the function
-answering the right question), and *operation* (the scheduled process actually running). You need all
-four and only one is cheap.
+answering the right question), and *operation* (the scheduled process actually running).
 
-### Three rules that follow
+### Four rules that follow
 
-1. **When you fix a defect, grep for every other caller of the thing you fixed.** **Three times now**
-   a correct fix was applied at one call site and reasoned about as if applied to a concept. The
-   third was 2026-09-05: `next(g for g in gaps if g.gates)` was fixed in `scripts/twin.py` and left
-   untouched in `src/qalpha/live/twin.py:append_history`, which is the one that writes the record.
-2. **A test that asserts a source line pins that line's bug in place.** Assert the *property*. One
-   test asserted the literal call that caused the +444% defect — the suite would have gone red if
-   anyone had fixed it.
-3. **When a number looks wrong in your own scratch run, chase it before explaining it away.** The
-   ₹5,97,418 basket was hit during an audit, written off as a harness mistake, and moved past. It was
-   both.
+1. **When you fix a defect, grep for every other caller of the thing you fixed.** Three times a
+   correct fix was applied at one call site and reasoned about as if applied to a concept.
+2. **A test that asserts a source line pins that line's bug in place.** Assert the *property*.
+3. **When a number looks wrong in your own scratch run, chase it before explaining it away.**
+4. **Test the caller, not only the function.** Eleven tests passed while the scheduled caller fed
+   `propose()` alphabetically ordered one-share baskets, because every test supplied good data. A
+   test suite is also a caller: "no production caller" is not the same as "unused".
+
+> **Assume your next feature ships with a labelling defect until someone else has looked.** That has
+> been true of every feature added since 2026-09-05, without exception.
 
 ---
 
@@ -80,238 +84,103 @@ four and only one is cheap.
 - **Rule (a): the validated backtest headline and its engine are frozen.** No change may touch
   `src/qalpha/{backtest, accounting, data, config}` for a live feature. Verify with
   `git diff --name-only main -- src/qalpha/backtest src/qalpha/accounting src/qalpha/data src/qalpha/config.py`
-  — it must print nothing.
+  — it must print nothing. One exception is on file: `save_parquet` was made atomic on 2026-09-07,
+  a correctness fix to a writer, recorded rather than slipped in.
 - **Unknown is never substituted.** Missing price ≠ previous price. Missing filing ≠ no bad news.
-  Missing AI response ≠ approval. Absent null ≠ threshold of zero. Unknown produces
-  `CANNOT ASSESS — NO ACTION`.
+  Missing AI response ≠ approval. Absent null ≠ threshold of zero. Unread ≠ clean.
 - **A number on a real-money surface must be labelled as the thing that was computed.**
-- **Audit with idle cash in the portfolio.** A zeroed fixture hides an entire class of defect.
+- **Audit with idle cash AND holdings.** A zeroed fixture hides an entire class of defect — on an
+  empty book any two-name basket is 47/53 by sector, so the governor fires on every clean day.
 - **Never tune a parameter to manufacture a GO.**
 - **Pre-registration before any experiment; negatives get published.**
-- **Flag, don't veto** on the buy list — user decision, still standing. Selection stays deterministic.
+- **Flag, don't veto** on the buy list. Selection stays deterministic and the decision stays his.
 - **All four gates green before every commit**: `ruff`, `ruff format`, `mypy --strict`, `pytest`.
-- **Panels are written atomically.** `save_parquet` writes a temp file and `os.replace`s it, and
-  refuses an empty frame. A direct `to_parquet` left a truncated panel when the step was killed, and
-  the price refresh is the *first* step in the cron — every later step would then read the fragment.
-- **Always branch + PR.** The harness blocks self-merges; the user clicks merge. Merging to `main`
-  auto-deploys Streamlit.
+- **Always branch + PR.** The harness blocks self-merges; the user clicks merge.
 
 ---
 
-## What is true today (2026-09-06)
+## What is true today (2026-09-08)
 
-**26436 lines · 46 live modules · 898 passed.** `main` is at the merge of PR #104.
-PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
-(record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
-repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the golden-day replay) and #99 (the matched null) follow.
+**26,509 lines · 46 live modules · 906 tests green.** The daily cron runs weekdays at 12:23 UTC and
+has produced a complete record since 2026-09-01.
 
-> **The test count in this file was wrong, and the PR bodies inherited it.** This file claimed
-> **703**; the true baseline at `5b18528` was **678 passed, 1 skipped** — measured, not counted off a
-> progress line. Every count reported during 2026-09-05 was therefore inflated by 25. Reconciled:
->
-> | | Δ | total |
-> |---|---:|---:|
-> | baseline `5b18528` | — | **678** |
-> | #90 evidence adapter | +27 | 705 |
-> | #91 record repair | +12 | 717 |
-> | #92 `CORE_V1` | +15 | **732** = `main` |
-> | #93 announcements + extractor | +38 | 770 |
-> | #94 pre-trade assessment | +21 | **791** |
-> | #95 integration repair | +15 | 806 |
-> | #97 daily evidence spine | +9 | 815 |
-> | #98 golden-day replay | +11 | 826 |
-> | #99 matched null | +2 | 828 |
-> | #100 null withdrawn | +1 | 829 |
-> | #101 the decision loop | +21 | 850 |
-> | #103 caller repair | +35 | 885 |
-> | #104 pre-open repairs | +11 | **896** |
->
-> Counting dots on a `pytest -q` progress line is not measuring. `pytest | grep passed` is.
+### Two experiments run, and neither authorizes anything
 
-### Two experiments now run side by side, and they must not be confused
-
-| | Question | Gated pair | Window | What resets it |
+| | Question | Pair | Window | Status |
 |---|---|---|---|---|
-| **run 2** | can the whole system beat the fund? | `TWIN_FULL` vs `BASELINE_EW` | 2026-09-01 → 2027-09-01 | any behaviour change in any component |
-| **CORE_V1** | does the *screen* beat the fund? | `CORE_V1` vs `BASELINE_EW` | 2026-09-08 → 2027-09-08 | **only** a screen or ranking change |
+| **run 2** | can the whole system beat the fund? | `TWIN_FULL` vs `BASELINE_EW` | 2026-09-01 → 2027-09-01 | operational rehearsal |
+| **CORE_V1** | does the *screen* beat the fund? | `CORE_V1` vs `BASELINE_EW` | opened 2026-09-08 | descriptive track |
 
-`CORE_V1` exists because every `TWIN_*` book is the composite minus one flag, so it moves whenever
-the composite moves — and a book that moves cannot carry a twelve-month clock. That is the mechanism
-by which this project kept getting *further* from evidence the closer it got to finished. The AI, the
-evidence adapter and the governor now version independently and none of them reaches `CORE_V1`.
-Registration: **[reports/PREREGISTRATION_CORE_V1.md](reports/PREREGISTRATION_CORE_V1.md)**.
+`AUTHORIZING_PAIR` is `None`. Both tracks record their own statistic under `tracks` in
+`data/twin/history.jsonl`, each labelled by its own pair; the `gate` block is empty because nothing
+authorizes. Set `AUTHORIZING_PAIR` only when that pair's question, statistic and matched null are all
+frozen **before** its window opens.
 
-**Run 2 is reclassified as an operational rehearsal** (amendment §6 of its own pre-registration): its
-first four days ran under two different AI rules wearing one version label. Preserved in full, no row
-edited. Its gated pair was *not* moved, because moving a gate after observing results is selection on
-the outcome.
+**Run 2 is a rehearsal** because its treatment changed inside its own window: its first four days ran
+under two different AI rules wearing one version label. Preserved in full, no row edited.
 
-**Run 2 no longer authorises anything (#95).** It keeps its statistic and loses its authority: an
-experiment declared methodologically invalid must never later produce a GO. `Gap.authorizes` is
-separate from `Gap.gates`, and **only `CORE_V1` vs `BASELINE_EW` authorises**. Until that book
-exists the GO gate has no gap and reads CANNOT ASSESS, which is the honest answer rather than a
-borrowed one.
+**`CORE_V1` is descriptive** because its matched null was withdrawn — see below.
 
-### The forward experiment — twin run 2
+### The matched null was generated and withdrawn
 
-The only clean evidence route this system has. Window **opened 2026-09-01**, closes twelve months
-later. Pre-registration: **[reports/PREREGISTRATION_TWIN_RUN2.md](reports/PREREGISTRATION_TWIN_RUN2.md)** —
-frozen, amendments recorded before the window opened.
+`NULL_P95_LOG_REL_WEALTH` is `None`. A value of 0.071877 was generated on 2026-09-06 from 2,000
+draws and withdrawn hours later: it was matched to *a* specification, not to `CORE_V1`'s. The two
+pre-registrations named different statistics (p95 of |G| vs of G), the gate is one-sided against a
+two-sided bar (true α 2.32%, not 5%), the null diversified into ~50 of 51 index members while
+`CORE_V1` holds a capped basket, and `CORE_V1` can sell while the null never does.
 
-Seven books on **identical cash flows** from the user's real tradebook (`assert_identical_flows`):
+Measured p95(|G|) by basket size: **8 names 0.162 · 15 names 0.106 · the null's ~50 names 0.072.**
+The bar was 1.5–2.3× too low, and too low is the direction that makes noise look like skill.
 
-| Book | 2026-09-03 | Note |
-|---|---:|---|
-| REAL | ₹3,01,643 | his own orders, replayed |
-| TWIN_FULL | ₹2,96,359 | everything on |
-| TWIN_NO_AI | ₹2,96,354 | **differs by ₹5 — the ablation is alive** |
-| TWIN_NO_EXITS | ₹2,96,239 | |
-| TWIN_NO_HEDGE | ₹2,96,359 | **identical to FULL — see below** |
-| BASELINE_EW | ₹2,99,383 | PIT equal-weight fund, net fee — **the only gating comparison** |
-| BASELINE | ₹3,00,984 | NIFTYBEES, reported never gating |
+> **The qualitative finding survives and is the important one.** The backtest's edge over the gating
+> benchmark is **0.42%/yr**; a 15-name basket drifts **5.3%/yr** against that fund for no reason. So
+> a correctly matched bar is ~25× the edge, criterion 3 would fire about **1%** of the time if the
+> edge were entirely real, and detecting it at 95% needs roughly **200 years**. A twelve-month
+> superiority test cannot answer this question. Full detail in `reports/NULL_MATCHED.md`.
 
-**The gating statistic** is log relative wealth of **unitized NAVs**:
+### The evidence spine — reads filings, decides nothing
 
-$$G = \ln\frac{\mathrm{NAV}_{\text{TWIN\_FULL}}}{\mathrm{NAV}_{\text{BASELINE\_EW}}}$$
+Runs daily **before** the twin. Fetches and archives NSE's regulatory-indicator file (`REG1_IND`,
+which carries the P/E>50 caution) and each candidate's corporate announcements, downloads the
+filings, hashes them, extracts their text, and puts them through the model.
 
-Raw book values are *not* contribution-invariant — identical deposits dilute a ratio rather than
-cancelling in it ($\ln(110/100)=0.095$ but $\ln(210/200)=0.049$), so a monthly SIP would walk the
-statistic toward zero. Unitized NAVs are invariant by construction (`live/nav.py`).
+**The model extracts, it does not judge.** It reports what a document says; deterministic policy
+decides what that means. Every event carries a verbatim quote **checked against the archived bytes** —
+a quote that is not in the document is discarded and counted. It cannot introduce a name it was not
+given a document for, and cannot attribute a real quote to the wrong company.
 
-`NULL_P95_LOG_REL_WEALTH` is **`None`** again. A value was generated on 2026-09-06 and **withdrawn
-hours later**: it was matched to *a* specification, not to `CORE_V1`'s.
+Extractor version **EX-2**. EX-1 asked for "material events" and never said material *to whom*, so 77
+of 193 came back `high` — "revenue up 10%", "EBITDA grew 8%" — and a high event triggers `WATCH`,
+which skips a name. **Good news rejected candidates.** EX-2 defines materiality as *concern to someone
+who owns the shares*. `pretrade` acts only on the current version, so EX-1 rows stay on file and
+cannot act.
 
-> ### ⛔ Four mismatches, and the bar was too LOW — the dangerous direction
->
-> | | |
-> |---|---:|
-> | run 2 §2 registers p95 of \|G\|; `CORE_V1` §4 registers p95 of G | 0.0719 vs 0.0600 |
-> | the gate is **one-sided** against that two-sided bar, so true α is | **2.32%**, not 5% |
-> | the null accumulates **~50 of 51 members**; `CORE_V1` holds a capped basket | |
-> | measured p95(\|G\|): 8 names / 15 names / the null's ~50 | 0.162 / 0.106 / **0.072** |
-> | `CORE_V1` has `use_exits=True` and can sell; the null never does | no realised tax |
->
-> **The bar was 1.5×–2.3× too low.** Fixing it makes §2's power finding worse: at ≈0.105 the bar is
-> ~25× the claimed edge and criterion 3 fires about 1% of the time.
->
-> The qualitative result — *twelve months cannot resolve this effect size* — was right. The number
-> was not. `reports/NULL_MATCHED.md` §6 lists what must happen before a value is set again.
->
-> **⚠️ `CORE_V1` should not be treated as authorizing until this is repaired.** Its clock starts
-> 2026-09-08; letting it start on an unmatched statistic converts an open implementation question
-> into a permanent experiment.
+### What reaches the user
 
-**The record is append-only.** `data/twin/history.jsonl` (one row/day: every book's value, net
-invested, XIRR, the gate) and `data/twin/ai_verdicts.jsonl` (every AI attempt *and* verdict, with
-`price_at_decision`, model, prompt version). Both refuse any write that would shrink the file. Before
-these existed, `marks.json` was rewritten daily and no book had a history at all.
+Under the basket on the dashboard, `live/flags.py` prints what the exchange and the filings say about
+those exact names, linked to the filing. **Flags, never vetoes** — there is no path from it back into
+selection or sizing.
 
-### The AI
+A name is "clear" only when the exchange passes **and** a complete, current-version, recent coverage
+row says its filings were read. Anything else prints *"Filings NOT read — that is a gap, not a clean
+bill."* This was wrong for two days and is the fifteenth entry in the table above.
 
-Deterministic screen generates → **the AI may only veto** → deterministic code sizes and executes
-survivors. Fake money only. Guards are structural, not prompted: it **cannot add a name**, **cannot
-size anything**, **cannot fail closed** (any failure keeps the whole basket), **cannot act
-unrecorded** (a failed provenance write discards the verdicts), and **cannot veto without a primary
-citation**.
+### The decision loop
 
-**First real veto: 2026-09-03, ADANIENSOL**, for "U.S. bribery charges against chairman" — citing a
-**stock quote page**. The rule then in force checked that a URL was *present*, not that it *supported
-the claim*. A veto now acts only on `nseindia.com` / `bseindia.com` / `sebi.gov.in` / `ibbi.gov.in` /
-`mca.gov.in`. Reporting *about* a filing does not count. A demoted veto is recorded as a lead.
+`live/pipeline.py` walks the screen's ranking, skips what does not clear, and puts the remainder in an
+anchor (`NIFTYBEES`) so cash is never idle. `HUMAN_REQUIRED` is reserved for the **account or the
+feed** — an unpriced holding, a wholly dead evidence feed, a broker mismatch. Never "I could not read
+one filing".
 
-Model `claude-haiku-4-5`, prompt version `PR-8b`, **frozen for the run** — a model or prompt change is
-a second treatment and would require re-registration.
+A rejected name is **not** backfilled with the next stock: that needs a screen re-run at a different
+basket size, and a screen asked for a different number of names is a different screen. The anchor is
+the replacement.
 
-### The hedge — signal only, and this is not a bug to fix
+The governor **filters, it does not stop** — and its 30% sector cap applies only once the book spans
+≥4 sectors, because below that it is arithmetically unsatisfiable and rejects everything.
 
-`runner._hedge` emits `HEDGE_ON`/`HEDGE_OFF` and **moves no money**, so `TWIN_FULL − TWIN_NO_HEDGE`
-is **₹0 by construction** and is *never* evidence about hedging. This is not an oversight: one Nifty
-futures contract is **65 index units** (verified 2026-09-04; NSE rebaselined at end-Dec 2025), so at
-index ~27,574 one lot is **₹17.9L** of notional and hedging half a book needs
-
-$$V_{\min} = \frac{\text{lot} \times \text{index}}{h} = ₹35.8\text{ lakh}$$
-
-against a ₹3L book.
-
-> ### ⚠️ This paragraph was wrong until 2026-09-05, and the function it cites was the reason
->
-> `runner._hedge` passed `market.index_close` as the index level. That series is **NIFTYBEES, an ETF
-> near ₹276**, not the Nifty near 27,574 — a hundredfold error, straight into a lot-size
-> multiplication. Run on the real book it reported **"hedge available: 8 lot(s) — one lot ₹17,923"**
-> when one lot is ₹17.9 *lakh* and the book can hold none. So the ₹0 was **not** explained; the thing
-> claimed to explain it was asserting the opposite.
->
-> `Market` now carries an explicit `index_level`, absent by default, and a missing one produces
-> **CANNOT BE ASSESSED** rather than an invented number. `index_close` remains the ETF series for
-> `stress_gauge`, which reads a drawdown *ratio* and is scale-free — a test pins that equivalence.
-
-**Re-verify `NIFTY_LOT_SIZE` before quoting any rupee figure from it.**
-
-### The pre-trade governor (Phase A — merged, PR #88)
-
-- **`live/governor.py`** — sector concentration measured on the **resulting book**, not the basket.
-  The 30% cap was applied to the names chosen *that round*; at slider 3–4 a 30% cap cannot bind
-  (three names ⇒ one is 33%), so twelve individually-compliant SIP baskets compound to a **36.9%
-  POWER** book. Kite nudges on holdings at 50%; our cap was stricter on paper and weaker in practice.
-- **`live/valuation.py` — REMOVED 2026-09-08.** It read a current P/E from yfinance and compared it
-  to the exchange's own threshold, which is mirroring a threshold while reading a different source.
-  It never had a production caller and `live/evidence.py` replaced it by reading NSE's actual file.
-  The lesson it taught is kept below because it is the whole reason the evidence spine exists.
-
-> ### ⚠️ The valuation check reads the wrong number, and would NOT have caught VBL
->
-> Indian companies report **standalone** and **consolidated** results separately, and for a group
-> like VBL the two P/Es differ by a fifth. The exchange's caution was computed on **standalone**;
-> `yfinance` — our source — serves **consolidated**.
->
-> | Basis | VBL P/E |
-> |---|---|
-> | Standalone TTM — *what NSE cautioned on* | **51.04** ← clears the >50 threshold |
-> | Consolidated TTM | 45.01 |
-> | yfinance trailing — **what we read** | **40.7** ← does not clear it |
-> | 5-year average | 78.2 |
->
-> So the check mirrors the exchange's *threshold* while reading a *different source*, which is not
-> mirroring the exchange. On the run that motivated it, it flags JIOFIN (P/E 74) and misses VBL.
->
-> **Decision: do NOT promote this to a veto.** Blocking a trade on a figure that contradicts the one
-> the user's own broker is showing him is worse than flagging. The bite is surgical enough that a
-> veto would not wreck the basket (1 of 8) — the problem is not force, it is that we re-derive the
-> exchange's conclusion from a source that disagrees with it. **The fix is to read NSE/BSE's actual
-> cautionary-message feed** (Phase B), not to re-derive it. Only then is promoting it a real option.
-
-### The feed now exists, and it says the VBL premise needs checking (PR #90)
-
-`live/evidence.py` reads NSE's own daily regulatory-indicator file — the one the exchange populates
-the caution from. The transport is trivial: a plain GET at
-`nsearchives.nseindia.com/content/cm/REG1_INDDDMMYY.csv`, ~600 KB, 3,140 securities. **The P/E column
-exists only in `REG1_IND`, not the `REG_IND` the circular names.**
-
-**The pre-registered fixture failed.** `reports/PREREGISTRATION_EVIDENCE_V1.md` predicted, before the
-file was downloaded, that VBL would read `WATCH` on the 2026-08-27 purchase date. It reads **`PASS`**
-— NSE was not cautioning on VBL that day. The rule was not widened afterwards to make it appear.
-
-The indicator does fire on VBL, just not then:
-
-| Period | P/E > 50 on VBL |
-|---|---|
-| 2025-07 → 2025-12 | active |
-| 2026-02 → 2026-04 | clear |
-| 2026-05 → 2026-06 | active |
-| 2026-07 → 2026-08 | **clear** |
-
-Earnings grew while the price fell. That is a de-rating from an expensive level, and it is exactly
-the distinction the price-only screen cannot draw.
-
-> **⚠️ OPEN — needs the user, do not rewrite either document without him.** This file and
-> `PLAN_SYSTEM.md` both say Q-Alpha would have encouraged a trade on which *"Kite's own nudge said
-> don't."* On the purchase date the exchange was **not** cautioning on VBL. Either the nudge was seen
-> in the 2026-05/06 window, or it was a different message. **Ask before correcting the premise.**
-> The 51.04 standalone figure quoted above is likewise contradicted by NSE's own file for that date.
-
-On 2026-08-27, 532 of 3,140 securities carry the caution, five of them names this system has bought
-or shortlisted: ADANIENSOL, DMART, JIOFIN, MAXHEALTH, SHREECEM. **JIOFIN is in the basket the live
-screen recommends today.** The adapter is not wired into any decision path yet — that is Phase B.
+**It is exercised by the golden-day replay and by the daily shadow run. It does not touch the
+dashboard's buy surface**, which calls the screen directly.
 
 ---
 
@@ -327,283 +196,140 @@ screen recommends today.** The adapter is not wired into any decision path yet �
 
 **Not proven — state these plainly whenever the numbers come up:**
 - **The headline is not out-of-sample.** `shrink` was selected by requiring it to beat 1/N *on the
-  2025–26 holdout* (`scripts/exp_breadth.py:104`), which makes the holdout validation data. README §5
-  still claims `✅ out-of-sample` for gate 1. **That claim is wrong and should be corrected.**
+  2025–26 holdout* (`scripts/exp_breadth.py:104`), which spends the holdout. `README.md` §5 now shows
+  gate 1 as 🔴 with the reasoning inline.
 - **The screen the real money runs has never been backtested out-of-sample at all.**
-  `advise_deploy_into_weakness` shares no selection code with the validated funnel.
-- **The screen's worst backtested fall is −47.5%, deeper than the index's −36.3%** (peak 2018-01-08 →
-  COVID trough 2020-03-23). The extra return is bought with extra risk. He runs it with no stop-loss.
+- **Its worst backtested fall is −47.5%**, against the index's −36.3%. He runs it with no stop-loss.
 - **"Tax-aware execution" overstates what runs.** `force_refresh=True` short-circuits the §4.6
-  net-benefit gate, so tax is *charged* but the gate never decides. Low turnover comes from the
-  annual cadence.
-- **`weighting="score"` silently collapses to equal weight** — `_cap_renorm` clips 0–100 scores to a
-  0.20 cap before normalising. So `exp_breadth` tested five variants, not six.
-- **Sharpe assumes rf = 0.** Immaterial to the comparison (the benchmark is computed the same way),
-  inflated as an absolute number.
-- **The reports do not reproduce day to day.** Identical code on a re-downloaded panel moved the
-  Phase-4 exits leg by ₹6.8 lakh. Until input hashes are pinned, treat every rupee figure as good to
-  about half a percent.
+  net-benefit gate (`decision.py:183`), so tax is *charged* but the gate never decides.
+- **`weighting="score"` silently collapses to equal weight** via `_cap_renorm`, so `exp_breadth`
+  tested five variants, not six.
+- **Sharpe assumes rf = 0.** Immaterial to the comparison, inflated as an absolute number.
+- **The reports do not reproduce day to day.** Until input hashes are pinned, treat every rupee
+  figure as good to about half a percent.
 - **Most of the tax engine has never met a broker statement** — multi-lot, LTCG, loss set-off and
   §112A are unit-tested and unconfirmed. **The first such real sale must be reconciled afterwards.**
-- **No corporate action has ever been reconciled live.**
+- **No corporate action has ever been reconciled live.** This is the likeliest thing to bite first.
 - **Nobody has watched this system fall.** Every live day so far has been calm.
 
 ---
 
-## The operating contract the user actually runs
+## The operating contract
 
 Open dashboard → Kite login (daily, one tap — there is **no** compliant unattended token) →
 **Add money, type the amount** (a hard budget) → **slider 8 for the opening ₹1,00,000, 3–4 for the
-monthly ₹50,000** → place every order himself in Kite, **CNC/delivery, no stop-loss, no target** →
-**upload the tradebook after every batch** (Console → Reports → Tradebook; de-duped on Zerodha trade
-IDs, so overlapping ranges are safe). Money for future instalments **stays in the broker account**.
+monthly ₹50,000** → read the flags under the basket → place every order himself in Kite,
+**CNC/delivery, no stop-loss, no target** → **upload the tradebook after every batch** (Console →
+Reports → Tradebook; de-duped on Zerodha trade IDs, so overlapping ranges are safe). Money for future
+instalments **stays in the broker account**.
 
 **No stop-loss, and it is load-bearing:** the screen buys names that are *down*, so a stop sells
 exactly what it just bought, realises a loss, triggers tax, and fires on ordinary volatility. The exit
-is the §4.7 breakdown test, which distinguishes a name-specific fall from the market falling. A stop
-cannot. *If* a news/catalyst sleeve is ever built it gets its own stops — a catalyst thesis
-invalidates in days — but that is a separate sleeve with a separate mandate, never a rule applied to
-the core.
+is the §4.7 breakdown test, which distinguishes a name-specific fall from the market falling.
 
 ---
 
 ## Architecture
 
 ```
-data/         yfinance→Parquet panel · point-in-time universes · Screener fundamentals
+data/         yfinance→Parquet panel (atomic writes) · point-in-time universes · fundamentals
 factors/      momentum · volatility · liquidity (+ value · quality · dividend) · regime · scoring
 alloc/        Ledoit-Wolf+EWMA conditioning → sector allocator → optimizer
-accounting/   FIFO lots · Zerodha costs · capital gains (§70 · §74 · §112A · cess) · corporate actions
-              · slippage.  FROZEN (rule (a)); reused live so the live path and backtest share one engine
+accounting/   FIFO lots · Zerodha costs · capital gains (§70 · §74 · §112A · cess) · corporate
+              actions · slippage.  FROZEN (rule (a)); reused live so both paths share one engine
 backtest/     walk-forward engine · portfolio · baselines · metrics · significance · runstore
               decision.py = the shared decide_rebalance the live runner also calls
-live/         advisor (sell/raise-cash/deploy/harvest) · deploy (the buy screen) · position_health
-              price_integrity · cooling_off · satellite · governor · hedge · nav
-              evidence (NSE regulatory-indicator adapter) · announcements (filings + provenance)
-              extraction (the AI reports what a filing says; it decides nothing)
-              pretrade (may we buy this name? eligibility only — never a view on return)
-              pipeline (the loop: rank → skip → replace → anchor → ONE outcome a day)
-scripts/       evidence.py — the daily shadow spine (archive → extract → report; changes nothing)
-              twin · runner · policy · go_gate · verdicts · ai_brief · track_record · measures
-              safety · scan · notify · auth · client · holdings · tradebook(+store) · taxpnl · ticker
-scripts/      twin.py (the cron) · paper.py · advisor.py · dashboard_app.py · backtest_* · exp_*
+live/         advisor · deploy (the buy screen) · position_health · price_integrity · cooling_off
+              satellite · governor · hedge · nav · twin · runner · policy · go_gate · verdicts
+              ai_brief · track_record · measures · safety · scan · notify · auth · client
+              holdings · tradebook(+store) · taxpnl · ticker
+              evidence (NSE regulatory indicators) · announcements (filings + provenance)
+              extraction (the model reports what a filing says) · pretrade (may we buy this?)
+              pipeline (rank → skip → anchor → one outcome) · flags (what the user sees)
+scripts/      twin.py (the cron) · evidence.py (the spine) · paper.py · advisor.py
+              dashboard_app.py · exp_null.py · backtest_* · exp_*
 config.py     every tunable parameter in one place
 ```
-
-Each rebalance: `as_of` slice (no look-ahead) → liquidity gate → factor scores under the regime's
-weights → top-N → sector allocator → optimizer → tax-aware execution.
 
 **Conventions.** Money is `Decimal` everywhere it touches accounting, never float. No look-ahead ever
 — historical reads go through `PriceData.as_of(date)`; fundamentals carry a 90-day effective lag; a
 test fails on look-ahead. Reuse before adding. Reference the spec by section (`§4.6`) in comments.
 
 **What runs unattended** — `paper.yml`, weekdays 12:23 UTC: refresh prices → mark the paper book →
-Telegram scan → AI brief → twin (`scripts/twin.py daily`: sync flows → AI verdicts → step books →
-mark → gate → append history) → commit → **postcondition that fails loudly if today's mark is not on
-file**. Everything else is `continue-on-error`, so without that check a green run could accrue
-nothing for months.
+Telegram scan → AI brief → **evidence spine** → twin → commit → **postcondition that fails unless
+today's row carries every book, valued, and both tracks**. The two long steps are capped so a stall
+cannot cost the day's record.
 
 ---
 
 ## Commands
 
 ```bash
-uv sync --extra dev
+uv sync --extra dev --extra dashboard
 uv run pytest                                          # must stay green
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src
 uv run python scripts/twin.py daily                    # the cron entry point
+uv run python scripts/evidence.py daily                # the evidence spine (shadow)
 uv run python scripts/run_phase0.py                    # the validated backtest
+uv run python scripts/exp_null.py --draws 2000         # the matched null
 uv run --extra dashboard streamlit run scripts/dashboard_app.py
 ```
 
-**Auditing a live surface offline** — no Kite login, no Streamlit server. The account *shape* is the
-point: **idle cash and holdings together**, because a zeroed portfolio hides an entire defect class.
-
-```python
-import sys; sys.path.insert(0, "scripts")
-from datetime import date
-from decimal import Decimal
-import pandas as pd
-from paper import _load_benchmark_series
-from qalpha.config import Config
-from qalpha.data.ingest import load_parquet
-from qalpha.backtest.portfolio import Portfolio
-from qalpha.live.deploy import advise_deploy_into_weakness
-
-cfg = Config()
-prices = load_parquet("data/historical/prices_watchlist.parquet")
-wl = pd.read_csv("data/universes/nifty100_watchlist.csv")
-sector_of = dict(zip(wl["ticker"], wl["sector"]))
-watchlist = [t for t in wl["ticker"] if t in prices.adj_close.columns]
-
-pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("500000"))   # ← idle cash AND holdings
-advice = advise_deploy_into_weakness(
-    pf, Decimal("100000"), watchlist, sector_of, prices,
-    _load_benchmark_series(), date.today(), max_names=8, spend_idle_cash=False,
-)
-print(advice.render())     # then check every rendered figure against what the code summed
-```
+**Auditing a live surface offline** — no Kite login, no server. The account *shape* is the point:
+**idle cash and holdings together**, because a zeroed portfolio hides an entire defect class. See
+`tests/test_golden_day.py` for the full chain asserted to the paisa.
 
 ⚠️ `scripts/paper.py refresh` refreshes **neither** the benchmark nor the watchlist panel. Call
 `_refresh_benchmark()` and `build_nifty100_watchlist.py --prices` too, or you audit stale data.
 
-**Secrets.** Repo Actions: `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GIST_TOKEN`.
-Streamlit: `GITHUB_TOKEN` (contents:write), `GIST_TOKEN`, `KITE_*`, `APP_PASSWORD`. GitHub secrets are
-write-only — never try to read them. Without `GIST_TOKEN` the twin cannot read the tradebook and
-**correctly refuses to run** rather than marking a book with no flows.
+**Secrets.** Repo Actions: `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
+`GIST_TOKEN`, `TRADEBOOK_GIST_ID`. Streamlit: `GITHUB_TOKEN`, `GIST_TOKEN`, `KITE_*`,
+`APP_PASSWORD`. GitHub secrets are write-only — never try to read them. Without `GIST_TOKEN` the twin
+cannot read the tradebook and **correctly refuses to run**.
 
 ---
 
-## Open work, in order
+## Open work
 
-**Start with 1 and 2.** They are small, and 2 is what stops the next integration defect shipping.
+**The build is not closed and saying so was itself a defect.** But there is no queue of features
+here, and adding one is not the default. The list below is short on purpose.
 
-1. **Correct the README's out-of-sample claim** (gate 1, `README.md` §5). Ten minutes; the claim most
-   likely to over-authorise capital. The configuration was selected *on* the holdout. **Still not
-   done** — `README.md:215` still prints `1✅`.
-2. ✅ **The golden-day replay exists** (`tests/test_golden_day.py`, #98). Data → evidence →
-   recommendation → governor → execution → costs → mark → reconciliation, asserting **cash to the
-   paisa** (`₹90,820.31`, costs `₹92.69`). It runs on the real archived exchange file and the real
-   archived filings, and it exercises `live/pipeline.py` — the join those parts were built for.
-   **`governor.py` finally has a caller.**
+1. **Nothing.** The system runs, the flags reach the buy screen, and the record accrues. The correct
+   next action is usually to let it run.
+2. **If the user asks for the AI to do more:** the live twin veto is still the web-search one whose
+   source rule checks only a hostname. `extraction.py` is the safer design and does not feed it.
+   Replacing it is a treatment change and needs registering.
+3. **If the user asks about the experiments:** the superiority question cannot be answered (see the
+   null). The honest options are to abandon it in writing, or re-register as non-inferiority. Leaving
+   it ambiguous invites someone to install a null later and retroactively authorize a window that
+   started before it was settled.
+4. **Deferred, none of it breaking:** dataset hashes so reports reproduce · raw prices for execution
+   and FIFO basis · date-dependent tax rates · `_cap_renorm` · durable off-repo document storage.
+5. **Never without a separate registered experiment:** mid/small-cap, IPO, F&O. **No engine inherits
+   another's authority.**
 
-   *Why it was ahead of the null.* Every defect found in the 2026-08/09 sessions was an
-   **integration** failure — right function, wrong argument; a constant standing in for a
-   measurement; a source disagreeing with the one the broker uses. 700+ unit tests caught none of
-   them. And five of those defects were **introduced during those same sessions and caught hours
-   later by inspection**, which is luck dressed as process. The replay is the only test shape that
-   turns that luck into a gate. Build it before anything else is layered on.
-3. ✅ **The decision loop no longer hands company uncertainty back to the user** (#101).
+### Do not disturb
 
-   *The defect it fixed.* `propose` had five exit paths and **four were `HUMAN_REQUIRED`**. A
-   rejected candidate was dropped with nothing replacing it and the cash sat idle. Run against the
-   live basket it asked nineteen questions and bought nothing. Honest and useless are not opposites.
-
-   Now: walk the ranking, skip what does not clear, **take the next name instead**, and put the
-   remainder in the anchor (`NIFTYBEES`) so money is never idle. `HUMAN_REQUIRED` is reserved for
-   the **account or the feed** — an unpriced holding, a wholly dead evidence feed, a broker
-   mismatch. Never "I could not read one filing".
-
-   **The governor filters, it does not stop.** A name that would breach a cap is skipped and the
-   next considered. And the cap is only enforced once the book spans ≥ 4 sectors, because a 30% cap
-   needs four to be satisfiable and below that it rejects *everything*, including the first buy
-   into an empty book.
-
-   **Holdings get different rules from purchases.** `BLOCK` proposes an exit for approval; `WATCH`
-   and `UNKNOWN` freeze additions and **never sell**, because selling realises tax and this screen
-   buys names that are already down.
-
-   ⚠️ **Its first scheduled caller was wrong, and #103 repaired it.** `_candidates` ran the screen
-   against a fabricated ₹1,00,000 on an *empty* portfolio, then **discarded the rank and the
-   quantity on the next line**, merged bare tickers with holdings and returned them `sorted()`.
-   `propose` was handed one share of each in alphabetical order, funded by different money. Eleven
-   tests passed throughout, because they hand `propose` good data and **nothing tested the caller**
-   — the class the golden day exists to catch, missed because I wrote the replay the same way.
-
-   Now: the screen runs on the real book and the real cash at the policy's `max_names`, and its rank
-   and sizing survive. A rejected name is **not** backfilled with the next stock — that would need a
-   re-run at a different basket size, and a screen asked for a different number of names is a
-   different screen. **The anchor is the replacement.**
-
-4. **`Mandate` + `RiskGovernor.veto()`** — the operating contract from prose into an object.
-4. ⛔ **The matched null was generated and WITHDRAWN** (#99, then #100). It showed the gate is underpowered by
-   ~17×. **Open decision, before 2026-09-08:** accept that criterion 3 will not go green, re-register
-   a longer window, or change the question to non-inferiority — `reports/NULL_MATCHED.md` §4.
-5. **Exchange evidence spine** — ✅ cautionary-message feed (`live/evidence.py`, #90), ✅ corporate
-   announcements archived and hashed (`live/announcements.py`, #93), ✅ the AI moved from *judge* to
-   *extractor* (`live/extraction.py`, #93), ✅ `PreTradeAssessment` combining them
-   (`live/pretrade.py`, #94), ✅ **running daily in shadow** (`scripts/evidence.py`, #97 — archives
-   the index response, every filing, and renders `reports/pretrade.md`). **It changes nothing.**
-
-   *Why unwired.* With filings listed but unread, every candidate reads `UNKNOWN` — correctly. A
-   gate that says `HUMAN_REQUIRED` eight times a day about names it has not opened trains the user
-   to click through it. **Next: run the announcement fetch + extraction daily so coverage is real**,
-   then wire the assessment, then point the live veto at filings instead of four web searches.
-
-   The corpus itself is **gitignored** — ~90 MB on the first run, growing daily. Every document is
-   re-fetchable from `nsearchives.nseindia.com` by the URL in its provenance sidecar, and the
-   sidecar's SHA-256 is what proves which bytes were read. **The sidecars, the event log and the
-   coverage log are tracked; they are the audit trail.**
-
-   ⚠️ **The live veto has NOT been replaced.** `TWIN_FULL` still calls `basket_verdicts()` →
-   Anthropic web search, and its "primary source" rule still checks only the **hostname** — any NSE
-   URL qualifies, whether or not the page supports the claim. `extraction.py` is the safer design
-   and it is not running. Two AI paths exist; the weaker one is the live one.
-
-   ✅ Both of the pipeline's remaining contract gaps are closed: the **index response is archived**
-   (an absence is only evidence if the thing that showed it was kept), and long filings are
-   **chunked, not truncated**, so "read" means read.
-
-   Still owed before it may be wired to a decision: real coverage on a run of days, and a
-   golden-day replay proving the path end to end.
-6. Raw prices for execution and FIFO basis · date-dependent tax rates · `_cap_renorm` · dataset hashes.
-
-   **Still open on the evidence spine, none of it breaking:** documents are gitignored so only a hash
-   and a URL survive if the exchange replaces a filing; the same document is re-extracted daily for
-   its whole window, roughly 10× the needed model calls; and `CORE_V2`'s question is undecided, which
-   is what blocks repairing the null.
-7. Only then: mid/small-cap, IPO, F&O — each a separate registered experiment with its own
-   point-in-time universe. **No engine inherits another's authority.**
-
-### Do not disturb — the twin clock is running
-
-The window opened **2026-09-01** and closes twelve months later. **The treatment is frozen**: model
-`claude-haiku-4-5`, prompt `PR-8b`, the veto rule, `EVALUATION_START`. Changing any of them makes
-this run 3 and restarts the clock. The primary-source tightening merged on day 4 got latitude because
-it *narrows* a guard rather than altering selection, and it is recorded — treat that as the last such
-amendment.
-
-**The cohort record.** `data/evidence/decisions.jsonl` (added to the workflow's commit step in
-#103 — before that it was written every run and thrown away) stores every candidate considered with
-its rank, price and verdict — taken or skipped. A portfolio yields one observation a year; 15 names
-across 12 deployments yields 180, and the skipped names become the control group instead of
-vanishing. That is the only route to enough observations to learn anything: at a 2%/name effect it
-is ~7 years, at 3% ~3 years, against 955 years for the portfolio-level question. A decision is
-recorded **only when the deployable cash changes**: a shadow that never executes sees the same idle
-money daily, and logging it every day would fill the cohort with one decision wearing many dates.
-
-**Watch `demoted` in `data/twin/ai_verdicts.jsonl`.** If the model keeps finding things it cannot cite
-to a filing, that count says whether the primary-source bar is right or too strict, and it is the
-input to whether the veto ever graduates.
-
----
-
-## 🛑 The build is closed (2026-09-08)
-
-**[OPERATING.md](OPERATING.md) is the page the user runs this from.** Read it before proposing any
-change: it tells him what to do, what to ignore and when to come back, and it is the only document
-he needs.
-
-**Both faults found on 2026-09-07 are now fixed**, and the evidence layer is on the buy surface as
-**flags, never vetoes** (`live/flags.py`, rendered under the basket in `dashboard_app.py`).
-
-1. **The spine ran after the twin deployed**, so it only ever screened leftover change — ₹377 on
-   2026-09-07, a one-share proposal. It now runs **before** the twin in `paper.yml`.
-2. **Materiality was read as newsworthiness.** EX-1 asked for "material events" and never said
-   material *to whom*, so 77 of 193 came back `high` — "revenue up 10%", "EBITDA grew 8%" — and a
-   high event triggers `WATCH`, which skips a name. **Good news rejected candidates.** EX-2 defines
-   materiality as *concern to someone who owns the shares* and names the routine cases as explicitly
-   not material. `pretrade` acts only on the current version, so EX-1 rows stay on file and cannot
-   act.
-
-Also closed: documents are re-read only once (an extraction ledger keyed on content hash — the same
-filing was being re-read every day of its window, ~10× the needed calls), and the **extracted text
-is archived gzipped and tracked**, so a passage stays checkable if NSE withdraws a document.
-
-The build is finished. Do not reopen it unless the user asks or one of OPERATING.md §7's
-triggers fires.
+`EVALUATION_START`, `CORE_EVALUATION_START`, the screen's parameters, and `BASELINE_EW`'s
+construction. Changing any of them restarts a twelve-month clock. The AI and evidence layers version
+**independently** and may change freely — that separation is the reason improvements no longer reset
+the experiment, which was the mechanism that kept this project further from evidence the closer it
+got.
 
 ---
 
 ## Reading order for a new session
 
-**[OPERATING.md](OPERATING.md)** → this file → **[PLAN_SYSTEM.md](PLAN_SYSTEM.md)** (target architecture) →
-**[reports/PREREGISTRATION_TWIN_RUN2.md](reports/PREREGISTRATION_TWIN_RUN2.md)** (what is frozen and
-why) → `README.md` (the front door, and note the out-of-sample claim above) → `Q_alpha.md` (the spec).
+**[OPERATING.md](OPERATING.md)** (what the user actually does) → this file →
+**[reports/NULL_MATCHED.md](reports/NULL_MATCHED.md)** (why the gate cannot open) →
+**[PLAN_SYSTEM.md](PLAN_SYSTEM.md)** (target architecture) → `README.md` → `Q_alpha.md` (the spec).
+
+`PLAN_REDESIGN.md` and `PLAN_TRUST_REPAIR.md` look like stale planning and are not: six source files
+cite them **by section** as the reason a design is what it is. Do not delete them.
 
 `../Q_Alpha_Research` is the **archive** — the hedge forward run and the published negatives (QUBO
-×2, HMM overlay, LPPLS). The product does not import from it.
+×2, HMM overlay, LPPLS). Dormant since 2026-08-29. The product does not import from it.
 
 > Q-Alpha never asks to be trusted. It shows enough evidence that the decision can be checked — and
 > it refuses to act when it cannot.

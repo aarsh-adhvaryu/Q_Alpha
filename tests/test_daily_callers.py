@@ -138,3 +138,55 @@ def test_the_brief_never_reads_as_a_signal() -> None:
     from qalpha.live.ai_brief import CONTEXT_PREAMBLE
 
     assert "not a signal" in CONTEXT_PREAMBLE.lower()
+
+
+# --- a name is "seen" only when it was actually covered ---------------------------------------------
+
+
+def _cov_row(tmp_path: Path, **over: object) -> Path:
+    import json
+
+    from qalpha.live.extraction import EXTRACTION_VERSION
+
+    row: dict[str, object] = {
+        "as_of": "2026-09-07",
+        "ticker": "VBL.NS",
+        "complete": True,
+        "extraction_version": EXTRACTION_VERSION,
+    }
+    row.update(over)
+    p = tmp_path / "coverage.jsonl"
+    p.write_text(json.dumps(row) + "\n")
+    return p
+
+
+def test_an_incomplete_coverage_row_does_not_burn_the_bootstrap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A name gets ONE chance at a year of history. A failed run must not spend it.
+
+    Sixteen incomplete rows written during local testing on 2026-09-08 would otherwise have sent
+    sixteen names down the ten-day path permanently.
+    """
+    import evidence
+
+    monkeypatch.setattr(evidence, "COVERAGE_LOG", _cov_row(tmp_path, complete=False))
+    assert evidence._seen_before("VBL.NS") is False
+    assert evidence._window_days("VBL.NS") == evidence.BOOTSTRAP_DAYS
+
+
+def test_a_superseded_extractor_does_not_burn_the_bootstrap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import evidence
+
+    monkeypatch.setattr(evidence, "COVERAGE_LOG", _cov_row(tmp_path, extraction_version="EX-1"))
+    assert evidence._seen_before("VBL.NS") is False
+
+
+def test_a_complete_current_row_does_count(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import evidence
+
+    monkeypatch.setattr(evidence, "COVERAGE_LOG", _cov_row(tmp_path))
+    assert evidence._seen_before("VBL.NS") is True
+    assert evidence._window_days("VBL.NS") == evidence.LOOKBACK_DAYS
