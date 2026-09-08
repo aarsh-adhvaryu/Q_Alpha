@@ -1,6 +1,6 @@
 # Q-Alpha — Paper-Trading Dashboard
 
-_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-09-08** · generated 2026-09-08 13:34 UTC._
+_Notional paper trading (no real money) of the validated tax-aware strategy. As of **2026-09-08** · generated 2026-09-08 16:44 UTC._
 
 ## At a glance
 
@@ -61,7 +61,7 @@ _Notional paper trading (no real money) of the validated tax-aware strategy. As 
 
 ## 🩺 System health & run log
 
-**🟢 healthy** — last autonomous run **2026-09-08T13:34:44Z** (market date 2026-09-08, `daily`).
+**🟢 healthy** — last autonomous run **2026-09-08T16:44:26Z** (market date 2026-09-08, `daily`).
 
 - Action: held — no action
 - Decision: holding — next scheduled rebalance on/after 2027-01-01
@@ -72,6 +72,7 @@ _Recent runs (last 10 of 50):_
 
 | Ran (UTC) | As of | Cmd | Action | GO | Warnings |
 |---|---|---|---|---|---|
+| 2026-09-08T16:44:26Z | 2026-09-08 | daily | held — no action | NO-GO | — |
 | 2026-09-08T13:34:44Z | 2026-09-08 | daily | held — no action | NO-GO | — |
 | 2026-09-07T17:46:51Z | 2026-09-07 | daily | held — no action | NO-GO | — |
 | 2026-09-04T16:29:05Z | 2026-09-04 | daily | held — no action | NO-GO | — |
@@ -81,7 +82,6 @@ _Recent runs (last 10 of 50):_
 | 2026-08-31T19:09:42Z | 2026-08-28 | daily | held — no action | NO-GO | — |
 | 2026-08-28T22:28:48Z | 2026-08-27 | daily | held — no action | NOT YET | — |
 | 2026-08-27T22:26:12Z | 2026-08-26 | daily | held — no action | NOT YET | — |
-| 2026-08-26T13:29:23Z | 2026-08-26 | daily | held — no action | NOT YET | — |
 
 ---
 _The decision engine is the same code validated in the backtest ([reports/PHASE0_VERDICT.md](PHASE0_VERDICT.md)); this page is regenerated daily by the pipeline, not by hand._
