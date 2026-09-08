@@ -28,7 +28,7 @@ from qalpha.live.evidence import (
 from qalpha.live.evidence import (
     assess as exchange_assess,
 )
-from qalpha.live.extraction import ExtractedEvent
+from qalpha.live.extraction import EXTRACTION_VERSION, ExtractedEvent
 from qalpha.live.pretrade import (
     ANNOUNCEMENTS,
     NOT_COVERED_DIMENSIONS,
@@ -76,7 +76,7 @@ def _event(materiality: str = "high", verified: bool = True) -> ExtractedEvent:
         doc_url="https://nsearchives.nseindia.com/corporate/X.pdf",
         disseminated_at=datetime(2026, 8, 25, tzinfo=UTC),
         model="m",
-        extraction_version="EX-1",
+        extraction_version=EXTRACTION_VERSION,
         verified=verified,
     )
 
@@ -251,3 +251,29 @@ def test_fixture_3_an_asm_stage_two_name_blocks() -> None:
 
 def test_fixture_4_a_missing_exchange_file_is_unknown_even_when_filings_are_clean() -> None:
     assert assess_candidate("VBL.NS", exchange=None, coverage=NOTHING_FILED).state == UNKNOWN
+
+
+def test_an_event_from_a_superseded_extractor_never_flags() -> None:
+    """EX-1 rated routine results `high` because the prompt never said material *to whom*.
+
+    77 of its 193 events came back high — "revenue up 10%", "EBITDA grew 8%" — and a high event
+    triggers WATCH, which skips the name. So good news rejected candidates. Those rows stay on file
+    as a record of what was believed; they must never act.
+    """
+    stale = ExtractedEvent(
+        ticker="X",
+        event_type="results",
+        event_date=PURCHASE_DATE,
+        materiality="high",
+        passage="Turnover for the quarter stood at INR 17,184 crores",
+        summary="revenue up 10%",
+        uncertainty="-",
+        doc_sha256="c" * 64,
+        doc_url="u",
+        disseminated_at=datetime(2026, 8, 25, tzinfo=UTC),
+        model="m",
+        extraction_version="EX-1",
+        verified=True,
+    )
+    a = assess_candidate("X", exchange=_exchange(), events=[stale], coverage=FULL)
+    assert a.state == PASS and a.flagged_events == ()

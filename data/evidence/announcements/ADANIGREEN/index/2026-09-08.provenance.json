@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=ADANIGREEN",
+ "retrieved_at_utc": "2026-09-08T06:26:42Z",
+ "http_status": 200,
+ "bytes": 629649,
+ "sha256": "92fad4ee001f9cb299da442b6f0d8f32ce962e8dab43c25e32310351da59db54",
+ "document_date": "2026-09-08",
+ "symbol": "ADANIGREEN",
+ "kind": "announcement_index"
+}

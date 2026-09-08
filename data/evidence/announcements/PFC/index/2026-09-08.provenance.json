@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=PFC",
+ "retrieved_at_utc": "2026-09-08T06:28:16Z",
+ "http_status": 200,
+ "bytes": 858968,
+ "sha256": "4b6426092ba92a200cc0fb2c0e987c9e2302a5ea9ead32715018ae68f3aff495",
+ "document_date": "2026-09-08",
+ "symbol": "PFC",
+ "kind": "announcement_index"
+}
