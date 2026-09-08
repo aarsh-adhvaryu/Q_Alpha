@@ -162,3 +162,58 @@ def test_rupees_are_grouped_the_same_way_everywhere_on_the_page() -> None:
     second way would be the page's own defect family in miniature."""
     assert ui.inr(Decimal("500000")) == f"₹{500000:,.0f}"
     assert ui.inr(Decimal("1234.56"), decimals=2) == "₹1,234.56"
+
+
+# --- the regression that shipped ---------------------------------------------------------------
+def _rules(css: str) -> list[tuple[str, str]]:
+    """Crudely split the stylesheet into (selector, declarations) pairs. Good enough: the sheet has
+    no nested at-rules, and this only needs to see which selectors declare what."""
+    import re
+
+    body = css[css.index("<style>") + 7 : css.rindex("</style>")]
+    return [(m.group(1).strip(), m.group(2)) for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", body)]
+
+
+def test_the_stylesheet_never_repaints_streamlits_icon_font() -> None:
+    """This one shipped, and it made the page look broken rather than merely ugly.
+
+    Streamlit draws its icons as ``<span data-testid="stIconMaterial">upload</span>`` — the text IS
+    the glyph name, turned into a picture by a LIGATURE in "Material Symbols Rounded". A rule like
+    ``[data-testid="stAppViewContainer"] * { font-family: … }`` wins on order and puts another
+    family in front, the ligature never forms, and the icon renders as its own name: the sidebar
+    arrow came out as "double_arrow_right" and the file uploader read "uploadUpload".
+
+    So: no blanket font-family in this sheet. The page font is set by ``theme.font`` in
+    ``.streamlit/config.toml``, which Streamlit applies to its body-font token and not to its icons.
+    """
+    offenders = [
+        selector
+        for selector, decls in _rules(ui.stylesheet())
+        if "font-family" in decls and "*" in selector and "stIconMaterial" not in selector
+    ]
+    assert not offenders, f"blanket font-family would unmake the icon ligatures: {offenders}"
+
+
+def test_the_stylesheet_puts_the_icon_font_back_and_makes_it_stick() -> None:
+    css = ui.stylesheet()
+    guard = [d for s, d in _rules(css) if "stIconMaterial" in s]
+    assert guard, "no rule restores the Material Symbols family"
+    assert 'font-family: "Material Symbols Rounded" !important' in guard[0]
+    assert "liga" in guard[0], "the ligature feature must be on, or the glyph name shows"
+
+
+def test_the_page_never_sets_a_height_on_streamlits_header() -> None:
+    """The header is sticky and holds Streamlit's own toolbar. Shortening it dropped the page
+    content underneath, so the instrument bar's chips rendered behind the share and menu icons."""
+    for selector, decls in _rules(ui.stylesheet()):
+        if "stHeader" in selector:
+            assert "height" not in decls, f"height on the header overlaps its toolbar: {decls}"
+
+
+def test_alert_colours_target_the_element_that_is_actually_coloured() -> None:
+    """``stAlert`` is the outer wrapper; ``stAlertContainer`` is the coloured box. The first version
+    of these rules styled the wrapper and changed nothing on screen."""
+    css = ui.stylesheet()
+    assert '[data-testid="stAlertContainer"]' in css
+    for kind in ("Success", "Warning", "Error", "Info"):
+        assert f':has([data-testid="stAlertContent{kind}"])' in css
