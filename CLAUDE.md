@@ -100,7 +100,7 @@ four and only one is cheap.
 
 ## What is true today (2026-09-06)
 
-**26656 lines · 47 live modules · 908 passed.** `main` is at the merge of PR #104.
+**26436 lines · 46 live modules · 898 passed.** `main` is at the merge of PR #104.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
 (record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
 repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the golden-day replay) and #99 (the matched null) follow.
@@ -253,8 +253,10 @@ against a ₹3L book.
   The 30% cap was applied to the names chosen *that round*; at slider 3–4 a 30% cap cannot bind
   (three names ⇒ one is 33%), so twelve individually-compliant SIP baskets compound to a **36.9%
   POWER** book. Kite nudges on holdings at 50%; our cap was stricter on paper and weaker in practice.
-- **`live/valuation.py`** — current P/E and market cap, threshold **the exchange's own P/E > 50**.
-  A check, never a factor: it does not re-rank or re-select.
+- **`live/valuation.py` — REMOVED 2026-09-08.** It read a current P/E from yfinance and compared it
+  to the exchange's own threshold, which is mirroring a threshold while reading a different source.
+  It never had a production caller and `live/evidence.py` replaced it by reading NSE's actual file.
+  The lesson it taught is kept below because it is the whole reason the evidence spine exists.
 
 > ### ⚠️ The valuation check reads the wrong number, and would NOT have caught VBL
 >
@@ -376,7 +378,7 @@ accounting/   FIFO lots · Zerodha costs · capital gains (§70 · §74 · §112
 backtest/     walk-forward engine · portfolio · baselines · metrics · significance · runstore
               decision.py = the shared decide_rebalance the live runner also calls
 live/         advisor (sell/raise-cash/deploy/harvest) · deploy (the buy screen) · position_health
-              price_integrity · cooling_off · satellite · valuation · governor · hedge · nav
+              price_integrity · cooling_off · satellite · governor · hedge · nav
               evidence (NSE regulatory-indicator adapter) · announcements (filings + provenance)
               extraction (the AI reports what a filing says; it decides nothing)
               pretrade (may we buy this name? eligibility only — never a view on return)

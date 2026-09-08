@@ -7,10 +7,11 @@ number, because the signal is distance below a *trailing* high and the trailing 
 behind a falling stock. No amount of compute recovers information that was never supplied.
 
 This is the first adapter that reads something which is not a price, and it reads it from the
-exchange rather than deriving it. ``live/valuation.py`` tried to *reproduce* NSE's "Scrip PE is
-greater than 50" caution from a yfinance trailing P/E, and got a different answer than NSE did
-because yfinance serves consolidated earnings while the exchange computed standalone. The fix for
-disagreeing with a source is to read the source.
+exchange rather than deriving it. An earlier module, ``live/valuation.py`` (removed 2026-09-08),
+tried to *reproduce* NSE's "Scrip PE is greater than 50" caution from a yfinance trailing P/E and
+got a different answer than NSE did, because yfinance serves consolidated earnings while the
+exchange computed standalone. It was never wired to anything and this module replaced it. **The fix
+for disagreeing with a source is to read the source.**
 
 **Five states, and two of them are different kinds of silence** (see
 ``reports/PREREGISTRATION_EVIDENCE_V1.md`` §3, frozen before this file was written):
