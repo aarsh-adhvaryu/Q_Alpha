@@ -34,13 +34,18 @@ pytestmark = pytest.mark.usefixtures("dashboard_sandbox")
 def test_dashboard_renders_the_system_view() -> None:
     at = AppTest.from_file(str(_APP), default_timeout=60).run()
     assert not at.exception
-    assert any("Q-Alpha" in t.value for t in at.title)
-    # Two top-level tabs now: 🧠 The system + 🔴 Live (Zerodha).
+    # The page names itself and says what it is, in the instrument bar at the top. This used to
+    # assert ``st.title`` specifically, which pinned the widget rather than the property — the bar
+    # is drawn as markup now and the page is no worse for it.
+    page = " ".join(m.value for m in at.markdown)
+    assert "Q-Alpha" in page
+    assert "read-only" in page.lower(), "the bar must state that nothing here places an order"
+    # Two top-level tabs: The system + Live · Zerodha.
     labels = [t.label for t in at.tabs]
     assert any("system" in lbl.lower() for lbl in labels)
     assert any(("Live" in lbl) or ("Zerodha" in lbl) for lbl in labels)
-    # The wallet metric renders (the fundable dry-powder view).
-    assert len(at.metric) >= 1
+    # And the instrument row renders — the book's headline figure, not a bare page of prose.
+    assert "qa-tile-value" in page
     # The core-GO expander carries the validated book's "Today" brief (unchanged underneath).
     assert any("Today — what to do" in m.value for m in at.markdown)
 
@@ -162,14 +167,19 @@ def test_the_headline_tile_reads_the_same_source_as_the_chart_beneath_it() -> No
     raw = json.loads(_BOOK.read_text(encoding="utf-8"))
     committed = float(raw["equity_curve"][-1]["equity"])
 
+    import re
+
     at = AppTest.from_file(str(_APP), default_timeout=90).run()
     assert not at.exception
-    values = [m.value for m in at.metric]
+    page = " ".join(m.value for m in at.markdown)
+    # The tile's VALUE, not merely the number appearing somewhere in the prose — the whole point is
+    # that the figure standing at the top of the page is the committed mark.
+    values = re.findall(r'class="qa-tile-value">([^<]*)<', page)
     assert any(f"₹{committed:,.0f}" == v for v in values), (
         f"no tile shows the committed mark ₹{committed:,.0f}; tiles were {values}"
     )
     # And the tile is named for what it contains — it is inclusive of cash, beside a cash tile.
-    labels = [m.label for m in at.metric]
+    labels = re.findall(r'class="qa-tile-label">([^<]*)<', page)
     assert any("Book value" in lbl and "cash" in lbl for lbl in labels)
 
 

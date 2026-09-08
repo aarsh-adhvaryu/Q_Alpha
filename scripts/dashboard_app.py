@@ -42,6 +42,7 @@ from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
+from qalpha.live import ui
 from qalpha.live.advisor import advise_harvest, advise_raise_cash, advise_sell
 from qalpha.live.basket import BUY, SELL, BasketOrder
 from qalpha.live.dashboard import (
@@ -397,10 +398,50 @@ def _load_live(cfg: Config, as_of: date) -> LiveHoldings | None:
         return None
 
 
-def _paper_status_panel(book: PaperBook) -> None:
-    """Show whether the weekday paper-run pipeline actually marked the book (seen, not trusted)."""
+def _page_header(book: PaperBook, as_of: date) -> None:
+    """The instrument bar and the fact strip under it — what this page is, and what it is standing on.
+
+    Four things belong above everything else, because every number below is read in their light: the
+    session clock, whether the weekday cron actually marked the book, which day the prices are from,
+    and that nothing here places an order. They are stated as facts in a hairline strip rather than
+    as three stacked coloured banners, which is what this row used to be.
+
+    The freshness note is ``paper_freshness``'s own text, unchanged — this only decides where it sits.
+    """
     fresh = paper_freshness(book, date.today())
-    (st.success if not fresh.is_stale else st.warning)(f"📊 Daily paper-run — {fresh.note}")
+    clock = ui.market_clock(datetime.now(UTC))
+    st.markdown(
+        ui.app_bar(
+            product="Q-Alpha",
+            tagline="Tax-smart portfolio assistant",
+            chips=[
+                ui.Chip(clock.label, tone=clock.tone, title=clock.note),
+                ui.Chip(
+                    "cron stale" if fresh.is_stale else "cron current",
+                    tone="warn" if fresh.is_stale else "good",
+                    title=fresh.note,
+                ),
+                ui.Chip(
+                    "read-only",
+                    tone="info",
+                    title="This page has never placed an order and no code path here can. "
+                    "You place every order yourself, in Kite.",
+                ),
+            ],
+        ),
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        ui.strip(
+            [
+                ("Prices marked", f"{as_of:%d %b %Y}"),
+                ("Daily paper run", fresh.note.lstrip("⚠️✓ ")),
+                ("Orders", "you place every one, in Kite — nothing here trades"),
+                ("Authorizing pair", "none — nothing here authorises a GO"),
+            ]
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def _advisor_with_safety(
@@ -1014,6 +1055,7 @@ def _system_tab(
 
 def main() -> None:
     st.set_page_config(page_title="Q-Alpha", page_icon="📈", layout="wide")
+    st.html(ui.stylesheet())  # before the password gate, so the login screen wears it too
     _bridge_secrets()
     if not _check_password():
         st.stop()
@@ -1028,10 +1070,9 @@ def main() -> None:
     cfg = Config()
     as_of = prices.dates[-1].date()
 
-    st.title("Q-Alpha — Tax-Smart Portfolio Advisor")
-    _paper_status_panel(book)
+    _page_header(book, as_of)
 
-    system_tab, live_tab = st.tabs(["🧠 The system", "🔴 Live (Zerodha)"])
+    system_tab, live_tab = st.tabs(["The system", "Live · Zerodha"])
 
     with system_tab:
         # ONE view of everything: the System book acting on its own advice (fake money), its no-AI
@@ -1146,11 +1187,47 @@ def _paper_overview(
         end=marked_on,
         denominator=f"₹{starting:,.0f}",
     )
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Book value (incl. cash)", f"₹{book_value:,.0f}", f"{ret:+.2f}%")
-    c2.metric("Nifty 50 TRI", f"{bench:+.2f}%" if bench is not None else "—")
-    c3.metric("of which cash", f"₹{book.portfolio.cash:,.0f}")
-    c4.metric("Realized tax to date", f"₹{book.realized_tax():,.0f}")
+    # The instrument row. Every tile carries its own basis on the line beneath it, because a bare
+    # rupee figure on this page has twice been read as something it was not.
+    st.markdown(
+        ui.tile_row(
+            [
+                ui.Tile(
+                    label="Book value (incl. cash)",
+                    value=ui.inr(book_value),
+                    delta=f"{ui.delta_glyph(ret)} {ui.pct(ret)}",
+                    delta_tone=ui.tone_for(ret),
+                    note=f"against the {ui.inr(starting)} it started with",
+                ),
+                ui.Tile(
+                    label="Nifty 50 TRI",
+                    value=ui.pct(bench) if bench is not None else "—",
+                    delta=(
+                        f"{ui.delta_glyph(bench)} same window"
+                        if bench is not None
+                        else "not measured"
+                    ),
+                    delta_tone=ui.tone_for(bench) if bench is not None else "neutral",
+                    note=(
+                        f"{book.start_date:%d %b %Y} → {marked_on:%d %b %Y}"
+                        if bench is not None
+                        else "no index data for this window — unmeasured, not flat"
+                    ),
+                ),
+                ui.Tile(
+                    label="Of which cash",
+                    value=ui.inr(book.portfolio.cash),
+                    note="uninvested — included in book value above",
+                ),
+                ui.Tile(
+                    label="Realised tax to date",
+                    value=ui.inr(book.realized_tax()),
+                    note="capital-gains tax the book has actually incurred",
+                ),
+            ]
+        ),
+        unsafe_allow_html=True,
+    )
     st.caption(
         f"Both figures cover **{book.start_date} → {marked_on}**. "
         f"Return is measured against {headline.basis_text} ({headline.denominator}); the Nifty 50 "
@@ -1184,16 +1261,20 @@ def _paper_overview(
     else:
         st.success(f"Hold — {plan.decision.reason}.")
 
-    left, right = st.columns([3, 2])
-    with left:
-        st.subheader("Equity vs Nifty 50 TRI")
-        _equity_chart(book, benchmark)
-    with right:
-        st.subheader("Holdings")
-        st.dataframe(
-            _holdings_frame(book.portfolio, prices_dec, as_of), hide_index=True, width="stretch"
-        )
-        st.caption(_LTCG_SAFE_LEGEND)
+    # Chart above, table below, both full width. Side by side, the eight-column holdings table was
+    # squeezed into two fifths of the page and every rupee figure wrapped.
+    st.markdown(
+        ui.section(
+            "Equity vs Nifty 50 TRI", note=f"{book.start_date:%d %b %Y} → {marked_on:%d %b %Y}"
+        ),
+        unsafe_allow_html=True,
+    )
+    _equity_chart(book, benchmark)
+    st.markdown(ui.section("Holdings"), unsafe_allow_html=True)
+    st.markdown(
+        _holdings_table(_holdings_frame(book.portfolio, prices_dec, as_of)), unsafe_allow_html=True
+    )
+    st.caption(_LTCG_SAFE_LEGEND)
 
 
 def _how_measured_note(book: PaperBook, curve: list, marked_on: date, headline_pct: float) -> None:
@@ -1642,35 +1723,64 @@ def _live_overview(
     ov = account_overview(
         portfolio, prices, previous_close=previous_close, realised_tax=realised_tax
     )
-    c1, c2, c3 = st.columns(3)
-    c1.metric(
-        "Equity (shares only)",
-        f"₹{ov.holdings_value:,.0f}",
-        delta=(None if ov.day_change is None else f"₹{ov.day_change:,.0f} today"),
+    # The instrument row. ``st.metric`` used to draw these, and it decided the arrow and the colour
+    # by looking at the FIRST CHARACTER of the delta string — so "₹-1,234 today" began with "₹",
+    # not "-", and a losing day rendered as a green ▲. Same defect family as every other entry in
+    # this repo's table: the arithmetic was right and the label on top of it was wrong. The sign now
+    # leads the symbol (``ui.signed_inr``) and the glyph is chosen from the number itself.
+    day_text, day_tone = (
+        ("", "neutral")
+        if ov.day_change is None
+        else ui.change_delta(ov.day_change, suffix=" today")
     )
-    c1.caption(
-        f"{ov.n_names} name{'s' if ov.n_names != 1 else ''} · "
-        + (
-            "no previous close for every holding, so today's move is not shown"
-            if ov.day_change_pct is None
-            else f"{ov.day_change_pct:+.2f}% today"
-        )
-    )
-    c2.metric("Cash / available margin", f"₹{ov.cash:,.0f}")
-    c2.caption(
-        "uninvested — not part of Equity"
-        if ov.cash_pct is None
-        else f"{ov.cash_pct:.1f}% of the ₹{ov.account_total:,.0f} account — uninvested"
-    )
-    c3.metric(
-        "Unrealised P&L",
-        f"₹{ov.unrealised:,.0f}",
-        delta=(None if ov.unrealised_pct is None else f"{ov.unrealised_pct:+.2f}%"),
-    )
-    c3.caption(
-        "nothing bought yet"
-        if ov.invested <= 0
-        else f"on ₹{ov.invested:,.0f} invested · realised CG tax this FY ₹{ov.realised_tax:,.0f}"
+    st.markdown(
+        ui.tile_row(
+            [
+                ui.Tile(
+                    label="Equity (shares only)",
+                    value=ui.inr(ov.holdings_value),
+                    delta=day_text or None,
+                    delta_tone=day_tone,
+                    note=f"{ov.n_names} name{'s' if ov.n_names != 1 else ''} · "
+                    + (
+                        "no previous close for every holding, so today's move is not shown"
+                        if ov.day_change_pct is None
+                        else f"{ov.day_change_pct:+.2f}% today"
+                    ),
+                ),
+                ui.Tile(
+                    label="Cash / available margin",
+                    value=ui.inr(ov.cash),
+                    note=(
+                        "uninvested — not part of Equity"
+                        if ov.cash_pct is None
+                        else f"{ov.cash_pct:.1f}% of the {ui.inr(ov.account_total)} account — uninvested"
+                    ),
+                ),
+                ui.Tile(
+                    label="Unrealised P&L",
+                    value=ui.signed_inr(ov.unrealised),
+                    delta=(
+                        None
+                        if ov.unrealised_pct is None
+                        else f"{ui.delta_glyph(ov.unrealised)} {ui.pct(ov.unrealised_pct)}"
+                    ),  # a percentage already carries its own sign, so only the glyph is added
+                    delta_tone=ui.tone_for(ov.unrealised),
+                    note=(
+                        "nothing bought yet"
+                        if ov.invested <= 0
+                        else f"on {ui.inr(ov.invested)} invested · realised CG tax this FY "
+                        f"{ui.inr(ov.realised_tax)}"
+                    ),
+                ),
+                ui.Tile(
+                    label="Account total",
+                    value=ui.inr(ov.account_total),
+                    note="shares + cash — the only figure the two tiles left of this add up to",
+                ),
+            ]
+        ),
+        unsafe_allow_html=True,
     )
     # The design gives idle cash its own line rather than a bare number, because the number alone
     # cannot say whether it is waiting to be used or waiting for next month.
@@ -1686,12 +1796,13 @@ def _live_overview(
         st.warning(caveat)
     else:
         st.success("Exact tax mode — holding periods dated from your tradebook.")
-    st.subheader("Holdings")
+    st.markdown(
+        ui.section("Holdings", note="marked at the live broker price"), unsafe_allow_html=True
+    )
     # caveat is None  <=>  lots carry real purchase dates (exact tax) → the LTCG-safe date is known.
-    st.dataframe(
-        _holdings_frame(portfolio, prices, date.today(), dated=caveat is None),
-        hide_index=True,
-        width="stretch",
+    st.markdown(
+        _holdings_table(_holdings_frame(portfolio, prices, date.today(), dated=caveat is None)),
+        unsafe_allow_html=True,
     )
     st.caption(_LTCG_SAFE_LEGEND)
 
@@ -1713,7 +1824,12 @@ def _live_overview(
                 ]
             ).sort_values("Share %", ascending=False)
             top = comp.iloc[0]
-            st.bar_chart(comp.set_index("Ticker")["Share %"], height=260, horizontal=True)
+            st.bar_chart(
+                comp.set_index("Ticker")["Share %"],
+                height=260,
+                horizontal=True,
+                color=ui.ACCENT,
+            )
             over = comp[comp["Share %"] > 20.0]
             note = (
                 f"Largest position **{top['Ticker']} at {top['Share %']:.1f}%** of equity "
@@ -2301,20 +2417,105 @@ def _holdings_frame(
     equity = portfolio.holdings_value(prices_dec)
     rows = []
     for t, q in sorted(portfolio.positions().items()):
-        px = prices_dec.get(t, Decimal("0"))
         safe = ltcg_safe_sell_note(portfolio.ledger, t, as_of) if dated else "❔ upload tradebook"
-        weight = float(q * px / equity) if equity > 0 else 0.0
+        # Cost is the same basis ``account_overview`` sums for the Unrealised P&L tile — open FIFO
+        # lots at their own cost per share — so the column adds up to the tile above it.
+        lots = portfolio.ledger.open_lots(t)
+        held = sum((lot.quantity_remaining for lot in lots), Decimal("0"))
+        cost = sum(
+            (lot.cost_basis_per_share * lot.quantity_remaining for lot in lots), Decimal("0")
+        )
+        avg = cost / held if held > 0 else None
+        # A held name the price source could not mark is shown as unknown, never marked at zero — a
+        # ₹0 row understates the account and reads as a wipeout rather than as a missing quote.
+        priced = t in prices_dec
+        px = prices_dec[t] if priced else Decimal("0")
+        value = q * px
+        weight = float(value / equity) if priced and equity > 0 else 0.0
         rows.append(
             {
-                "Ticker": t,
+                "Ticker": t.removesuffix(".NS"),
                 "Qty": str(q),
-                "Price": f"₹{px:,.2f}",
-                "Value": f"₹{q * px:,.0f}",
-                "% of equity": f"{weight * 100:.1f}%",
+                "Avg cost": f"₹{avg:,.2f}" if avg is not None else "—",
+                "Price": f"₹{px:,.2f}" if priced else "no quote",
+                "Value": f"₹{value:,.0f}" if priced else "—",
+                "P&L": f"₹{value - cost:+,.0f}" if priced else "—",
+                "% of equity": f"{weight * 100:.1f}%" if priced else "—",
                 "LTCG-safe": safe,
+                "_pnl": float(value - cost) if priced else 0.0,
+                "_value": float(value) if priced else 0.0,
+                "_priced": priced,
             }
         )
     return pd.DataFrame(rows)
+
+
+_HOLDINGS_COLUMNS = (
+    ui.Column("Instrument"),
+    ui.Column("Qty", "right"),
+    ui.Column("Avg cost", "right"),
+    ui.Column("Price", "right"),
+    ui.Column("Value", "right"),
+    ui.Column("P&L", "right"),
+    ui.Column("% of equity", "right"),
+    ui.Column("LTCG-safe"),
+)
+
+
+def _holdings_table(frame: pd.DataFrame) -> str:
+    """Render the holdings frame as the terminal-style table, with a totals row.
+
+    Presentation only — every string in here was formatted by ``_holdings_frame``; this decides
+    alignment, weight and colour. P&L carries a ``▲``/``▼`` glyph as well as its colour so the sign
+    survives colour-blindness, greyscale printing and forced-colours mode.
+    """
+    if frame.empty:
+        return ui.table(_HOLDINGS_COLUMNS, [], empty="No holdings on this book yet.")
+    rows: list[ui.Row] = []
+    for r in frame.to_dict("records"):
+        priced = bool(r["_priced"])
+        pnl = float(r["_pnl"])
+        pnl_cell = (
+            ui.Cell(f"{ui.delta_glyph(pnl)} {r['P&L']}", tone=ui.tone_for(pnl))
+            if priced
+            else ui.Cell("—", tone="neutral", title="no live quote for this name")
+        )
+        rows.append(
+            ui.Row(
+                cells=[
+                    ui.Cell(str(r["Ticker"]), strong=True),
+                    ui.Cell(str(r["Qty"])),
+                    ui.Cell(str(r["Avg cost"])),
+                    ui.Cell(str(r["Price"]), tone="neutral" if priced else "warn"),
+                    ui.Cell(str(r["Value"])),
+                    pnl_cell,
+                    ui.Cell(str(r["% of equity"])),
+                    ui.Cell(str(r["LTCG-safe"])),
+                ],
+                muted=not priced,
+            )
+        )
+    total_value = float(frame["_value"].sum())
+    total_pnl = float(frame["_pnl"].sum())
+    unpriced = int((~frame["_priced"].astype(bool)).sum())
+    footer = ui.Row(
+        cells=[
+            ui.Cell(
+                f"Total ({len(frame)} names)" + (f" · {unpriced} unpriced" if unpriced else "")
+            ),
+            ui.Cell(""),
+            ui.Cell(""),
+            ui.Cell(""),
+            ui.Cell(ui.inr(total_value)),
+            ui.Cell(
+                f"{ui.delta_glyph(total_pnl)} {ui.signed_inr(total_pnl)}",
+                tone=ui.tone_for(total_pnl),
+            ),
+            ui.Cell("100.0%" if not unpriced else "—"),
+            ui.Cell(""),
+        ]
+    )
+    return ui.table(_HOLDINGS_COLUMNS, rows, footer=footer)
 
 
 def _lots_frame(
@@ -2372,7 +2573,13 @@ def _equity_chart(book: PaperBook, benchmark: pd.Series) -> None:
     if len(window) >= 2:
         rebased = window / float(window.iloc[0]) * float(eq.iloc[0])
         chart["Nifty 50 TRI"] = rebased.reindex(eq.index, method="ffill")
-    st.line_chart(chart)
+    # One series is the point and the other is context, so the book gets the hue and the index
+    # recedes to grey — not two competing colours. Streamlit draws the legend, so identity is never
+    # carried by colour alone.
+    if len(chart.columns) == 2:
+        st.line_chart(chart, height=300, color=[ui.SERIES_BOOK, ui.SERIES_BENCH])
+    else:
+        st.line_chart(chart, height=300, color=ui.SERIES_BOOK)
 
 
 if __name__ == "__main__":

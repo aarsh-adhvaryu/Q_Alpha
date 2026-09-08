@@ -42,6 +42,9 @@ reports/*.png
 !.env.example
 secrets/
 .kite_session.json
+# .streamlit/config.toml IS tracked (it is the theme). Streamlit's secrets file is not, and it sits
+# in the same directory — an easy way to commit the Kite credentials by accident.
+.streamlit/secrets.toml
 
 # Notebooks scratch
 .ipynb_checkpoints/
