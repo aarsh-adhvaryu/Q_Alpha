@@ -1,23 +1,19 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Nifty50 fell ~0.5%, closing at 23,779, weighed by geopolitical risk and energy headwinds.
+**Sentiment:** 🔴 Sensex fell 0.73% and Nifty50 was down 0.61% — second consecutive day lower amid financial drag.
 
-**Drivers:**
-1. **Crude rally to $97/bbl via US-Iran escalation** → rising crude prices and foreign investor outflows pressure the index; OMC margins compress (BPCL, IOC, ONGC hit), while aviation & paint input costs rise. FII exit worsens technicals.
-2. **Tech sector weakness** → IT stocks were major losers, likely FII rotation out of expensive multiples amid rate-hike fears.
+**Drivers:** 
+1. Crude oil remains elevated (~$99.85/barrel, up 79 cents from yesterday), extending pressure on refiner/aviation/paint input costs; escalatory US-Iran rhetoric over Strait of Hormuz access sustains geopolitical premium.
+2. Financial Services down ~0.93%, banking/insurance under selling pressure — rate-sensitive bias as global inflation and energy remain sticky.
 
-**Watchlist names affected:**
-- **Energy/OMCs:** BPCL, IOC, ONGC (margin squeeze)
-- **IT downside:** TCS, INFY, WIPRO, TECHM  
-- **Spillover:** APOLLOHOSP, DRREDDY (input cost creep); INDIGO (jet fuel)
+**Watchlist names affected:** ICICIBANK, AXISBANK, SBILIFE led Nifty50 losers; Pharma/FMCG outperformed — so DRREDDY, SUNPHARMA, BRITANNIA, HINDUNILVR resilient; ENERGY sector strength: IOC, BPCL, ONGC countered headline weakness.
 
-**Likely reaction (next 1–2 sessions):**
-**Lean: flat–down, band: −0.5% to +0.2%, confidence: medium.** Crude above $100 is feared but not yet breached; index likely oscillates on Strait-of-Hormuz news flow. IT may consolidate; OMCs could stabilize on subsidy chat, but FII outflows remain a headwind. Watch for Fed speak on rates—any dovish surprise could trigger a bounce.
+**Likely reaction:** Sideways to down over next 1–2 sessions; band **–0.4% to +0.2%**, confidence **medium**. Crude holding above $97 keeps financials tentative and cyclicals (auto, metals) fragile; defensive pharma/FMCG capped upside. **Watch:** ICICIBANK likely sub-0.5% further if crude stays; DRREDDY/DIVISLAB defensive support.
 
-**Watchlist most likely to move:** TCS/INFY *down* (tech rotation); BPCL/IOC *sideways-to-up* (if crude plateaus).
+**Discretionary ideas:** None clear—avoid bottom-fishing financials while rate expectations unwind *satellite sleeve rules apply*.
 
-**Risk note:** Strait-of-Hormuz supply shock or fresh US–Iran flare-up could spike crude past $105 intraday, triggering panic selling and a 1.5–2% index drop.
+**Risk note:** Middle East escalation or crude spike above $102 could accelerate 2% downside; Fed policy trajectory this week pivotal.
 
-SIGNAL: lean=flat; band=-0.5..0.2; confidence=medium
+SIGNAL: lean=down; band=-0.4..0.2; confidence=medium
 
-— 🤖 claude-haiku-4-5 · 26,463 in / 680 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 66,879 in / 827 out tokens · ✓ complete
