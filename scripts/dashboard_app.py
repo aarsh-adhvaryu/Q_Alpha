@@ -660,6 +660,17 @@ def _auto_pm_brief(
             as_of,
             max_names=cfg.deploy_policy.max_names_default,
             broker_prices=broker_prices,
+            # HARD BUDGET. Without this the screen takes ``spend_idle_cash``'s True default, and
+            # ``advise_deploy`` then sets ``budget = portfolio.cash + amount`` — while this caller
+            # passes ``available_cash``, which IS ``portfolio.cash``. The account's cash was being
+            # counted twice: ₹3,00,000 in the account produced ₹5,97,562 of orders under a heading
+            # reading "Idle cash ₹3,00,000".
+            #
+            # This is the 2026-08-24 defect verbatim — the one recorded in CLAUDE.md as
+            # "Deploy ₹100,000 / a ₹5,97,418 basket". The Add-money tab was fixed then and given a
+            # checkbox; this panel was written afterwards, took the default, and brought it back on
+            # the same screen. Grep every caller when you fix a default: that lesson is rule 1.
+            spend_idle_cash=False,
         )
         brief = live_pm_brief_markdown(
             available_cash, advice, floor=cfg.deploy_policy.idle_cash_floor
