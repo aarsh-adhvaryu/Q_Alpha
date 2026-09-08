@@ -120,6 +120,12 @@ jobs:
           # The cohort record. Without this line it was written every run and thrown away, so the
           # thing the decision loop exists to accumulate never accumulated.
           git add data/evidence/decisions.jsonl 2>/dev/null || true
+          # The extraction ledger and the archived filing TEXT. Without these two lines both were
+          # written on the runner and thrown away: every document would be re-read tomorrow at full
+          # model cost, and the text that keeps a passage checkable after NSE withdraws a document
+          # would never leave the machine that fetched it.
+          git add data/evidence/extracted.jsonl 2>/dev/null || true
+          git add data/evidence/announcements/**/*.txt.gz 2>/dev/null || true
           git add reports/pretrade.md 2>/dev/null || true
           # ⛔ The auto-pilot books below are ARCHIVED (reports/ARCHIVE_2026-08-28.md) and their step
           # is `if: false`. These lines stay one release so a stale working copy cannot resurrect
@@ -175,8 +181,18 @@ jobs:
           unvalued = sorted(b for b, v in books.items() if not v.get("value"))
           if unvalued:
               fail.append(f"book(s) present but unvalued: {', '.join(unvalued)}")
-          if "tracks" not in row:
-              fail.append("today's row has no per-track statistics - the gate half never ran")
+          # NOT `"tracks" in row`: the twin writes books first and tracks second, and revision 0 of
+          # the 2026-09-07 row carries tracks={} with 8 books. An empty dict passed the old check.
+          tracks = row.get("tracks") or {}
+          missing_tracks = sorted({"core_v1", "run2"} - set(tracks))
+          if missing_tracks:
+              fail.append(
+                  f"today's row is missing track(s): {', '.join(missing_tracks)} - the gate half "
+                  "did not finish, so the row is a date with no statistics behind it"
+              )
+          empty = sorted(t for t, v in tracks.items() if not (v or {}).get("pair"))
+          if empty:
+              fail.append(f"track(s) present but carrying no pair: {', '.join(empty)}")
           print(f"books in today's row: {len(books)} | tracks: {sorted(row.get('tracks', {}))}")
 
           # The evidence spine is allowed to find nothing. It is not allowed to leave no trace.

@@ -100,7 +100,7 @@ four and only one is cheap.
 
 ## What is true today (2026-09-06)
 
-**26656 lines · 47 live modules · 908 passed.** `main` is at the merge of PR #104.
+**26729 lines · 47 live modules · 916 passed.** `main` is at the merge of PR #106.
 PRs #85–#88 as before, plus **#90** (evidence adapter v1 — the first non-price input), **#91**
 (record repair) and **#92** (`CORE_V1`). PRs #93 (announcement spine + AI extractor), #94 (`PreTradeAssessment`), #95 (integration
 repair), #96 (README gate-1 correction), #97 (the daily shadow spine), #98 (the golden-day replay) and #99 (the matched null) follow.
@@ -589,8 +589,16 @@ Also closed: documents are re-read only once (an extraction ledger keyed on cont
 filing was being re-read every day of its window, ~10× the needed calls), and the **extracted text
 is archived gzipped and tracked**, so a passage stays checkable if NSE withdraws a document.
 
-The build is finished. Do not reopen it unless the user asks or one of OPERATING.md §7's
-triggers fires.
+**The build is not "finished" and saying so was itself a defect.** It was declared closed on
+2026-09-08 and four defects were found the same day, the worst of which made the buy screen's panel
+call a company "clear" when nothing had read its filings — in a module whose own docstring says an
+absent warning and no warning are different facts.
+
+All four are fixed (#108). What is true: nothing places an order, every path to real money runs
+through the user, and the monthly loop works. Do not reopen the build unless the user asks or one of
+OPERATING.md §7's triggers fires — and if you do add a feature, assume it ships with a labelling
+defect until someone else has looked, because that has been true of every feature added since
+2026-09-05.
 
 ---
 
