@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=DMART",
+ "retrieved_at_utc": "2026-09-08T06:26:45Z",
+ "http_status": 200,
+ "bytes": 491893,
+ "sha256": "0b711e4aae04cbf2dbf41552fd80805369501be8bbc223df64d46bc1f79913c3",
+ "document_date": "2026-09-08",
+ "symbol": "DMART",
+ "kind": "announcement_index"
+}

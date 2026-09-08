@@ -170,6 +170,42 @@ def write_document(
     return prov
 
 
+def text_path(ann: Announcement, *, directory: Path = ARCHIVE_DIR) -> Path:
+    """Where the extracted text of one filing is kept, gzipped."""
+    pdf, _ = document_paths(ann, directory=directory)
+    return pdf.with_suffix(".txt.gz")
+
+
+def write_text(text: str, ann: Announcement, *, directory: Path = ARCHIVE_DIR) -> Path:
+    """Keep the **text** of a filing, not only its hash.
+
+    The PDFs are gitignored because they are ~250 KB each and grow daily. A hash and a URL prove
+    which bytes were read *only for as long as the exchange still serves them* — if NSE replaces or
+    withdraws a document, the hash becomes unfalsifiable and the passage in an event row can no
+    longer be checked against anything. The text is ~8 KB, ~2.5 KB gzipped, and it is the part a
+    later reader actually needs. Tracked.
+    """
+    import gzip
+
+    out = text_path(ann, directory=directory)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(gzip.compress(text.encode("utf-8")))
+    return out
+
+
+def read_text(ann: Announcement, *, directory: Path = ARCHIVE_DIR) -> str:
+    """The archived text, or ``""`` when it was never kept. Never a guess at the content."""
+    import gzip
+
+    path = text_path(ann, directory=directory)
+    if not path.exists():
+        return ""
+    try:
+        return gzip.decompress(path.read_bytes()).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
 def extract_text(payload: bytes) -> str:
     """Text of a filing PDF. Returns ``""`` when it cannot be read — never a guess at the content.
 
@@ -205,11 +241,20 @@ def load_document(
     primary source is worse than a missing one, because it still looks like evidence.
     """
     pdf_path, prov_path = document_paths(ann, directory=directory)
-    if not (pdf_path.exists() and prov_path.exists()):
+    if not prov_path.exists():
         return "", None
-    payload = pdf_path.read_bytes()
+    if not pdf_path.exists():
+        # The PDF is gitignored, so a fresh clone has the sidecar and the text but not the bytes.
+        # The text IS the evidence a later reader needs; returning it with its provenance is honest,
+        # and returning nothing would discard a document we did read.
+        kept = read_text(ann, directory=directory)
+        if not kept:
+            return "", None
+        payload = None
+    else:
+        payload = pdf_path.read_bytes()
     meta = json.loads(prov_path.read_text())
-    if sha256_of(payload) != meta.get("sha256"):
+    if payload is not None and sha256_of(payload) != meta.get("sha256"):
         return "", None
     prov = Provenance(
         source_url=str(meta["source_url"]),
@@ -221,7 +266,12 @@ def load_document(
         byte_length=int(meta["bytes"]),
         document_date=date.fromisoformat(str(meta["document_date"])),
     )
-    return extract_text(payload), prov
+    if payload is None:
+        return read_text(ann, directory=directory), prov
+    text = extract_text(payload)
+    if text and not text_path(ann, directory=directory).exists():
+        write_text(text, ann, directory=directory)
+    return text, prov
 
 
 @dataclass(frozen=True)
