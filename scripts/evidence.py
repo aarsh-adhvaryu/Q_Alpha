@@ -310,17 +310,31 @@ def _mark_extracted(hashes: object) -> None:
 
 
 def _seen_before(ticker: str) -> bool:
-    """Has this name ever been covered? A first sighting gets a year, not ten days."""
+    """Has this name ever been **successfully** covered at the current extractor?
+
+    Not "does a row exist". A row is written every run including the failed ones — no API key, an
+    extraction that errored, a document cap that left the window unread. Counting those as seen
+    means the 365-day bootstrap is skipped for a name nobody ever finished reading, which is the
+    only chance that name gets at a year of history.
+
+    Sixteen incomplete rows written during local testing on 2026-09-08 would have done exactly that
+    to sixteen names.
+    """
     if not COVERAGE_LOG.exists():
         return False
     for line in COVERAGE_LOG.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         try:
-            if json.loads(line).get("ticker") == ticker:
-                return True
+            row = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if (
+            row.get("ticker") == ticker
+            and row.get("complete")
+            and row.get("extraction_version") == EXTRACTION_VERSION
+        ):
+            return True
     return False
 
 
