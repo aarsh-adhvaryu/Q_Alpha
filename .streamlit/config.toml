@@ -1,0 +1,61 @@
+# Streamlit's own theme, set to the same palette `src/qalpha/live/ui.py` draws with.
+#
+# Two layers, on purpose. This file styles the parts of the page Streamlit renders itself — widgets,
+# dataframes, charts, radii, borders — which CSS cannot reach reliably because their class names are
+# generated. `ui.stylesheet()` styles everything else. Both read from one palette, so they cannot
+# drift into two looks on one screen.
+#
+# Committed to `light` deliberately. This is a single-operator instrument panel and Kite's own
+# default is light; a half-supported dark mode where Streamlit's chrome flips but the hand-written
+# panels do not would be worse than either.
+
+[theme]
+base = "light"
+primaryColor = "#2a78d6"              # categorical slot 1 — the accent, and the book's own series
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f4f2"  # the page plane behind the cards
+textColor = "#0b0b0b"
+linkColor = "#2a78d6"
+borderColor = "#e1e0d9"               # the hairline everything is ruled with
+dataframeBorderColor = "#e1e0d9"
+dataframeHeaderBackgroundColor = "#fafaf8"
+
+# Status steps. Reserved for state — never reused as a series colour.
+greenColor = "#0ca30c"
+redColor = "#d03b3b"
+yellowColor = "#fab219"
+orangeColor = "#ec835a"
+
+# Dense, squared-off, terminal-ish. Radius "small" rather than none: fully square edges read as
+# unfinished on Streamlit's widgets, which are drawn for a rounded look.
+baseRadius = "small"
+buttonRadius = "small"
+baseFontSize = 14
+showWidgetBorder = true
+showSidebarBorder = true
+
+# The validated categorical order (blue, orange, aqua, yellow, magenta, green, violet, red). Charts
+# that want emphasis-plus-context — the equity curve against its index — pass their own two colours
+# explicitly instead of taking the first two slots.
+chartCategoricalColors = [
+  "#2a78d6",
+  "#eb6834",
+  "#1baf7a",
+  "#eda100",
+  "#e87ba4",
+  "#008300",
+  "#4a3aa7",
+  "#e34948",
+]
+chartSequentialColors = [
+  "#cde2fb",
+  "#b7d3f6",
+  "#9ec5f4",
+  "#86b6ef",
+  "#6da7ec",
+  "#5598e7",
+  "#3987e5",
+  "#2a78d6",
+  "#256abf",
+  "#1c5cab",
+]
