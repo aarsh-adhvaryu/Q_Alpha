@@ -1,19 +1,20 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment:** 🔴 Sensex fell 0.73% and Nifty50 was down 0.61% — second consecutive day lower amid financial drag.
+**Sentiment**: 🔴 Markets extended losses to a second session, ending at three-month lows as oil prices advanced amid persistent geopolitical tension.
 
-**Drivers:** 
-1. Crude oil remains elevated (~$99.85/barrel, up 79 cents from yesterday), extending pressure on refiner/aviation/paint input costs; escalatory US-Iran rhetoric over Strait of Hormuz access sustains geopolitical premium.
-2. Financial Services down ~0.93%, banking/insurance under selling pressure — rate-sensitive bias as global inflation and energy remain sticky.
+**Drivers**:
+1. **Crude oil spike to $99/bbl** — Brent crude rose to $99/barrel after Yemen-based Houthi rebels targeted multiple Saudi Aramco facilities; OMC margins compress; aviation & paint input costs rise; energy stocks underperform.
+2. **RBI liquidity withdrawal** — RBI withdrew >6 trillion rupees of excess liquidity from the banking system; banking/rate-sensitive sectors pressured; capital constraints on credit growth.
+3. **Heavy IPO supply drain** — Massive supply of IPOs/OFS issuances keeping secondary market liquidity constrained; retail participation diverted from equities; broad-market liquidity tight.
 
-**Watchlist names affected:** ICICIBANK, AXISBANK, SBILIFE led Nifty50 losers; Pharma/FMCG outperformed — so DRREDDY, SUNPHARMA, BRITANNIA, HINDUNILVR resilient; ENERGY sector strength: IOC, BPCL, ONGC countered headline weakness.
+**Watchlist names affected**:
+Top Nifty losers: SBILIFE, ICICIBANK, AXISBANK (rate/liquidity pain). Energy names (BPCL, IOC, ONGC) face mixed margin pressures. IT stocks (HCLTECH, INFY, TECHM) fell 0.9–3.8% on Fed/rate worries.
 
-**Likely reaction:** Sideways to down over next 1–2 sessions; band **–0.4% to +0.2%**, confidence **medium**. Crude holding above $97 keeps financials tentative and cyclicals (auto, metals) fragile; defensive pharma/FMCG capped upside. **Watch:** ICICIBANK likely sub-0.5% further if crude stays; DRREDDY/DIVISLAB defensive support.
+**Likely reaction** (next 1–2 sessions):
+Directional lean: **down** (band: **−0.4% to −0.8%**; confidence: **medium**). Crude holding above $98 and liquidity drain historically weigh on CapEx/rate-sensitive names through expiry. SBILIFE & ICICIBANK most likely to retest lows; energy plays volatile but supported if crude stabilizes. Broader market's modest outperformance (+0.2% MidCap/SmallCap) suggests large-cap correction may deepen near-term.
 
-**Discretionary ideas:** None clear—avoid bottom-fishing financials while rate expectations unwind *satellite sleeve rules apply*.
+**Risk note**: Geopolitical escalation; RBI emergency liquidity measures; or sharp crude reversal could pivot sentiment intraday.
 
-**Risk note:** Middle East escalation or crude spike above $102 could accelerate 2% downside; Fed policy trajectory this week pivotal.
+SIGNAL: lean=down; band=-0.8..-0.4; confidence=medium
 
-SIGNAL: lean=down; band=-0.4..0.2; confidence=medium
-
-— 🤖 claude-haiku-4-5 · 66,879 in / 827 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 22,145 in / 726 out tokens · ✓ complete
