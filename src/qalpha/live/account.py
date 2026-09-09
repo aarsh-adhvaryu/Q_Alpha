@@ -42,6 +42,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from qalpha.accounting.tax_lots import TaxLot
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.live.tradebook import TradebookTrade, replay_tradebook
@@ -65,6 +66,9 @@ class ReconciledAccount:
     #: Sells the replay could not match, verbatim from the engine.
     replay_warnings: tuple[str, ...] = ()
     realized_tax: Decimal = Decimal("0")
+    #: Held names carried at the broker's average cost with no purchase date. Their VALUE is exact
+    #: and their TAX is not — the two are tracked separately because they fail separately.
+    undated_tickers: tuple[str, ...] = ()
 
     @property
     def tallies(self) -> bool:
@@ -90,8 +94,14 @@ class ReconciledAccount:
 
     @property
     def tax_exact(self) -> bool:
-        """May a tax figure from this account be called exact? Only with dated lots and a full tally."""
-        return self.dated and self.tallies
+        """May a tax figure from this account be called exact?
+
+        Three conditions, and the third was missing. A sale the replay could not match means part of
+        the *history* is absent, and history is what FIFO consumes — yet the remaining quantities
+        can still agree with the broker perfectly, so ``tallies`` says nothing about it. Found in
+        review 2026-09-09: a skipped sale left ``tax_exact`` True.
+        """
+        return self.dated and self.tallies and not self.replay_warnings
 
     def report(self) -> str:
         """One paragraph a person can act on. Says what tallied, what did not, and what to do."""
@@ -117,7 +127,14 @@ class ReconciledAccount:
             )
         if self.mismatched:
             lines.append(f"⚠️ Quantities disagree: {', '.join(self.mismatched)}.")
-        if not self.dated:
+        if self.undated_tickers:
+            names = ", ".join(t.removesuffix(".NS") for t in self.undated_tickers)
+            lines.append(
+                f"⚠️ **{names}** — carried at the broker's average cost with no purchase date. The "
+                "value is exact; the tax is not, because FIFO needs to know which shares were "
+                "bought when. Upload a tradebook covering these and it becomes exact."
+            )
+        elif not self.dated:
             lines.append(
                 "⚠️ No dated lots — every tax figure here is an estimate. The broker's holdings "
                 "give a blended average and no purchase dates, and FIFO needs the dates."
@@ -133,6 +150,8 @@ def reconcile(
     cash: Decimal,
     cfg: Config,
     as_of: date,
+    *,
+    broker_costs: dict[str, Decimal] | None = None,
 ) -> ReconciledAccount:
     """Replay the ledger and check it against the broker. The result is track 1.
 
@@ -159,14 +178,33 @@ def reconcile(
         else:
             mismatched.append(f"{ticker.removesuffix('.NS')} ledger {ours} vs broker {theirs}")
 
+    # A NAME THE LEDGER CANNOT EXPLAIN IS STILL A NAME YOU OWN. The first version left it out of
+    # the portfolio entirely, so "if I buy a stock in Kite it appears" was false: the reconciler
+    # named HDFCBANK as broker_only and then handed downstream a book containing only VBL. It could
+    # not be valued, could not be monitored, and did not count toward concentration.
+    #
+    # It is added as an UNDATED lot at the broker's average cost — exact value, unknown tax — and
+    # listed in `undated_tickers` so the tax gap is per-name rather than a blanket caveat.
+    costs = broker_costs or {}
+    for ticker in broker_only:
+        result.portfolio.ledger.add_lot(
+            TaxLot(
+                ticker=ticker,
+                acquisition_date=as_of,  # unknown; recorded as today and flagged, never guessed back
+                quantity_original=broker_quantities[ticker],
+                buy_price=costs.get(ticker, Decimal("0")),
+            )
+        )
+
     return ReconciledAccount(
         as_of=as_of,
         portfolio=result.portfolio,
         cash=cash,
-        dated=bool(trades),
+        dated=bool(trades) and not broker_only,
         mismatched=tuple(mismatched),
         broker_only=tuple(broker_only),
         tradebook_only=tuple(tradebook_only),
         replay_warnings=tuple(result.warnings),
         realized_tax=result.realized_tax,
+        undated_tickers=tuple(broker_only),
     )
