@@ -86,6 +86,39 @@ def dispatch_error(status: int) -> str:
     return f"GitHub returned {status}."
 
 
+#: GitHub disables a scheduled workflow after this long without repository activity, and emails the
+#: owner once. A year-long unattended run is exactly the shape that trips it — and the failure mode
+#: is silence: the cron simply stops, and nothing in this repo would notice, because every check here
+#: asks "did today's run succeed", not "has a run happened at all".
+INACTIVITY_DISABLE_DAYS = 60
+#: Warn well before that, so there is time to act. A single manual dispatch resets the clock.
+INACTIVITY_WARN_DAYS = 45
+
+
+def dormancy_warning(last_run: datetime | None, now: datetime) -> str:
+    """Is the scheduled workflow at risk of being switched off for inactivity?
+
+    Returns "" when there is nothing to say. The daily bot commit probably resets GitHub's clock —
+    "probably" is doing real work in that sentence, and a year-long run cannot rest on it. Pressing
+    the run button once is a documented reset, so this warns in time to press it.
+    """
+    if last_run is None:
+        return ""
+    days = (now - last_run).days
+    if days < INACTIVITY_WARN_DAYS:
+        return ""
+    if days >= INACTIVITY_DISABLE_DAYS:
+        return (
+            f"No run for {days} days. GitHub disables scheduled workflows after "
+            f"{INACTIVITY_DISABLE_DAYS} days of repository inactivity — assume it is off. "
+            "Press Run the daily job now, then check the Actions tab."
+        )
+    return (
+        f"No run for {days} days. GitHub switches scheduled workflows off at "
+        f"{INACTIVITY_DISABLE_DAYS} days of inactivity, so this is worth one manual run."
+    )
+
+
 @dataclass(frozen=True)
 class RunSummary:
     """One workflow run, reduced to what is worth putting on a screen."""
@@ -167,6 +200,9 @@ def status_line(runs: list[RunSummary], now: datetime) -> tuple[str, str]:
     today = last.started is not None and last.started.date() == now.date()
     if today:
         return f"Ran today{when}{age} — success.", "good"
+    dormant = dormancy_warning(last.started, now)
+    if dormant:
+        return (f"⚠️ {dormant}", "bad")
     return (
         f"Nothing today yet. Last success{when}{age}. "
         f"The {SCHEDULED_UTC} UTC schedule has never once fired on time — median delay 2.4h.",

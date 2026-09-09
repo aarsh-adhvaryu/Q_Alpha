@@ -99,7 +99,12 @@ BOOTSTRAP_DAYS = 365
 #: Cap on documents fetched per name per run. A first run on a name with years of filings would
 #: otherwise download hundreds; the window bounds it in practice and this bounds the pathological
 #: case. **Hitting it makes coverage incomplete, which reads UNKNOWN — it never silently passes.**
-MAX_DOCUMENTS_PER_NAME = 25
+MAX_DOCUMENTS_PER_NAME = 25  # retained: other modules import it
+#: Filings fetched per name per run. Fetching is a cached GET; this only bounds a pathological name.
+MAX_FETCH_PER_NAME = 200
+#: Documents sent to the MODEL per name per run — the cap that actually costs tokens and minutes.
+#: Unread documents carry over, so a 365-day bootstrap closes over several runs rather than never.
+MAX_EXTRACT_PER_RUN = 25
 
 
 def _fetch_one_reg_ind(day: date) -> tuple[dict[str, dict[str, str]], Provenance | None]:
@@ -436,14 +441,15 @@ def _cover_name(
     # covered. The cap is a fetch budget, never a redefinition of what was filed — and a name that
     # exceeds it is INCOMPLETE, which is UNKNOWN, which is the honest answer.
     in_window = [a for a in since(anns, cutoff) if a.has_document]
-    with_docs = in_window[:MAX_DOCUMENTS_PER_NAME]
-    if len(in_window) > len(with_docs):
-        print(
-            f"  {ticker:<16} {len(in_window)} filings in the window, fetching the newest "
-            f"{MAX_DOCUMENTS_PER_NAME} — coverage stays INCOMPLETE"
-        )
+
+    # FETCH THE WHOLE WINDOW; CAP ONLY THE MODEL CALLS. Fetching is a cached HTTP GET and costs
+    # nothing after the first time; extraction is what costs tokens and minutes. The old code capped
+    # the FETCH at the newest 25, which made a name with more filings than that **permanently
+    # incomplete**: `complete` requires documents_read >= filings_in_window, documents_read could
+    # never exceed 25, and every run re-selected the same newest 25. Thirty filings meant UNKNOWN
+    # for ever, and the buy screen said "Filings NOT read" for that name until the end of time.
     stored: list[Announcement] = []
-    for ann in with_docs:
+    for ann in in_window[:MAX_FETCH_PER_NAME]:
         if fetch_document(ann) is not None:
             stored.append(ann)
     docs = documents_for(stored)
@@ -453,7 +459,18 @@ def _cover_name(
     unverified = 0
     extraction_ran = False
     done = _already_extracted()
+    # Documents already carrying a current-version receipt have been read on an earlier run. They
+    # count toward coverage without costing a token again — that is what makes the window close
+    # ACROSS runs instead of restarting every day (gate 3: "bootstrap the declared filing window
+    # across capped runs").
+    already = [d for d in docs if d.provenance.sha256 in done]
     fresh = [d for d in docs if d.provenance.sha256 not in done]
+    if len(fresh) > MAX_EXTRACT_PER_RUN:
+        print(
+            f"  {ticker:<16} {len(fresh)} unread of {len(in_window)} filed — extracting "
+            f"{MAX_EXTRACT_PER_RUN} this run, the rest resume tomorrow"
+        )
+        fresh = fresh[:MAX_EXTRACT_PER_RUN]
     if docs and not fresh:
         # Every document in this window carries a receipt proving its findings reached events.jsonl
         # (``_already_extracted`` only counts rows that do). Re-reading would cost the same tokens
@@ -482,17 +499,22 @@ def _cover_name(
     else:
         extraction_ran = True  # nothing filed: there was nothing to extract, and that is complete
 
+    # Read = carries a receipt. `already` were read on earlier runs; the fresh batch joins them only
+    # if this run's extraction actually landed. Counting len(docs) counted FETCHED, not read, which
+    # is the same "listing is not reading" defect AnnouncementCoverage was created to stop.
+    read_now = len(already) + (len(fresh) if extraction_ran else 0)
     coverage = AnnouncementCoverage(
         # The true window size, not the capped slice. This is the number that decides completeness.
         filings_in_window=len(in_window),
-        documents_read=len(docs),
+        documents_read=read_now,
         documents_truncated=truncated,
         extraction_ran=extraction_ran,
         index_fetched=True,
     )
     flag = "✓" if coverage.complete else "…"
     print(
-        f"  {ticker:<16} {flag} {len(with_docs):>2} filed · {len(docs):>2} read · "
+        f"  {ticker:<16} {flag} {len(in_window):>3} filed · {read_now:>3} read "
+        f"({len(already)} cached + {len(fresh) if extraction_ran else 0} new) · "
         f"{len(events):>2} event(s) · {unverified} discarded"
         + (f" · index sha {index_prov.sha256[:12]}…" if index_prov else "")
     )
