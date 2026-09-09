@@ -44,7 +44,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:  # import-cycle-free: session records, account reconciles
+    from qalpha.live.account import ReconciledAccount
 
 SESSION_DIR = Path("data/session")
 SNAPSHOT_PATH = SESSION_DIR / "snapshot.json"
@@ -195,6 +198,42 @@ class InputSnapshot:
         if self.cash != other.cash:
             out.append(f"cash ₹{other.cash:,.0f} → ₹{self.cash:,.0f}")
         return out
+
+
+def snapshot_from(
+    account: ReconciledAccount,
+    *,
+    budget: Decimal,
+    universe: Sequence[str],
+    taken_at: datetime,
+    prices_sha: str = "",
+    stale: Sequence[str] = (),
+    extraction_version: str = "",
+    policy_version: str = "",
+) -> InputSnapshot:
+    """Build the run's snapshot from the reconciled account — the one bridge from track 1.
+
+    The account's own blocking reasons become the snapshot's ``missing_critical``, so a book that
+    does not tally with the broker cannot silently become the base for a decision. ``budget`` is the
+    MANDATE's remaining allowance, not the broker balance: the account holds several future
+    instalments and the run may propose at most one.
+    """
+    holdings = {t: int(q) for t, q in account.portfolio.positions().items()}
+    return InputSnapshot(
+        as_of=account.as_of,
+        taken_at=taken_at,
+        holdings=holdings,
+        cash=account.cash,
+        budget=budget,
+        universe=tuple(universe),
+        prices_sha=prices_sha,
+        # Undated lots are a real caveat and not a stop: the book can still be valued and monitored,
+        # it just cannot produce an exact tax figure. That distinction is the account's to make.
+        stale=tuple(stale) + (() if account.dated else ("lots are undated — tax is an estimate",)),
+        missing_critical=account.blocking,
+        extraction_version=extraction_version,
+        policy_version=policy_version,
+    )
 
 
 def load_snapshot(path: Path = SNAPSHOT_PATH) -> InputSnapshot | None:
