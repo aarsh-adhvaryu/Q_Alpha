@@ -13,6 +13,7 @@ loop. This is that fix, generalised.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -178,3 +179,61 @@ def test_a_corrupt_ledger_line_does_not_lose_the_rest(tmp_path: Path) -> None:
 def test_an_absent_ledger_means_everything_is_pending(tmp_path: Path) -> None:
     assert pending(_snap().digest(), _TASKS, tmp_path / "none.jsonl") == _TASKS
     assert history(tmp_path / "none.jsonl") == []
+
+
+# --- the three defects found in review, after PR #120 merged -------------------------------------
+def test_a_torn_write_does_not_swallow_the_next_completion(tmp_path: Path) -> None:
+    """FOUND IN REVIEW 2026-09-09, and my own test had passed over it.
+
+    A process killed mid-write leaves a line with **no trailing newline**. The next append lands on
+    that line, both records fuse into one unparseable string, and the completion just recorded is
+    lost — so its task silently runs again.
+
+    The original test wrote a partial line *with* a newline, which is not a torn write at all. It
+    passed, and the bug shipped. This writes a real one.
+    """
+    led = tmp_path / "ledger.jsonl"
+    d = _snap().digest()
+    record_task(d, "sync", "done", _WHEN, path=led)
+    with led.open("a", encoding="utf-8") as fh:
+        fh.write('{"digest": "' + d + '", "task": "evid')  # no newline — killed mid-write
+    record_task(d, "screen", "done", _WHEN, path=led)
+
+    assert completed(d, led) == {"sync", "screen"}, "the record after the tear was swallowed"
+
+
+def test_work_done_while_an_input_was_missing_is_reconsidered_when_it_arrives() -> None:
+    """Availability IS an input. A run that finished "evidence" while the exchange file was missing
+    has not checked the same thing as a run with it — leaving these out of the digest meant an
+    improved input never triggered a re-check, and the answer obtained while blind was kept."""
+    blind = _snap(missing_critical=("exchange file",))
+    seeing = _snap()
+    assert blind.digest() != seeing.digest()
+    assert _snap(stale=("filings 2 days old",)).digest() != seeing.digest()
+
+
+def test_a_rule_change_reopens_the_work_it_would_have_changed() -> None:
+    """A task completed under EX-1 is not a task completed under EX-2 — that exact version bump is
+    why 193 events had to be re-read. A plan made under one policy is not a plan under the next."""
+    assert _snap(extraction_version="EX-1").digest() != _snap(extraction_version="EX-2").digest()
+    assert _snap(policy_version="v1").digest() != _snap(policy_version="v2").digest()
+
+
+def test_every_snapshot_is_kept_so_an_old_decision_stays_replayable(tmp_path: Path) -> None:
+    """The first version replaced snapshot.json each run — destroying the thing the file exists for.
+    A decision cites a digest; if that snapshot was overwritten the citation points at nothing."""
+    pointer, archive = tmp_path / "snapshot.json", tmp_path / "snapshots"
+    first = _snap()
+    second = _snap(cash=Decimal("151117"))
+    first.save(pointer, archive=archive)
+    second.save(pointer, archive=archive)
+
+    kept = {p.stem for p in archive.glob("*.json")}
+    assert kept == {first.digest(), second.digest()}, "an overwritten snapshot is an unciteable one"
+    assert load_snapshot(pointer) == second, "the pointer tracks the current one"
+    assert (
+        InputSnapshot.from_dict(
+            json.loads((archive / f"{first.digest()}.json").read_text(encoding="utf-8"))
+        )
+        == first
+    )
