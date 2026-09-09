@@ -26,6 +26,10 @@ data/satellite.json
 # Broker exports — contain PAN / client-id / name PII; never commit (resume repo is public).
 # The crit-4 reconciliation reads these locally; tests use a hermetic synthetic fixture instead.
 data/tradebook-*.csv
+# The local run's drop folder. The old rule matched `data/tradebook-*.csv` and NOT this directory,
+# so a broad `git add -A` would have published a real Console export — name, holdings, every trade —
+# into a PUBLIC repository. Found in review 2026-09-09; no export had been committed.
+data/tradebooks/
 data/taxpnl-*
 data/*.jpeg
 data/*.jpg
