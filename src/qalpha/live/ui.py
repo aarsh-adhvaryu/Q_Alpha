@@ -1,8 +1,13 @@
-"""The dashboard's visual layer — an instrument panel, not a report.
+"""The visual layer — an instrument panel, not a report.
 
 Everything here is **pure**: it takes numbers and labels and returns HTML or CSS strings. No
-Streamlit import, no network, no I/O — so every piece is unit-testable and none of it can change a
+framework import, no network, no I/O — so every piece is unit-testable and none of it can change a
 figure. That separation is the point: this module decides how a number *looks*, never what it is.
+
+**It outlived the app it was written for.** This was built for a Streamlit dashboard; that was
+deleted on 2026-09-09 and the whole module moved to a static HTML report without one edit to a
+component, because it had never been allowed to know what was rendering it. The Streamlit-specific
+CSS below is dead weight now and is kept only until the report has been looked at on a real screen.
 
 The look is a trading terminal (Zerodha Kite is the reference): a dark instrument bar across the
 top, dense hairline-ruled sections, small uppercase labels, and numbers in tabular figures so
