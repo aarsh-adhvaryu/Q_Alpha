@@ -831,6 +831,19 @@ def _twin_standings(as_of: date) -> None:
         return
 
     fund = rows.get("BASELINE_EW")
+    born = _twin_inceptions()
+    fund_born = born.get("BASELINE_EW")
+
+    def _comparable(name: str) -> bool:
+        """Do this book and the fund share a start? If not, no gap between them means anything.
+
+        CORE_V1 entered the record on 2026-09-07 already ₹10,293 ahead of TWIN_FULL, purely because
+        it did not exist for the fall between 08-29 and 09-07. Rendering that as "▲ +₹6,109 vs the
+        fund" put an inception artefact on the screen wearing performance's clothes.
+        """
+        mine = born.get(name)
+        return bool(mine and fund_born and mine == fund_born)
+
     tiles = []
     for name in _TWIN_HEADLINE:
         row = rows.get(name)
@@ -840,9 +853,11 @@ def _twin_standings(as_of: date) -> None:
         # Against the fund, because "up 2%" means nothing on its own — the question is always
         # whether it beat the thing you could have bought instead. The fund's own tile shows its
         # return rather than a zero gap against itself.
-        if fund is not None and name != "BASELINE_EW":
+        if fund is not None and name != "BASELINE_EW" and _comparable(name):
             vs = float(gain) - float(fund["Gain"])
             delta, tone = ui.change_delta(vs, suffix=" vs the fund")
+        elif name != "BASELINE_EW":
+            delta, tone = f"since {born.get(name, '?')} — not comparable", "warn"
         else:
             delta, tone = (
                 f"{ui.delta_glyph(gain)} {ui.pct(float(row['Return %']))}",
@@ -863,6 +878,7 @@ def _twin_standings(as_of: date) -> None:
     columns = [
         ui.Column("Book"),
         ui.Column("What it is"),
+        ui.Column("Since"),
         ui.Column("Worth today", "right"),
         ui.Column("Gain", "right"),
         ui.Column("vs the fund", "right"),
@@ -882,25 +898,46 @@ def _twin_standings(as_of: date) -> None:
         if row is None:
             continue
         gain = float(row["Gain"])
-        vs = None if fund is None or name == "BASELINE_EW" else gain - float(fund["Gain"])
+        ok = _comparable(name)
+        vs = None if fund is None or name == "BASELINE_EW" or not ok else gain - float(fund["Gain"])
+        since = born.get(name, "?")
         table_rows.append(
             ui.Row(
                 cells=[
                     ui.Cell(name, strong=name in _TWIN_HEADLINE),
                     ui.Cell(_TWIN_PLAIN.get(name, "")),
+                    ui.Cell(since, tone="neutral" if ok or name == "BASELINE_EW" else "warn"),
                     ui.Cell(ui.inr(float(row["Value"]))),
                     ui.Cell(
                         f"{ui.delta_glyph(gain)} {ui.signed_inr(gain)}", tone=ui.tone_for(gain)
                     ),
+                    # "—" when the books do not share a start. A dash is the honest answer; a number
+                    # here measures a period one of the two books did not live through.
                     ui.Cell(
                         "—" if vs is None else f"{ui.delta_glyph(vs)} {ui.signed_inr(vs)}",
                         tone="neutral" if vs is None else ui.tone_for(vs),
+                        title=(
+                            None
+                            if vs is not None or name == "BASELINE_EW"
+                            else f"{name} was first marked {since}; the fund was first marked "
+                            f"{fund_born}. No gap between them can be attributed to either."
+                        ),
                     ),
                 ],
                 muted=name not in _TWIN_HEADLINE,
             )
         )
     st.markdown(ui.table(columns, table_rows), unsafe_allow_html=True)
+    stragglers = sorted(n for n in rows if n in born and born[n] != fund_born)
+    if stragglers:
+        st.warning(
+            "**Some books are younger than the fund, so their gap column reads —.** "
+            + ", ".join(f"{n} first marked {born[n]}" for n in stragglers)
+            + f", against the fund's {fund_born}. A book cannot out- or under-perform over a "
+            "period it did not exist for: CORE_V1 entered the record on 2026-09-07 already "
+            "₹10,293 ahead of TWIN_FULL, and in the one day both had been alive they moved "
+            "₹475 apart. Until they share a window the Gain column is all that can be read."
+        )
     st.caption(
         f"Window: **{_twin_window_start() or '?'} → {saved.get('as_of', as_of)}** — every book on "
         "the same rupees, the same days. Gains are measured against **net money in**, not against a "
@@ -925,6 +962,47 @@ def _twin_window_start() -> str | None:
     except (OSError, ValueError, KeyError, IndexError, json.JSONDecodeError):
         pass
     return None
+
+
+def _twin_inceptions() -> dict[str, str]:
+    """The first day each book was actually **marked**, per book — not the seeding date they share.
+
+    ### Why this exists
+
+    Every book's ``start`` field reads 2026-06-15, because that is when the cash flows begin. It is
+    not when the book existed. ``CORE_V1``'s first mark is **2026-09-07**, and every lot it holds is
+    dated that day: it was constituted last Monday, at that Monday's prices, while ``TWIN_FULL`` had
+    been accumulating since 2026-08-29 and had fallen ₹10,627 over the stretch in between.
+
+    So CORE_V1 appeared in the record **already ₹10,293 ahead of TWIN_FULL**, and in the one day
+    both books have been alive they have diverged by ₹475. The dashboard was rendering that ₹10,768
+    as "The screen ▲ +₹6,109 vs the fund" — an inception artefact presented as performance, which is
+    the defect family this whole repo is organised around. A book cannot outperform over a period it
+    did not exist for.
+
+    Reads the append-only history at the highest revision per day, the same rule every other reader
+    uses.
+    """
+    out: dict[str, str] = {}
+    try:
+        rows = [
+            json.loads(line)
+            for line in TWIN_HISTORY_JSONL.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except (OSError, ValueError, json.JSONDecodeError):
+        return out
+    latest: dict[str, dict] = {}
+    for row in rows:
+        day = str(row.get("as_of"))
+        if day not in latest or int(row.get("revision", 0)) >= int(latest[day].get("revision", 0)):
+            latest[day] = row
+    for day in sorted(latest):
+        for name, book in (latest[day].get("books") or {}).items():
+            # A book with no value that day was not marked; it is not yet alive for this purpose.
+            if book.get("value") and name not in out:
+                out[str(name)] = day
+    return out
 
 
 def _twin_panel(as_of: date) -> None:
