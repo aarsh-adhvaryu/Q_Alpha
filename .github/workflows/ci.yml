@@ -15,11 +15,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install deps
-        # `dashboard` (streamlit) is needed so tests/test_dashboard_app.py actually RUNS here.
-        # Without it `pytest.importorskip("streamlit")` skipped the whole module, and the dashboard
-        # — the surface every defect in PLAN_TRUST_REPAIR.md reached the user through — was the
-        # least-tested code in the repo despite a green suite (T3.3).
-        run: uv sync --extra dev --extra dashboard --extra research --frozen
+        # The `dashboard` extra (streamlit) was removed on 2026-09-09 along with the app it
+        # installed. CI kept asking for it and failed with "Extra `dashboard` is not defined" —
+        # rule 1 exactly: I deleted the extra and did not grep for who requests it.
+        run: uv sync --extra dev --extra research --frozen
       - name: Ruff (lint)
         run: uv run ruff check .
       - name: Ruff (format check)

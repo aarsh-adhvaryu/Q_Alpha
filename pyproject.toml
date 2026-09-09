@@ -30,11 +30,6 @@ dev = [
     "pandas-stubs>=2.2",
     "types-pyyaml",
 ]
-# Interactive live dashboard (the consumer-facing web view). UI-only, run locally — NOT needed by
-# CI or the headless daily pipeline — so install with `uv sync --extra dashboard`.
-dashboard = [
-    "streamlit>=1.37",
-]
 # Optional, quarantined LLM layer for the daily AI market brief (context-only narrative + the
 # auto-pilot's Book-B nudge). NOT a core dep — the engine/factors/backtest/CI never import it; install
 # with `uv sync --extra ai`. Keeps the product deterministic where it must be (rule (a) intact).

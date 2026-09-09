@@ -42,7 +42,10 @@ SCREEN = "advise_deploy_into_weakness"
 #: The surfaces that produce a decision a human or a book acts on. `backtest_sip.py` is research and
 #: `autopilot.py` is archived (its cron step is `if: false`), so neither is a production surface.
 PRODUCTION_SURFACES = (
-    "scripts/dashboard_app.py",
+    # scripts/dashboard_app.py was deleted on 2026-09-09 with Streamlit. Its buy surface — the one
+    # that produced real orders and the one with no risk layer — is now scripts/local_run.py, which is
+    # a file-writing local run rather than a server. Four surfaces became three.
+    "scripts/local_run.py",
     "scripts/evidence.py",
     "src/qalpha/live/runner.py",
     "scripts/advisor.py",
@@ -80,17 +83,15 @@ def test_the_screen_really_is_shared_which_is_the_good_news() -> None:
     """Gate 2 is not "four different screens". It is one screen driven four different ways — which
     is a much smaller job than it looks, and worth stating before the failures below."""
     sites = _all_sites()
-    assert len(sites) >= 4, f"expected the screen on every surface, found {sorted(sites)}"
+    assert len(sites) >= 3, f"expected the screen on every surface, found {sorted(sites)}"
 
 
-def test_the_divergence_is_exactly_where_it_is_documented_to_be() -> None:
-    """A live record of the gap. When this starts failing, the table in this module is stale."""
-    sites = _all_sites()
-    idle = {k: v.get("spend_idle_cash", "<default:True>") for k, v in sites.items()}
-    dash = {k: v for k, v in idle.items() if "dashboard" in k}
-    rest = {k: v for k, v in idle.items() if "dashboard" not in k}
-    assert any(v is False for v in rest.values()), "the pipeline/runner still pin it False"
-    assert dash, "the dashboard still calls the screen directly"
+def test_no_surface_takes_the_dangerous_default() -> None:
+    """``spend_idle_cash`` defaults to True, and ``advise_deploy`` then sets
+    ``budget = portfolio.cash + amount``. Every surface must pin it False, because on this account
+    the True default turned a ₹50,000 instalment into a ₹5,97,562 basket."""
+    taking_default = [site for site, kw in _all_sites().items() if "spend_idle_cash" not in kw]
+    assert not taking_default, f"these would deploy the whole balance: {taking_default}"
 
 
 # --- the acceptance criterion, which does not hold yet ------------------------------------------
@@ -134,22 +135,24 @@ def test_only_a_surface_with_a_broker_passes_broker_prices() -> None:
     """
     sites = _all_sites()
     with_broker = {s for s, kw in sites.items() if "broker_prices" in kw}
-    assert with_broker, "the dashboard has a live session and must use it"
-    assert all("dashboard" in s for s in with_broker), (
-        f"a surface with no broker session is passing broker prices: {sorted(with_broker)}"
-    )
+    # The dashboard was the only surface with a live Kite session and it is gone. The local runner
+    # marks from the price panel and reports every name it cannot price, which is the same property
+    # reached a different way — so NO surface passing broker prices is now the correct state.
+    assert not with_broker, f"no surface holds a broker session any more: {sorted(with_broker)}"
 
 
 @pytest.mark.xfail(
     strict=True,
-    reason="GATE 2 OPEN, and this is the one that matters: the dashboard's buy surface applies "
-    "neither the evidence skip, nor the governor, nor the anchor. The surface that becomes a real "
-    "order is the only one with no risk layer.",
+    reason="GATE 2 OPEN, and still the one that matters: the surface that produces the orders you "
+    "place — now scripts/local_run.py — applies neither the evidence skip, nor the governor, nor the "
+    "anchor. Blocked on a policy decision, not on engineering: PLAN_SYSTEM gate 2 wants one "
+    "proposal function everywhere, CLAUDE.md's iron rule says the buy list is flagged and never "
+    "vetoed, and propose() vetoes.",
 )
 def test_the_surface_that_becomes_a_real_order_runs_the_risk_layer() -> None:
-    dash = (ROOT / "scripts/dashboard_app.py").read_text(encoding="utf-8")
-    assert "propose(" in dash or "from qalpha.live.pipeline import" in dash, (
-        "the dashboard reaches the screen without passing through live/pipeline.py"
+    runner_src = (ROOT / "scripts/local_run.py").read_text(encoding="utf-8")
+    assert "propose(" in runner_src or "from qalpha.live.pipeline import" in runner_src, (
+        "the local run reaches the screen without passing through live/pipeline.py"
     )
 
 

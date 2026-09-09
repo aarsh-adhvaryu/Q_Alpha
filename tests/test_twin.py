@@ -447,47 +447,10 @@ def test_holdings_frame_skips_names_it_cannot_price() -> None:
     assert abs(frame["Share %"].sum() - 100.0) < 1e-6, "shares are of what could be priced"
 
 
-def test_the_twin_prices_merge_every_panel_rather_than_taking_the_first() -> None:
-    """Live on 2026-09-09: "Your account — what it holds: nothing priced yet", rendered directly
-    beneath a table valuing that same book at ₹297,352.
-
-    ``_twin_prices`` returned the FIRST panel that yielded anything, and the watchlist panel does not
-    carry every name the real account holds — so ``holdings_frame`` correctly skipped the names it
-    could not price, which was all of them, and the chart said nothing was held. One book, two
-    answers, one screen. Merging the panels is the fix; the earlier panel still wins on conflict.
-    """
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-    import dashboard_app
-
-    marks = dashboard_app._twin_prices()
-    if not marks:
-        pytest.skip("no price panels on this host")
-
-    import inspect
-
-    src = inspect.getsource(dashboard_app._twin_prices)
-    assert "if out:\n            return out" not in src, (
-        "returning the first panel that works is what left the real account's names unpriced"
-    )
-    # The merged view must be at least as large as either panel alone could give.
-    from qalpha.data.ingest import load_parquet
-
-    sizes = []
-    for path in (
-        "data/historical/prices_watchlist.parquet",
-        "data/historical/prices_pit_2026.parquet",
-    ):
-        try:
-            sizes.append(len(load_parquet(path).adj_close.columns))
-        except (OSError, ValueError):
-            continue
-    if sizes:
-        assert len(marks) >= max(sizes), (
-            f"merged marks ({len(marks)}) smaller than the largest panel ({max(sizes)})"
-        )
+# ``_twin_prices`` and its test went with the dashboard on 2026-09-09. The lesson it carried —
+# MERGE the price panels, never take the first that yields anything, or a holding the watchlist
+# cannot price vanishes from a book that is valuing it — is built into ``scripts/local_run.py::_prices``
+# from the start, which reports every unpriced name rather than dropping it.
 
 
 def test_a_book_younger_than_the_fund_gets_no_gap_column() -> None:
@@ -502,13 +465,9 @@ def test_a_book_younger_than_the_fund_gets_no_gap_column() -> None:
     Every book's ``start`` field says 2026-06-15 — that is when the CASH FLOWS begin, not when the
     book existed — so the inception has to be read from the first day the book was actually marked.
     """
-    import sys
-    from pathlib import Path
+    from qalpha.live.twin import inceptions
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-    import dashboard_app
-
-    born = dashboard_app._twin_inceptions()
+    born = inceptions()
     if not born:
         pytest.skip("no twin history on this host")
     assert "BASELINE_EW" in born
@@ -525,11 +484,9 @@ def test_a_book_younger_than_the_fund_gets_no_gap_column() -> None:
 def test_inception_is_the_first_marked_day_not_the_first_row() -> None:
     """A book present in a row but carrying no value was not marked, and is not yet alive."""
     import json
-    import sys
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-    import dashboard_app
+    from qalpha.live import twin as twin_mod
 
     rows = [
         {"as_of": "2026-09-01", "revision": 0, "books": {"A": {}, "B": {"value": "100"}}},
@@ -538,11 +495,8 @@ def test_inception_is_the_first_marked_day_not_the_first_row() -> None:
     path = Path("data/twin/_inception_probe.jsonl")
     path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     try:
-        old = dashboard_app.TWIN_HISTORY_JSONL
-        dashboard_app.TWIN_HISTORY_JSONL = path
-        born = dashboard_app._twin_inceptions()
+        born = twin_mod.inceptions(path)
     finally:
-        dashboard_app.TWIN_HISTORY_JSONL = old
         path.unlink(missing_ok=True)
     assert born == {"B": "2026-09-01", "A": "2026-09-02"}, (
         "a book listed with no value that day has not been marked and is not alive yet"
