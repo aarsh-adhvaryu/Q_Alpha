@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -75,6 +76,10 @@ class InputSnapshot:
     stale: Sequence[str] = field(default_factory=tuple)
     #: Inputs whose absence makes a decision impossible, as opposed to merely less informed.
     missing_critical: Sequence[str] = field(default_factory=tuple)
+    #: Versions of the rules that read this snapshot. A task completed under EX-1 is not a task
+    #: completed under EX-2, and a plan made under one policy is not a plan made under the next.
+    extraction_version: str = ""
+    policy_version: str = ""
 
     @property
     def usable(self) -> bool:
@@ -96,6 +101,14 @@ class InputSnapshot:
                 "budget": str(self.budget),
                 "universe": sorted(self.universe),
                 "prices_sha": self.prices_sha,
+                # AVAILABILITY IS AN INPUT. Work finished while the exchange file was missing is not
+                # work finished now that it is here — leaving these out meant an improved input
+                # never triggered a re-check, and the run kept the answer it got while blind.
+                "stale": sorted(self.stale),
+                "missing_critical": sorted(self.missing_critical),
+                # And the rules that read it: a task completed under EX-1 is not completed under EX-2.
+                "extraction_version": self.extraction_version,
+                "policy_version": self.policy_version,
             },
             sort_keys=True,
         )
@@ -112,6 +125,8 @@ class InputSnapshot:
             "prices_sha": self.prices_sha,
             "stale": list(self.stale),
             "missing_critical": list(self.missing_critical),
+            "extraction_version": self.extraction_version,
+            "policy_version": self.policy_version,
             "digest": self.digest(),
         }
 
@@ -133,13 +148,31 @@ class InputSnapshot:
             prices_sha=str(raw.get("prices_sha", "")),
             stale=_seq("stale"),
             missing_critical=_seq("missing_critical"),
+            extraction_version=str(raw.get("extraction_version", "")),
+            policy_version=str(raw.get("policy_version", "")),
         )
 
-    def save(self, path: Path = SNAPSHOT_PATH) -> None:
-        """Write the snapshot **before** any book steps. See the ordering rule in the module docs."""
+    def save(self, path: Path = SNAPSHOT_PATH, *, archive: Path | None = None) -> None:
+        """Write the snapshot **before** any book steps, and **keep the previous ones**.
+
+        The first version replaced ``snapshot.json`` every run — which destroyed the thing the file
+        exists for. A decision cites a digest; if the snapshot behind that digest has been
+        overwritten, the decision cannot be replayed and the citation points at nothing. That is the
+        defect this module was written to prevent, committed by the module itself.
+
+        ``snapshot.json`` stays as the pointer to the current one; every snapshot is also archived
+        under its digest and never rewritten.
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
+        body = json.dumps(self.to_dict(), indent=2) + "\n"
+        keep = (
+            archive if archive is not None else path.parent / "snapshots"
+        ) / f"{self.digest()}.json"
+        keep.parent.mkdir(parents=True, exist_ok=True)
+        if not keep.exists():  # same inputs, same file — never rewritten
+            keep.write_text(body, encoding="utf-8")
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.to_dict(), indent=2) + "\n", encoding="utf-8")
+        tmp.write_text(body, encoding="utf-8")
         tmp.replace(path)
 
     def changes_against(self, other: InputSnapshot | None) -> list[str]:
@@ -208,8 +241,24 @@ def record_task(
         "at": at.isoformat(),
         "detail": detail,
     }
+    # HEAL A TORN TAIL BEFORE APPENDING. A process killed mid-write leaves a line with no trailing
+    # newline; the next append lands ON that line and BOTH records become one unparseable string —
+    # so the completion just recorded is lost, silently, and its task runs again. Being killed
+    # mid-write is the normal case for this file, not the exotic one.
+    #
+    # The first version of the test for this wrote a partial line *with* a newline, which is not a
+    # torn write at all. It passed, and the bug shipped.
+    needs_newline = False
+    if path.exists() and path.stat().st_size:
+        with path.open("rb") as fh:
+            fh.seek(-1, 2)
+            needs_newline = fh.read(1) != b"\n"
     with path.open("a", encoding="utf-8") as fh:
+        if needs_newline:
+            fh.write("\n")
         fh.write(json.dumps(row) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())  # the record must be on the platter before the caller moves on
 
 
 def completed(digest: str, path: Path = LEDGER_PATH) -> set[str]:
