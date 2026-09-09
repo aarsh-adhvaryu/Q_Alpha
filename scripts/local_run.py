@@ -31,8 +31,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from qalpha.config import Config
 from qalpha.live.account import ReconciledAccount, reconcile
-from qalpha.live.commitments import allowance
+from qalpha.live.buygate import MAX_PRICE_AGE_DAYS, evaluate
+from qalpha.live.commitments import Commitment, allowance, already_committed
 from qalpha.live.commitments import load as load_commitments
+from qalpha.live.commitments import record as record_commitment
+from qalpha.live.extraction import EXTRACTION_VERSION
 from qalpha.live.mandate import load_mandate
 from qalpha.live.report import render
 from qalpha.live.session import load_snapshot, snapshot_from
@@ -66,7 +69,9 @@ def _trades() -> tuple[list[TradebookTrade], list[str]]:
     return sorted(seen.values(), key=lambda t: (t.trade_date, t.exec_time)), notes
 
 
-def _broker(cfg: Config) -> tuple[dict[str, Decimal], dict[str, Decimal], Decimal, list[str]]:
+def _broker(
+    cfg: Config,
+) -> tuple[dict[str, Decimal], dict[str, Decimal], Decimal | None, list[str]]:
     """Holdings, average costs, cash — or a named absence. Never a stale value pretending to be new."""
     try:
         from qalpha.live.client import authenticated_kite
@@ -81,14 +86,18 @@ def _broker(cfg: Config) -> tuple[dict[str, Decimal], dict[str, Decimal], Decima
             [],
         )
     except Exception as exc:
+        # `None`, NOT `Decimal("0")`. Returning zero replaced a recorded ₹2,01,117 balance with ₹0,
+        # SAVED that to the snapshot, and still proposed purchases against it — a broker outage
+        # rewritten as a confirmed empty account. "Unknown is never substituted" is the first iron
+        # rule in this repo, and this broke it on the money path.
         return (
             {},
             {},
-            Decimal("0"),
+            None,
             [
-                f"Kite was not reachable ({type(exc).__name__}). Holdings and cash below come from "
-                "the trade ledger alone and are not confirmed against the broker. Run with "
-                "--login to refresh the session."
+                f"Kite was not reachable ({type(exc).__name__}). Holdings come from the trade "
+                "ledger alone and the cash balance is UNKNOWN — not zero. Run with --login before "
+                "buying against anything here."
             ],
         )
 
@@ -179,6 +188,38 @@ def _proposal(
         ]
 
 
+def _prices_sha(prices: dict[str, Decimal], as_of: date | None) -> str:
+    """A content hash of the marks this run used, and the day they are from.
+
+    Without it two runs quoting different prices shared a digest, so a resumed run inherited work
+    done against numbers that had since moved. A filename cannot prove this; an mtime is reset by a
+    fresh checkout.
+    """
+    import hashlib
+
+    payload = "|".join(f"{t}={prices[t]}" for t in sorted(prices)) + f"@{as_of}"
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _price_as_of() -> date | None:
+    """The newest day in the panels the screen reads. ``None`` when there is no panel at all."""
+    try:
+        from qalpha.data.ingest import load_parquet
+
+        newest: date | None = None
+        for path in (
+            "data/historical/prices_watchlist.parquet",
+            "data/historical/prices_pit_2026.parquet",
+        ):
+            if not Path(path).exists():
+                continue
+            day = load_parquet(path).adj_close.index[-1].date()
+            newest = day if newest is None else max(newest, day)
+        return newest
+    except Exception:
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--no-open", action="store_true", help="write the page, do not open a browser")
@@ -204,19 +245,41 @@ def main(argv: list[str] | None = None) -> int:
     quantities, costs, cash, broker_notes = _broker(cfg)
     notes += broker_notes
 
-    account = reconcile(trades, quantities, cash, cfg, date.today(), broker_costs=costs)
+    # The ledger replay needs a number to set the balance to; the GATE gets the honest `None`.
+    # Keeping the two apart is the point: the page may display a last-known figure, and nothing may
+    # be bought against one.
+    account = reconcile(
+        trades,
+        quantities,
+        cash if cash is not None else Decimal("0"),
+        cfg,
+        date.today(),
+        broker_costs=costs,
+    )
     prices, price_notes = _prices(sorted(account.portfolio.positions()), costs)
     notes += price_notes
 
+    price_as_of = _price_as_of()
     mandate = load_mandate()
     commitments = load_commitments()
     left = allowance(mandate.monthly_budget, commitments, period=date.today())
 
+    # The snapshot must identify the DATA, not only the account. It carried an empty price hash and
+    # listed only the held names, so changing a holding's price from ₹80 to ₹88 left the digest
+    # unchanged — and a decision that cannot be tied to the prices behind it cannot be replayed.
+    stale: list[str] = []
+    if price_as_of is not None and (date.today() - price_as_of).days > MAX_PRICE_AGE_DAYS:
+        stale.append(f"prices are from {price_as_of}, {(date.today() - price_as_of).days} days old")
+    if cash is None:
+        stale.append("cash balance unconfirmed — the broker was not reachable")
     snapshot = snapshot_from(
         account,
         budget=left.remaining,
-        universe=sorted(account.portfolio.positions()),
+        universe=sorted(set(account.portfolio.positions()) | set(prices)),
         taken_at=datetime.now(UTC),
+        prices_sha=_prices_sha(prices, price_as_of),
+        stale=stale,
+        extraction_version=EXTRACTION_VERSION,
     )
     previous = load_snapshot()
     changes = snapshot.changes_against(previous)
@@ -224,8 +287,42 @@ def main(argv: list[str] | None = None) -> int:
         notes.append("Changed since the last run: " + "; ".join(changes))
     snapshot.save()
 
-    orders, screen_notes = _proposal(account, left.remaining, cfg)
-    notes += screen_notes
+    # THE GATE. Every check it makes already existed and was tested; NONE was in the buying path,
+    # so a ₹100 account was offered a ₹49,658 basket and a book that did not reconcile got one
+    # anyway. Nothing reaches the screen without passing here first.
+    gate = evaluate(
+        snapshot=snapshot,
+        allowance=left,
+        settled_cash=cash,
+        cash_confirmed=cash is not None,
+        price_as_of=price_as_of,
+        today=date.today(),
+        floor=mandate.idle_cash_floor,
+    )
+    notes += list(gate.reasons)
+    orders: list[tuple[str, int, Decimal]] = []
+    if gate.open:
+        orders, screen_notes = _proposal(account, gate.budget, cfg)
+        notes += screen_notes
+        # WRITE WHAT WAS PROPOSED. The runner read the commitment ledger and never wrote to it, so
+        # the allowance never moved: ₹49,766 of imported purchases still left ₹50,000 on offer, and
+        # a second run proposed the same rupees again. A proposal RESERVES its money the moment it
+        # is made — it is not spending until a broker trade confirms it, and `commitments.py` keeps
+        # those two states apart.
+        for ticker, qty, price in orders:
+            amount = Decimal(qty) * price
+            if already_committed(commitments, ticker) is not None:
+                continue  # an open decision on this name already holds its allocation
+            record_commitment(
+                Commitment(
+                    id=f"{date.today().isoformat()}:{ticker}",
+                    ticker=ticker,
+                    state="proposed",
+                    amount=amount,
+                    on=date.today(),
+                    reason=f"screen basket, {qty} @ {price}",
+                ),
+            )
 
     PAGE.parent.mkdir(parents=True, exist_ok=True)
     PAGE.write_text(
