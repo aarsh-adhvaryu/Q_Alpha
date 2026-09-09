@@ -88,17 +88,23 @@ def test_a_corrupt_mandate_falls_back_rather_than_taking_the_page_down(tmp_path:
     assert load_mandate(p) == Mandate()
 
 
-def test_the_buy_surface_sizes_against_the_mandate_not_the_balance() -> None:
-    """The caller, not just the function. The defect was never in the arithmetic — it was that the
-    dashboard passed ``portfolio.cash`` and nothing looked at a budget."""
+def test_the_buy_surface_sizes_against_the_allowance_not_the_balance() -> None:
+    """The caller, not just the function. The defect was never in the arithmetic — the dashboard
+    passed ``portfolio.cash`` and nothing looked at a budget.
+
+    That surface was deleted with Streamlit on 2026-09-09 and the local runner replaced it, so this
+    follows the property to its new home rather than dying with the old one.
+    """
     import inspect
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-    import dashboard_app
+    import local_run as runner
 
-    src = inspect.getsource(dashboard_app._advisor_with_safety)
-    assert "mandate.deployable(" in src, "the auto brief must size against one instalment"
-    assert "_auto_pm_brief(portfolio, benchmark, available_cash" not in src, (
-        "the whole balance must not reach the brief again"
+    src = inspect.getsource(runner.main)
+    assert "left.remaining" in src, "the screen must be sized from the remaining allowance"
+    assert "_proposal(account, left.remaining" in src
+    proposal = inspect.getsource(runner._proposal)
+    assert "spend_idle_cash=False" in proposal, (
+        "the budget IS the allowance; the True default would add the whole balance on top"
     )
