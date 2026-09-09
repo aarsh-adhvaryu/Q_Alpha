@@ -157,7 +157,7 @@ cannot act.
 
 ### What reaches the user
 
-Under the basket on the dashboard, `live/flags.py` prints what the exchange and the filings say about
+Under the basket on the page, `live/flags.py` prints what the exchange and the filings say about
 those exact names, linked to the filing. **Flags, never vetoes** — there is no path from it back into
 selection or sizing.
 
@@ -180,7 +180,7 @@ The governor **filters, it does not stop** — and its 30% sector cap applies on
 ≥4 sectors, because below that it is arithmetically unsatisfiable and rejects everything.
 
 **It is exercised by the golden-day replay and by the daily shadow run. It does not touch the
-dashboard's buy surface**, which calls the screen directly.
+local run's buy surface** (`scripts/local_run.py`), which calls the screen directly.
 
 ---
 
@@ -216,12 +216,12 @@ dashboard's buy surface**, which calls the screen directly.
 
 ## The operating contract
 
-Open dashboard → Kite login (daily, one tap — there is **no** compliant unattended token) →
-**Add money, type the amount** (a hard budget) → **slider 8 for the opening ₹1,00,000, 3–4 for the
-monthly ₹50,000** → read the flags under the basket → place every order himself in Kite,
-**CNC/delivery, no stop-loss, no target** → **upload the tradebook after every batch** (Console →
-Reports → Tradebook; de-duped on Zerodha trade IDs, so overlapping ranges are safe). Money for future
-instalments **stays in the broker account**.
+Double-click **Q-Alpha** → it runs on this machine and opens one page → if it says Kite was not
+reachable, run once with `--login` (the session expires ~6am IST, so most days it will ask) → read
+**Today's basket**, sized to the ₹50,000 allowance and never to the whole balance → place every order
+yourself in Kite, **CNC/delivery, no stop-loss, no target** → **drop the tradebook export into
+`data/tradebooks/`** afterwards (de-duped on Zerodha trade ids, so overlapping ranges are safe).
+Money for future instalments **stays in the broker account**; the page holds it back and says so.
 
 **No stop-loss, and it is load-bearing:** the screen buys names that are *down*, so a stop sells
 exactly what it just bought, realises a loss, triggers tax, and fires on ordinary volatility. The exit
@@ -239,15 +239,18 @@ accounting/   FIFO lots · Zerodha costs · capital gains (§70 · §74 · §112
               actions · slippage.  FROZEN (rule (a)); reused live so both paths share one engine
 backtest/     walk-forward engine · portfolio · baselines · metrics · significance · runstore
               decision.py = the shared decide_rebalance the live runner also calls
-live/         advisor · deploy (the buy screen) · position_health · price_integrity · cooling_off
+live/         account (the reconciled account) · session (snapshot + resume) · seed (one common
+              start) · commitments (what it already decided) · mandate (the limits, once)
+              report (the HTML page) · ui (how a number looks, never what it is)
+              advisor · deploy (the buy screen) · position_health · price_integrity · cooling_off
               satellite · governor · hedge · nav · twin · runner · policy · go_gate · verdicts
               ai_brief · track_record · measures · safety · scan · notify · auth · client
               holdings · tradebook(+store) · taxpnl · ticker
               evidence (NSE regulatory indicators) · announcements (filings + provenance)
               extraction (the model reports what a filing says) · pretrade (may we buy this?)
               pipeline (rank → skip → anchor → one outcome) · flags (what the user sees)
-scripts/      twin.py (the cron) · evidence.py (the spine) · paper.py · advisor.py
-              dashboard_app.py · exp_null.py · backtest_* · exp_*
+scripts/      local_run.py (the click) · twin.py (the cron) · evidence.py (the spine)
+              paper.py · advisor.py · exp_null.py · backtest_* · exp_*
 config.py     every tunable parameter in one place
 ```
 
@@ -265,7 +268,7 @@ cannot cost the day's record.
 ## Commands
 
 ```bash
-uv sync --extra dev --extra dashboard
+uv sync --extra dev
 uv run pytest                                          # must stay green
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src
@@ -273,8 +276,15 @@ uv run python scripts/twin.py daily                    # the cron entry point
 uv run python scripts/evidence.py daily                # the evidence spine (shadow)
 uv run python scripts/run_phase0.py                    # the validated backtest
 uv run python scripts/exp_null.py --draws 2000         # the matched null
-uv run --extra dashboard streamlit run scripts/dashboard_app.py
+uv run python scripts/local_run.py                     # the local run → writes and opens one page
+uv run python scripts/local_run.py --login             # refresh the Kite session first
+./qalpha.sh                                            # the same thing, from the desktop launcher
 ```
+
+**There is no dashboard and no server.** Streamlit, its 2,498-line app, its config, `requirements.txt`
+and the whole `deploy/` hosting tree were removed on 2026-09-09. The system runs on this machine when
+you click it, writes `data/session/qalpha.html`, and stops. `live/ui.py` survived the move without
+one edit to a component, because it had never been allowed to know what was rendering it.
 
 **Auditing a live surface offline** — no Kite login, no server. The account *shape* is the point:
 **idle cash and holdings together**, because a zeroed portfolio hides an entire defect class. See
@@ -284,8 +294,8 @@ uv run --extra dashboard streamlit run scripts/dashboard_app.py
 `_refresh_benchmark()` and `build_nifty100_watchlist.py --prices` too, or you audit stale data.
 
 **Secrets.** Repo Actions: `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
-`GIST_TOKEN`, `TRADEBOOK_GIST_ID`. Streamlit: `GITHUB_TOKEN`, `GIST_TOKEN`, `KITE_*`,
-`APP_PASSWORD`. GitHub secrets are write-only — never try to read them. Without `GIST_TOKEN` the twin
+`GIST_TOKEN`, `TRADEBOOK_GIST_ID`. The local run: `KITE_API_KEY`, `KITE_API_SECRET`,
+GitHub secrets are write-only — never try to read them. Without `GIST_TOKEN` the twin
 cannot read the tradebook and **correctly refuses to run**.
 
 ---
