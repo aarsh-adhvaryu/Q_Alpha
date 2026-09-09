@@ -1,20 +1,18 @@
 🧠 AI market brief — context only, not a signal.
 
-**Sentiment**: 🔴 Markets extended losses to a second session, ending at three-month lows as oil prices advanced amid persistent geopolitical tension.
+**Sentiment**: 🔴 Indian market fell 0.53% on September 9, 2026, extending losses as investors remained concerned that higher energy costs could fuel inflation, widen India's trade deficit and weigh on economic growth.
 
 **Drivers**:
-1. **Crude oil spike to $99/bbl** — Brent crude rose to $99/barrel after Yemen-based Houthi rebels targeted multiple Saudi Aramco facilities; OMC margins compress; aviation & paint input costs rise; energy stocks underperform.
-2. **RBI liquidity withdrawal** — RBI withdrew >6 trillion rupees of excess liquidity from the banking system; banking/rate-sensitive sectors pressured; capital constraints on credit growth.
-3. **Heavy IPO supply drain** — Massive supply of IPOs/OFS issuances keeping secondary market liquidity constrained; retail participation diverted from equities; broad-market liquidity tight.
+1. **Crude surges past $100 on Middle East flare-up** — Brent crude futures rose 3% to $100.95 after Iran fired ballistic missiles at a U.S. base in Jordan. Compresses margins for refiners (IOC, BPCL), raises input costs for aviation (INDIGO), paint (ASIANPAINT), auto fuels.
+2. **Foreign institutional outflows persist** — Foreign investors continued to sell Indian equities, adding to market pressure. Dampens bank, IT, auto sentiment broadly.
+3. **Rupee weakens near 95/USD** — The rupee remained under pressure near 95 per dollar. Headwind for importers; mild tailwind for exporters.
 
-**Watchlist names affected**:
-Top Nifty losers: SBILIFE, ICICIBANK, AXISBANK (rate/liquidity pain). Energy names (BPCL, IOC, ONGC) face mixed margin pressures. IT stocks (HCLTECH, INFY, TECHM) fell 0.9–3.8% on Fed/rate worries.
+**Watchlist names affected**: IOC, BPCL (refiner margin compression), ONGC (crude benefit offset by FII outflow), INDIGO (aviation cost rise), ASIANPAINT (paint input cost), INFY, HCLTECH, TCS (IT sector under FII selling).
 
-**Likely reaction** (next 1–2 sessions):
-Directional lean: **down** (band: **−0.4% to −0.8%**; confidence: **medium**). Crude holding above $98 and liquidity drain historically weigh on CapEx/rate-sensitive names through expiry. SBILIFE & ICICIBANK most likely to retest lows; energy plays volatile but supported if crude stabilizes. Broader market's modest outperformance (+0.2% MidCap/SmallCap) suggests large-cap correction may deepen near-term.
+**Likely reaction** (YOUR READ): **Near-term lean = down; magnitude = −0.4–0.9%; confidence = medium**. Oil's break above $100 historically persists 1–2 sessions unless resolution signals emerge; FII selling in tech/banks compounds weakness. INDIGO and IOC likely to extend losses; ONGC may stabilize on crude gains but capped by outflows. Watch BPCL closely—if fuel spreads compress further, another −1–1.5% possible.
 
-**Risk note**: Geopolitical escalation; RBI emergency liquidity measures; or sharp crude reversal could pivot sentiment intraday.
+**Risk note**: Strait of Hormuz closure risk is material; any supply shock could spike crude toward $110+, forcing sharper index repricing downward across levered sectors (autos, cement).
 
-SIGNAL: lean=down; band=-0.8..-0.4; confidence=medium
+SIGNAL: lean=down; band=-0.4..-0.9; confidence=medium
 
-— 🤖 claude-haiku-4-5 · 22,145 in / 726 out tokens · ✓ complete
+— 🤖 claude-haiku-4-5 · 44,297 in / 790 out tokens · ✓ complete
