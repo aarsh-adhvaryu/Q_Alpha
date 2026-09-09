@@ -209,7 +209,11 @@ def test_the_daily_sources_are_freshness_gated_on_the_page() -> None:
     # source names, which only appear in the stale branch, so it passed only while the cron was
     # behind and broke the moment it caught up. What must hold either way is that a freshness
     # verdict is *reached and shown* rather than the files being trusted silently.
-    assert "daily sources are up to date" in shown or "daily sources are stale" in shown
+    # Plurality-agnostic as well as branch-agnostic: with one source the sentence reads "The daily
+    # source is up to date", and asserting the plural pinned a grammar bug in place.
+    assert "up to date" in shown or "stale" in shown, (
+        "a freshness verdict must be reached and shown, not the files trusted silently"
+    )
 
 
 def test_the_track_record_is_on_the_real_money_page() -> None:
@@ -565,3 +569,49 @@ def test_the_reconciliation_warning_names_the_fix() -> None:
     # The §48 acquisition cost is the ISSUE price, not the listing price — recording the
     # latter would understate the gain and overstate the tax.
     assert "*issue*" in src
+
+
+def test_the_holdings_table_spells_a_loss_the_same_way_in_every_row_and_in_its_total() -> None:
+    """Live on 2026-09-09: rows read "▼ ₹-1,268" while the totals row read "▼ -₹11,029".
+
+    One table, two conventions, and the row form is the one Streamlit misreads — the minus hidden
+    behind the currency symbol. Same defect as the tile, one surface over, found by reading the
+    rendered page rather than by any test.
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    import dashboard_app
+
+    from qalpha.accounting.tax_lots import TaxLot
+    from qalpha.backtest.portfolio import Portfolio
+    from qalpha.config import Config
+
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    pf.ledger.add_lot(
+        TaxLot(
+            ticker="LOSS.NS",
+            acquisition_date=date(2026, 8, 29),
+            quantity_original=Decimal("10"),
+            buy_price=Decimal("100"),
+        )
+    )
+    pf.ledger.add_lot(
+        TaxLot(
+            ticker="GAIN.NS",
+            acquisition_date=date(2026, 8, 29),
+            quantity_original=Decimal("10"),
+            buy_price=Decimal("100"),
+        )
+    )
+    frame = dashboard_app._holdings_frame(
+        pf, {"LOSS.NS": Decimal("90"), "GAIN.NS": Decimal("110")}, date(2026, 9, 9)
+    )
+    pnl = dict(zip(frame["Ticker"], frame["P&L"], strict=True))
+    assert pnl["LOSS"] == "-₹100", f"the minus must lead the symbol, got {pnl['LOSS']!r}"
+    assert pnl["GAIN"] == "+₹100"
+    for value in pnl.values():
+        assert not value.startswith("₹"), (
+            "a sign hidden behind ₹ is the defect this repo keeps making"
+        )
