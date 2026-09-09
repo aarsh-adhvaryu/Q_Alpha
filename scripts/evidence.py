@@ -334,6 +334,44 @@ def _mark_extracted(hashes: object, *, events_recorded: int) -> None:
         print(f"[evidence] WARNING: extraction ledger not updated ({exc})", file=sys.stderr)
 
 
+def _record_coverage(as_of: date, ticker: str, cov: AnnouncementCoverage, window_days: int) -> None:
+    """Write one name's coverage row the moment that name is finished.
+
+    This was a single bulk write after the whole loop, which meant a run that did not reach the end
+    recorded no coverage for any name — including the ones it had fully read. On 2026-09-08 the step
+    was killed at its 20-minute cap having produced 110 events, and **not one coverage row was
+    written**, so every name kept reading "Filings NOT read" on the buy screen while its findings sat
+    in ``events.jsonl``. Same disease as the extraction receipt, one file over.
+
+    ``_append_jsonl`` supersedes by revision rather than replacing, so a row written here can be
+    corrected by a later run and never lost — including the incomplete rows a killed run leaves,
+    which is what ``_seen_before`` needs in order not to burn a name's 365-day bootstrap.
+    """
+    try:
+        _append_jsonl(
+            COVERAGE_LOG,
+            [
+                {
+                    "as_of": as_of.isoformat(),
+                    "ticker": ticker,
+                    "filings_in_window": cov.filings_in_window,
+                    "documents_read": cov.documents_read,
+                    "extraction_ran": cov.extraction_ran,
+                    "index_fetched": cov.index_fetched,
+                    "complete": cov.complete,
+                    # The window this verdict actually covers. Without it a reader cannot tell a
+                    # ten-day look from a year's, and both would print the same word.
+                    "window_days": window_days,
+                    "extraction_version": EXTRACTION_VERSION,
+                    "_key": f"{as_of.isoformat()}:{ticker}",
+                }
+            ],
+            key="_key",
+        )
+    except Exception as exc:
+        print(f"[evidence] WARNING: coverage not recorded for {ticker} ({exc})", file=sys.stderr)
+
+
 def _persist_events(events: list[ExtractedEvent], as_of: date) -> bool:
     """Append one name's events to the log. ``True`` only if they are durably on disk.
 
@@ -541,7 +579,24 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
     windows: dict[str, int] = {}
     events: dict[str, list[ExtractedEvent]] = {}
     unverified: dict[str, int] = {}
-    for ticker in tickers:
+    # A BUDGET, NOT A CAP. The workflow gives this step 20 minutes and SIGKILLs it at the boundary,
+    # and `continue-on-error` then reports the corpse as "success" — which is exactly what happened
+    # on 2026-09-08 (16:44:54 → 17:05:06, killed at 20m12s, step green, no coverage written at all).
+    # Stopping ourselves a little early means the run ends by choice: everything done is on disk,
+    # the names not reached are named, and the exit says so. Being killed loses the summary and the
+    # in-flight name's work; stopping loses neither.
+    budget = timedelta(seconds=int(os.environ.get("EVIDENCE_BUDGET_SECONDS", "900")))
+    started = datetime.now(UTC)
+    # `covered` is the count already finished — at the break it equals the loop index, because
+    # every earlier iteration wrote its coverage row before incrementing.
+    for covered, ticker in enumerate(tickers):
+        if datetime.now(UTC) - started > budget:
+            print(
+                f"[evidence] time budget {budget} reached after {covered}/{len(tickers)} name(s). "
+                f"Stopping cleanly — everything read so far is on disk, and the receipts mean "
+                f"tomorrow's run resumes past it rather than starting again."
+            )
+            break
         days = _window_days(ticker)
         windows[ticker] = days
         if days != LOOKBACK_DAYS:
@@ -552,6 +607,11 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
         coverage[ticker] = cov
         events[ticker] = found
         unverified[ticker] = bad
+        # DURABLE PER NAME, for the same reason the events are. This was one bulk write after the
+        # loop, so the 2026-09-08 timeout produced 110 events and ZERO coverage rows — every name
+        # still reading "Filings NOT read" on the buy screen while its findings sat in events.jsonl.
+        # A row written here can only be superseded by a later revision, never lost.
+        _record_coverage(as_of, ticker, cov, windows[ticker])
 
     # Events are already on disk — ``_cover_name`` persists each name's findings before it writes
     # that name's receipt. This used to be the single bulk write for the whole run, which is what
@@ -559,31 +619,6 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
     all_events = [e for found in events.values() for e in found]
     if all_events:
         print(f"[evidence] {len(all_events)} event(s) recorded → {EVENT_LOG}")
-
-    try:
-        _append_jsonl(
-            COVERAGE_LOG,
-            [
-                {
-                    "as_of": as_of.isoformat(),
-                    "ticker": t,
-                    "filings_in_window": c.filings_in_window,
-                    "documents_read": c.documents_read,
-                    "extraction_ran": c.extraction_ran,
-                    "index_fetched": c.index_fetched,
-                    "complete": c.complete,
-                    # The window this verdict actually covers. Without it a reader cannot tell a
-                    # ten-day look from a year's, and both would print the same word.
-                    "window_days": windows.get(t, LOOKBACK_DAYS),
-                    "extraction_version": EXTRACTION_VERSION,
-                    "_key": f"{as_of.isoformat()}:{t}",
-                }
-                for t, c in coverage.items()
-            ],
-            key="_key",
-        )
-    except Exception as exc:
-        print(f"[evidence] WARNING: coverage not recorded ({exc})", file=sys.stderr)
 
     exchange: dict[str, Assessment] = (
         {t: exchange_assess(t, rows, exchange_prov, as_of=as_of) for t in tickers}

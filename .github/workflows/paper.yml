@@ -196,12 +196,33 @@ jobs:
           print(f"books in today's row: {len(books)} | tracks: {sorted(row.get('tracks', {}))}")
 
           # The evidence spine is allowed to find nothing. It is not allowed to leave no trace.
+          # This used to test only whether TODAY'S DATE appeared anywhere in the log, which a local
+          # test run had already put there - so on 2026-09-08 it printed "True" for a scheduled run
+          # that was killed at its 20-minute cap and wrote no coverage at all. A date is not
+          # progress. Print the counts, so a zero-progress day is legible in the log instead of
+          # reading as a clean one. Still not a hard failure: the spine is continue-on-error by
+          # design and a red cron on a fail-soft step costs more days than it saves.
           cov = pathlib.Path("data/evidence/coverage.jsonl")
           if cov.exists():
-              dates = {json.loads(l).get("as_of") for l in cov.read_text().splitlines() if l.strip()}
-              print(f"evidence coverage recorded for today: {today in dates}")
-              if today not in dates:
-                  print("WARN: the evidence spine left no coverage row today (it is continue-on-error)")
+              rows = [json.loads(l) for l in cov.read_text().splitlines() if l.strip()]
+              # Current view: highest revision per key, the same rule every reader uses.
+              cur = {}
+              for r in rows:
+                  k = r.get("_key")
+                  if k is None:
+                      continue
+                  if k not in cur or int(r.get("revision", 0)) >= int(cur[k].get("revision", 0)):
+                      cur[k] = r
+              todays_cov = [r for r in cur.values() if r.get("as_of") == today]
+              done = sum(1 for r in todays_cov if r.get("complete"))
+              ran = sum(1 for r in todays_cov if r.get("extraction_ran"))
+              print(f"evidence coverage today: {len(todays_cov)} name(s), {ran} extracted, {done} complete")
+              if not todays_cov:
+                  print("WARN: the evidence spine left NO coverage row today (it is continue-on-error)")
+              elif done == 0:
+                  print("WARN: coverage rows exist for today but NOT ONE is complete - every name "
+                        "will read 'Filings NOT read' on the buy screen. Check the spine's log above "
+                        "for a time-budget stop or a missing ANTHROPIC_API_KEY.")
           else:
               print("WARN: no coverage log yet - first run")
 
