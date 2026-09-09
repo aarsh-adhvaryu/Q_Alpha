@@ -25,9 +25,10 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, "scripts")
+ROOT_SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+sys.path.insert(0, str(ROOT_SCRIPTS))
 
-import evidence
+import evidence  # noqa: E402
 
 
 def _log(tmp_path: Path, *rows: dict[str, object]) -> Path:
@@ -138,3 +139,97 @@ def test_events_are_persisted_before_the_receipt_is_written() -> None:
     assert "extraction_ran = False" in src[mark_at:], (
         "a failed persist must mark the name NOT covered, or it reads as complete with no events"
     )
+
+
+# --- the same disease, one file over ------------------------------------------------------------
+def test_a_coverage_row_is_written_the_moment_its_name_is_finished(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Found on 2026-09-08, in the run that verified the fix above.
+
+    The evidence step was killed at its 20-minute cap having produced **110 events and zero coverage
+    rows** — because coverage was still one bulk write after the whole loop. Every name kept reading
+    "Filings NOT read" on the buy screen while its findings sat in ``events.jsonl``.
+    """
+    from datetime import date
+
+    from qalpha.live.pretrade import AnnouncementCoverage
+
+    path = tmp_path / "coverage.jsonl"
+    monkeypatch.setattr(evidence, "COVERAGE_LOG", path)
+    cov = AnnouncementCoverage(
+        filings_in_window=2, documents_read=2, extraction_ran=True, index_fetched=True
+    )
+    evidence._record_coverage(date(2026, 9, 9), "VBL.NS", cov, 10)
+
+    rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    assert len(rows) == 1
+    assert rows[0]["ticker"] == "VBL.NS"
+    assert rows[0]["complete"] is True
+    assert rows[0]["window_days"] == 10
+    assert rows[0]["extraction_version"] == evidence.EXTRACTION_VERSION
+
+
+def test_a_later_run_supersedes_a_coverage_row_without_erasing_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A correction never deletes what it corrects. An incomplete row from a killed run must stay on
+    file — ``_seen_before`` reads it to decide whether a name has already spent its 365-day
+    bootstrap, and an erased failure would silently send that name down the ten-day path."""
+    from datetime import date
+
+    from qalpha.live.pretrade import AnnouncementCoverage
+
+    path = tmp_path / "coverage.jsonl"
+    monkeypatch.setattr(evidence, "COVERAGE_LOG", path)
+    partial = AnnouncementCoverage(
+        filings_in_window=5, documents_read=1, extraction_ran=False, index_fetched=True
+    )
+    whole = AnnouncementCoverage(
+        filings_in_window=5, documents_read=5, extraction_ran=True, index_fetched=True
+    )
+    evidence._record_coverage(date(2026, 9, 9), "VBL.NS", partial, 365)
+    evidence._record_coverage(date(2026, 9, 9), "VBL.NS", whole, 365)
+
+    rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    assert len(rows) == 2, "the failed attempt must survive its own correction"
+    assert [r["revision"] for r in rows] == [0, 1]
+    assert [r["complete"] for r in rows] == [False, True]
+
+
+def test_coverage_is_recorded_inside_the_loop_not_after_it() -> None:
+    """The ordering, at the one call site where it decides whether a killed run leaves anything."""
+    import inspect
+
+    src = inspect.getsource(evidence.cmd_daily)
+    loop = src.index("for covered, ticker in enumerate(tickers)")
+    assert "_record_coverage(" in src[loop:], "coverage must be written inside the loop"
+    after_loop = src.index("all_events = [", loop)
+    assert "_record_coverage(" in src[loop:after_loop], (
+        "the coverage write must happen per name, before the loop can be interrupted"
+    )
+    assert "COVERAGE_LOG," not in src, "no bulk coverage write may survive in cmd_daily()"
+
+
+def test_the_self_imposed_budget_is_strictly_inside_the_workflow_hard_cap() -> None:
+    """The invariant that makes the budget worth having, asserted across the two files that hold it.
+
+    GitHub SIGKILLs the step at ``timeout-minutes``, and ``continue-on-error: true`` then reports the
+    corpse as **success** — which is exactly how a 20m12s run on 2026-09-08 went green having written
+    no coverage at all. A budget that is not strictly smaller than the cap never fires, and the step
+    goes back to being killed. If someone lowers the cap, this fails.
+    """
+    import re
+
+    src = (ROOT_SCRIPTS / "evidence.py").read_text(encoding="utf-8")
+    budget_s = int(re.search(r'EVIDENCE_BUDGET_SECONDS", "(\d+)"', src).group(1))
+
+    workflow = (ROOT_SCRIPTS.parent / ".github/workflows/paper.yml").read_text(encoding="utf-8")
+    spine = workflow.index("Evidence spine")
+    cap_min = int(re.search(r"timeout-minutes:\s*(\d+)", workflow[spine:]).group(1))
+
+    assert budget_s < cap_min * 60, (
+        f"budget {budget_s}s is not inside the {cap_min}-minute hard cap — it can never fire"
+    )
+    # And with real headroom: one in-flight name plus the report tail must fit in the gap.
+    assert cap_min * 60 - budget_s >= 240, "leave at least four minutes for the name in flight"
