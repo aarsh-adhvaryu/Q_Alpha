@@ -42,15 +42,20 @@ engine has been reconciled against exactly one real sale — single lot, all sho
 Multi-lot, long-term and loss set-off are unit-tested and have never met a broker statement. The
 first time you sell something complicated, that number needs checking by hand.
 
-## 3. What runs by itself — nothing, and that is the point
+## 3. What runs by itself
 
-There is no cron, no server and no cloud any more. It runs when you click it, on this machine, and
-it stops when it finishes. If you do not open it for two days, nothing is lost: the next run reads
-what changed, resumes any work it had not finished, and says what moved while it was off.
+**The local run does not.** It runs when you click it, on this machine, and stops when it finishes.
+Miss two days and nothing is lost: the next run reads what changed, resumes what it had not
+finished, and says what moved while it was off.
 
-The one thing that needs you is the Kite login. Market history and filings need no session at all —
-only your holdings and cash do — so the analysis can run for as long as you like without one, and it
-will tell you plainly that the account figures are unconfirmed until you log in.
+**But the old cron is still on**, and saying otherwise here was wrong — this section claimed "no
+cron, no cloud" on 2026-09-09 while `.github/workflows/paper.yml` was running every weekday, doing
+hosted AI calls and stepping the twins. It still is. Retiring it is the next step and it has not
+happened yet; until it does, two systems are running and only one of them is the one you click.
+
+The one thing the local run needs from you is the Kite login. Market history and filings need no
+session at all — only your holdings and cash do — so the analysis runs without one, and it will say
+plainly that the account figures are unconfirmed rather than showing you a zero.
 
 ## 4. What the buy screen shows you
 
