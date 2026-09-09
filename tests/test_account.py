@@ -1,0 +1,139 @@
+"""Track 1 — the reconciled account, and the base every other book is seeded from.
+
+The twin's ``REAL`` book held **nothing**: ₹3,04,144 of cash and zero open lots, while the actual
+Zerodha account held eight names worth ₹2,93,197. The value the dashboard printed for REAL came from
+a different code path, which is why its holdings chart said "nothing priced yet" beneath a
+valuation. "Start every book from a copy of my actual account" needed a copy of the account, and
+there was none.
+
+These pin the three ways a replay can disagree with the broker, because they are different facts
+with different consequences and collapsing them is how a book that does not match reality becomes
+the base for a decision.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from qalpha.accounting.costs import Side
+from qalpha.config import Config
+from qalpha.live.account import reconcile
+from qalpha.live.session import snapshot_from
+from qalpha.live.tradebook import TradebookTrade
+
+CFG = Config()
+AS_OF = date(2026, 9, 9)
+CASH = Decimal("201117")
+
+
+def _buy(ticker: str, qty: str, price: str, on: date = date(2026, 8, 29)) -> TradebookTrade:
+    return TradebookTrade(
+        trade_date=on,
+        ticker=ticker,
+        side=Side.BUY,
+        quantity=Decimal(qty),
+        price=Decimal(price),
+        exec_time="10:00:00",
+        trade_id=f"{ticker}-{qty}-{on}",
+    )
+
+
+def test_a_replay_that_matches_the_broker_tallies_and_is_tax_exact() -> None:
+    trades = [_buy("VBL.NS", "147", "414.23"), _buy("TCS.NS", "10", "2340.04")]
+    acct = reconcile(trades, {"VBL.NS": Decimal("147"), "TCS.NS": Decimal("10")}, CASH, CFG, AS_OF)
+
+    assert acct.tallies and acct.blocking == ()
+    assert acct.dated and acct.tax_exact
+    assert acct.portfolio.positions() == {"VBL.NS": Decimal("147"), "TCS.NS": Decimal("10")}
+    assert "match your broker account exactly" in acct.report()
+
+
+def test_a_stock_bought_in_kite_is_named_and_does_not_block_the_run() -> None:
+    """THE "I added a stock" case, and it is normal. Refusing to run until a CSV arrives would make
+    the system useless on exactly the day something changed — so it is a loud caveat, not a stop."""
+    trades = [_buy("VBL.NS", "147", "414.23")]
+    acct = reconcile(
+        trades, {"VBL.NS": Decimal("147"), "HDFCBANK.NS": Decimal("25")}, CASH, CFG, AS_OF
+    )
+
+    assert acct.broker_only == ("HDFCBANK.NS",)
+    assert not acct.tallies
+    assert acct.blocking == (), "a new purchase must not stop the run"
+    assert not acct.tax_exact, "but its tax cannot be computed without a purchase date"
+    assert "HDFCBANK" in acct.report() and "upload a tradebook" in acct.report()
+
+
+def test_a_quantity_disagreement_blocks_because_the_lots_are_wrong() -> None:
+    """Same name, different count — a corporate action or a missing trade. The lots are wrong, so
+    the tax computed from them is wrong, and nothing should be decided on it."""
+    trades = [_buy("VBL.NS", "147", "414.23")]
+    acct = reconcile(trades, {"VBL.NS": Decimal("294")}, CASH, CFG, AS_OF)
+
+    assert acct.mismatched and "ledger 147 vs broker 294" in acct.mismatched[0]
+    assert acct.blocking, "a book that does not match the broker is not a base for a decision"
+
+
+def test_the_ledger_holding_something_the_broker_does_not_also_blocks() -> None:
+    trades = [_buy("VBL.NS", "147", "414.23"), _buy("TCS.NS", "10", "2340.04")]
+    acct = reconcile(trades, {"VBL.NS": Decimal("147")}, CASH, CFG, AS_OF)
+
+    assert acct.tradebook_only == ("TCS.NS",)
+    assert acct.blocking
+
+
+def test_no_tradebook_means_undated_lots_and_no_exact_tax() -> None:
+    """The broker's holdings give a blended average and no purchase dates. That is enough to value a
+    position and nowhere near enough to tax one — FIFO needs to know which shares were bought when."""
+    acct = reconcile([], {}, CASH, CFG, AS_OF)
+    assert not acct.dated and not acct.tax_exact
+    assert acct.tallies, "an empty ledger against an unqueried broker is not a disagreement"
+    assert "estimate" in acct.report()
+
+
+# --- the bridge into the run -------------------------------------------------------------------
+def test_the_snapshot_carries_the_accounts_blocking_reasons() -> None:
+    """A book that does not tally must not silently become the base for a decision."""
+    from datetime import UTC, datetime
+
+    trades = [_buy("VBL.NS", "147", "414.23")]
+    bad = reconcile(trades, {"VBL.NS": Decimal("294")}, CASH, CFG, AS_OF)
+    snap = snapshot_from(
+        bad,
+        budget=Decimal("50000"),
+        universe=("VBL.NS",),
+        taken_at=datetime(2026, 9, 9, tzinfo=UTC),
+    )
+    assert not snap.usable
+    assert any("disagree" in m for m in snap.missing_critical)
+
+
+def test_the_snapshot_takes_the_mandates_budget_not_the_broker_balance() -> None:
+    """₹2,01,117 sits in the account and one instalment is deployable. The snapshot must carry the
+    allowance, or every book downstream sizes against several months of future contributions."""
+    from datetime import UTC, datetime
+
+    good = reconcile(
+        [_buy("VBL.NS", "147", "414.23")], {"VBL.NS": Decimal("147")}, CASH, CFG, AS_OF
+    )
+    snap = snapshot_from(
+        good,
+        budget=Decimal("50000"),
+        universe=("VBL.NS",),
+        taken_at=datetime(2026, 9, 9, tzinfo=UTC),
+    )
+    assert snap.usable
+    assert snap.cash == CASH, "the balance is recorded"
+    assert snap.budget == Decimal("50000"), "but the budget is the mandate's"
+    assert snap.holdings == {"VBL.NS": 147}
+
+
+def test_undated_lots_are_a_caveat_on_the_snapshot_not_a_stop() -> None:
+    from datetime import UTC, datetime
+
+    acct = reconcile([], {}, CASH, CFG, AS_OF)
+    snap = snapshot_from(
+        acct, budget=Decimal("50000"), universe=(), taken_at=datetime(2026, 9, 9, tzinfo=UTC)
+    )
+    assert snap.usable, "an undated book can still be valued and monitored"
+    assert any("undated" in s for s in snap.stale), "and the caveat travels with it"
