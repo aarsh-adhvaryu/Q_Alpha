@@ -102,8 +102,11 @@ def test_the_buy_surface_sizes_against_the_allowance_not_the_balance() -> None:
     import local_run as runner
 
     src = inspect.getsource(runner.main)
-    assert "left.remaining" in src, "the screen must be sized from the remaining allowance"
-    assert "_proposal(account, left.remaining" in src
+    # Stronger than it was. The screen is sized from the GATE, not from the raw allowance — the gate
+    # clamps the allowance to the cash that actually exists, which is what ₹100 buying a ₹49,658
+    # basket was missing. Asserting `left.remaining` reached the screen would now pin the weaker rule.
+    assert "_proposal(account, gate.budget" in src, "the screen must be sized by the gate"
+    assert "if gate.open:" in src, "and must not run at all when the gate is closed"
     proposal = inspect.getsource(runner._proposal)
     assert "spend_idle_cash=False" in proposal, (
         "the budget IS the allowance; the True default would add the whole balance on top"
