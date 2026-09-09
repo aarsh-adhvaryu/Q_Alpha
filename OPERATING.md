@@ -14,17 +14,19 @@ Nothing here places an order. Nothing ever will. You place every order yourself.
 
 ## 1. Once a month, when the ₹50,000 goes in
 
-1. **Open the dashboard** and enter `APP_PASSWORD`.
-2. **Log in to Kite.** One tap. It expires around 6am IST every day, so it will ask most times.
-3. **Add money → type the amount.** Type `50000`. The number you type is a hard budget; the basket
-   below it will add up to that and not more.
-4. **Set the slider to 3–4.** (Slider 8 was for the opening ₹1,00,000. Monthly is 3–4.)
-5. **Place the orders yourself in Kite.** CNC / delivery. **No stop-loss. No target.**
-6. **Upload the tradebook afterwards.** Console → Reports → Tradebook. It de-duplicates on Zerodha
-   trade IDs, so overlapping date ranges are safe — when in doubt, export wider.
+1. **Double-click Q-Alpha** on the desktop. It runs on this machine, writes one page, and opens it.
+   Nothing is hosted, nothing is left running, and closing the page closes nothing.
+2. **If it says Kite was not reachable**, run it once with `--login` (or `./qalpha.sh --login`) —
+   the session expires around 6am IST, so most days it will ask.
+3. **Read "Today's basket"** on the page. It is sized to this month's allowance — ₹50,000 — not to
+   the whole balance, however much cash is sitting there.
+4. **Place the orders yourself in Kite.** CNC / delivery. **No stop-loss. No target.**
+5. **Drop the tradebook export into `data/tradebooks/`** afterwards. Console → Reports → Tradebook.
+   Overlapping date ranges are safe; it de-duplicates on Zerodha trade ids. Until an export covers a
+   holding, its lots have no purchase date and its tax is labelled an estimate rather than exact.
 
-Money for future instalments **stays in the broker account**. That is intended: the system counts it
-and does not treat it as performance.
+Money for future instalments **stays in the broker account**. The page counts it, holds it back from
+the basket, and says how much it is holding back.
 
 **Why no stop-loss.** The screen buys names that have already fallen. A stop sells exactly what it
 just bought, realises a loss, triggers tax, and fires on ordinary volatility. The exit that does
@@ -40,30 +42,15 @@ engine has been reconciled against exactly one real sale — single lot, all sho
 Multi-lot, long-term and loss set-off are unit-tested and have never met a broker statement. The
 first time you sell something complicated, that number needs checking by hand.
 
-## 3. What runs by itself — and how to make it run now
+## 3. What runs by itself — nothing, and that is the point
 
-One scheduled job, weekdays at 12:23 UTC. It refreshes prices, marks the paper books, runs the twin
-experiment, collects exchange filings, and commits the record. It is fail-soft everywhere and has a
-postcondition that goes red if the day's record is missing or incomplete.
+There is no cron, no server and no cloud any more. It runs when you click it, on this machine, and
+it stops when it finishes. If you do not open it for two days, nothing is lost: the next run reads
+what changed, resumes any work it had not finished, and says what moved while it was off.
 
-**If it fails you get a Telegram alert.** If you get one, nothing is on fire: no money moves on that
-job. It means a day of evidence is missing.
-
-**The 12:23 UTC schedule is not a schedule.** Of the 60 scheduled runs since 2026-06-15, **none**
-started within fifteen minutes of it — median delay 2.4 hours, worst 10.1. GitHub queues scheduled
-workflows behind paid load and says outright that it may drop them. So do not read "it has not run
-by 6pm IST" as a fault; it usually lands between 19:30 and 21:30 IST.
-
-**To run it now**, either:
-
-- **In the dashboard** — sidebar → **▶ Run the daily job now**. It starts within seconds. This needs
-  `GITHUB_TOKEN` in the app's secrets with the **actions: write** scope (a classic token needs
-  `workflow`; a fine-grained one needs *Actions: read and write* on this repo). The sidebar then
-  shows whether a run is queued, running, or finished, with a link to it.
-- **From a terminal** — `gh workflow run paper.yml`, then `gh run watch`.
-
-Both start the *same* job on GitHub, which is the point: it has the credentials and it commits the
-record. Running the steps on your own machine would produce a day's evidence that never leaves it.
+The one thing that needs you is the Kite login. Market history and filings need no session at all —
+only your holdings and cash do — so the analysis can run for as long as you like without one, and it
+will tell you plainly that the account figures are unconfirmed until you log in.
 
 ## 4. What the buy screen shows you
 

@@ -1179,3 +1179,52 @@ def off_market_snippet(credits: Sequence[OffMarketCredit]) -> str:
         "  ]",
     ]
     return "\n".join(lines)
+
+
+def inceptions(path: Path = TWIN_HISTORY) -> dict[str, str]:
+    """The first day each book was actually **marked** — not the seeding date they all share.
+
+    Moved here from the dashboard when Streamlit was removed. The logic outlives the page it was
+    written for, because the rule it enforces is about the RECORD, not about a screen.
+
+    ### Why this exists
+
+    Every book's ``start`` field reads 2026-06-15, because that is when the cash flows begin. It is
+    not when the book existed. ``CORE_V1``'s first mark is **2026-09-07**, and every lot it holds is
+    dated that day: it was constituted last Monday, at that Monday's prices, while ``TWIN_FULL`` had
+    been accumulating since 2026-08-29 and had fallen ₹10,627 over the stretch in between.
+
+    So CORE_V1 appeared in the record **already ₹10,293 ahead of TWIN_FULL**, and in the one day
+    both books have been alive they have diverged by ₹475. The dashboard was rendering that ₹10,768
+    as "The screen ▲ +₹6,109 vs the fund" — an inception artefact presented as performance, which is
+    the defect family this whole repo is organised around. A book cannot outperform over a period it
+    did not exist for.
+
+    Reads the append-only history at the highest revision per day, the same rule every other reader
+    uses.
+    """
+    out: dict[str, str] = {}
+    try:
+        rows = [
+            json.loads(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except (OSError, ValueError, json.JSONDecodeError):
+        return out
+    latest: dict[str, dict[str, object]] = {}
+    for row in rows:
+        day = str(row.get("as_of"))
+        if day not in latest or int(str(row.get("revision", 0))) >= int(
+            str(latest[day].get("revision", 0))
+        ):
+            latest[day] = row
+    for day in sorted(latest):
+        books = latest[day].get("books")
+        if not isinstance(books, dict):
+            continue
+        for name, book in books.items():
+            # A book with no value that day was not marked; it is not yet alive for this purpose.
+            if isinstance(book, dict) and book.get("value") and str(name) not in out:
+                out[str(name)] = day
+    return out
