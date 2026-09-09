@@ -27,7 +27,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from paper import BOOK_PATH, _load_market
+from paper import BOOK_PATH, _load_benchmark_series, _load_market
 
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
@@ -183,7 +183,21 @@ def main(argv: list[str] | None = None) -> int:
             )
         priced = sum(1 for t in watchlist if t in wl_prices.adj_close.columns)
         print(f"_(deploy-weakness sees {priced}/{len(watchlist)} watchlist names)_\n")
-        index_close = wl_prices.adj_close.mean(axis=1)  # equal-weight market proxy (self-contained)
+        # THE REAL INDEX, not a mean of the watchlist. `market_weakness` classifies the drawdown
+        # from a rolling 1-year high and that drawdown decides the deploy tranche, so feeding it an
+        # equal-weighted mean of 95 names is a different market: the same account on the same day
+        # could sit in "normal" here and "elevated" on the dashboard. The dashboard already passes
+        # the Nifty TRI and says so in a comment; this is the same series, from the same loader.
+        try:
+            index_close = _load_benchmark_series()
+        except Exception as exc:
+            print(
+                f"⚠️  no benchmark series ({exc}) — falling back to the watchlist mean, which is a "
+                "DIFFERENT market and may put this run in a different weakness regime than the "
+                "dashboard reports",
+                file=sys.stderr,
+            )
+            index_close = wl_prices.adj_close.mean(axis=1)
         advice = advise_deploy_into_weakness(
             portfolio,
             Decimal(args.amount),
