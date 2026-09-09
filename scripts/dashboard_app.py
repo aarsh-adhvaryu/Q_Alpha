@@ -63,6 +63,7 @@ from qalpha.live.dashboard import (
 )
 from qalpha.live.gist_store import find_gist_id, load_gist_file, save_gist_file
 from qalpha.live.holdings import LiveHoldings
+from qalpha.live.mandate import load_mandate
 from qalpha.live.paper import PaperBook
 from qalpha.live.position_health import position_health
 from qalpha.live.safety import SafetyReport, assess_advice_inputs, broker_session_guard
@@ -561,13 +562,25 @@ def _advisor_with_safety(
     # buy plan with zero typing (gated behind the same guards above — never bypassed). The
     # Add-money field is then prefilled with the available cash for a one-tap deeper dive.
     cfg = Config()
-    floor = cfg.deploy_policy.idle_cash_floor
-    default_add = 50000
+    mandate = load_mandate()
+    floor = mandate.idle_cash_floor
+    default_add = int(mandate.monthly_budget)
     buy_ok = BUY_ADVICE_ON_REAL_MONEY and report.buy_advice_safe
     if available_cash is not None and available_cash >= floor:
-        if buy_ok:
-            _auto_pm_brief(portfolio, benchmark, available_cash, as_of, cfg, prices_dec)
-        default_add = int(available_cash)
+        # ONE INSTALMENT, never the balance. The account holds several future instalments and the
+        # system cannot tell which rupee is which — advisor.py says so outright. This panel used to
+        # size a basket against the whole ₹2,01,117 and prefill the Add-money field with it.
+        budget = mandate.deployable(available_cash)
+        reserved = mandate.reserved(available_cash)
+        if buy_ok and budget > 0:
+            _auto_pm_brief(portfolio, benchmark, budget, as_of, cfg, prices_dec)
+        if reserved > 0:
+            st.caption(
+                f"Sizing against **{ui.inr(budget)}**, one instalment under the mandate — "
+                f"{ui.inr(reserved)} of the {ui.inr(available_cash)} balance is held for later "
+                "instalments. Change the amount in the Add-money tab to spend more."
+            )
+        default_add = int(budget)
     if live_session is not None:
         _live_health_view(portfolio, prices, wl[2] if wl is not None else None, as_of)
     st.caption("Deterministic — every figure comes from the FIFO/cost/tax engine, no AI.")
@@ -719,6 +732,30 @@ def _live_health_view(
         adj = adj.reindex(idx).ffill()
         adj[extra] = wl_prices.adj_close[extra].reindex(idx).ffill()
     with st.expander("🩺 Are any of my holdings breaking down?", expanded=False):
+        # A CORPORATE ACTION ON A NAME YOU HOLD IS THE LIKELIEST THING TO BITE FIRST — CLAUDE.md
+        # says so, and the engine has never reconciled one against a broker statement. The detector
+        # already exists (`unexplained_gaps`, used below for the tilt guard) but its findings only
+        # ever reached the cheapness scoring. On the one surface where a holding is yours, an
+        # unexplained step in the price must be said out loud, because the first one needs checking
+        # by hand and nobody will think to look.
+        from qalpha.live.price_integrity import unexplained_gaps
+
+        gaps = unexplained_gaps(adj, held, as_of)
+        if gaps:
+            lines = "\n".join(
+                f"- **{t.removesuffix('.NS')}** — {g.pct * 100:+.1f}% step on {g.on}"
+                for t, g in sorted(gaps.items())
+            )
+            st.warning(
+                "⚠️ **Unexplained price step on a name you hold — probably a corporate action.**\n\n"
+                f"{lines}\n\n"
+                "`adj_close` corrects splits and dividends and nothing else, so a demerger or a "
+                "bonus leaves a step this looks like. **No corporate action has ever been "
+                "reconciled live by this engine**, and the first one needs checking by hand: "
+                "compare your Kite holdings and average cost against the book above before you "
+                "buy or sell that name. Until then its cost basis, and therefore its tax, may be "
+                "wrong."
+            )
         st.markdown(health_panel_markdown(_guarded_health(adj, held, as_of)))
         st.caption(
             "Advisory only — this never sells, and a 🟠 is not a reason to act. It exists so a "

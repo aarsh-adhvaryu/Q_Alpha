@@ -33,6 +33,23 @@ jobs:
           python-version: "3.12"
       - name: Install deps
         run: uv sync --extra dev --extra ai --frozen
+      # Which secrets exist, never their values. Every step below is fail-soft, so an expired token
+      # degrades silently: the AI brief writes nothing, the spine archives filings it never reads,
+      # the twin's AI arm quietly becomes its no-AI arm — and every step still reports success. Over
+      # a year unattended that is the most likely way this stops working without anyone noticing.
+      - name: Preflight — which credentials are present
+        run: |
+          for name in ANTHROPIC_API_KEY GIST_TOKEN TRADEBOOK_GIST_ID TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+            if [ -n "${!name}" ]; then echo "  present  $name (${#name} chars of name, value never printed)";
+            else echo "  MISSING  $name"; fi
+          done
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          TRADEBOOK_GIST_ID: ${{ secrets.TRADEBOOK_GIST_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
       - name: Daily mark + dashboard (refreshes data; never trades)
         run: uv run python scripts/paper.py daily
       - name: Opportunity scan → Telegram alerts (edge-triggered; fail-soft, never blocks)
