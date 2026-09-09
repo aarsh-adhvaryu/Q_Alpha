@@ -64,7 +64,19 @@ def paper_freshness(book: PaperBook, today: date) -> PaperFreshness:
     stale_days = max(0, _weekdays_after(last, today) - 1)  # 1 weekday grace (today not yet marked)
     is_stale = stale_days >= 1
     if is_stale:
-        note = f"⚠️ Stale — last marked {last}, {stale_days} weekday(s) missed. Check the cron."
+        # NOT "check the cron". On 2026-09-09 this read "last marked 2026-09-07, 1 weekday missed,
+        # check the cron" while the committed book carried 2026-09-08 and the workflow's last run
+        # had succeeded twelve hours earlier — the staleness was in the PAGE's cached copy, not in
+        # the job. A reader following that instruction would go and debug a healthy cron.
+        #
+        # This function cannot tell the two apart: it sees a book and a date and nothing else. So it
+        # names both causes and points at the panel that does know, instead of picking one.
+        note = (
+            f"⚠️ Stale — the copy on this page was last marked {last}, {stale_days} weekday(s) "
+            "missed. Either the daily job missed a day **or this page is holding an older "
+            "checkout** — the sidebar's Daily job panel says which. Reload data to rule out the "
+            "second."
+        )
     else:
         note = f"✓ Up to date — last marked {last}."
     return PaperFreshness(last, stale_days, is_stale, note)
@@ -124,7 +136,12 @@ def sources_freshness_markdown(sources: list[SourceFreshness]) -> str:
     stale = [s for s in sources if s.is_stale]
     if not stale:
         newest = max((s.last_update for s in sources if s.last_update), default=None)
-        return f"✓ All {len(sources)} daily sources are up to date (latest {newest})."
+        n = len(sources)
+        return (
+            f"✓ The daily source is up to date (latest {newest})."
+            if n == 1
+            else f"✓ All {n} daily sources are up to date (latest {newest})."
+        )
     lines = [
         f"⚠️ **{len(stale)} of {len(sources)} daily sources are stale — the numbers below may be "
         "out of date.** The weekday run writes these; if it stopped, everything on this tab is "

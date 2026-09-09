@@ -633,3 +633,47 @@ def test_no_holdings_says_so_rather_than_rendering_an_empty_table() -> None:
     from qalpha.live.dashboard import health_panel_markdown
 
     assert health_panel_markdown(_report()) == "No holdings to watch yet."
+
+
+def test_a_stale_book_never_blames_the_cron_on_its_own_evidence() -> None:
+    """Live on 2026-09-09. The page read "last marked 2026-09-07, 1 weekday missed. Check the cron."
+
+    The committed book carried **2026-09-08** and the workflow's last scheduled run had succeeded
+    twelve hours earlier. The staleness was in the page's own cached checkout. A reader following
+    that instruction would have gone and debugged a healthy cron.
+
+    This function sees a book and a date and nothing else — it genuinely cannot tell the two apart.
+    So the rule is that it must not pick one: it names both causes and points at the panel that does
+    know. Asserting the absence of the accusation is the property; the exact wording is free to
+    change.
+    """
+    from types import SimpleNamespace
+    from typing import cast
+
+    book = cast(
+        PaperBook,
+        SimpleNamespace(equity_curve=[{"date": "2026-09-07", "equity": "196186"}]),
+    )
+    fresh = paper_freshness(book, date(2026, 9, 10))
+    assert fresh.is_stale
+    assert "Check the cron" not in fresh.note, (
+        "it cannot know that, and it was wrong when it said it"
+    )
+    lowered = fresh.note.lower()
+    assert "this page" in lowered, "the page's own copy must be named as a possible cause"
+    assert "daily job" in lowered or "reload" in lowered, "point at what can settle it"
+
+
+def test_a_fresh_book_still_says_so_plainly() -> None:
+    """The other branch must stay short — a healthy day should not read like an incident."""
+    from types import SimpleNamespace
+    from typing import cast
+
+    book = cast(
+        PaperBook,
+        SimpleNamespace(equity_curve=[{"date": "2026-09-09", "equity": "196186"}]),
+    )
+    fresh = paper_freshness(book, date(2026, 9, 9))
+    assert not fresh.is_stale
+    assert fresh.note.startswith("✓")
+    assert len(fresh.note) < 60, "a clean day needs one line, not a paragraph"
