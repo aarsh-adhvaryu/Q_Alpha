@@ -46,6 +46,12 @@ secrets/
 # in the same directory — an easy way to commit the Kite credentials by accident.
 .streamlit/secrets.toml
 
+# The local run's output page — regenerated every run, 17KB, never a source of truth.
+# The records beside it (snapshot.json, snapshots/, ledger.jsonl, commitments.jsonl) ARE tracked:
+# they are what makes a decision replayable, and a decision citing a snapshot nobody kept is a
+# citation pointing at nothing.
+data/session/*.html
+
 # Notebooks scratch
 .ipynb_checkpoints/
 pytest.log
