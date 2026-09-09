@@ -315,13 +315,13 @@ catches integration and operational defects, and it constrains everything built 
 1. ✅ **Sector concentration measured on the book**, not the basket (`live/governor.py`). Twelve
    individually-compliant SIP baskets at slider 4 compound into a **36.9% POWER** book; the governor
    flags 4 of those 12 months.
-2. ✅ **Valuation caution** (`live/valuation.py`) — the VBL gap. The nudge was *"Scrip PE is greater
-   than 50"*, and the screen ranks names **by** how far they fell, so a −38% fall from a P/E-80
-   valuation reads as a discount. Current P/E is one API call; only *historical point-in-time*
-   fundamentals are blocked. Threshold is the exchange's own, so nothing is invented.
-3. ✅ **Hedge availability** at whole-lot granularity (`live/hedge.py`).
-4. `Mandate` object + `RiskGovernor.veto()` — the rules of §L4 moved from prose to code. *(next)*
-5. **Golden-day replay** proving the governor cannot be bypassed. *(next)*
+2. ⛔ **Valuation caution** — **WITHDRAWN 2026-09-08, and the gap it closed is open again.**
+   `live/valuation.py` was deleted in the tidy-up as unused: nothing imported it, and the direct NSE
+   evidence adapter had replaced its data path. This line still read ✅ afterwards, so the plan
+   claimed the VBL gap was closed by a file that no longer exists — on the plan's own headline
+   example. The exchange's P/E>50 caution now reaches the screen through `REG1_IND` and
+   `live/flags.py`, which **flags and does not act**, so the specific failure described in §1 — a
+   name ranked as a discount because it fell 38% from a P/E-80 valuation — is not prevented today
 
 *Why first: built from decisions already made, needs no new data, and converts conventions into
 invariants. A governor nobody can prove is unbypassable is prose again.*

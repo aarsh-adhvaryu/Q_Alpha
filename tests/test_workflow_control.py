@@ -8,7 +8,7 @@ failure**, because this job has been ten hours late and still finished.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from qalpha.live import workflow
 
@@ -91,3 +91,42 @@ def test_a_run_in_flight_outranks_the_last_finished_one() -> None:
 def test_no_history_is_distinguished_from_no_run_today() -> None:
     text, tone = workflow.status_line([], datetime(2026, 9, 8, 12, 30, tzinfo=UTC))
     assert tone == "warn" and "No run history" in text
+
+
+# --- the year-long-run failure mode -------------------------------------------------------------
+def test_a_dormant_workflow_is_reported_before_github_switches_it_off() -> None:
+    """GitHub disables a scheduled workflow after 60 days of repository inactivity and the failure
+    mode is silence — the cron simply stops. Every other check here asks "did today's run succeed",
+    which cannot see "no run has happened for two months"."""
+    now = datetime(2026, 12, 1, tzinfo=UTC)
+    quiet = workflow.parse_runs({"workflow_runs": [_run(run_started_at="2026-09-01T12:00:00Z")]})
+    text, tone = workflow.status_line(quiet, now)
+    assert tone == "bad"
+    assert "60" in text and "disable" in text.lower()
+
+
+def test_the_warning_arrives_with_time_to_act() -> None:
+    """At 45 days there are still two weeks to press the button. A warning that fires on day 60 is
+    a post-mortem."""
+    base = datetime(2026, 9, 1, tzinfo=UTC)
+    assert workflow.dormancy_warning(base, base + timedelta(days=44)) == ""
+    assert workflow.dormancy_warning(base, base + timedelta(days=45)) != ""
+    assert "worth one manual run" in workflow.dormancy_warning(base, base + timedelta(days=50))
+
+
+def test_an_active_workflow_is_never_warned_about() -> None:
+    base = datetime(2026, 9, 1, tzinfo=UTC)
+    assert workflow.dormancy_warning(base, base + timedelta(days=1)) == ""
+    assert workflow.dormancy_warning(None, base) == "", "no history is a different problem"
+
+
+def test_the_cron_preflight_reports_every_secret_the_pipeline_depends_on() -> None:
+    """An expired token degrades silently: the brief writes nothing, the spine archives filings it
+    never reads, the twin's AI arm becomes its no-AI arm — and every step still reports success."""
+    from pathlib import Path
+
+    wf = (Path(__file__).resolve().parent.parent / ".github/workflows/paper.yml").read_text()
+    assert "Preflight — which credentials are present" in wf
+    for secret in ("ANTHROPIC_API_KEY", "GIST_TOKEN", "TELEGRAM_BOT_TOKEN"):
+        assert wf.count(secret) >= 2, f"{secret} is used but not preflighted"
+    assert "value never printed" in wf, "a preflight must never echo a secret"
