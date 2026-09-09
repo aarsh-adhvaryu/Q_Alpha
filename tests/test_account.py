@@ -137,3 +137,63 @@ def test_undated_lots_are_a_caveat_on_the_snapshot_not_a_stop() -> None:
     )
     assert snap.usable, "an undated book can still be valued and monitored"
     assert any("undated" in s for s in snap.stale), "and the caveat travels with it"
+
+
+# --- found in review 2026-09-09 -----------------------------------------------------------------
+def test_a_stock_bought_in_kite_is_actually_in_the_copied_portfolio() -> None:
+    """FOUND IN REVIEW, and it falsified the claim this module was built on.
+
+    The reconciler named HDFCBANK as ``broker_only`` and then handed downstream a portfolio
+    containing only VBL. So "if I buy a stock in Kite it appears" was false: it could not be valued,
+    could not be monitored, and did not count toward concentration. Naming a thing is not carrying
+    it.
+
+    It is carried now as an undated lot at the broker's average cost — exact value, unknown tax.
+    """
+    acct = reconcile(
+        [_buy("VBL.NS", "147", "414.23")],
+        {"VBL.NS": Decimal("147"), "HDFCBANK.NS": Decimal("25")},
+        CASH,
+        CFG,
+        AS_OF,
+        broker_costs={"HDFCBANK.NS": Decimal("1900")},
+    )
+    assert acct.portfolio.positions() == {"VBL.NS": Decimal("147"), "HDFCBANK.NS": Decimal("25")}
+    assert acct.broker_only == ("HDFCBANK.NS",)
+    assert acct.undated_tickers == ("HDFCBANK.NS",)
+    assert not acct.tax_exact, "its tax is unknown, and that is tracked per name"
+    assert "HDFCBANK" in acct.report()
+
+
+def test_a_holding_with_no_broker_cost_is_carried_rather_than_dropped() -> None:
+    """A missing average price is not a reason to lose the position. Value is wrong until a
+    tradebook arrives; quantity, concentration and monitoring are right immediately."""
+    acct = reconcile(
+        [_buy("VBL.NS", "147", "414.23")],
+        {"VBL.NS": Decimal("147"), "HDFCBANK.NS": Decimal("25")},
+        CASH,
+        CFG,
+        AS_OF,
+    )
+    assert acct.portfolio.positions()["HDFCBANK.NS"] == Decimal("25")
+
+
+def test_an_unmatched_sale_makes_the_tax_inexact_even_when_quantities_agree() -> None:
+    """FOUND IN REVIEW. A sale the replay could not match means part of the HISTORY is missing, and
+    history is what FIFO consumes — but the remaining quantities can still agree with the broker
+    perfectly, so ``tallies`` says nothing about it. ``tax_exact`` was True."""
+    sale = TradebookTrade(
+        trade_date=date(2026, 9, 1),
+        ticker="OLDCO.NS",
+        side=Side.SELL,
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        exec_time="10:00:00",
+        trade_id="sale",
+    )
+    acct = reconcile(
+        [_buy("VBL.NS", "147", "414.23"), sale], {"VBL.NS": Decimal("147")}, CASH, CFG, AS_OF
+    )
+    assert acct.replay_warnings, "the engine warned"
+    assert acct.tallies, "and the quantities still agree"
+    assert not acct.tax_exact, "but the tax history is incomplete, so nothing may call it exact"
