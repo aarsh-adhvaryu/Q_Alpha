@@ -488,3 +488,62 @@ def test_the_twin_prices_merge_every_panel_rather_than_taking_the_first() -> Non
         assert len(marks) >= max(sizes), (
             f"merged marks ({len(marks)}) smaller than the largest panel ({max(sizes)})"
         )
+
+
+def test_a_book_younger_than_the_fund_gets_no_gap_column() -> None:
+    """A book cannot out- or under-perform over a period it did not exist for.
+
+    Found 2026-09-09 by asking why CORE_V1 was "working". It was not. Its first mark in
+    ``history.jsonl`` is 2026-09-07 and every lot it holds is dated that day — it was constituted
+    last Monday, while TWIN_FULL had been accumulating since 08-29 and fell ₹10,627 in between. It
+    entered the record **already ₹10,293 ahead**, and in the one day both books had been alive they
+    diverged by ₹475. The dashboard was rendering that as "The screen ▲ +₹6,109 vs the fund".
+
+    Every book's ``start`` field says 2026-06-15 — that is when the CASH FLOWS begin, not when the
+    book existed — so the inception has to be read from the first day the book was actually marked.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import dashboard_app
+
+    born = dashboard_app._twin_inceptions()
+    if not born:
+        pytest.skip("no twin history on this host")
+    assert "BASELINE_EW" in born
+    # The real record: the fund predates CORE_V1, which is the whole point.
+    if "CORE_V1" in born:
+        assert born["CORE_V1"] >= born["BASELINE_EW"]
+    # And inception must never be read off the shared `start` field, which is identical for all.
+    assert len(set(born.values())) > 1 or len(born) == 1, (
+        "if every book shares an inception the guard is inert — check it is reading first-mark, "
+        "not the seeding date every book carries"
+    )
+
+
+def test_inception_is_the_first_marked_day_not_the_first_row() -> None:
+    """A book present in a row but carrying no value was not marked, and is not yet alive."""
+    import json
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import dashboard_app
+
+    rows = [
+        {"as_of": "2026-09-01", "revision": 0, "books": {"A": {}, "B": {"value": "100"}}},
+        {"as_of": "2026-09-02", "revision": 0, "books": {"A": {"value": "90"}}},
+    ]
+    path = Path("data/twin/_inception_probe.jsonl")
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    try:
+        old = dashboard_app.TWIN_HISTORY_JSONL
+        dashboard_app.TWIN_HISTORY_JSONL = path
+        born = dashboard_app._twin_inceptions()
+    finally:
+        dashboard_app.TWIN_HISTORY_JSONL = old
+        path.unlink(missing_ok=True)
+    assert born == {"B": "2026-09-01", "A": "2026-09-02"}, (
+        "a book listed with no value that day has not been marked and is not alive yet"
+    )
