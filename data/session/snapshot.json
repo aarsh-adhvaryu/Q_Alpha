@@ -1,0 +1,16 @@
+{
+  "as_of": "2026-09-09",
+  "taken_at": "2026-09-09T13:19:14.123262+00:00",
+  "holdings": {},
+  "cash": "0",
+  "budget": "50000",
+  "universe": [],
+  "prices_sha": "",
+  "stale": [
+    "lots are undated \u2014 tax is an estimate"
+  ],
+  "missing_critical": [],
+  "extraction_version": "",
+  "policy_version": "",
+  "digest": "631583c23aa4cbc6"
+}
