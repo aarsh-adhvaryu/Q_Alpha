@@ -730,6 +730,12 @@ def _twin_prices() -> dict:
     """Latest marks for the twin's charts — watchlist panel first, core panel as fallback."""
     from qalpha.data.ingest import load_parquet
 
+    # MERGE the panels; do not take the first that yields anything. The watchlist panel alone does
+    # not carry every name the real account holds, so REAL's chart rendered "nothing priced yet"
+    # directly beneath a table valuing REAL at ₹297,352 — one book with two answers on one screen,
+    # which is this repo's oldest defect shape. Earlier panels win on conflict, so the watchlist's
+    # marks still take precedence where both have a name.
+    out: dict[str, Decimal] = {}
     for path in (
         "data/historical/prices_watchlist.parquet",
         "data/historical/prices_pit_2026.parquet",
@@ -738,14 +744,13 @@ def _twin_prices() -> dict:
             adj = load_parquet(path).adj_close
         except (OSError, ValueError):
             continue
-        out = {}
         for t in adj.columns:
+            if str(t) in out:
+                continue
             series = adj[t].dropna()
             if len(series):
                 out[str(t)] = Decimal(str(float(series.iloc[-1])))
-        if out:
-            return out
-    return {}
+    return out
 
 
 def _basket_download(orders: list, label: str, key: str) -> None:
@@ -1110,7 +1115,8 @@ def main() -> None:
             prices_dec, stream_label = _streamed_prices(prices_dec, sorted(portfolio.positions()))
             _track_record_panel(portfolio, prices_dec, benchmark, as_of)
             st.caption(
-                f"Live Zerodha · {stream_label} · page rendered {datetime.now():%H:%M:%S} · "
+                f"Live Zerodha · {stream_label} · page rendered "
+                f"{datetime.now(ui.IST):%H:%M:%S} IST · "
                 "read-only — this page never trades."
             )
             if auto:
@@ -2249,7 +2255,11 @@ def _holdings_frame(
                 "Avg cost": f"₹{avg:,.2f}" if avg is not None else "—",
                 "Price": f"₹{px:,.2f}" if priced else "no quote",
                 "Value": f"₹{value:,.0f}" if priced else "—",
-                "P&L": f"₹{value - cost:+,.0f}" if priced else "—",
+                # ui.signed_inr, not f"₹{x:+,.0f}". The latter renders "₹-1,268" — the minus hidden
+                # behind the symbol, which is the defect this page has now produced three times. It
+                # was live on 2026-09-09 in these rows while the TOTALS row of the same table used
+                # the corrected form, so one table showed two conventions.
+                "P&L": ui.signed_inr(value - cost) if priced else "—",
                 "% of equity": f"{weight * 100:.1f}%" if priced else "—",
                 "LTCG-safe": safe,
                 "_pnl": float(value - cost) if priced else 0.0,
@@ -2361,7 +2371,7 @@ def _lots_frame(
                     "Qty": str(int(qty)),
                     "Buy price": f"₹{lot.cost_basis_per_share:,.2f}",
                     "Value now": f"₹{qty * px:,.0f}",
-                    "P&L": f"₹{qty * px - cost:+,.0f}",
+                    "P&L": ui.signed_inr(qty * px - cost),
                     "Long-term from": f"{lt:%d %b %Y}" if days > 0 else "🟢 now",
                     "Days": str(max(0, days)),
                 }

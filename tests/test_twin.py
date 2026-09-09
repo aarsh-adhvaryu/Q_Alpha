@@ -445,3 +445,46 @@ def test_holdings_frame_skips_names_it_cannot_price() -> None:
     frame = holdings_frame(book, {"INFY.NS": Decimal("1140")})  # TCS unpriced
     assert list(frame["Ticker"]) == ["INFY"]
     assert abs(frame["Share %"].sum() - 100.0) < 1e-6, "shares are of what could be priced"
+
+
+def test_the_twin_prices_merge_every_panel_rather_than_taking_the_first() -> None:
+    """Live on 2026-09-09: "Your account — what it holds: nothing priced yet", rendered directly
+    beneath a table valuing that same book at ₹297,352.
+
+    ``_twin_prices`` returned the FIRST panel that yielded anything, and the watchlist panel does not
+    carry every name the real account holds — so ``holdings_frame`` correctly skipped the names it
+    could not price, which was all of them, and the chart said nothing was held. One book, two
+    answers, one screen. Merging the panels is the fix; the earlier panel still wins on conflict.
+    """
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import dashboard_app
+
+    marks = dashboard_app._twin_prices()
+    if not marks:
+        pytest.skip("no price panels on this host")
+
+    import inspect
+
+    src = inspect.getsource(dashboard_app._twin_prices)
+    assert "if out:\n            return out" not in src, (
+        "returning the first panel that works is what left the real account's names unpriced"
+    )
+    # The merged view must be at least as large as either panel alone could give.
+    from qalpha.data.ingest import load_parquet
+
+    sizes = []
+    for path in (
+        "data/historical/prices_watchlist.parquet",
+        "data/historical/prices_pit_2026.parquet",
+    ):
+        try:
+            sizes.append(len(load_parquet(path).adj_close.columns))
+        except (OSError, ValueError):
+            continue
+    if sizes:
+        assert len(marks) >= max(sizes), (
+            f"merged marks ({len(marks)}) smaller than the largest panel ({max(sizes)})"
+        )
