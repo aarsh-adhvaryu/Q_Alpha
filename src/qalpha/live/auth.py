@@ -114,8 +114,61 @@ def capture_request_token(
     return captured["request_token"]
 
 
+#: What Kite's login errors actually mean, in the order they are worth checking.
+#:
+#: "Invalid `checksum`" is the one that matters, and on its own it is close to useless: it is Kite
+#: saying that ``sha256(api_key + request_token + api_secret)`` did not match, which it computes and
+#: we cannot. It names none of the three inputs. Reported verbatim it reads like a bug in this code,
+#: and the two real causes are both on the Kite console.
+_LOGIN_HINTS: tuple[tuple[str, str], ...] = (
+    (
+        "checksum",
+        "Kite rejected the signature over (api_key + request_token + api_secret). That is almost "
+        "always the SECRET: it belongs to a different app than the key, or it was regenerated on "
+        "the Kite developer console since it was copied here. Open "
+        "https://developers.kite.trade/apps, pick the app whose API key ends {key_tail}, and copy "
+        "its API secret into KITE_API_SECRET in .env. The other cause is a request_token used "
+        "twice — press Log in again for a fresh one.",
+    ),
+    (
+        "token is invalid or has expired",
+        "That request_token is spent. They are single-use and last minutes — press Log in to "
+        "Zerodha again and complete it in one go.",
+    ),
+    (
+        "invalid api_key",
+        "Kite does not recognise this API key. Check KITE_API_KEY in .env against the app on "
+        "https://developers.kite.trade/apps.",
+    ),
+    (
+        "user is not enabled",
+        "The Kite app exists but your account is not enabled on it — that is a subscription state "
+        "on the developer console, not something this code can fix.",
+    ),
+)
+
+
+def explain_login_failure(exc: BaseException, *, api_key: str = "") -> str:
+    """Turn a Kite login exception into the thing to actually go and do.
+
+    Falls back to the raw message rather than inventing one: an unrecognised error reported plainly
+    is honest, and a confident wrong explanation is worse than none.
+    """
+    text = str(exc).lower()
+    tail = f"...{api_key[-4:]}" if len(api_key) >= 4 else "your key"
+    for needle, hint in _LOGIN_HINTS:
+        if needle in text:
+            return hint.format(key_tail=tail)
+    return f"{type(exc).__name__}: {exc}"
+
+
 def exchange(creds: KiteCredentials, request_token: str) -> KiteSession:
-    """Trade a ``request_token`` + api_secret for a day's access token (a Kite network call)."""
+    """Trade a ``request_token`` + api_secret for a day's access token (a Kite network call).
+
+    **Returns the session; it does not save it.** Prefer :func:`mint_session`, which does both —
+    three of the four callers here used this one, dropped the result, and told the user the session
+    had been saved.
+    """
     kite = KiteConnect(api_key=creds.api_key)
     data = kite.generate_session(request_token, api_secret=creds.api_secret)
     return KiteSession(
@@ -123,6 +176,29 @@ def exchange(creds: KiteCredentials, request_token: str) -> KiteSession:
         user_id=str(data.get("user_id", "")),
         login_date=dt.datetime.now(IST).date().isoformat(),
     )
+
+
+def mint_session(creds: KiteCredentials, request_token: str) -> KiteSession:
+    """Exchange a request_token AND put the result where the rest of the system looks for it.
+
+    ### The bug this exists to make impossible
+
+    :func:`exchange` returns a session and saves nothing. Every interactive path except the CLI
+    called it and **discarded the return value** — the app's *Log in to Zerodha* button, its paste
+    box, and ``local_run --login``. So a login that succeeded completely left no session on disk,
+    the very next run reported *"Kite was not reachable"*, and the page said:
+
+        Session minted and written to .env.
+
+    Which was false twice: nothing was written, and ``.env`` is not where a session goes.
+    :func:`get_access_token` reads ``.kite_session.json``, so that is what has to be written.
+
+    Two functions where one would do is how the discard happened. This is the one callers want, and
+    :func:`exchange` stays for the tests that check the network call alone.
+    """
+    session = exchange(creds, request_token)
+    persist_session(session)
+    return session
 
 
 def persist_session(session: KiteSession) -> None:
