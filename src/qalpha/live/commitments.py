@@ -211,6 +211,65 @@ def allowance(authorised: Decimal, commitments: Iterable[Commitment], *, period:
     return Allowance(authorised=authorised, spent=spent, reserved=reserved)
 
 
+def confirm_fills(
+    commitments: Iterable[Commitment],
+    trades: Sequence[object],
+    *,
+    today: date,
+) -> list[Commitment]:
+    """Turn proposals the broker actually executed into fills. **The other half of the lifecycle.**
+
+    Recording a proposal was only half of it: importing the confirmed purchases left the commitment
+    marked ``proposed`` with spending still ₹0, so ₹49,766 of real buys still showed a full ₹50,000
+    allowance and the next run proposed another ₹49,738.
+
+    A proposal is confirmed when the tradebook carries a BUY of that ticker **on or after the day it
+    was proposed**. The amount recorded is what the broker actually charged, not what was proposed —
+    a partial fill is a smaller number and must reduce the allowance by the smaller number, or the
+    difference is quietly lost.
+
+    Returns only the NEW states to record; the caller writes them. Nothing here decides that a
+    proposal was *declined* — an absence of trades is not a refusal, and guessing one would release
+    money that may already be spent. :func:`stale_proposals` names those instead.
+    """
+    open_now = {c.ticker: c for c in current(commitments).values() if c.reserves}
+    if not open_now:
+        return []
+    filled: dict[str, tuple[Decimal, date]] = {}
+    for trade in trades:
+        ticker = str(getattr(trade, "ticker", ""))
+        commitment = open_now.get(ticker)
+        if commitment is None:
+            continue
+        side = getattr(trade, "side", None)
+        if side is None or getattr(side, "name", "") != "BUY":
+            continue
+        on = getattr(trade, "trade_date", None)
+        if not isinstance(on, date) or on < commitment.on:
+            continue  # a purchase that predates the proposal did not fill it
+        try:
+            spent = Decimal(str(getattr(trade, "quantity", 0))) * Decimal(
+                str(getattr(trade, "price", 0))
+            )
+        except (ArithmeticError, TypeError, ValueError):
+            continue
+        prior, prior_on = filled.get(ticker, (Decimal("0"), on))
+        filled[ticker] = (prior + spent, max(prior_on, on))
+    return [
+        Commitment(
+            id=open_now[ticker].id,
+            ticker=ticker,
+            state="filled",
+            amount=amount,
+            on=open_now[ticker].on,
+            reason=f"confirmed by the tradebook on {when}",
+            trigger=open_now[ticker].trigger,
+            filled_on=when,
+        )
+        for ticker, (amount, when) in sorted(filled.items())
+    ]
+
+
 def waiting(commitments: Iterable[Commitment]) -> list[Commitment]:
     """Candidates the system is watching, and the trigger it is watching for."""
     return [c for c in current(commitments).values() if c.state == "waiting"]

@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from qalpha.config import Config
 from qalpha.live.account import ReconciledAccount, reconcile
 from qalpha.live.buygate import MAX_PRICE_AGE_DAYS, evaluate
-from qalpha.live.commitments import Commitment, allowance, already_committed
+from qalpha.live.commitments import Commitment, allowance, already_committed, confirm_fills
 from qalpha.live.commitments import load as load_commitments
 from qalpha.live.commitments import record as record_commitment
 from qalpha.live.extraction import EXTRACTION_VERSION
@@ -43,6 +43,14 @@ from qalpha.live.tradebook import TradebookTrade, parse_tradebook
 
 PAGE = Path("data/session/qalpha.html")
 TRADEBOOK_DIR = Path("data/tradebooks")
+#: Every file this run reads or writes, in one place and passed explicitly.
+#:
+#: They used to be default arguments bound at import time, which is a large part of why NO TEST
+#: COULD REACH `main()` — and six defects survived a PR that claimed to fix them, because the gate
+#: was tested with prepared inputs while nothing checked that `main` supplied them correctly.
+SNAPSHOT = Path("data/session/snapshot.json")
+SNAPSHOT_ARCHIVE = Path("data/session/snapshots")
+COMMITMENTS = Path("data/session/commitments.jsonl")
 
 
 def _trades() -> tuple[list[TradebookTrade], list[str]]:
@@ -61,7 +69,15 @@ def _trades() -> tuple[list[TradebookTrade], list[str]]:
     for csv in sorted(TRADEBOOK_DIR.glob("*.csv")):
         try:
             for t in parse_tradebook(str(csv)):
-                seen[t.trade_id or f"{t.trade_date}:{t.ticker}:{t.quantity}:{t.price}"] = t
+                # THE SIDE IS PART OF THE IDENTITY. Without it a same-day BUY and SELL of the
+                # same quantity at the same price share a key and collapse into one row — one of
+                # the two transactions simply disappears from the ledger, taking its tax with it.
+                # Trade ids make this moot when the export has them; this is the fallback for when
+                # it does not, and a fallback that loses a trade is worse than refusing to guess.
+                key = t.trade_id or (
+                    f"{t.trade_date}:{t.ticker}:{t.side.name}:{t.quantity}:{t.price}:{t.exec_time}"
+                )
+                seen[key] = t
         except Exception as exc:
             notes.append(f"{csv.name} could not be read ({exc}) — skipped, not guessed at.")
     if not seen:
@@ -188,6 +204,35 @@ def _proposal(
         ]
 
 
+def _panel_sha() -> str:
+    """A fingerprint of the SCREENING data, not just the held names' marks.
+
+    The snapshot hashed only the prices of things already owned, so changing an unheld candidate's
+    price changed its recommended quantity and left the digest identical — two different decisions
+    sharing one identity, which defeats the entire point of having one. The screen reads the whole
+    watchlist panel and the benchmark, so both belong in the fingerprint.
+
+    Shape and last row rather than every cell: enough to change when the data changes, cheap enough
+    to compute on every run.
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+    try:
+        from qalpha.data.ingest import load_parquet
+
+        if SCREEN_PANEL.exists():
+            adj = load_parquet(str(SCREEN_PANEL)).adj_close
+            h.update(f"{adj.shape}|{adj.index[-1].date()}".encode())
+            # The last row is what the screen ranks on; a changed candidate price lands here.
+            h.update("|".join(f"{c}={adj[c].iloc[-1]}" for c in sorted(adj.columns)).encode())
+        if BENCHMARK_PANEL.exists():
+            h.update(str(BENCHMARK_PANEL.stat().st_size).encode())
+    except Exception:
+        h.update(b"screening panel unreadable")
+    return h.hexdigest()[:16]
+
+
 def _prices_sha(prices: dict[str, Decimal], as_of: date | None) -> str:
     """A content hash of the marks this run used, and the day they are from.
 
@@ -201,21 +246,34 @@ def _prices_sha(prices: dict[str, Decimal], as_of: date | None) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
+#: The panel `_proposal` screens from. Freshness must follow THIS file and no other.
+SCREEN_PANEL = Path("data/historical/prices_watchlist.parquet")
+BENCHMARK_PANEL = Path("data/historical/benchmark_NIFTYBEESNS_2026.parquet")
+
+
 def _price_as_of() -> date | None:
-    """The newest day in the panels the screen reads. ``None`` when there is no panel at all."""
+    """The newest day in the panel the screen ACTUALLY READS, and in the benchmark beside it.
+
+    It used to take the newest date across two panels while ``_proposal`` read one specific file —
+    so a fresh secondary panel licensed a 90-day-old screening panel to produce ₹49,766 of
+    recommendations. Freshness has to follow the data the decision is made from, and when two inputs
+    are both required the OLDER one governs: a current price list against a stale benchmark still
+    paces the deploy tranche off a stale market.
+    """
     try:
+        import pandas as pd
+
         from qalpha.data.ingest import load_parquet
 
-        newest: date | None = None
-        for path in (
-            "data/historical/prices_watchlist.parquet",
-            "data/historical/prices_pit_2026.parquet",
-        ):
-            if not Path(path).exists():
-                continue
-            day = load_parquet(path).adj_close.index[-1].date()
-            newest = day if newest is None else max(newest, day)
-        return newest
+        if not SCREEN_PANEL.exists():
+            return None
+        oldest = load_parquet(str(SCREEN_PANEL)).adj_close.index[-1].date()
+        if BENCHMARK_PANEL.exists():
+            raw = pd.read_parquet(BENCHMARK_PANEL)
+            column = raw["date"] if "date" in raw.columns else raw.index
+            bench = pd.to_datetime(pd.Series(list(column))).max().date()
+            oldest = min(oldest, bench)
+        return oldest
     except Exception:
         return None
 
@@ -245,6 +303,19 @@ def main(argv: list[str] | None = None) -> int:
     quantities, costs, cash, broker_notes = _broker(cfg)
     notes += broker_notes
 
+    # AN OUTAGE IS NOT A CONFIRMED EMPTY ACCOUNT. Buying already stopped correctly, but the account,
+    # the saved snapshot and the displayed cash all became ₹0 — a known ₹2,01,117 overwritten by a
+    # network failure. The last figure on file is carried forward FOR DISPLAY ONLY; `cash_confirmed`
+    # stays False, so the gate still refuses to spend against it.
+    last = load_snapshot(SNAPSHOT)
+    cash_confirmed = cash is not None
+    if cash is None and last is not None:
+        cash = last.cash
+        notes.append(
+            f"Showing the last known balance, ₹{cash:,.0f} from {last.as_of} — not confirmed with "
+            "the broker just now, and nothing will be bought against it."
+        )
+
     # The ledger replay needs a number to set the balance to; the GATE gets the honest `None`.
     # Keeping the two apart is the point: the page may display a last-known figure, and nothing may
     # be bought against one.
@@ -261,7 +332,18 @@ def main(argv: list[str] | None = None) -> int:
 
     price_as_of = _price_as_of()
     mandate = load_mandate()
-    commitments = load_commitments()
+    commitments = load_commitments(COMMITMENTS)
+
+    # CONFIRM WHAT THE BROKER ACTUALLY EXECUTED, before deciding anything new. Recording a proposal
+    # was only half the lifecycle: importing its purchases left it marked `proposed` with spending
+    # still ₹0, so ₹49,766 of real buys still showed a full ₹50,000 allowance.
+    for done in confirm_fills(commitments, trades, today=date.today()):
+        record_commitment(done, COMMITMENTS)
+        notes.append(
+            f"{done.ticker.removesuffix('.NS')}: proposal confirmed as bought for "
+            f"₹{done.amount:,.0f} — the allowance is debited, not just reserved."
+        )
+    commitments = load_commitments(COMMITMENTS)
     left = allowance(mandate.monthly_budget, commitments, period=date.today())
 
     # The snapshot must identify the DATA, not only the account. It carried an empty price hash and
@@ -270,22 +352,23 @@ def main(argv: list[str] | None = None) -> int:
     stale: list[str] = []
     if price_as_of is not None and (date.today() - price_as_of).days > MAX_PRICE_AGE_DAYS:
         stale.append(f"prices are from {price_as_of}, {(date.today() - price_as_of).days} days old")
-    if cash is None:
+    if not cash_confirmed:
         stale.append("cash balance unconfirmed — the broker was not reachable")
     snapshot = snapshot_from(
         account,
         budget=left.remaining,
         universe=sorted(set(account.portfolio.positions()) | set(prices)),
         taken_at=datetime.now(UTC),
-        prices_sha=_prices_sha(prices, price_as_of),
+        # Held marks AND the screening panel: a decision depends on both, so its identity must too.
+        prices_sha=f"{_prices_sha(prices, price_as_of)}:{_panel_sha()}",
         stale=stale,
         extraction_version=EXTRACTION_VERSION,
     )
-    previous = load_snapshot()
+    previous = last
     changes = snapshot.changes_against(previous)
     if changes and previous is not None:
         notes.append("Changed since the last run: " + "; ".join(changes))
-    snapshot.save()
+    snapshot.save(SNAPSHOT, archive=SNAPSHOT_ARCHIVE)
 
     # THE GATE. Every check it makes already existed and was tested; NONE was in the buying path,
     # so a ₹100 account was offered a ₹49,658 basket and a book that did not reconcile got one
@@ -294,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         snapshot=snapshot,
         allowance=left,
         settled_cash=cash,
-        cash_confirmed=cash is not None,
+        cash_confirmed=cash_confirmed,
         price_as_of=price_as_of,
         today=date.today(),
         floor=mandate.idle_cash_floor,
@@ -309,10 +392,20 @@ def main(argv: list[str] | None = None) -> int:
         # a second run proposed the same rupees again. A proposal RESERVES its money the moment it
         # is made — it is not spending until a broker trade confirms it, and `commitments.py` keeps
         # those two states apart.
+        kept: list[tuple[str, int, Decimal]] = []
         for ticker, qty, price in orders:
             amount = Decimal(qty) * price
-            if already_committed(commitments, ticker) is not None:
-                continue  # an open decision on this name already holds its allocation
+            open_already = already_committed(commitments, ticker)
+            if open_already is not None:
+                # SUPPRESSING THE RESERVATION IS NOT ENOUGH. The order stayed on the page, so the
+                # basket showed something the run had deliberately declined to allocate for — an
+                # instruction to buy money it had not set aside. Drop it and say why.
+                notes.append(
+                    f"{ticker.removesuffix('.NS')} is not in today's basket: it already has an "
+                    f"open {open_already.state} decision from {open_already.on}."
+                )
+                continue
+            kept.append((ticker, qty, price))
             record_commitment(
                 Commitment(
                     id=f"{date.today().isoformat()}:{ticker}",
@@ -322,7 +415,15 @@ def main(argv: list[str] | None = None) -> int:
                     on=date.today(),
                     reason=f"screen basket, {qty} @ {price}",
                 ),
+                COMMITMENTS,
             )
+        orders = kept
+        # RE-READ. The page must show the allowance AFTER this run's reservations, not before —
+        # the first page said "₹50,000 available" and "nothing cleared the screen" on the very run
+        # that had just reserved ₹49,766 and printed a basket. Three statements, one screen, two of
+        # them false.
+        commitments = load_commitments(COMMITMENTS)
+        left = allowance(mandate.monthly_budget, commitments, period=date.today())
 
     PAGE.parent.mkdir(parents=True, exist_ok=True)
     PAGE.write_text(
