@@ -55,20 +55,14 @@ if errorlevel 1 (
 
 echo   [2/3] running the pipeline...
 echo.
-wsl -d %DISTRO% -e bash -lc "cd '%REPO%' && ./qalpha.sh --no-open"
+REM The app: buttons, live progress, the Kite login, token status. It serves on loopback inside
+REM WSL and Windows can reach it at the same address, so the browser opens on this side.
+start "" http://127.0.0.1:8787/
+wsl -d %DISTRO% -e bash -lc "cd '%REPO%' && ./qalpha.sh --app --no-open --port 8787"
 set RUN_RC=%errorlevel%
 echo.
 
-REM --- 4. Open the page even if the run reported a problem. A page that says
-REM ---    what went wrong is more useful than a console that closed.
-for /f "delims=" %%p in ('wsl -d %DISTRO% -e wslpath -w "%REPO%/data/session/qalpha.html" 2^>nul') do set PAGE=%%p
-if defined PAGE (
-  if exist "!PAGE!" (
-    echo   [3/3] opening the page...
-    start "" "!PAGE!"
-  )
-)
-
+REM --- 4. The app runs until you close this window; the browser was opened above.
 if not "%RUN_RC%"=="0" (
   echo.
   echo   The run reported a problem ^(exit %RUN_RC%^). The page above, if it

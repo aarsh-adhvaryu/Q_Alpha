@@ -208,8 +208,9 @@ def test_the_windows_launcher_checks_each_failure_separately() -> None:
     assert "wsl --install" in bat, "a missing WSL must say how to install it"
     assert "wsl --list --verbose" in bat, "a wrong distro name must say how to find the right one"
     assert "Edit REPO" in bat, "a wrong path must say which line to edit"
-    # It must open the page even on failure: a page that says what went wrong beats a closed console.
-    assert bat.index('start "" "!PAGE!"') < bat.index("The run reported a problem")
+    # The browser is opened BEFORE the server starts: the app runs in the foreground
+    # until the window closes, so opening it afterwards would never happen.
+    assert bat.index('start "" http://127.0.0.1:8787/') < bat.index("qalpha.sh --app")
     assert "pause" in bat, "a failing run must not close before it can be read"
     assert "NOTHING HERE TRADES" in bat
 

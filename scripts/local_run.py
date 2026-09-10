@@ -37,6 +37,7 @@ from qalpha.live.commitments import load as load_commitments
 from qalpha.live.commitments import record as record_commitment
 from qalpha.live.extraction import EXTRACTION_VERSION
 from qalpha.live.mandate import load_mandate
+from qalpha.live.progress import LOG
 from qalpha.live.report import render
 from qalpha.live.session import load_snapshot, snapshot_from
 from qalpha.live.tradebook import TradebookTrade, parse_tradebook
@@ -282,7 +283,21 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--no-open", action="store_true", help="write the page, do not open a browser")
     ap.add_argument("--login", action="store_true", help="refresh the Kite session first")
+    ap.add_argument(
+        "--app",
+        action="store_true",
+        help="open the local app instead: buttons, live progress, the Kite login, token status",
+    )
+    ap.add_argument("--port", type=int, default=8787, help="port for --app (loopback only)")
     args = ap.parse_args(argv)
+
+    if args.app:
+        # The interactive half: a page you press buttons on, watching the run narrate itself. The
+        # file this script writes is still the record; the app is a way to make it and read it.
+        from qalpha.live.server import serve
+
+        serve(args.port, open_browser=not args.no_open)
+        return 0
 
     cfg = Config()
     notes: list[str] = []
@@ -298,10 +313,19 @@ def main(argv: list[str] | None = None) -> int:
         exchange(creds, token)
         print("Session refreshed.")
 
+    LOG.say(f"Reading tradebook exports from {TRADEBOOK_DIR}/", "step")
     trades, tb_notes = _trades()
     notes += tb_notes
+    LOG.say(f"{len(trades)} dated trade(s) on file.", "detail" if trades else "warn")
+    LOG.say("Asking Kite for holdings, average cost and cash…", "step")
     quantities, costs, cash, broker_notes = _broker(cfg)
     notes += broker_notes
+    LOG.say(
+        f"Broker returned {len(quantities)} holding(s)."
+        if quantities
+        else "Broker not reachable — working from the ledger alone.",
+        "detail" if quantities else "warn",
+    )
 
     # AN OUTAGE IS NOT A CONFIRMED EMPTY ACCOUNT. Buying already stopped correctly, but the account,
     # the saved snapshot and the displayed cash all became ₹0 — a known ₹2,01,117 overwritten by a
@@ -327,10 +351,16 @@ def main(argv: list[str] | None = None) -> int:
         date.today(),
         broker_costs=costs,
     )
+    LOG.say("Marking holdings from the price panel…", "step")
     prices, price_notes = _prices(sorted(account.portfolio.positions()), costs)
     notes += price_notes
+    LOG.say(f"{len(prices)} name(s) priced.", "detail")
 
     price_as_of = _price_as_of()
+    LOG.say(
+        f"Newest usable market data: {price_as_of}." if price_as_of else "No price panel at all.",
+        "detail" if price_as_of else "error",
+    )
     mandate = load_mandate()
     commitments = load_commitments(COMMITMENTS)
 
@@ -383,6 +413,12 @@ def main(argv: list[str] | None = None) -> int:
         floor=mandate.idle_cash_floor,
     )
     notes += list(gate.reasons)
+    LOG.say(
+        f"Budget for this run: ₹{gate.budget:,.0f}."
+        if gate.open
+        else "No basket: " + " ".join(gate.reasons),
+        "step" if gate.open else "warn",
+    )
     orders: list[tuple[str, int, Decimal]] = []
     if gate.open:
         orders, screen_notes = _proposal(account, gate.budget, cfg)
@@ -418,6 +454,7 @@ def main(argv: list[str] | None = None) -> int:
                 COMMITMENTS,
             )
         orders = kept
+        LOG.say(f"Screen proposed {len(orders)} name(s).", "detail")
         # RE-READ. The page must show the allowance AFTER this run's reservations, not before —
         # the first page said "₹50,000 available" and "nothing cleared the screen" on the very run
         # that had just reserved ₹49,766 and printed a basket. Three statements, one screen, two of
@@ -438,6 +475,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
         encoding="utf-8",
     )
+    # "matches the broker" is false when the broker was never asked — with both sides empty,
+    # `tallies` is trivially true and would have printed a reassurance nobody earned.
+    if not cash_confirmed:
+        LOG.say("Account NOT checked against the broker — no session this run.", "warn")
+    else:
+        LOG.say(
+            f"Account reconciled: {'matches the broker' if account.tallies else 'does NOT match'}.",
+            "detail" if account.tallies else "warn",
+        )
     print(f"Wrote {PAGE.resolve()}")
     for note in notes:
         print(f"  · {note}")
