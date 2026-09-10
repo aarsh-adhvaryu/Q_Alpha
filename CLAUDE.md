@@ -101,7 +101,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**63 live modules · 1,234 tests green + 1 xfail** (counted, not estimated — see the
+**63 live modules · 1,255 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -219,12 +219,19 @@ local run's buy surface** (`scripts/local_run.py`), which calls the screen direc
 
 ## The operating contract
 
-Double-click **Q-Alpha** → it runs on this machine and opens one page → if it says Kite was not
-reachable, run once with `--login` (the session expires ~6am IST, so most days it will ask) → read
-**Today's basket**, sized to the ₹50,000 allowance and never to the whole balance → place every order
-yourself in Kite, **CNC/delivery, no stop-loss, no target** → **drop the tradebook export into
-`data/tradebooks/`** afterwards (de-duped on Zerodha trade ids, so overlapping ranges are safe).
-Money for future instalments **stays in the broker account**; the page holds it back and says so.
+Double-click **Q-Alpha** → a console window opens and stays open (**it is the app**; closing it
+stops the server) → it runs the evening itself and opens `http://127.0.0.1:8787/`, which narrates the
+run and reloads when it finishes → if it says Kite was not reachable, press **Log in to Zerodha** on
+the page (the session expires ~6am IST, so most days it will ask) → read **Today's basket**, sized to
+the ₹50,000 allowance and never to the whole balance → place every order yourself in Kite,
+**CNC/delivery, no stop-loss, no target** → **drop the tradebook export into `data/tradebooks/`**
+afterwards (de-duped on Zerodha trade ids, so overlapping ranges are safe). Money for future
+instalments **stays in the broker account**; the page holds it back and says so.
+
+**The export must cover the first trade (2026-06-15).** It is the only source of cash flows for every
+book, and one that starts later replays `REAL` short — every twin then reads as beating the user by
+the lots it left out. `twin.partial_export_reason` refuses instead; the empty-tradebook check cannot
+see this, because one row is not zero rows.
 
 **No stop-loss, and it is load-bearing:** the screen buys names that are *down*, so a stop sells
 exactly what it just bought, realises a loss, triggers tax, and fires on ordinary volatility. The exit
@@ -290,10 +297,11 @@ uv run python scripts/evidence.py daily                # the evidence spine (sha
 uv run python scripts/run_phase0.py                    # the validated backtest
 uv run python scripts/exp_null.py --draws 2000         # the matched null
 uv run python scripts/local_run.py --app               # the app: buttons, live progress, tokens
+uv run python scripts/local_run.py --app --autorun     # what the desktop click runs
 uv run python scripts/local_run.py --no-pipeline       # decide only, on research already on disk
 uv run python scripts/local_run.py --force             # re-run steps the ledger calls done
 uv run python scripts/local_run.py --login             # refresh the Kite session first
-D:\Q-Alpha\Q-Alpha.bat                                 # the desktop shortcut points here
+Q-Alpha.bat                                            # the desktop shortcut points at this file
 ```
 
 **It runs natively on Windows, from `D:\Q-Alpha`.** Moved off WSL on 2026-09-10. Python,
@@ -307,10 +315,13 @@ The move also fixed the local model for free: Ollama runs on Windows and binds t
 loopback, which WSL — a separate network namespace — could never reach. `QALPHA_LOCAL_MODEL` now
 works with no configuration at all.
 
-**There is no dashboard and no server.** Streamlit, its 2,498-line app, its config, `requirements.txt`
-and the whole `deploy/` hosting tree were removed on 2026-09-09. The system runs on this machine when
-you click it, writes `data/session/qalpha.html`, and stops. `live/ui.py` survived the move without
-one edit to a component, because it had never been allowed to know what was rendering it.
+**There is no hosting, and the only server is the one the click starts.** Streamlit, its 2,498-line
+app, its config, `requirements.txt` and the whole `deploy/` hosting tree were removed on 2026-09-09.
+What runs now is `live/server.py`: Python's own `http.server` on 127.0.0.1 only, started by the
+launcher with `--autorun` so the click *runs the evening* rather than serving the last run's page,
+and stopped by closing its window. It writes `data/session/qalpha.html` and inlines it. `live/ui.py`
+survived the move without one edit to a component, because it had never been allowed to know what was
+rendering it.
 
 **Auditing a live surface offline** — no Kite login, no server. The account *shape* is the point:
 **idle cash and holdings together**, because a zeroed portfolio hides an entire defect class. See
@@ -334,7 +345,7 @@ writes, or if any live module spells a panel path as a literal again.
 | `KITE_API_KEY` · `KITE_API_SECRET` | holdings, cash, prices; the secret only at login |
 | `QALPHA_LOCAL_MODEL` | reads filings **on this machine**. Set it only once a server answers — a name set with nothing listening does NOT fall back to the cloud, by design, so it turns reading off rather than on |
 | `ANTHROPIC_API_KEY` | filings in the cloud, and the web-searched brief (which has no local substitute) |
-| `GIST_TOKEN` | the tradebook store. Without it the twin cannot read the tradebook and **correctly refuses to run** |
+| `GIST_TOKEN` | **optional.** A private-gist tradebook store, for whoever keeps one. Unset, the twin reads `data/tradebooks/` — the same folder the page reads and the one OPERATING.md names |
 
 A missing one is never an error: the run degrades to a named absence and says which figures it
 therefore cannot confirm.

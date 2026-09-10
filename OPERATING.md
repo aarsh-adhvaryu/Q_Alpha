@@ -14,8 +14,9 @@ Nothing here places an order. Nothing ever will. You place every order yourself.
 
 ## 1. Once a month, when the ₹50,000 goes in
 
-1. **Double-click Q-Alpha** on the desktop. It runs on this machine, writes one page, and opens it.
-   Nothing is hosted, nothing is left running, and closing the page closes nothing.
+1. **Double-click Q-Alpha** on the desktop. A small black window opens and stays open — **that
+   window is the app**, and closing it stops everything. It starts the evening by itself, then opens
+   the page at `http://127.0.0.1:8787/`, which narrates what it is doing and reloads when it is done.
 2. **If it says Kite was not reachable**, press **Log in to Zerodha** on the page —
    the session expires around 6am IST, so most days it will ask.
 3. **Read "Today's basket"** on the page. It is sized to this month's allowance — ₹50,000 — not to
@@ -23,7 +24,12 @@ Nothing here places an order. Nothing ever will. You place every order yourself.
 4. **Place the orders yourself in Kite.** CNC / delivery. **No stop-loss. No target.**
 5. **Drop the tradebook export into `data/tradebooks/`** afterwards. Console → Reports → Tradebook.
    Overlapping date ranges are safe; it de-duplicates on Zerodha trade ids. Until an export covers a
-   holding, its lots have no purchase date and its tax is labelled an estimate rather than exact.
+   holding, its lots have no purchase date and its tax is labelled an estimate.
+
+**The export must reach back to your first trade** (2026-06-15). It is the only source of cash flows
+for the model books, so one that starts later would replay your own account short and make every
+model book look like it had beaten you. The run refuses to write rather than show you that, and says
+so on the page.
 
 Money for future instalments **stays in the broker account**. The page counts it, holds it back from
 the basket, and says how much it is holding back.
@@ -33,9 +39,13 @@ just bought, realises a loss, triggers tax, and fires on ordinary volatility. Th
 exist is the §4.7 breakdown test, which can tell a name-specific fall from the whole market falling.
 A stop cannot.
 
+*If the desktop shortcut ever goes missing: right-click `Q-Alpha.bat` in the repo folder → **Send
+to** → **Desktop (create shortcut)**. There is nothing to install and no path to fill in.*
+
 ## 2. Any day you feel like looking
 
-Open the dashboard and read the holdings and the track record. That is all.
+Double-click Q-Alpha and read the holdings and the track record. If it is already running, the click
+just opens the page rather than starting a second one. That is all.
 
 **If you upload a tradebook after a sale, check the tax figure against Zerodha's own Tax P&L.** The
 engine has been reconciled against exactly one real sale — single lot, all short-term, no loss.
@@ -44,9 +54,9 @@ first time you sell something complicated, that number needs checking by hand.
 
 ## 3. What runs by itself
 
-**The local run does not.** It runs when you click it, on this machine, and stops when it finishes.
-Miss two days and nothing is lost: the next run reads what changed, resumes what it had not
-finished, and says what moved while it was off.
+**Nothing.** It runs when you click it, on this machine, and keeps running only for as long as you
+leave that window open. Miss two days and nothing is lost: the next run reads what changed, resumes
+what it had not finished, and says what moved while it was off.
 
 **The cron is gone.** `.github/workflows/paper.yml` was deleted on 2026-09-10, and with it the
 last thing that wrote to these ledgers without you. It was not deleted for being redundant — it ran

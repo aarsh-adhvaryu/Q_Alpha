@@ -61,6 +61,7 @@ from qalpha.live.twin import (
     load_off_market,
     mark,
     navs_from_history,
+    partial_export_reason,
     save_books,
     seed_books,
     sync_flows,
@@ -94,39 +95,41 @@ EW_CSV = Path("data/universes/nifty50_membership_2026.csv")
 AI_PROMPT_VERSION = "PR-8c"
 
 
-def _tradebook() -> list[object]:
+def _tradebook() -> tuple[list[object], list[str]]:
     """The user's real trades — the ONLY source of cash flows for every book (§4c).
 
-    The private gist holds the cumulative master, de-duplicated on Zerodha trade IDs, and needs a
-    ``GIST_TOKEN``. A committed export is the fallback so the runner works locally and in a fresh
-    checkout. Real trades are never written to this public repo — only read from the gist.
+    **The same folder the page reads**, :data:`qalpha.live.tradebook.EXPORT_DIR`. It used to be a
+    private gist plus ``data/tradebook-YHK037-EQ.csv``, a file that does not exist here — so the
+    instruction the user is actually given ("drop the Console export in ``data/tradebooks/``") dated
+    the page's lots and could never stop the twin aborting. The gist stays as an override for
+    whoever has one; without ``GIST_TOKEN`` it is not consulted and is not an error.
+
+    Returns ``(trades, notes)``. The notes are named absences, and the caller refuses on them.
     """
     import os
 
-    from qalpha.live.gist_store import find_gist_id, load_gist_file
-    from qalpha.live.tradebook_store import trades_from_master_csv
+    from qalpha.live.tradebook import EXPORT_DIR, read_exports
 
-    filename = "tradebook_master.csv"
     token = os.environ.get("GIST_TOKEN", "").strip() or os.environ.get("GITHUB_TOKEN", "").strip()
     if token:
+        from qalpha.live.gist_store import find_gist_id, load_gist_file
+        from qalpha.live.tradebook_store import trades_from_master_csv
+
+        filename = "tradebook_master.csv"
         try:
             gist_id = os.environ.get("TRADEBOOK_GIST_ID", "").strip() or find_gist_id(
                 token, filename
             )
             text = load_gist_file(token, gist_id, filename) if gist_id else None
             if text:
-                return list(trades_from_master_csv(text))
-            print("[twin] gist reachable but holds no master yet")
+                return list(trades_from_master_csv(text)), []
+            print("[twin] gist reachable but holds no master yet — reading the local folder")
         except Exception as exc:
-            print(f"[twin] gist unavailable ({exc}) — falling back to a local export")
-    else:
-        print("[twin] no GIST_TOKEN — falling back to a local export")
-    local = Path("data/tradebook-YHK037-EQ.csv")
-    if local.exists():
-        from qalpha.live.tradebook import parse_tradebook
-
-        return list(parse_tradebook(str(local)))
-    return []
+            print(f"[twin] gist unavailable ({exc}) — reading the local folder")
+    trades, notes = read_exports(EXPORT_DIR)
+    for note in notes:
+        print(f"[twin] {note}")
+    return list(trades), notes
 
 
 def _market(as_of: date) -> Market | None:
@@ -369,7 +372,7 @@ def cmd_seed(cfg: Config) -> int:
             file=sys.stderr,
         )
         return 1
-    trades = _tradebook()
+    trades, _notes = _tradebook()
     if not trades:
         print("[twin] no tradebook — nothing to seed from.", file=sys.stderr)
         return 1
@@ -404,7 +407,7 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config, *, persist: bool =
     from qalpha.live.tradebook import replay_tradebook
 
     marks = {n: mark(b, market.prices, market.as_of) for n, b in books.items() if n != REAL}
-    real = replay_tradebook(_tradebook(), cfg).portfolio
+    real = replay_tradebook(_tradebook()[0], cfg).portfolio
     # The allotment is not a trade, so the replay cannot know about it — give REAL the lots, with
     # the allotment date, because that is what §2(42A) counts the holding period from.
     apply_off_market(real, load_off_market())
@@ -521,7 +524,7 @@ def cmd_daily(cfg: Config) -> int:
 
     # New money first: the user's flows are the twin's only funding, and a purchase that reached
     # REAL but not the twins would break the identical-flow invariant on his very next SIP.
-    trades = _tradebook()
+    trades, tradebook_notes = _tradebook()
     credits = load_off_market()
     for d in sync_flows(books, trades, credits):
         print(f"[twin] credited ₹{d.amount:,.2f} on {d.on} to all {len(books)} books")
@@ -530,13 +533,26 @@ def cmd_daily(cfg: Config) -> int:
     # account. Left unchecked, REAL replays to ₹0 against ₹3,04,144 of flows — a −100% line, with
     # every twin appearing to beat it by three lakh, written to the dashboard as a verdict. Refuse
     # to write anything: yesterday's report is far better than today's wrong one.
+    refusal: str | None = None
     if not trades and books[REAL].flows:
+        refusal = (
+            f"the tradebook read EMPTY but the books hold {len(books[REAL].flows)} flows "
+            f"(₹{books[REAL].net_invested:,.2f}). That is a failed read, not an empty account."
+        )
+        if tradebook_notes:
+            refusal += " " + " ".join(tradebook_notes)
+    else:
+        # AN EXPORT THAT STARTS TOO LATE IS THE SAME DEFECT WITH ONE ROW IN IT, and the empty
+        # check above cannot see it: REAL replays short and every book reads as beating it by
+        # the lots the export left out. See `twin.partial_export_reason`.
+        refusal = partial_export_reason(trades, books[REAL].start)
+    if refusal:
         print(
-            f"[twin] ABORT — the tradebook read EMPTY but the books hold "
-            f"{len(books[REAL].flows)} flows (₹{books[REAL].net_invested:,.2f}).\n"
-            "       This is a failed read, not an empty account. Nothing was written; the previous "
-            "report stands.\n"
-            "       Check: GIST_TOKEN present in the job, and that it carries the `gist` scope.",
+            f"[twin] ABORT — {refusal}\n"
+            "       Nothing was written; the previous report stands.\n"
+            "       Check: is there a Zerodha Console export in data/tradebooks/ covering your "
+            "first trade? Console → Reports → Tradebook → CSV. The twin reads the same folder "
+            "the page does.",
             file=sys.stderr,
         )
         # NON-ZERO, because this is a refusal and the caller writes down what happened. Under the

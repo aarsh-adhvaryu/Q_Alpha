@@ -14,7 +14,9 @@ from qalpha.accounting.costs import Side
 from qalpha.config import Config
 from qalpha.live.advisor import advise_sell
 from qalpha.live.tradebook import (
+    EXPORT_DIR,
     parse_tradebook,
+    read_exports,
     reconcile_positions,
     replay_tradebook,
 )
@@ -126,3 +128,83 @@ def test_setoff_reconciliation_through_replay() -> None:
     assert any(g.gain < 0 for g in res.realized_gains)  # the STCL loss
     assert net < gross  # the loss set-off saved tax
     assert net > 0  # LTCG above the ₹1.25L exemption is still taxed
+
+
+# --- the drop folder, which is now the only spelling of "the tradebook" ---------------------------
+#
+# `local_run` read `data/tradebooks/` while `scripts/twin.py` read a private gist and
+# `data/tradebook-YHK037-EQ.csv`, a file that does not exist. So OPERATING.md's instruction — drop
+# the Console export in `data/tradebooks/` — dated the page's lots and could never stop the twin
+# aborting, which it did on every run of 2026-09-10 with a message about a credential this desktop
+# does not use. One reader, one folder.
+_HEAD = "symbol,trade_date,trade_type,quantity,price,trade_id,order_execution_time\n"
+
+
+def _export(directory, name: str, rows: str) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / name).write_text(_HEAD + rows, encoding="utf-8")
+
+
+def test_overlapping_exports_de_duplicate_on_the_trade_id(tmp_path) -> None:
+    """Console exports are chosen by date range, so consecutive ones overlap by construction."""
+    _export(tmp_path, "june.csv", "INFY,2026-06-15,buy,5,1136,11,2026-06-15 09:30:00\n")
+    _export(
+        tmp_path,
+        "june-august.csv",
+        "INFY,2026-06-15,buy,5,1136,11,2026-06-15 09:30:00\n"
+        "TCS,2026-08-28,buy,10,2340,12,2026-08-28 10:00:00\n",
+    )
+    trades, notes = read_exports(tmp_path)
+    assert [(t.ticker, t.quantity) for t in trades] == [
+        ("INFY.NS", Decimal("5")),
+        ("TCS.NS", Decimal("10")),
+    ]
+    assert notes == []
+
+
+def test_a_same_day_buy_and_sell_survive_an_export_with_no_trade_ids(tmp_path) -> None:
+    """The composite fallback key carries the SIDE. Without it these two collapse into one row and
+    a transaction disappears from the ledger, taking its tax with it."""
+    (tmp_path).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "old.csv").write_text(
+        "symbol,trade_date,trade_type,quantity,price\n"
+        "INFY,2026-06-15,buy,5,1136\n"
+        "INFY,2026-06-15,sell,5,1136\n",
+        encoding="utf-8",
+    )
+    trades, _notes = read_exports(tmp_path)
+    assert {t.side for t in trades} == {Side.BUY, Side.SELL}
+    assert len(trades) == 2
+
+
+def test_an_unreadable_export_is_named_and_the_readable_one_is_kept(tmp_path) -> None:
+    _export(tmp_path, "good.csv", "INFY,2026-06-15,buy,5,1136,11,2026-06-15 09:30:00\n")
+    (tmp_path / "broken.csv").write_text("not,a,tradebook\n1,2,3\n", encoding="utf-8")
+    trades, notes = read_exports(tmp_path)
+    assert len(trades) == 1
+    assert any("broken.csv" in n and "not guessed at" in n for n in notes)
+
+
+def test_a_missing_folder_is_a_named_absence_not_an_empty_account(tmp_path) -> None:
+    trades, notes = read_exports(tmp_path / "nothing-here")
+    assert trades == []
+    assert notes and "estimate" in notes[0]
+
+
+def test_an_empty_folder_says_so_rather_than_reading_as_no_trades(tmp_path) -> None:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    trades, notes = read_exports(tmp_path)
+    assert trades == []
+    assert any("No readable export" in n for n in notes)
+
+
+def test_both_readers_point_at_one_folder() -> None:
+    """Asserted on the constant, because the defect was two literals that agreed until one moved."""
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "scripts"))
+    import local_run
+
+    assert local_run.TRADEBOOK_DIR is EXPORT_DIR
+    assert _Path("data/tradebooks") == EXPORT_DIR
