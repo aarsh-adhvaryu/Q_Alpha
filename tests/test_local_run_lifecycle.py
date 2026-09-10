@@ -212,9 +212,23 @@ def test_the_windows_launcher_checks_each_failure_separately() -> None:
     assert "wsl --install" in bat, "a missing WSL must say how to install it"
     assert "wsl --list --verbose" in bat, "a wrong distro name must say how to find the right one"
     assert "Edit REPO" in bat, "a wrong path must say which line to edit"
-    # The browser is opened BEFORE the server starts: the app runs in the foreground
-    # until the window closes, so opening it afterwards would never happen.
-    assert bat.index('start "" http://127.0.0.1:8787/') < bat.index("qalpha.sh --app")
+    # THE PROPERTY, NOT THE LINE. This used to assert the literal
+    # `start "" http://127.0.0.1:8787/` appeared before the server call — which pinned a real
+    # defect in place: opening the browser *immediately* meant a cold start (WSL waking, uv
+    # resolving, pandas importing) showed a connection error, and "not up yet" and "broken" look
+    # identical in a browser.
+    #
+    # Two things have to hold at once, and both still do. The opener must be LAUNCHED before the
+    # server call, because that call blocks until the window closes and nothing after it would ever
+    # run. And it must not actually open anything until the server answers.
+    opener = bat.index("Start-Process $u")
+    assert opener < bat.index("qalpha.sh --app"), "the opener must be launched before the blocker"
+    waiter = bat[bat.index('start "" /b powershell') : bat.index("qalpha.sh --app")]
+    assert "Invoke-WebRequest" in waiter, "it must wait for a real response, not a guess at timing"
+    assert "Start-Process" in waiter.split("Invoke-WebRequest", 1)[1], (
+        "the browser must open only AFTER the request succeeds"
+    )
+    assert "Start-Sleep" in waiter, "and retry rather than giving up on the first refusal"
     assert "pause" in bat, "a failing run must not close before it can be read"
     assert "NOTHING HERE TRADES" in bat
 
@@ -340,3 +354,52 @@ def test_a_failed_step_does_not_stop_the_page_being_written(rig, monkeypatch) ->
     page = _page(rig)
     assert "evidence FAILED" in page
     assert "NSE refused the connection" in page
+
+
+def test_the_windows_launcher_does_not_fight_a_copy_of_itself() -> None:
+    """A second double-click must open the running app, not try to bind its port again.
+
+    Binding 8787 twice fails with a traceback about an address already in use, which says nothing
+    about what is actually happening — the app is running and the user wants to look at it.
+    """
+    bat = (Path(__file__).resolve().parent.parent / "deploy/Q-Alpha.bat").read_text(
+        encoding="utf-8"
+    )
+    head = bat[: bat.index("qalpha.sh --app")]
+    assert "already running" in head.lower()
+    assert head.index("already running") < head.index("waking"), (
+        "check before waking the distro: there is nothing to wake if it is already up"
+    )
+
+
+def test_the_windows_launcher_pauses_with_something_that_works_under_redirection() -> None:
+    """`timeout` refuses to run when stdin is redirected, printing an error over the last words the
+    user reads. `ping -n` is the pause that always works."""
+    bat = (Path(__file__).resolve().parent.parent / "deploy/Q-Alpha.bat").read_text(
+        encoding="utf-8"
+    )
+    assert "timeout /t" not in bat
+    assert "ping -n" in bat
+
+
+def test_the_windows_launcher_still_says_it_places_no_orders() -> None:
+    """The claim belongs on the thing the user double-clicks, not only on the page it opens."""
+    bat = (Path(__file__).resolve().parent.parent / "deploy/Q-Alpha.bat").read_text(
+        encoding="utf-8"
+    )
+    assert "NOTHING HERE TRADES" in bat
+    assert "you place every order in Kite" in bat
+
+
+def test_the_launcher_and_the_installer_agree_on_where_the_repo_is() -> None:
+    """The installer bakes this machine's values in. A hard-coded path that has drifted from the
+    checkout would send the launcher to a directory that is not this one."""
+    root = Path(__file__).resolve().parent.parent
+    bat = (root / "deploy/Q-Alpha.bat").read_text(encoding="utf-8")
+    baked = next(
+        line.split("=", 1)[1].strip() for line in bat.splitlines() if line.startswith("set REPO=")
+    )
+    assert (Path(baked) / "scripts/local_run.py").exists(), (
+        f"the launcher points at {baked}, which has no local_run.py. "
+        "Re-run ./deploy/install-windows.sh from the checkout you actually use."
+    )
