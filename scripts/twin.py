@@ -640,11 +640,16 @@ def main(argv: list[str] | None = None) -> int:
     cfg = Config()
     if args.cmd == "seed":
         return cmd_seed(cfg)
-    try:
-        return cmd_daily(cfg) if args.cmd == "daily" else cmd_status(cfg)
-    except Exception as exc:
-        print(f"[twin] failed (non-fatal, cron stays green): {exc}", file=sys.stderr)
-        return 0
+    # THE SWALLOW IS GONE, AND SO IS THE THING IT WAS FOR. This caught every exception and
+    # returned 0 so that a GitHub Actions run would not go red. There is no GitHub Actions run any
+    # more — `live/daily.py` calls this, and it RECORDS what happened. Returning 0 after a failure
+    # would have that ledger write "done" against a step that did nothing, and the resume logic
+    # would then never run it again for these inputs. Silence used to cost a red tick; it now
+    # costs the record.
+    #
+    # The caller still keeps the evening going: `run_pipeline` catches this, writes `failed` with
+    # the message, and moves to the next step. That is fail-soft. This was fail-silent.
+    return cmd_daily(cfg) if args.cmd == "daily" else cmd_status(cfg)
 
 
 if __name__ == "__main__":

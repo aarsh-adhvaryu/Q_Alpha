@@ -205,3 +205,73 @@ def test_the_brief_is_the_only_step_that_needs_a_cloud_key() -> None:
     """Everything except the web-searched brief must run with no credential at all."""
     needing = {s.name for s in daily.steps() if "ANTHROPIC_API_KEY" in s.needs}
     assert needing == {"brief"}
+
+
+# --- the entry points must let a failure out ------------------------------------------------------
+#
+# `run_pipeline` records what happened, and it can only record what it is told. Two of the entry
+# points it calls used to catch every exception and `return 0` so a GitHub Actions run would not go
+# red. There is no Actions run any more, and that swallow would now make the ledger write "done"
+# against a step that did nothing — after which the resume logic would never run it again for these
+# inputs. These assert the behaviour rather than the absence of a try block.
+def test_the_twin_entry_point_lets_a_failure_reach_its_caller(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import twin
+
+    def _boom(cfg: object) -> int:
+        raise RuntimeError("the price panel was empty")
+
+    monkeypatch.setattr(twin, "cmd_daily", _boom)
+    with pytest.raises(RuntimeError, match="price panel was empty"):
+        twin.main(["daily"])
+
+
+def test_the_brief_entry_point_lets_a_failure_reach_its_caller(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import ai_brief
+
+    monkeypatch.setattr(ai_brief.Path, "exists", lambda self: True)
+    monkeypatch.setattr(ai_brief, "load_watchlist_lines", lambda p: ["INFY | 1100"])
+
+    def _boom(watchlist: object) -> object:
+        raise RuntimeError("the API refused")
+
+    monkeypatch.setattr(ai_brief, "generate_brief", _boom)
+    with pytest.raises(RuntimeError, match="API refused"):
+        ai_brief.main(["daily"])
+
+
+def test_a_step_that_swallows_its_failure_would_be_recorded_as_done(tmp_path: Path) -> None:
+    """The consequence, made explicit: this is what those swallows were buying.
+
+    A step that catches its own exception and returns normally is INDISTINGUISHABLE from success
+    here, and there is no way for the runner to know better. That is precisely why the swallow had
+    to be removed at the source rather than worked around at the caller.
+    """
+    ledger = tmp_path / "l.jsonl"
+
+    def _quietly_fails() -> None:
+        try:
+            raise RuntimeError("something broke")
+        except RuntimeError:
+            return  # what `return 0` inside a bare except amounts to
+
+    result = daily.run_pipeline(
+        "d1",
+        plan=[daily.Step("twin", "stepping", _quietly_fails)],
+        ledger=ledger,
+        log=Progress(),
+        now=lambda: AT,
+    )
+    assert result.complete, "the runner has no way to see through a swallowed exception"
+    assert _ledger_rows(ledger)[0]["state"] == "done"
