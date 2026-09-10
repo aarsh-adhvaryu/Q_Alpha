@@ -6,7 +6,7 @@ REM  Use Q-Alpha.bat for the daily run. This one is for working ON the system:
 REM  it opens VS Code attached to WSL at the repo, and leaves a shell there too.
 REM ============================================================================
 
-set DISTRO=Ubuntu
+set DISTRO=Ubuntu-24.04
 set REPO=/home/aarsh/q-alpha/Q_Alpha
 
 where wsl >nul 2>&1 || (echo WSL is not installed. Run: wsl --install & pause & exit /b 1)
