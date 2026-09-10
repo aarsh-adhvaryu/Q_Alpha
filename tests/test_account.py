@@ -197,3 +197,48 @@ def test_an_unmatched_sale_makes_the_tax_inexact_even_when_quantities_agree() ->
     assert acct.replay_warnings, "the engine warned"
     assert acct.tallies, "and the quantities still agree"
     assert not acct.tax_exact, "but the tax history is incomplete, so nothing may call it exact"
+
+
+# --- was the broker actually asked? --------------------------------------------------------------
+#
+# `tallies` answers "were any disagreements found", which is vacuously yes when nothing was
+# compared. With no session and no trades the page printed
+#
+#     Account   reconciled ✓
+#     ✓ Reconstructed holdings match your broker account exactly.
+#
+# directly above a log line reading "Account NOT checked against the broker — no session this run".
+# A tick on this surface means it is safe to act on.
+def test_an_unchecked_broker_is_not_a_confirmation() -> None:
+    """THE ONE THIS BLOCK EXISTS FOR. Agreement was not found — it was not looked for."""
+    acct = reconcile([], {}, CASH, CFG, AS_OF, broker_checked=False)
+    assert acct.tallies, "no disagreements were found, which is still true"
+    assert not acct.broker_confirmed, "but nothing was compared, so nothing is confirmed"
+    assert acct.broker_state == "unchecked"
+
+
+def test_the_report_says_it_was_not_checked_rather_than_showing_a_tick() -> None:
+    text = reconcile([], {}, CASH, CFG, AS_OF, broker_checked=False).report()
+    assert "match your broker account exactly" not in text
+    assert "was NOT asked this run" in text
+    assert "it was not looked for" in text
+
+
+def test_a_checked_and_matching_account_still_gets_its_tick() -> None:
+    """The fix must not take the confirmation away from runs that earned it."""
+    trades = [_buy("VBL.NS", "147", "414.23")]
+    acct = reconcile(trades, {"VBL.NS": Decimal("147")}, CASH, CFG, AS_OF)
+    assert acct.broker_confirmed and acct.broker_state == "confirmed"
+    assert "match your broker account exactly" in acct.report()
+
+
+def test_a_disagreement_is_still_distinct_from_not_looking() -> None:
+    """Three states, because there are three."""
+    trades = [_buy("VBL.NS", "147", "414.23")]
+    acct = reconcile(trades, {"VBL.NS": Decimal("100")}, CASH, CFG, AS_OF)
+    assert acct.broker_state == "disagrees"
+    assert not acct.broker_confirmed
+
+
+def test_checked_is_the_default_so_existing_callers_are_unchanged() -> None:
+    assert reconcile([], {}, CASH, CFG, AS_OF).broker_checked is True

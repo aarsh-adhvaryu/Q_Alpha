@@ -45,6 +45,7 @@ from qalpha.live.daily import (
 from qalpha.live.desk import Desk, gather
 from qalpha.live.extraction import EXTRACTION_VERSION
 from qalpha.live.mandate import Mandate, load_mandate
+from qalpha.live.panels import BENCHMARK_PANEL, SCREEN_PANEL
 from qalpha.live.progress import LOG
 from qalpha.live.report import render
 from qalpha.live.session import load_snapshot, snapshot_from
@@ -136,11 +137,9 @@ def _prices(tickers: list[str], costs: dict[str, Decimal]) -> tuple[dict[str, De
     notes: list[str] = []
     try:
         from qalpha.data.ingest import load_parquet
+        from qalpha.live.panels import BOOK_PANEL
 
-        for path in (
-            "data/historical/prices_watchlist.parquet",
-            "data/historical/prices_pit_2026.parquet",
-        ):
+        for path in (str(SCREEN_PANEL), str(BOOK_PANEL)):
             if not Path(path).exists():
                 continue
             adj = load_parquet(path).adj_close
@@ -197,11 +196,12 @@ def _proposal(
 
         from qalpha.data.ingest import load_parquet
         from qalpha.live.deploy import advise_deploy_into_weakness
+        from qalpha.live.panels import SCREEN_UNIVERSE
 
-        wl = pd.read_csv("data/universes/nifty100_watchlist.csv")
+        wl = pd.read_csv(SCREEN_UNIVERSE)
         tickers = [str(t) for t in wl["ticker"]]
         sector_of = {str(t): str(sec) for t, sec in zip(wl["ticker"], wl["sector"], strict=True)}
-        panel = load_parquet("data/historical/prices_watchlist.parquet")
+        panel = load_parquet(str(SCREEN_PANEL))
         as_of = min(date.today(), panel.adj_close.index[-1].date())
         advice = advise_deploy_into_weakness(
             account.portfolio,
@@ -253,8 +253,9 @@ def _watchlist_focus(limit: int = WATCH_ROWS) -> tuple[list[str], list[str]]:
 
         from qalpha.data.ingest import load_parquet
         from qalpha.live.deploy import cheapness_scores
+        from qalpha.live.panels import SCREEN_UNIVERSE
 
-        wl = pd.read_csv("data/universes/nifty100_watchlist.csv")
+        wl = pd.read_csv(SCREEN_UNIVERSE)
         tickers = [str(t) for t in wl["ticker"]]
         panel = load_parquet(str(SCREEN_PANEL))
         as_of = min(date.today(), panel.adj_close.index[-1].date())
@@ -309,9 +310,9 @@ def _prices_sha(prices: dict[str, Decimal], as_of: date | None) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
-#: The panel `_proposal` screens from. Freshness must follow THIS file and no other.
-SCREEN_PANEL = Path("data/historical/prices_watchlist.parquet")
-BENCHMARK_PANEL = Path("data/historical/benchmark_NIFTYBEESNS_2026.parquet")
+#: The panel `_proposal` screens from. Freshness must follow THIS file and no other — and so must
+#: the refresh, which for two weeks it did not: see `qalpha.live.panels`. Imported rather than
+#: written out again, because the drift between two spellings of "the prices" is the whole bug.
 
 
 def _price_as_of() -> date | None:
@@ -433,6 +434,9 @@ def main(argv: list[str] | None = None) -> int:
         cfg,
         date.today(),
         broker_costs=costs,
+        # The same signal the gate uses. Without it an unreachable broker produced an account that
+        # claimed to match one.
+        broker_checked=cash_confirmed,
     )
     LOG.say("Marking holdings from the price panel…", "step")
     prices, price_notes = _prices(sorted(account.portfolio.positions()), costs)
@@ -609,8 +613,8 @@ def main(argv: list[str] | None = None) -> int:
         LOG.say("Account NOT checked against the broker — no session this run.", "warn")
     else:
         LOG.say(
-            f"Account reconciled: {'matches the broker' if account.tallies else 'does NOT match'}.",
-            "detail" if account.tallies else "warn",
+            f"Account reconciled: {'matches the broker' if account.broker_confirmed else 'does NOT match'}.",
+            "detail" if account.broker_confirmed else "warn",
         )
     print(f"Wrote {PAGE.resolve()}")
     for note in notes:
