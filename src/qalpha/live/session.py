@@ -117,6 +117,35 @@ class InputSnapshot:
         )
         return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
+    def research_digest(self) -> str:
+        """The id for work that reads the WORLD rather than the account.
+
+        Reading a company's filings, marking the model book and stepping the twin do not depend on
+        how much cash has settled or how much of this month's allowance is still unspoken for. But
+        :meth:`digest` covers both, because a *decision* does depend on them — so keying the
+        research to it meant that making a proposal, which lowers the remaining budget, changed the
+        digest and left every filing pending again. The next evening would re-download and re-read
+        the same documents, and the ledger's whole purpose — not redoing finished work — would be
+        defeated by the run's own output.
+
+        So this covers exactly what would make re-reading produce a different answer: the date, the
+        names in scope, the prices, what was unavailable, and the version of the extraction rules.
+        Holdings are in, because a name bought today is a name whose filings nobody has read.
+        """
+        payload = json.dumps(
+            {
+                "as_of": self.as_of.isoformat(),
+                "holdings": sorted(self.holdings),
+                "universe": sorted(self.universe),
+                "prices_sha": self.prices_sha,
+                "stale": sorted(self.stale),
+                "missing_critical": sorted(self.missing_critical),
+                "extraction_version": self.extraction_version,
+            },
+            sort_keys=True,
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
     def to_dict(self) -> dict[str, object]:
         return {
             "as_of": self.as_of.isoformat(),

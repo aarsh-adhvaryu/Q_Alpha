@@ -101,8 +101,10 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**26,509 lines · 46 live modules · 906 tests green.** The daily cron runs weekdays at 12:23 UTC and
-has produced a complete record since 2026-09-01.
+**48 live modules · 1,122 tests green.** **There is no cron.** `paper.yml` was deleted on
+2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
+he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
+everything after it is produced locally.
 
 ### Two experiments run, and neither authorizes anything
 
@@ -249,7 +251,7 @@ live/         account (the reconciled account) · session (snapshot + resume) ·
               evidence (NSE regulatory indicators) · announcements (filings + provenance)
               extraction (the model reports what a filing says) · pretrade (may we buy this?)
               pipeline (rank → skip → anchor → one outcome) · flags (what the user sees)
-scripts/      local_run.py (the click) · twin.py (the cron) · evidence.py (the spine)
+scripts/      local_run.py (the click — the only entry point) · twin.py · evidence.py (the spine)
               paper.py · advisor.py · exp_null.py · backtest_* · exp_*
 config.py     every tunable parameter in one place
 ```
@@ -258,10 +260,20 @@ config.py     every tunable parameter in one place
 — historical reads go through `PriceData.as_of(date)`; fundamentals carry a 90-day effective lag; a
 test fails on look-ahead. Reuse before adding. Reference the spec by section (`§4.6`) in comments.
 
-**What runs unattended** — `paper.yml`, weekdays 12:23 UTC: refresh prices → mark the paper book →
-Telegram scan → AI brief → **evidence spine** → twin → commit → **postcondition that fails unless
-today's row carries every book, valued, and both tracks**. The two long steps are capped so a stall
-cannot cost the day's record.
+**Nothing runs unattended.** `live/daily.py` holds the step list the cron used to hold — prices →
+mark the model book → **evidence spine** → twin → brief — and runs it when the user presses *Run the
+evening*. Three properties make that a replacement rather than a regression:
+
+- **A failed step is recorded and the run continues.** The cron was fail-soft too; the problem was
+  that it was fail-*silent*. A failure here is written to `data/session/ledger.jsonl` and printed on
+  the page.
+- **Finished work is not redone.** Completion is keyed to `InputSnapshot.research_digest()` — the
+  date, the names, the price panel, the extraction version. Not cash and not the budget, because a
+  proposal lowering the remaining allowance must not invalidate every filing the run just read.
+- **A skip is not a completion.** A step missing its credential is reported and left pending, so it
+  runs the day the credential arrives.
+
+`tests/test_evidence_durability.py` fails if any workflow with a `schedule:` reappears.
 
 ---
 
@@ -272,11 +284,13 @@ uv sync --extra dev
 uv run pytest                                          # must stay green
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src
-uv run python scripts/twin.py daily                    # the cron entry point
+uv run python scripts/local_run.py                     # THE entry point: pipeline → page
 uv run python scripts/evidence.py daily                # the evidence spine (shadow)
 uv run python scripts/run_phase0.py                    # the validated backtest
 uv run python scripts/exp_null.py --draws 2000         # the matched null
-uv run python scripts/local_run.py                     # the local run → writes and opens one page
+uv run python scripts/local_run.py --app               # the app: buttons, live progress, tokens
+uv run python scripts/local_run.py --no-pipeline       # decide only, on research already on disk
+uv run python scripts/local_run.py --force             # re-run steps the ledger calls done
 uv run python scripts/local_run.py --login             # refresh the Kite session first
 ./qalpha.sh                                            # the same thing, from the desktop launcher
 ```

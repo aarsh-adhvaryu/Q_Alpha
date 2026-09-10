@@ -48,10 +48,20 @@ first time you sell something complicated, that number needs checking by hand.
 Miss two days and nothing is lost: the next run reads what changed, resumes what it had not
 finished, and says what moved while it was off.
 
-**But the old cron is still on**, and saying otherwise here was wrong — this section claimed "no
-cron, no cloud" on 2026-09-09 while `.github/workflows/paper.yml` was running every weekday, doing
-hosted AI calls and stepping the twins. It still is. Retiring it is the next step and it has not
-happened yet; until it does, two systems are running and only one of them is the one you click.
+**The cron is gone.** `.github/workflows/paper.yml` was deleted on 2026-09-10, and with it the
+last thing that wrote to these ledgers without you. It was not deleted for being redundant — it ran
+five real steps — but because its work now happens on this desktop, in the order it always ran them:
+prices → the model book → the filings → the twin → the brief, and then the account and the basket.
+There is one system now, and it is the one you click.
+
+It was never on time anyway. Across 60 scheduled runs, **not one fired at 12:23 UTC** — median
+lateness 2.4 hours — and GitHub's `continue-on-error` reported a step it had SIGKILLed at 20m12s as
+a success. The schedule was never the useful part.
+
+**Missing days costs the days, not the work.** Each step's completion is written against a digest of
+the inputs it ran on. Come back after two days and it resumes where it stopped, because a step
+finished against these exact holdings and these exact prices is not run again — and one finished
+against different prices is, since that is not the same work.
 
 The one thing the local run needs from you is the Kite login. Market history and filings need no
 session at all — only your holdings and cash do — so the analysis runs without one, and it will say

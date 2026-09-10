@@ -24,14 +24,18 @@ because a stale page that does not announce its age is worse than no page.
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from html import escape
+from pathlib import Path
 
-from qalpha.live import ui
+from qalpha.live import evidence, ui
 from qalpha.live.account import ReconciledAccount
 from qalpha.live.commitments import Allowance, Commitment, open_proposals, waiting
+from qalpha.live.desk import UNREADABLE, Desk, NameView
 
 
 def _holdings_table(account: ReconciledAccount, prices: Mapping[str, Decimal]) -> str:
@@ -195,6 +199,247 @@ def _proposal_table(orders: Sequence[tuple[str, int, Decimal]], allowance: Allow
     )
 
 
+# --- the market brief ----------------------------------------------------------------------------
+BRIEF_MD = Path("reports/ai_brief.md")
+BRIEF_STAMP = Path("reports/ai_brief.json")
+
+#: Older than this and the brief is history, not news. Shown anyway — with its age in the heading,
+#: because hiding it would leave the page silent about a market it has an opinion on.
+BRIEF_FRESH_DAYS = 3
+
+
+def _brief_age(today: date, stamp: Path = BRIEF_STAMP) -> int | None:
+    """Days since the brief was written, or ``None`` when it does not say.
+
+    An unstamped brief is undated, and this returns ``None`` rather than falling back to the file's
+    mtime — a mtime is reset by a fresh checkout, so it would date a three-week-old brief as this
+    morning's with nothing on the page to contradict it.
+    """
+    try:
+        written = json.loads(stamp.read_text(encoding="utf-8"))["as_of"]
+        return (today - date.fromisoformat(str(written))).days
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _markdownish(text: str) -> str:
+    """Just enough markdown for this one document: **bold**, numbered items, blank-line paragraphs.
+
+    Deliberately not a markdown library. The brief is one known shape written by one known caller,
+    and a general renderer here would be a dependency plus an escaping surface for model output.
+    Everything is escaped first, so nothing the model writes can become markup.
+    """
+    out: list[str] = []
+    for block in escape(text.strip()).split("\n\n"):
+        block = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", block.strip())
+        if not block:
+            continue
+        lines = [ln for ln in block.split("\n") if ln.strip()]
+        # A block is usually a heading line followed by numbered drivers ("**Drivers**:\n1. …"),
+        # so the two halves are split rather than the whole block being all-or-nothing.
+        head = [ln for ln in lines if not re.match(r"^\d+\.\s", ln.strip())]
+        items = [ln for ln in lines if re.match(r"^\d+\.\s", ln.strip())]
+        if head:
+            out.append("<p>" + "<br>".join(head) + "</p>")
+        if items:
+            cells = "".join(f"<li>{re.sub(r'^\d+\.\s*', '', ln.strip())}</li>" for ln in items)
+            out.append(f"<ol>{cells}</ol>")
+    return "".join(out)
+
+
+def _brief_panel(today: date, *, path: Path = BRIEF_MD, stamp: Path = BRIEF_STAMP) -> str:
+    """The market narrative — labelled, every time, as the thing it is.
+
+    ``ai_brief`` is explicit that this is a **language model's narrative**, including a directional
+    "likely reaction" that is its non-validated opinion. Nothing on this page acts on it and nothing
+    ever will: the basket comes from the deterministic screen, and the AI layer may only ever
+    subtract from that. It is here because a market moved today and the user should be able to read
+    what it moved on — not because anything downstream reads it.
+    """
+    if not path.exists():
+        return (
+            ui.section("The market, in words")
+            + '<div class="qa-empty">No brief on file. It needs a cloud key: it is built on web '
+            "search, and a model on this machine has nothing to search. Its absence means nobody "
+            "wrote one — not that the day was quiet.</div>"
+        )
+    age = _brief_age(today, stamp)
+    if age is None:
+        note = "undated — it does not say when it was written, so it is not being dated for it"
+    elif age <= 0:
+        note = "written today"
+    elif age <= BRIEF_FRESH_DAYS:
+        note = f"{age} day{'s' if age != 1 else ''} old"
+    else:
+        note = f"{age} days old — this is history, not news"
+    body = path.read_text(encoding="utf-8")
+    # The machine-readable SIGNAL line is for the twin's AI arm, not for a person to act on.
+    body = re.sub(r"^SIGNAL:.*$", "", body, flags=re.M)
+    return (
+        ui.section("The market, in words", note=note)
+        + f'<div class="qa-note">{_markdownish(body)}</div>'
+        + '<p class="qa-foot"><b>This is a language model&#8217;s narrative, and the &#8220;likely '
+        "reaction&#8221; in it is its own non-validated opinion.</b> Nothing on this page acts on "
+        "it. The basket below comes from the deterministic screen; the AI layer may only ever "
+        "remove a name from that screen, never add one, and never size anything.</p>"
+    )
+
+
+# --- the research desk ---------------------------------------------------------------------------
+#
+# The columns a person actually reads a name on, side by side, with the third state visible in every
+# one of them. A blank cell here would read as "fine"; none of them is ever blank.
+_HEALTH_TONE: dict[str, ui.Tone] = {
+    "breaking": "bad",
+    "watch": "warn",
+    "healthy": "good",
+    UNREADABLE: "warn",
+}
+# IMPORTED, NOT RETYPED. The first version of this map spelled the passing state ``"CLEAR"``,
+# which is not one of evidence.py's states — the real one is ``PASS``, and ``CLEAR`` is a column
+# code meaning something else entirely. Every clean name therefore fell through to the warn tone
+# and was rendered amber. A string constant copied by hand onto a display surface is this repo's
+# oldest defect wearing a stylesheet.
+_EXCHANGE_TONE: dict[str, ui.Tone] = {
+    evidence.PASS: "good",
+    evidence.WATCH: "warn",
+    evidence.BLOCK: "bad",
+    evidence.UNKNOWN: "warn",
+    evidence.NOT_COVERED: "warn",
+}
+
+
+def _trend_cell(value: float | None, *, invert: bool = False) -> ui.Cell:
+    """A percentage, or the word for not knowing. **Never a zero standing in for absence.**"""
+    if value is None:
+        return ui.Cell("—", tone="warn", title="Not enough price history to measure this.")
+    shown = value * 100.0
+    tone = ui.tone_for(-shown if invert else shown)
+    return ui.Cell(ui.pct(shown), tone=tone)
+
+
+def _desk_row(view: NameView) -> ui.Row:
+    mark = ui.inr(view.mark) if view.mark is not None else "unpriced"
+    pnl = view.unrealised
+    return ui.Row(
+        cells=[
+            ui.Cell(view.ticker.removesuffix(".NS"), strong=True),
+            # THE THIRD STATE AGAIN, IN THE ONE COLUMN THAT COULD READ AS AN INSTRUCTION. A blank
+            # or a dash beside a research row invites it to be read as a position of zero, or
+            # worse, as something to open. It says which of the three this row is.
+            ui.Cell(
+                f"{view.quantity:,}"
+                if view.held
+                else ("in basket" if view.proposed else "watching"),
+                tone="neutral" if view.held else "info",
+                title=(
+                    None
+                    if view.held
+                    else (
+                        "proposed in today's basket"
+                        if view.proposed
+                        else "on the desk for research only — not held, not proposed"
+                    )
+                ),
+            ),
+            ui.Cell(mark, tone="neutral" if view.mark is not None else "warn"),
+            ui.Cell(
+                ui.signed_inr(pnl) if pnl is not None else "—",
+                tone=ui.tone_for(pnl) if pnl is not None else "warn",
+            ),
+            _trend_cell(view.trailing_return),
+            _trend_cell(view.drawdown),
+            _trend_cell(view.excess),
+            ui.Cell(
+                view.health,
+                tone=_HEALTH_TONE.get(view.health, "warn"),
+                title=view.health_note or None,
+            ),
+            ui.Cell(
+                view.exchange,
+                tone=_EXCHANGE_TONE.get(view.exchange, "warn"),
+                title="; ".join(view.indicators) if view.indicators else None,
+            ),
+            ui.Cell(
+                view.evidence_state,
+                tone=("bad" if view.concerns else ("good" if view.filings_read else "warn")),
+                title="\n".join(view.concerns) if view.concerns else None,
+            ),
+        ]
+    )
+
+
+def _desk_panel(desk: Desk | None) -> str:
+    """Everything known about every name in scope. Absent is a sentence, never an empty table."""
+    if desk is None:
+        return (
+            ui.section("The desk")
+            + '<div class="qa-empty">The research layer did not run this time, so there is '
+            "nothing here. That is not the same as nothing being wrong.</div>"
+        )
+    columns = [
+        ui.Column("Name"),
+        ui.Column("Qty", "right"),
+        ui.Column("Mark", "right"),
+        ui.Column("P&L", "right"),
+        ui.Column("6m", "right"),
+        ui.Column("From high", "right"),
+        ui.Column("vs median", "right"),
+        ui.Column("Trend"),
+        ui.Column("Exchange"),
+        ui.Column("Filings"),
+    ]
+    ordered = sorted(desk.rows, key=lambda r: (not r.attention, not r.held, r.ticker))
+    age = desk.exchange_file_age
+    note = (
+        f"surveillance file {age} day{'s' if age != 1 else ''} old"
+        if age is not None
+        else "no surveillance file found — every Exchange cell reads UNKNOWN"
+    )
+    body = ui.section("The desk", note=note) + ui.table(
+        columns, [_desk_row(r) for r in ordered], empty="No names in scope."
+    )
+    body += f'<p class="qa-foot">{escape(desk.coverage_line())}</p>'
+    if desk.notes:
+        body += (
+            '<div class="qa-note">' + "".join(f"<p>{escape(n)}</p>" for n in desk.notes) + "</div>"
+        )
+    body += (
+        '<p class="qa-foot">'
+        "<b>6m</b> is the return over the health window · <b>From high</b> is the fall from this "
+        "name&#8217;s own trailing high · <b>vs median</b> is that return minus the cross-sectional "
+        "median, which is the part that is about the company rather than the market. "
+        "A dash means there was not enough history to measure — it does not mean flat. "
+        "<b>UNKNOWN</b> on Exchange means the surveillance file could not be read for this name; "
+        "it is not CLEAR. <b>filings not read</b> means nobody opened this company&#8217;s "
+        "announcements, so the absence of a concern below is not evidence of one&#8217;s absence. "
+        "<b>watching</b> in the quantity column means the row is here so the market is visible "
+        "when the gate is shut &#8212; it is neither held nor proposed, and it is not a suggestion "
+        "to buy. The only thing this system ever proposes is in <i>Today&#8217;s basket</i> below."
+        "</p>"
+    )
+    return body
+
+
+def _concerns_panel(desk: Desk | None) -> str:
+    """What the filings actually said, quoted, for the names where anything was found."""
+    if desk is None:
+        return ""
+    flagged = [r for r in desk.rows if r.concerns]
+    if not flagged:
+        return ""
+    items = []
+    for view in flagged:
+        lines = "".join(f"<li>{escape(c)}</li>" for c in view.concerns)
+        items.append(f"<p><b>{escape(view.ticker.removesuffix('.NS'))}</b></p><ul>{lines}</ul>")
+    return (
+        ui.section("What the filings said", note="verified quotes, current extractor only")
+        + '<div class="qa-note">'
+        + "".join(items)
+        + "</div>"
+    )
+
+
 def render(
     *,
     account: ReconciledAccount,
@@ -204,6 +449,7 @@ def render(
     generated_at: datetime,
     notes: Sequence[str] = (),
     proposal: Sequence[tuple[str, int, Decimal]] = (),
+    desk: Desk | None = None,
 ) -> str:
     """One self-contained page. No server, no network, no fonts to fetch — it opens from a file."""
     ist = generated_at.astimezone(ui.IST)
@@ -288,6 +534,9 @@ def render(
     font-size:.8rem; color:var(--qa-ink-2); }}
   .qa-note p {{ margin:.25rem 0; }}
   p {{ font-size:.84rem; color:var(--qa-ink-2); line-height:1.5; }}
+  .qa-foot {{ font-size:.74rem; color:var(--qa-muted); line-height:1.55; margin:.35rem 0 1rem; }}
+  .qa-note ul {{ margin:.2rem 0 .5rem 1.1rem; padding:0; }}
+  .qa-note li {{ margin:.15rem 0; }}
 </style>
 </head><body><div class="qa-wrap">
 {
@@ -313,6 +562,9 @@ def render(
 {warnings}
 {ui.section("Holdings", note="marked at the run's prices")}
 {_holdings_table(account, prices)}
+{_brief_panel(ist.date())}
+{_desk_panel(desk)}
+{_concerns_panel(desk)}
 {ui.section("Today's basket", note="the screen, sized to this month's allowance")}
 {_proposal_table(proposal, allowance)}
 {ui.section("What the run decided")}
