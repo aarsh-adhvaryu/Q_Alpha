@@ -326,10 +326,12 @@ def _reader_panel() -> str:
     )
     if backend.kind != "local":
         body += (
-            "<p>To read them here instead: install <b>Ollama</b>, run "
-            "<code>ollama pull qwen2.5:7b</code>, then set <code>"
-            f"{MODEL_VAR}=qwen2.5:7b</code> in <code>.env</code> and restart this app. "
-            "It is slower — minutes per filing on a CPU — and no document leaves the machine. "
+            "<p>To read them here instead: install <b>Ollama</b>, then "
+            "<code>ollama pull qwen3:8b</code> and "
+            "<code>ollama create qwen3-8b-32k -f docs/ollama/Modelfile.qwen3-8b-32k</code> — the "
+            "Modelfile is what sets the 32k window, because the chat API has nowhere to send it. "
+            f"Then set <code>{MODEL_VAR}=qwen3-8b-32k</code> in <code>.env</code> and restart this "
+            "app. It is slower — minutes per filing — and no document leaves the machine. "
             "The market brief still needs a cloud key, because it is built on web search and "
             "a local model has nothing to search.</p>"
         )

@@ -156,7 +156,8 @@ def test_generate_posts_the_openai_shape_and_reads_the_reply(
         "qwen2.5:7b", "read this"
     )
     assert text == "EVENT: something"
-    assert usage == {"input": 11, "output": 3}
+    assert usage["input"] == 11 and usage["output"] == 3
+    assert usage["truncated"] == 0, "a reply that finished is not a reply that was cut off"
     assert sent["body"]["model"] == "qwen2.5:7b"
     assert sent["body"]["messages"] == [{"role": "user", "content": "read this"}]
     # Extraction must be reproducible: the same filing, the same events, on a re-run.
@@ -183,12 +184,20 @@ def test_an_empty_reply_is_no_events_rather_than_an_exception(
     assert localmodel.local_generate("http://x/v1/chat/completions")("m", "p") == ("", {})
 
 
-def test_probe_asks_the_models_route_not_the_chat_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Probing must cost nothing and must not look like work."""
-    asked: list[str] = []
+def _listing(*ids: str, body: bytes | None = None, status: int = 200) -> Any:
+    """A stand-in for the models route, in the shape Ollama actually answers in."""
+    payload = body
+    if payload is None:
+        payload = json.dumps(
+            {"object": "list", "data": [{"id": i, "object": "model"} for i in ids]}
+        ).encode()
 
     class _Resp:
-        status = 200
+        def __init__(self) -> None:
+            self.status = status
+
+        def read(self) -> bytes:
+            return payload  # type: ignore[return-value]
 
         def __enter__(self) -> _Resp:
             return self
@@ -196,13 +205,174 @@ def test_probe_asks_the_models_route_not_the_chat_route(monkeypatch: pytest.Monk
         def __exit__(self, *exc: object) -> None:
             return None
 
-    def _urlopen(url: Any, timeout: float = 0.0) -> _Resp:
+    return _Resp
+
+
+def test_probe_asks_the_models_route_not_the_chat_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Probing must cost nothing and must not look like work."""
+    asked: list[str] = []
+    resp = _listing("qwen3-8b-32k:latest")
+
+    def _urlopen(url: Any, timeout: float = 0.0) -> Any:
         asked.append(url)
-        return _Resp()
+        return resp()
 
     monkeypatch.setattr(localmodel.urllib.request, "urlopen", _urlopen)
     assert localmodel.probe("http://127.0.0.1:11434/v1/chat/completions") == ""
     assert asked == ["http://127.0.0.1:11434/v1/models"]
+
+
+# --- the probe has to read the list, not merely reach it -------------------------------------------
+#
+# `.env` on the machine this was found on named `qwen2.5:7b`; Ollama had `qwen3-8b-32k` and
+# `qwen3:8b`. The probe passed, the page said "Filings read locally by qwen2.5:7b", and every
+# extraction call came back 404. Everything underneath degraded correctly — no events, no receipt,
+# "Filings NOT read" on the buy screen — while the surface said reading was happening.
+def _served(monkeypatch: pytest.MonkeyPatch, *ids: str, body: bytes | None = None) -> None:
+    resp = _listing(*ids, body=body)
+    monkeypatch.setattr(localmodel.urllib.request, "urlopen", lambda url, timeout=0.0: resp())
+
+
+def test_probe_refuses_a_tag_the_server_does_not_have(monkeypatch: pytest.MonkeyPatch) -> None:
+    _served(monkeypatch, "qwen3-8b-32k:latest", "qwen3:8b")
+    why = localmodel.probe("http://127.0.0.1:11434/v1/chat/completions", model="qwen2.5:7b")
+    assert "does not have qwen2.5:7b" in why
+    assert "qwen3-8b-32k:latest" in why and "qwen3:8b" in why, "say what IS there"
+
+
+def test_probe_accepts_the_short_form_of_an_implicit_latest_tag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`ollama create name -f Modelfile` lists `name:latest`; people write `name` in .env."""
+    _served(monkeypatch, "qwen3-8b-32k:latest")
+    assert localmodel.probe("http://x/v1/chat/completions", model="qwen3-8b-32k") == ""
+    assert localmodel.probe("http://x/v1/chat/completions", model="qwen3-8b-32k:latest") == ""
+
+
+def test_probe_rejects_a_web_page_that_answers_200(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Open WebUI serves its own HTML at /v1/models on :8080 and 405s the chat route."""
+    _served(monkeypatch, body=b"<!doctype html><html><body>Open WebUI</body></html>")
+    why = localmodel.probe("http://127.0.0.1:8080/v1/chat/completions", model="qwen3:8b")
+    assert "not with a model list" in why and "Open WebUI" in why
+    assert localmodel.URL_VAR in why
+
+
+def test_probe_rejects_a_server_holding_no_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    _served(monkeypatch)
+    assert "no models loaded" in localmodel.probe("http://x/v1/chat/completions", model="m")
+
+
+def test_a_tag_the_server_lacks_does_not_become_a_cloud_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same promise as an unreachable server: local was asked for, so local it stays."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv(localmodel.MODEL_VAR, "qwen2.5:7b")
+    _served(monkeypatch, "qwen3-8b-32k:latest")
+    backend = localmodel.choose_backend()
+    assert backend.kind == "none" and backend.generate is None
+    assert "did NOT fall back" in backend.note
+
+
+def test_choose_backend_asks_about_the_model_it_would_actually_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, str] = {}
+    monkeypatch.setenv(localmodel.MODEL_VAR, "qwen3-8b-32k")
+    monkeypatch.setattr(
+        localmodel, "probe", lambda url, **kw: seen.update(model=kw.get("model", "")) or ""
+    )
+    localmodel.choose_backend()
+    assert seen == {"model": "qwen3-8b-32k"}, "probing a different model than we call is no probe"
+
+
+# --- thinking, and running out of room ---------------------------------------------------------
+def test_the_request_asks_the_model_not_to_think(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Qwen3 thinks by default and it is charged to the same cap as the events — 150-220 tokens on
+    a one-line answer, out of the 3,000 a whole batch has to fit in."""
+    sent = _capture(monkeypatch, {"choices": [{"message": {"content": "ok"}}]})
+    localmodel.local_generate("http://x/v1/chat/completions")("m", "p")
+    assert sent["body"]["reasoning_effort"] == "none"
+
+
+def test_a_reply_cut_off_at_the_cap_is_reported_as_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The input fitting the window says nothing about the OUTPUT fitting max_tokens."""
+    _capture(
+        monkeypatch,
+        {"choices": [{"message": {"content": "EVENT: one"}, "finish_reason": "length"}]},
+    )
+    _text, usage = localmodel.local_generate("http://x/v1/chat/completions")("m", "p")
+    assert usage["truncated"] == 1
+
+
+def test_a_model_that_thought_anyway_is_recorded_rather_than_ignored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _capture(
+        monkeypatch,
+        {
+            "choices": [
+                {
+                    "message": {"content": "EVENT: one", "reasoning": "Okay, the user wants…"},
+                    "finish_reason": "stop",
+                }
+            ]
+        },
+    )
+    _text, usage = localmodel.local_generate("http://x/v1/chat/completions")("m", "p")
+    assert usage["thought"] == 1 and usage["truncated"] == 0
+
+
+def test_the_per_call_ceiling_is_shorter_than_the_evening_s_whole_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """It was 900 seconds, which is exactly the evidence run's own budget: one wedged call could
+    spend the entire evening and cover nothing."""
+    monkeypatch.delenv(localmodel.TIMEOUT_VAR, raising=False)
+    assert localmodel.timeout_seconds() < 900
+    monkeypatch.setenv(localmodel.TIMEOUT_VAR, "45")
+    assert localmodel.timeout_seconds() == 45.0
+    monkeypatch.setenv(localmodel.TIMEOUT_VAR, "not a number")
+    assert localmodel.timeout_seconds() == localmodel.TIMEOUT_SECONDS
+
+
+def test_the_note_says_the_context_and_that_thinking_is_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whichever backend is chosen, the page says so in words — including what it was sized to."""
+    monkeypatch.setenv(localmodel.MODEL_VAR, "qwen3-8b-32k")
+    monkeypatch.setenv(localmodel.CONTEXT_VAR, "32768")
+    monkeypatch.setattr(localmodel, "probe", lambda url, **kw: "")
+    backend = localmodel.choose_backend()
+    assert backend.context_tokens == 32768
+    assert "32,768-token context" in backend.note and "thinking off" in backend.note
+
+
+def _capture(monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]) -> dict[str, Any]:
+    """Record the request body and answer with ``payload``. No server, no network."""
+    sent: dict[str, Any] = {}
+
+    class _Resp:
+        status = 200
+
+        def read(self) -> bytes:
+            return json.dumps(payload).encode()
+
+        def __enter__(self) -> _Resp:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+    def _urlopen(request: Any, timeout: float = 0.0) -> _Resp:
+        sent["url"] = request.full_url
+        sent["body"] = json.loads(request.data.decode())
+        return _Resp()
+
+    monkeypatch.setattr(localmodel.urllib.request, "urlopen", _urlopen)
+    return sent
 
 
 # --- the server is on Windows and this is not ----------------------------------------------------

@@ -101,7 +101,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**63 live modules · 1,255 tests green + 1 xfail** (counted, not estimated — see the
+**63 live modules · 1,270 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -343,7 +343,8 @@ writes, or if any live module spells a panel path as a literal again.
 | | |
 |---|---|
 | `KITE_API_KEY` · `KITE_API_SECRET` | holdings, cash, prices; the secret only at login |
-| `QALPHA_LOCAL_MODEL` | reads filings **on this machine**. Set it only once a server answers — a name set with nothing listening does NOT fall back to the cloud, by design, so it turns reading off rather than on |
+| `QALPHA_LOCAL_MODEL` | reads filings **on this machine**. Must be a tag the server actually lists; a name with nothing listening — or a name the server does not have — does NOT fall back to the cloud, by design, so it turns reading off rather than on. Recipe: `ollama create qwen3-8b-32k -f docs/ollama/Modelfile.qwen3-8b-32k` |
+| `QALPHA_LOCAL_MODEL_CONTEXT` | what that model was **built** with (32768 for the above). It states the window, it cannot set it: the OpenAI-compatible route has nowhere to send `num_ctx`, which is why the Modelfile is committed |
 | `ANTHROPIC_API_KEY` | filings in the cloud, and the web-searched brief (which has no local substitute) |
 | `GIST_TOKEN` | **optional.** A private-gist tradebook store, for whoever keeps one. Unset, the twin reads `data/tradebooks/` — the same folder the page reads and the one OPERATING.md names |
 
