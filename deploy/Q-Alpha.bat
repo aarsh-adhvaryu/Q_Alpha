@@ -3,15 +3,20 @@ setlocal EnableDelayedExpansion
 REM ============================================================================
 REM  Q-Alpha — one click, from the Windows desktop.
 REM
-REM  Right-click this file -> Send to -> Desktop (create shortcut). Then one
-REM  double-click: it starts WSL if it is asleep, runs the pipeline inside it,
-REM  and opens the page it wrote in your Windows browser.
+REM  DO NOT shortcut this file where it sits. It lives inside WSL's filesystem,
+REM  at \\wsl$\<distro>\..., and that path only exists WHILE WSL IS RUNNING —
+REM  while starting WSL is this file's entire job. A .lnk to it fails with
+REM  "Missing Shortcut" on exactly the occasions you need it.
+REM
+REM  Run  ./deploy/install-windows.sh  from WSL instead. It copies this to the
+REM  Windows side with your real distro and repo path baked in, and makes the
+REM  shortcut. Then one double-click: WSL wakes, the pipeline runs, the page opens.
 REM
 REM  NOTHING HERE TRADES. It reads, it decides, it writes a page. Every order is
 REM  placed by you, in Kite.
 REM ============================================================================
 
-set DISTRO=Ubuntu
+set DISTRO=Ubuntu-24.04
 set REPO=/home/aarsh/q-alpha/Q_Alpha
 
 title Q-Alpha

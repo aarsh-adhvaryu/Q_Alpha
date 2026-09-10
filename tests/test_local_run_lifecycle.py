@@ -222,3 +222,35 @@ def test_the_launcher_runs_the_same_entry_point_the_tests_drive() -> None:
     sh = (root / "qalpha.sh").read_text(encoding="utf-8")
     assert "qalpha.sh" in bat
     assert "scripts/local_run.py" in sh
+
+
+def test_the_launcher_is_installed_to_windows_not_shortcut_inside_wsl() -> None:
+    """ "Missing Shortcut", 2026-09-10, and it was a chicken-and-egg of my own making.
+
+    The first instruction shortcut ``deploy/Q-Alpha.bat`` where it sits — inside WSL's filesystem at
+    ``\\\\wsl$\\<distro>\\...``. **That path only exists while WSL is running**, and starting WSL is
+    the launcher's entire job, so Windows could not reach the file it needed in order to wake the
+    thing the file lives on. It failed on exactly the occasions it was needed.
+
+    The installer copies the launcher to the Windows side, where it is always reachable, and writes
+    this machine's real distro and repo into the copy.
+    """
+    root = Path(__file__).resolve().parent.parent
+    installer = (root / "deploy/install-windows.sh").read_text(encoding="utf-8")
+    assert "WSL_DISTRO_NAME" in installer, "the distro must be read, never assumed"
+    assert "%USERNAME%" in installer, "the Windows user must be read, never assumed"
+    assert "OneDrive/Desktop" in installer, (
+        "a redirected Desktop is the common case, not the odd one"
+    )
+    # The shortcut must target the Windows copy. A .lnk whose TargetPath is a \\wsl$ path is the
+    # exact failure being fixed, so no TargetPath line may mention it.
+    targets = [ln for ln in installer.splitlines() if "TargetPath" in ln]
+    assert targets, "the installer must set a shortcut target"
+    for line in targets:
+        assert "USERPROFILE" in line, line
+        assert "wsl$" not in line, f"a shortcut into WSL is unreachable when WSL is asleep: {line}"
+
+    bat = (root / "deploy/Q-Alpha.bat").read_text(encoding="utf-8")
+    assert "DO NOT shortcut this file where it sits" in bat, (
+        "the file must warn against the thing that failed"
+    )
