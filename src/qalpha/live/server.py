@@ -26,14 +26,13 @@ from __future__ import annotations
 import json
 import os
 import threading
-import webbrowser
 from collections.abc import Callable
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from qalpha.live import ui
+from qalpha.live import browser, ui
 from qalpha.live.progress import IST, LOG
 
 HOST = "127.0.0.1"
@@ -446,7 +445,13 @@ def _job_login() -> None:
     url = login_url(creds.api_key)
     LOG.say("Opening Kite in your browser…", "step")
     LOG.say(url, "detail")
-    webbrowser.open(url)
+    # SAY SO WHEN IT DID NOT OPEN. Inside WSL there is no desktop handler, so this used to print
+    # `gio: …: Operation not supported` to a terminal while the page said Kite had been opened —
+    # and the user waited for a redirect that was never coming. The URL is already in the feed
+    # above; this makes it an instruction rather than a log line.
+    if not browser.open_url(url):
+        LOG.say(browser.describe_failure(url), "warn")
+        LOG.say("Then paste the address you land on into the box on this page.", "warn")
     LOG.say("Waiting for the redirect (paste it on the page if it does not arrive).", "detail")
     exchange(creds, capture_request_token())
     LOG.say("Session minted and written to .env.", "done")
@@ -467,8 +472,8 @@ def serve(port: int = DEFAULT_PORT, *, open_browser: bool = True) -> None:
     url = f"http://{HOST}:{port}/"
     print(f"Q-Alpha is at {url}")
     print("Nothing here places an order. Ctrl-C to stop.")
-    if open_browser:
-        webbrowser.open(url)
+    if open_browser and not browser.open_url(url):
+        print(browser.describe_failure(url))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

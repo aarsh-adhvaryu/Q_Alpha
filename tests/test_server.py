@@ -230,3 +230,82 @@ def test_decide_only_asks_the_runner_to_skip_the_research(monkeypatch: pytest.Mo
 def test_the_trail_panel_reports_an_empty_history_rather_than_nothing(app: int) -> None:
     _status, body, _ = _get(app, "/")
     assert "What has run" in body
+
+
+# --- the login button, when there is no browser ---------------------------------------------------
+#
+# The bug was not that opening failed — inside WSL there is no desktop handler and it always would.
+# It was that the app claimed to have opened Kite anyway, so the user sat waiting for a redirect
+# that was never coming, next to a terminal error naming a program they had never heard of.
+def test_the_login_job_says_so_when_no_browser_opens(monkeypatch: pytest.MonkeyPatch) -> None:
+    from qalpha.live import browser, server
+    from qalpha.live.progress import LOG
+
+    monkeypatch.setattr(browser, "open_url", lambda url: False)
+    monkeypatch.setattr(
+        server, "load_credentials", lambda: None, raising=False
+    )  # not reached before the open
+
+    class _Creds:
+        api_key = "testkey"
+
+    monkeypatch.setattr("qalpha.live.credentials.load_credentials", lambda: _Creds())
+    monkeypatch.setattr(
+        "qalpha.live.auth.login_url", lambda k: f"https://kite.test/?v=3&api_key={k}"
+    )
+    monkeypatch.setattr(
+        "qalpha.live.auth.capture_request_token",
+        lambda: (_ for _ in ()).throw(RuntimeError("stop")),
+    )
+
+    LOG.begin()
+    with pytest.raises(RuntimeError, match="stop"):
+        server._job_login()
+    text = " ".join(str(line.get("text", "")) for line in LOG.snapshot()["lines"])  # type: ignore[union-attr]
+    assert "Could not open a browser" in text
+    assert "paste the address" in text.lower()
+    assert "api_key=testkey" in text, "the link itself must be in the feed to copy"
+
+
+def test_the_login_job_stays_quiet_when_the_browser_does_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A warning printed on the happy path teaches people to ignore warnings."""
+    from qalpha.live import browser, server
+    from qalpha.live.progress import LOG
+
+    class _Creds:
+        api_key = "testkey"
+
+    monkeypatch.setattr(browser, "open_url", lambda url: True)
+    monkeypatch.setattr("qalpha.live.credentials.load_credentials", lambda: _Creds())
+    monkeypatch.setattr("qalpha.live.auth.login_url", lambda k: "https://kite.test/")
+    monkeypatch.setattr(
+        "qalpha.live.auth.capture_request_token",
+        lambda: (_ for _ in ()).throw(RuntimeError("stop")),
+    )
+
+    LOG.begin()
+    with pytest.raises(RuntimeError, match="stop"):
+        server._job_login()
+    text = " ".join(str(line.get("text", "")) for line in LOG.snapshot()["lines"])  # type: ignore[union-attr]
+    assert "Could not open a browser" not in text
+
+
+def test_serve_prints_the_url_when_it_cannot_open_one(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--app` on a headless box must still tell you where the app is."""
+    from qalpha.live import browser, server
+
+    monkeypatch.setattr(browser, "open_url", lambda url: False)
+
+    class _StopError(Exception):
+        pass
+
+    def _server(addr: object, handler: object) -> object:
+        raise _StopError()
+
+    monkeypatch.setattr(server, "ThreadingHTTPServer", _server)
+    with pytest.raises(_StopError):
+        server.serve(9999, open_browser=True)
