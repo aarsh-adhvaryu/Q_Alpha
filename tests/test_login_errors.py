@@ -16,6 +16,9 @@ that was right.
 
 from __future__ import annotations
 
+import pytest
+
+from qalpha.live import auth
 from qalpha.live.auth import explain_login_failure
 
 
@@ -79,3 +82,78 @@ def test_a_network_error_is_not_diagnosed_as_a_credential_problem() -> None:
     text = explain_login_failure(OSError("Connection reset by peer"))
     assert "OSError" in text
     assert "KITE_API_SECRET" not in text
+
+
+# --- a login that succeeds must leave a session behind --------------------------------------------
+#
+# `exchange()` returns a KiteSession and saves nothing. Every interactive path except the CLI called
+# it and DISCARDED the return value — the app's Log in button, its paste box, and `--login`. So a
+# login that succeeded completely left no session on disk, the next run said "Kite was not
+# reachable", and the page said:
+#
+#     Session minted and written to .env.
+#
+# False twice: nothing was written, and .env is not where a session goes. `get_access_token` reads
+# `.kite_session.json`. These assert what is on disk afterwards, because that is the only thing that
+# made the difference between a working login and a silent no-op.
+@pytest.fixture
+def session_file(tmp_path, monkeypatch):
+    path = tmp_path / ".kite_session.json"
+    monkeypatch.setattr(auth, "SESSION_FILE", path)
+    monkeypatch.setattr(
+        auth,
+        "exchange",
+        lambda creds, token: auth.KiteSession(
+            access_token="tok-abc", user_id="AB1234", login_date="2026-09-10"
+        ),
+    )
+    return path
+
+
+def _creds():
+    from qalpha.live.credentials import KiteCredentials
+
+    return KiteCredentials(api_key="k" * 16, api_secret="s" * 32)
+
+
+def test_minting_a_session_writes_it_where_the_broker_path_reads_it(session_file) -> None:
+    """THE ONE THIS BLOCK EXISTS FOR."""
+    auth.mint_session(_creds(), "req-token")
+    assert session_file.exists(), "a successful login that saves nothing is a silent no-op"
+    assert "tok-abc" in session_file.read_text()
+
+
+def test_the_saved_session_is_the_one_get_access_token_returns(session_file, monkeypatch) -> None:
+    """Written and readable are different claims; assert the round trip."""
+    monkeypatch.setattr(auth.dt, "datetime", auth.dt.datetime)
+    auth.mint_session(_creds(), "req-token")
+    session = auth.load_cached_session()
+    assert session is not None and session.access_token == "tok-abc"
+    assert session.user_id == "AB1234"
+
+
+def test_no_interactive_caller_uses_bare_exchange_any_more() -> None:
+    """The caller test. `exchange` still exists for the tests that check the network call alone —
+    but a path that logs a user in and does not persist is the bug, so none may use it."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    for name in ("src/qalpha/live/server.py", "scripts/local_run.py"):
+        text = (root / name).read_text(encoding="utf-8")
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#") or "exchange(" not in stripped:
+                continue
+            assert "mint_session" in stripped or "explain" in stripped, (
+                f"{name} calls exchange() directly at: {stripped!r} — use mint_session, which "
+                "saves the session the rest of the system reads"
+            )
+
+
+def test_the_app_never_claims_the_session_went_to_dot_env() -> None:
+    """It goes to .kite_session.json. Naming the wrong file is how this stayed invisible."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    server = (root / "src/qalpha/live/server.py").read_text(encoding="utf-8")
+    assert "written to .env" not in server

@@ -163,7 +163,12 @@ def explain_login_failure(exc: BaseException, *, api_key: str = "") -> str:
 
 
 def exchange(creds: KiteCredentials, request_token: str) -> KiteSession:
-    """Trade a ``request_token`` + api_secret for a day's access token (a Kite network call)."""
+    """Trade a ``request_token`` + api_secret for a day's access token (a Kite network call).
+
+    **Returns the session; it does not save it.** Prefer :func:`mint_session`, which does both —
+    three of the four callers here used this one, dropped the result, and told the user the session
+    had been saved.
+    """
     kite = KiteConnect(api_key=creds.api_key)
     data = kite.generate_session(request_token, api_secret=creds.api_secret)
     return KiteSession(
@@ -171,6 +176,29 @@ def exchange(creds: KiteCredentials, request_token: str) -> KiteSession:
         user_id=str(data.get("user_id", "")),
         login_date=dt.datetime.now(IST).date().isoformat(),
     )
+
+
+def mint_session(creds: KiteCredentials, request_token: str) -> KiteSession:
+    """Exchange a request_token AND put the result where the rest of the system looks for it.
+
+    ### The bug this exists to make impossible
+
+    :func:`exchange` returns a session and saves nothing. Every interactive path except the CLI
+    called it and **discarded the return value** — the app's *Log in to Zerodha* button, its paste
+    box, and ``local_run --login``. So a login that succeeded completely left no session on disk,
+    the very next run reported *"Kite was not reachable"*, and the page said:
+
+        Session minted and written to .env.
+
+    Which was false twice: nothing was written, and ``.env`` is not where a session goes.
+    :func:`get_access_token` reads ``.kite_session.json``, so that is what has to be written.
+
+    Two functions where one would do is how the discard happened. This is the one callers want, and
+    :func:`exchange` stays for the tests that check the network call alone.
+    """
+    session = exchange(creds, request_token)
+    persist_session(session)
+    return session
 
 
 def persist_session(session: KiteSession) -> None:

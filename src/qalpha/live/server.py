@@ -430,16 +430,16 @@ def _use_token(raw: str) -> str:
     if not raw.strip():
         return quote("Nothing pasted.")
     try:
-        from qalpha.live.auth import exchange, parse_request_token
+        from qalpha.live.auth import mint_session, parse_request_token
         from qalpha.live.credentials import load_credentials
 
-        exchange(load_credentials(), parse_request_token(raw))
+        mint_session(load_credentials(), parse_request_token(raw))
     except Exception as exc:
         from qalpha.live.auth import explain_login_failure
 
         key = os.environ.get("KITE_API_KEY", "")
         return quote(f"That token was not accepted. {explain_login_failure(exc, api_key=key)}")
-    return quote("Logged in. Run the analysis to use the fresh session.")
+    return quote("Logged in — the session is saved. Run the evening to use it.")
 
 
 def _job_run() -> None:
@@ -480,7 +480,7 @@ def _job_evidence() -> None:
 
 
 def _job_login() -> None:
-    from qalpha.live.auth import capture_request_token, exchange, login_url
+    from qalpha.live.auth import SESSION_FILE, capture_request_token, login_url, mint_session
     from qalpha.live.credentials import load_credentials
 
     creds = load_credentials()
@@ -497,7 +497,7 @@ def _job_login() -> None:
     LOG.say("Waiting for the redirect (paste it on the page if it does not arrive).", "detail")
     token = capture_request_token()
     try:
-        exchange(creds, token)
+        session = mint_session(creds, token)
     except Exception as exc:
         # "TokenException: Invalid `checksum`" on its own reads like a bug in this code. It is
         # Kite saying a signature it computed did not match, over three inputs it does not name.
@@ -505,7 +505,10 @@ def _job_login() -> None:
 
         LOG.say(explain_login_failure(exc, api_key=creds.api_key), "error")
         raise
-    LOG.say("Session minted and written to .env.", "done")
+    # NAME THE FILE THAT WAS ACTUALLY WRITTEN. This line used to say ".env", and nothing was
+    # written anywhere — the session was minted and dropped, and the next run said Kite was
+    # unreachable.
+    LOG.say(f"Logged in as {session.user_id}; session saved to {SESSION_FILE.name}.", "done")
 
 
 _ACTIONS: dict[str, tuple[str, Callable[[], None]]] = {

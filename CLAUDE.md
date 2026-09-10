@@ -101,7 +101,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**63 live modules · 1,223 tests green + 1 xfail** (counted, not estimated — see the
+**63 live modules · 1,230 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;

@@ -376,7 +376,7 @@ def main(argv: list[str] | None = None) -> int:
     notes: list[str] = []
 
     if args.login:
-        from qalpha.live.auth import capture_request_token, exchange, login_url
+        from qalpha.live.auth import SESSION_FILE, capture_request_token, login_url, mint_session
         from qalpha.live.credentials import load_credentials
 
         creds = load_credentials()
@@ -384,9 +384,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Opening Kite login…\n  {url}")
         if not open_url(url):
             print(describe_failure(url))
-        token = capture_request_token()
-        exchange(creds, token)
-        print("Session refreshed.")
+        session = mint_session(creds, capture_request_token())
+        print(f"Logged in as {session.user_id}; session saved to {SESSION_FILE.name}.")
 
     # THE REFRESH PHASE, FIRST. It is what *creates* today's inputs, so it cannot be keyed to a
     # digest of them; it is scoped to the calendar day instead. Everything read below marks against
