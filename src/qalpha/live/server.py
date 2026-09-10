@@ -33,6 +33,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from qalpha.live import browser, ui
+from qalpha.live import build as build_info
 from qalpha.live.progress import IST, LOG
 
 HOST = "127.0.0.1"
@@ -109,6 +110,7 @@ def _shell(body: str, *, refresh: bool) -> bytes:
     """The page frame. Auto-refresh only while a job runs — a page that reloads under your cursor
     when nothing is happening is worse than one you refresh yourself."""
     now = datetime.now(IST)
+    build = build_info.current()
     poll = (
         "<script>setInterval(async()=>{const r=await fetch('/status.json');const s=await r.json();"
         "document.getElementById('feed').innerHTML=s.lines.map(l=>"
@@ -140,6 +142,21 @@ def _shell(body: str, *, refresh: bool) -> bytes:
  input[type=text]{{font:inherit;font-size:.78rem;padding:.4rem .6rem;border:1px solid var(--qa-line-2);
    border-radius:2px;width:min(560px,100%);background:var(--qa-surface);color:var(--qa-ink)}}
  p{{font-size:.82rem;color:var(--qa-ink-2);line-height:1.5}}
+ /* The report's body is inlined into this page and its own <style> is dropped with the rest of
+    its <head>, so the classes it uses have to be defined HERE too. They were not: every note,
+    footnote and list the report writes rendered as unstyled text inside the app while looking
+    correct in the standalone file. One visual language, one place — or two that disagree. */
+ .qa-note{{border:1px solid var(--qa-line);border-left:3px solid var(--qa-warn);
+   background:var(--qa-surface);border-radius:3px;padding:.6rem .85rem;margin:.6rem 0;
+   font-size:.8rem;color:var(--qa-ink-2)}}
+ .qa-note p{{margin:.25rem 0}}
+ .qa-note ul{{margin:.2rem 0 .5rem 1.1rem;padding:0}}
+ .qa-note li{{margin:.15rem 0}}
+ .qa-note.qa-good{{border-left-color:var(--qa-good)}}
+ .qa-note.qa-info{{border-left-color:var(--qa-accent)}}
+ .qa-note.qa-bad{{border-left-color:var(--qa-bad);background:var(--qa-surface)}}
+ .qa-note.qa-bad b{{color:var(--qa-bad-ink)}}
+ .qa-foot{{font-size:.74rem;color:var(--qa-muted);line-height:1.55;margin:.35rem 0 1rem}}
 </style></head><body><div class="qa-wrap">
 {
         ui.app_bar(
@@ -155,12 +172,33 @@ def _shell(body: str, *, refresh: bool) -> bytes:
                     tone="info",
                     title="No code path in this server can place an order.",
                 ),
+                # WHICH CODE IS THIS. A fix was written, the app was "restarted" and was not, and
+                # the page looked identical either way — so the same error came back and read as
+                # the fix not working. The gap between the file being right and the process being
+                # right was invisible from here.
+                ui.Chip(
+                    build.chip_text(),
+                    tone="warn" if build.stale else "neutral",
+                    title=build.sentence(),
+                    dot=build.stale,
+                ),
             ],
         )
     }
 {body}
 </div>{poll}</body></html>"""
     return html.encode("utf-8")
+
+
+def _stale_banner() -> str:
+    """Loud, because the chip is easy to miss and this is the failure it exists to prevent."""
+    build = build_info.current()
+    if not build.stale:
+        return ""
+    return (
+        '<div class="qa-note qa-bad"><p><b>This app is running old code.</b> '
+        f"{_escape(build.sentence())}</p></div>"
+    )
 
 
 def _controls() -> str:
@@ -357,7 +395,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         message = parse_qs(urlparse(self.path).query).get("m", [""])[0]
         body = (
-            _controls()
+            _stale_banner()
+            + _controls()
             + _feed_panel()
             + _last_report()
             + _trail_panel()
