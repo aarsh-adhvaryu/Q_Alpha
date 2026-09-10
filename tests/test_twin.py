@@ -570,3 +570,25 @@ def test_the_abort_tells_the_user_about_the_folder_not_about_a_job() -> None:
     source = inspect.getsource(twin_script.cmd_daily)
     assert "data/tradebooks/" in source
     assert "GIST_TOKEN present in the job" not in source
+
+
+def test_the_daily_run_snapshots_the_gate_for_the_page() -> None:
+    """The page must show what the twin graded, not grade it a second time and disagree.
+
+    Source-level, like the coverage-write check in the evidence caller: the write happens deep
+    inside a run that needs a market, a tradebook and eight books, and what matters is that it is in
+    the same place as the report it belongs to.
+    """
+    import inspect
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import twin as twin_script
+
+    source = inspect.getsource(twin_script.cmd_daily)
+    assert "GATE_JSON.write_text" in source
+    assert "gate.to_dict()" in source
+
+    from qalpha.live.twinpanel import GATE_JSON
+
+    assert twin_script.GATE_JSON is GATE_JSON, "one path, imported — not two that agree today"

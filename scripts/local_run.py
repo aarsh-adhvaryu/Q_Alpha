@@ -219,6 +219,33 @@ def _proposal(
         ]
 
 
+def _track(
+    trades: list[TradebookTrade],
+    account: ReconciledAccount,
+    prices: dict[str, Decimal],
+) -> object | None:
+    """Your account beside the same money in the index. ``None`` when it cannot be measured.
+
+    **Shares only.** The value handed over excludes cash, because the idle balance here is next
+    month's instalment rather than performance — counting it is the ₹4,01,677 "+444%" defect, and
+    this is the one panel where that number would be quoted back at the user as a track record.
+
+    Never raises: a missing benchmark or an unreadable tradebook is a panel that says so.
+    """
+    try:
+        from paper import _load_benchmark_series
+
+        from qalpha.live.track_record import track_record
+
+        equity = sum(
+            (qty * prices[t] for t, qty in account.portfolio.positions().items() if t in prices),
+            Decimal("0"),
+        )
+        return track_record(trades, equity, _load_benchmark_series(), date.today())
+    except Exception:
+        return None
+
+
 #: How many watchlist names get a research row when nothing is held or proposed. Enough to read a
 #: market from; small enough that the filings layer could realistically cover them.
 WATCH_ROWS = 12
@@ -595,6 +622,7 @@ def main(argv: list[str] | None = None) -> int:
             notes=notes,
             proposal=orders,
             desk=desk,
+            track=_track(trades, account, prices),
         ),
         encoding="utf-8",
     )

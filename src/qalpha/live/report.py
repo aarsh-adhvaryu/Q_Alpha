@@ -32,10 +32,11 @@ from decimal import Decimal
 from html import escape
 from pathlib import Path
 
-from qalpha.live import evidence, ui
+from qalpha.live import evidence, twinpanel, ui
 from qalpha.live.account import ReconciledAccount
 from qalpha.live.commitments import Allowance, Commitment, open_proposals, waiting
 from qalpha.live.desk import UNREADABLE, Desk, NameView
+from qalpha.live.track_record import TrackRecord
 
 
 def _holdings_table(account: ReconciledAccount, prices: Mapping[str, Decimal]) -> str:
@@ -480,8 +481,15 @@ def render(
     notes: Sequence[str] = (),
     proposal: Sequence[tuple[str, int, Decimal]] = (),
     desk: Desk | None = None,
+    track: TrackRecord | None = None,
 ) -> str:
-    """One self-contained page. No server, no network, no fonts to fetch — it opens from a file."""
+    """One self-contained page. No server, no network, no fonts to fetch — it opens from a file.
+
+    ``track`` is the account measured against the same money in the index. It is built by the
+    caller, from the module that owns that arithmetic, and passed in — the page adds the record to
+    what it already showed, so the surface that says *buy these* can also be asked *and how has this
+    been doing*. Absent, every panel below says what is missing rather than going quiet.
+    """
     ist = generated_at.astimezone(ui.IST)
     positions = account.portfolio.positions()
     unpriced_names = sorted(t for t in positions if t not in prices)
@@ -600,6 +608,7 @@ def render(
 {_proposal_table(proposal, allowance)}
 {ui.section("What the run decided")}
 {_decisions(commitments, allowance, ist.date())}
+{twinpanel.panels(today=ist.date(), account=track)}
 <p style="margin-top:2rem;color:var(--qa-muted);font-size:.72rem">
 Everything here is as of the run that wrote this file — {ist:%d %b %Y, %H:%M} IST. It does not
 update on its own. Run again for a newer page.</p>

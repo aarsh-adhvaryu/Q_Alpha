@@ -66,6 +66,7 @@ from qalpha.live.twin import (
     seed_books,
     sync_flows,
 )
+from qalpha.live.twinpanel import GATE_JSON
 from qalpha.live.verdicts import basket_verdicts, verdict_calls
 
 REPORT = Path("reports/twin_dashboard.md")
@@ -614,6 +615,9 @@ def cmd_daily(cfg: Config) -> int:
         + "\n",
         encoding="utf-8",
     )
+    # The same grading the report just rendered, for the page to read. Snapshot, not record: the
+    # append-only history below is the evidence, and this is overwritten every run like the marks.
+    GATE_JSON.write_text(json.dumps(gate.to_dict(), indent=2) + "\n", encoding="utf-8")
     # Persist the marks the report was built from, so the dashboard charts plot exactly these
     # numbers rather than recomputing and quietly disagreeing with the table above them.
     MARKS.write_text(

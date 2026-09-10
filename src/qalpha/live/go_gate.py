@@ -215,6 +215,27 @@ class GateReport:
     def blocking(self) -> list[Criterion]:
         return [c for c in self.criteria if c.blocks]
 
+    def to_dict(self) -> dict[str, object]:
+        """The same grading, for a surface that is not markdown.
+
+        Written beside the report as a daily snapshot so the page shows what the twin actually
+        graded, rather than a second implementation of the same six rules drifting quietly away
+        from this one.
+        """
+        return {
+            "as_of": self.as_of.isoformat(),
+            "verdict": self.verdict,
+            "criteria": [
+                {
+                    "name": c.name,
+                    "verdict": c.verdict,
+                    "reading": c.reading,
+                    "settles_it": c.settles_it,
+                }
+                for c in self.criteria
+            ],
+        }
+
     def render(self) -> str:
         head = (
             f"# GO gate — **{self.verdict}** ({self.as_of})\n\n"
