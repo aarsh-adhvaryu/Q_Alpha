@@ -133,12 +133,23 @@ def evaluate(
 
     # THE ONE THAT LET ₹100 BUY ₹49,658. The allowance says what the mandate permits this month; the
     # balance says what exists. A basket may never exceed either.
-    if settled_cash < budget:
+    #
+    # And the cash that matters is UNSPOKEN-FOR cash. Money already reserved by an unconfirmed
+    # proposal is still sitting in the account — it has not left yet — so comparing the new budget
+    # against the raw balance let ₹12,000 of cash carry ₹10,000 of reservations and then take
+    # another ₹11,882: ₹21,882 promised against ₹12,000. Reservations are subtracted first.
+    free_cash = settled_cash - allowance.reserved
+    if allowance.reserved > 0:
         reasons.append(
-            f"{_inr(settled_cash)} of settled cash is less than the {_inr(budget)} allowance "
-            "remaining, so the cash is the limit."
+            f"{_inr(allowance.reserved)} of the {_inr(settled_cash)} balance is already reserved by "
+            f"an unconfirmed proposal, leaving {_inr(max(Decimal('0'), free_cash))} unspoken for."
         )
-        budget = settled_cash
+    if free_cash < budget:
+        reasons.append(
+            f"{_inr(max(Decimal('0'), free_cash))} of free cash is less than the {_inr(budget)} "
+            "allowance remaining, so the cash is the limit."
+        )
+        budget = max(Decimal("0"), free_cash)
 
     if budget < floor:
         return BuyGate(

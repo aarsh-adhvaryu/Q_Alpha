@@ -66,7 +66,11 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         lambda tickers, costs: ({t: Decimal("400") for t in tickers}, []),
     )
     monkeypatch.setattr(
-        local_run, "_proposal", lambda account, budget, cfg: (_fit(state["orders"], budget), [])
+        local_run,
+        "_proposal",
+        # `mandate` joined the signature when the sector and name caps were threaded through — the
+        # stub follows the real one, or it stops testing the real one.
+        lambda account, budget, cfg, mandate: (_fit(state["orders"], budget), []),
     )
     state["tmp"] = tmp_path
     return state
