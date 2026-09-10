@@ -111,6 +111,27 @@ def configured() -> tuple[str, str, int]:
     return url, model, context
 
 
+def wsl_advice() -> str:
+    """What to do when the model server is on Windows and this is running in WSL.
+
+    Ollama on Windows binds ``127.0.0.1`` on the WINDOWS side. WSL2 has its own network namespace,
+    so that address is a different machine's loopback and nothing there answers — which the generic
+    "nothing answered" message describes accurately and unhelpfully, since the server is running
+    perfectly well two feet away.
+    """
+    from qalpha.live.browser import is_wsl
+
+    if not is_wsl():
+        return ""
+    return (
+        " You are in WSL and Ollama on Windows listens on the Windows side's own loopback, which "
+        "is not this one. Two fixes: add `networkingMode=mirrored` under [wsl2] in "
+        "C:\\Users\\<you>\\.wslconfig and run `wsl --shutdown` (localhost then works both "
+        "ways), or set OLLAMA_HOST=0.0.0.0 on Windows and point "
+        f"{URL_VAR} at the Windows host address."
+    )
+
+
 def probe(url: str, *, timeout: float = 5.0) -> str:
     """``""`` when a server answers at ``url``, else why it did not.
 
@@ -212,8 +233,9 @@ def choose_backend(*, prefer_local: bool | None = None) -> Backend:
                 None,
                 model,
                 "none",
-                f"Local model {model} was configured but {why}. Filings are archived and left "
-                "unread — this did NOT fall back to the cloud, because you asked for local.",
+                f"Local model {model} was configured but {why}.{wsl_advice()} Filings are "
+                "archived and left unread — this did NOT fall back to the cloud, because you "
+                "asked for local.",
             )
         return Backend(
             local_generate(url),

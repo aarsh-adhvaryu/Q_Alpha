@@ -191,3 +191,48 @@ def test_probe_asks_the_models_route_not_the_chat_route(monkeypatch: pytest.Monk
     monkeypatch.setattr(localmodel.urllib.request, "urlopen", _urlopen)
     assert localmodel.probe("http://127.0.0.1:11434/v1/chat/completions") == ""
     assert asked == ["http://127.0.0.1:11434/v1/models"]
+
+
+# --- the server is on Windows and this is not ----------------------------------------------------
+#
+# Ollama on Windows binds the WINDOWS side's 127.0.0.1. WSL2 has its own network namespace, so that
+# address is a different machine's loopback: nothing answers, and "nothing answered at
+# http://127.0.0.1:11434" is an accurate and useless description of a server running two feet away.
+def test_a_wsl_user_is_told_why_their_windows_ollama_is_invisible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from qalpha.live import browser
+
+    monkeypatch.setenv(localmodel.MODEL_VAR, "qwen2.5:7b")
+    monkeypatch.setattr(browser, "is_wsl", lambda: True)
+    monkeypatch.setattr(localmodel, "probe", lambda url, **kw: "nothing answered")
+    note = localmodel.choose_backend().note
+    assert "WSL" in note
+    assert "networkingMode=mirrored" in note
+    assert "OLLAMA_HOST=0.0.0.0" in note
+
+
+def test_the_wsl_advice_is_absent_off_wsl(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Linux desktop user with Ollama down does not need Windows instructions."""
+    from qalpha.live import browser
+
+    monkeypatch.setenv(localmodel.MODEL_VAR, "qwen2.5:7b")
+    monkeypatch.setattr(browser, "is_wsl", lambda: False)
+    monkeypatch.setattr(localmodel, "probe", lambda url, **kw: "nothing answered")
+    note = localmodel.choose_backend().note
+    assert "WSL" not in note and "wslconfig" not in note
+
+
+def test_the_no_fallback_promise_survives_the_extra_advice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Adding help must not dilute the thing that matters: it did not go to the cloud."""
+    from qalpha.live import browser
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv(localmodel.MODEL_VAR, "qwen2.5:7b")
+    monkeypatch.setattr(browser, "is_wsl", lambda: True)
+    monkeypatch.setattr(localmodel, "probe", lambda url, **kw: "nothing answered")
+    backend = localmodel.choose_backend()
+    assert backend.kind == "none"
+    assert "did NOT fall back" in backend.note
