@@ -79,6 +79,18 @@ CHUNK_OVERLAP = 500
 #: Document text per model call. Chunks are packed up to this; a chunk is never split across calls.
 PROMPT_CHAR_BUDGET = 24_000
 
+#: Every counter :func:`extract` reports. Named in one place so an empty run and a busy one carry
+#: the same keys — a caller reading ``usage["failed_batches"]`` on the empty path used to get a
+#: KeyError's worth of nothing.
+_USAGE_FIELDS = (
+    "input",
+    "output",
+    "calls",
+    "failed_batches",
+    "truncated_batches",
+    "retried_batches",
+)
+
 
 @dataclass(frozen=True)
 class DocumentChunk:
@@ -369,25 +381,52 @@ def extract(
     counted in ``usage["failed_batches"]`` so a caller can refuse to claim coverage it did not get.
     An extraction that did not happen must look different from one that found nothing, and neither
     may look like approval.
+
+    **The same is true of a reply that ran out of room.** The input fitting the window says nothing
+    about the OUTPUT fitting ``max_tokens``: a batch of filings that genuinely carries a dozen events
+    can be cut off mid-list, and every document after the cut has then been sent and not reported on.
+    A multi-document batch is retried one document at a time, which is usually enough; a single
+    document whose reply is still cut off counts in ``failed_batches`` (and in
+    ``truncated_batches``), so no caller may claim coverage from it. Its verified events are still
+    returned — a quote checked against the archived bytes is evidence whatever else went wrong — but
+    they arrive alongside a count that stops them being read as a complete answer.
     """
     if not documents:
-        return [], 0, "", {"input": 0, "output": 0, "calls": 0, "failed_batches": 0}
+        return [], 0, "", dict.fromkeys(_USAGE_FIELDS, 0)
     all_chunks = [c for doc in documents for c in chunks_for(doc)]
     events: list[ExtractedEvent] = []
     discarded = 0
     raws: list[str] = []
-    usage: dict[str, int] = {"input": 0, "output": 0, "calls": 0, "failed_batches": 0}
-    for batch in batch_chunks(all_chunks, budget=batch_chars):
+    usage: dict[str, int] = dict.fromkeys(_USAGE_FIELDS, 0)
+    pending: list[list[DocumentChunk]] = list(batch_chunks(all_chunks, budget=batch_chars))
+    while pending:
+        batch = pending.pop(0)
         try:
             raw, call_usage = generate(model, build_prompt(batch))
         except Exception as exc:
             raws.append(f"extraction failed: {exc}")
             usage["failed_batches"] += 1
             continue
+        if call_usage.get("truncated") and len(batch) > 1:
+            # The reply ran out of room with several documents in the call. Splitting is the only
+            # thing worth trying: temperature is zero, so asking again unchanged truncates again in
+            # the same place. The tokens spent are still counted — they were spent.
+            usage["retried_batches"] += 1
+            usage["calls"] += 1
+            for field in ("input", "output"):
+                usage[field] += int(call_usage.get(field, 0))
+            raws.append("[TRUNCATED] retried one document at a time")
+            pending = [[chunk] for chunk in batch] + pending
+            continue
         raws.append(raw)
         usage["calls"] += 1
         for field in ("input", "output"):
             usage[field] += int(call_usage.get(field, 0))
+        if call_usage.get("truncated"):
+            # One document, and the reply STILL ran out of room. Whatever it found is kept; what it
+            # did not reach is unknown, and unknown is what the caller has to be told.
+            usage["truncated_batches"] += 1
+            usage["failed_batches"] += 1
         # Verified against the WHOLE documents, never just this batch's slices, so a quote spanning
         # a chunk boundary still resolves to the document it came from.
         found, dropped = parse_events(raw, documents, model=model)
@@ -435,6 +474,9 @@ def default_generate(api_key: str, *, max_tokens: int = MAX_OUTPUT_TOKENS) -> Ge
         return text, {
             "input": int(getattr(resp.usage, "input_tokens", 0) or 0),
             "output": int(getattr(resp.usage, "output_tokens", 0) or 0),
+            # The cloud's spelling of the same fact. A cut-off reply is not a reading of the
+            # documents that produced it, wherever the model ran.
+            "truncated": 1 if resp.stop_reason == "max_tokens" else 0,
         }
 
     return generate
