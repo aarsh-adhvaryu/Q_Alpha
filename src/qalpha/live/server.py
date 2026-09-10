@@ -44,7 +44,9 @@ PAGE_PATH = Path("data/session/qalpha.html")
 TOKENS: tuple[tuple[str, str], ...] = (
     ("KITE_API_KEY", "your holdings, cash and live prices"),
     ("KITE_API_SECRET", "exchanging a login for a day's session"),
-    ("ANTHROPIC_API_KEY", "reading filings (the AI layer)"),
+    ("QALPHA_LOCAL_MODEL", "reading filings on this machine — set this and nothing is sent out"),
+    ("QALPHA_LOCAL_MODEL_URL", "where the local server listens (defaults to Ollama's port)"),
+    ("ANTHROPIC_API_KEY", "reading filings in the cloud, and the web-searched market brief"),
     ("GIST_TOKEN", "the private tradebook store, if you use it"),
 )
 
@@ -168,11 +170,16 @@ def _controls() -> str:
     return (
         ui.section("Do something", note="each of these ends in a page you read")
         + f"""<p>
-<form method="post" action="/run"><button class="qa-btn primary"{dis}>▶ Run the analysis</button></form>
+<form method="post" action="/run"><button class="qa-btn primary"{dis}>▶ Run the evening</button></form>
+&nbsp;<form method="post" action="/decide"><button class="qa-btn"{dis}>⚖ Decide only</button></form>
 &nbsp;<form method="post" action="/refresh"><button class="qa-btn"{dis}>⭯ Refresh market data</button></form>
 &nbsp;<form method="post" action="/evidence"><button class="qa-btn"{dis}>📄 Read new filings</button></form>
 &nbsp;<form method="post" action="/login"><button class="qa-btn"{dis}>🔑 Log in to Zerodha</button></form>
-</p>"""
+</p>
+<p><b>Run the evening</b> does the whole thing: prices, the model book, the filings, the twin, the
+brief, then the account and the basket. It picks up where it stopped — a step finished against
+these exact holdings and prices is not done twice, so leaving it for two days costs you the
+two days, not the work. <b>Decide only</b> skips the research and re-reads the account.</p>"""
         + (
             "<p><b>A job is running.</b> This page follows it below and reloads when it finishes.</p>"
             if busy
@@ -254,6 +261,72 @@ def _last_report() -> str:
     return body.replace("</div>", "</div>", 1)
 
 
+def _reader_panel() -> str:
+    """Which model will read the filings on the next run, and what that means for your documents.
+
+    Resolved live rather than remembered, because the answer changes the moment you start or stop a
+    local server — and a page that said "local" while the run went to the cloud would be the exact
+    class of untruth this repo exists to avoid.
+    """
+    from qalpha.live.localmodel import MODEL_VAR, choose_backend
+
+    backend = choose_backend()
+    tone = {"local": "good", "anthropic": "info", "none": "warn"}[backend.kind]
+    label = {
+        "local": "on this machine",
+        "anthropic": "in the cloud",
+        "none": "not at all",
+    }[backend.kind]
+    body = (
+        ui.section("Who reads the filings", note=label)
+        + f'<div class="qa-note"><p>{_escape(backend.note)}</p></div>'
+    )
+    if backend.kind != "local":
+        body += (
+            "<p>To read them here instead: install <b>Ollama</b>, run "
+            "<code>ollama pull qwen2.5:7b</code>, then set <code>"
+            f"{MODEL_VAR}=qwen2.5:7b</code> in <code>.env</code> and restart this app. "
+            "It is slower — minutes per filing on a CPU — and no document leaves the machine. "
+            "The market brief still needs a cloud key, because it is built on web search and "
+            "a local model has nothing to search.</p>"
+        )
+    return body.replace('class="qa-note"', f'class="qa-note qa-{tone}"', 1)
+
+
+def _trail_panel() -> str:
+    """What the pipeline has actually done lately — including what failed.
+
+    The cron reported success whatever happened, for as long as nobody opened the Actions tab.
+    This is the same information with nowhere to hide it.
+    """
+    from qalpha.live.session import history
+
+    rows = history(limit=12)
+    if not rows:
+        return (
+            ui.section("What has run")
+            + '<div class="qa-empty">Nothing recorded yet. Press <b>Run the evening</b>.</div>'
+        )
+    table = ui.table(
+        [ui.Column("When"), ui.Column("Step"), ui.Column("Result"), ui.Column("Detail")],
+        [
+            ui.Row(
+                cells=[
+                    ui.Cell(f"{record.at.astimezone(IST):%d %b %H:%M}"),
+                    ui.Cell(record.task, strong=True),
+                    ui.Cell(
+                        record.state,
+                        tone="good" if record.state == "done" else "bad",
+                    ),
+                    ui.Cell(record.detail),
+                ]
+            )
+            for record in reversed(rows)
+        ],
+    )
+    return ui.section("What has run", note="newest first · a failure stays on file") + table
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "QAlpha/1.0"
 
@@ -288,7 +361,9 @@ class Handler(BaseHTTPRequestHandler):
             _controls()
             + _feed_panel()
             + _last_report()
+            + _trail_panel()
             + _kite_panel(_escape(message) if message else "")
+            + _reader_panel()
             + _tokens_panel()
         )
         self._send(_shell(body, refresh=True))
@@ -327,10 +402,24 @@ def _use_token(raw: str) -> str:
 
 
 def _job_run() -> None:
+    """The whole evening. Slow on purpose — it reads documents."""
     import local_run
 
-    LOG.say("Reconciling the account and screening.", "step")
+    LOG.say("Running the full evening: prices, filings, the books, then the account.", "step")
     local_run.main(["--no-open"])
+    LOG.say(f"Wrote {PAGE_PATH}", "done")
+
+
+def _job_decide() -> None:
+    """The account and the basket, on whatever research is already on disk.
+
+    Useful after importing a tradebook or minting a session, when nothing about the *world* has
+    changed and re-reading every filing would only cost twenty minutes to reach the same answer.
+    """
+    import local_run
+
+    LOG.say("Reconciling the account and screening — no new research this run.", "step")
+    local_run.main(["--no-open", "--no-pipeline"])
     LOG.say(f"Wrote {PAGE_PATH}", "done")
 
 
@@ -364,7 +453,8 @@ def _job_login() -> None:
 
 
 _ACTIONS: dict[str, tuple[str, Callable[[], None]]] = {
-    "/run": ("Run the analysis", _job_run),
+    "/run": ("Run the evening", _job_run),
+    "/decide": ("Decide only", _job_decide),
     "/refresh": ("Refresh market data", _job_refresh),
     "/evidence": ("Read new filings", _job_evidence),
     "/login": ("Log in to Zerodha", _job_login),
