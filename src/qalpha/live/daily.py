@@ -88,7 +88,8 @@ class PipelineResult:
         """Sentences for the page. Silence about a step that did not run is the failure mode here."""
         out: list[str] = []
         for outcome in self.failed:
-            out.append(f"{outcome.name} FAILED: {outcome.detail}. Anything it feeds is unchanged.")
+            detail = outcome.detail.rstrip(".")
+            out.append(f"{outcome.name} FAILED: {detail}. Anything it feeds is unchanged.")
         for outcome in self.skipped:
             out.append(f"{outcome.name} was skipped: {outcome.detail}")
         return out
@@ -100,6 +101,22 @@ class PipelineResult:
 # --------------------------------------------------------------------------------------------
 
 
+def _checked(name: str, code: int) -> None:
+    """Turn a non-zero exit code into a failure the ledger can see.
+
+    These entry points are CLI programs: they report refusals by exit code, not by raising. The
+    twin's abort is the case that matters — it declines to write when the tradebook reads empty but
+    the books hold flows, which is a failed read rather than an empty account. Ignoring the code
+    meant the ledger recorded the twin as having stepped while the model book stood still, and the
+    page told the user the evening had completed.
+    """
+    if code:
+        raise RuntimeError(
+            f"{name} exited {code} — it declined to write. Whatever it maintains is unchanged "
+            f"from the last successful run; see the output above for the reason it gave."
+        )
+
+
 def _step_prices() -> None:
     import paper
 
@@ -109,25 +126,25 @@ def _step_prices() -> None:
 def _step_mark() -> None:
     import paper
 
-    paper.main(["dashboard"])
+    _checked("paper dashboard", paper.main(["dashboard"]))
 
 
 def _step_evidence() -> None:
     import evidence
 
-    evidence.main(["daily"])
+    _checked("evidence", evidence.main(["daily"]))
 
 
 def _step_twin() -> None:
     import twin
 
-    twin.main(["daily"])
+    _checked("twin", twin.main(["daily"]))
 
 
 def _step_brief() -> None:
     import ai_brief
 
-    ai_brief.main(["daily"])
+    _checked("ai_brief", ai_brief.main(["daily"]))
 
 
 def refresh_steps() -> list[Step]:

@@ -502,6 +502,11 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config, *, persist: bool =
     return marks, gaps, gate
 
 
+#: Exit code for "refused to write, nothing changed". Distinct from 1 so a caller can tell a
+#: deliberate abort from a crash, and distinct from 0 so neither reads as a completed step.
+ABORTED = 2
+
+
 def cmd_daily(cfg: Config) -> int:
     """Step every autonomous book, mark them all, grade the gate, write the report."""
     books = load_books(cfg)
@@ -534,7 +539,11 @@ def cmd_daily(cfg: Config) -> int:
             "       Check: GIST_TOKEN present in the job, and that it carries the `gist` scope.",
             file=sys.stderr,
         )
-        return 0
+        # NON-ZERO, because this is a refusal and the caller writes down what happened. Under the
+        # cron `return 0` meant "do not go red"; under `live/daily.py` it means the ledger records
+        # the twin as having STEPPED, and the page tells the user the evening completed while the
+        # model book stood still. A deliberate refusal is still a thing that did not happen.
+        return ABORTED
 
     # The AI treatment. Until 2026-08-30 this was never gathered, so `Market.ai_verdicts` was always
     # None, `policy.use_ai and market.ai_verdicts` was always False, and all four twins were

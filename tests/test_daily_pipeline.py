@@ -275,3 +275,44 @@ def test_a_step_that_swallows_its_failure_would_be_recorded_as_done(tmp_path: Pa
     )
     assert result.complete, "the runner has no way to see through a swallowed exception"
     assert _ledger_rows(ledger)[0]["state"] == "done"
+
+
+def test_a_refusal_reported_by_exit_code_is_recorded_as_a_failure(tmp_path: Path) -> None:
+    """The twin's abort, generalised.
+
+    These entry points are CLI programs: a refusal arrives as an exit code, not an exception. On
+    2026-09-10 a real run hit exactly this — the twin declined to write because the tradebook read
+    empty while the books held ₹304,144 of flows (a failed read, not an empty account) — and the
+    evening was recorded as complete with the model book standing still.
+    """
+    ledger = tmp_path / "l.jsonl"
+
+    def _refuses() -> None:
+        daily._checked("twin", 2)
+
+    result = daily.run_pipeline(
+        "d1",
+        plan=[daily.Step("twin", "stepping", _refuses)],
+        ledger=ledger,
+        log=Progress(),
+        now=lambda: AT,
+    )
+    assert not result.complete
+    assert [o.name for o in result.failed] == ["twin"]
+    assert "declined to write" in _ledger_rows(ledger)[0]["detail"]
+    assert any("is unchanged" in n for n in result.notes())
+
+
+def test_a_zero_exit_is_left_alone(tmp_path: Path) -> None:
+    """The evidence step stops itself at its time budget and exits 0 — that is a real completion."""
+    daily._checked("evidence", 0)  # must not raise
+
+
+def test_the_twin_signals_its_abort_with_a_distinct_code() -> None:
+    """Distinct from 1 so a refusal is tellable from a crash, and from 0 so neither reads as done."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import twin
+
+    assert twin.ABORTED not in (0, 1)
