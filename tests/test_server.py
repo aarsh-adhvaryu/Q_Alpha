@@ -339,3 +339,73 @@ def test_the_credentials_table_reads_the_env_file_not_just_the_shell(
 
     states = {row.cells[0].text: row.cells[1].text for row in server._token_rows()}
     assert states["KITE_API_KEY"] == "set"
+
+
+# --- the click, and what it starts ----------------------------------------------------------------
+#
+# `--app` returns from `main()` before the pipeline runs, so serving alone left the desktop click
+# showing whatever the last run had written. `autorun` is the difference between a server and the
+# thing OPERATING.md describes; it is asserted here rather than trusted to the launcher, because the
+# launcher can only pass the flag — this decides whether the flag does anything.
+class _StubServer:
+    def __init__(self, addr: object, handler: object) -> None:
+        self.addr = addr
+
+    def serve_forever(self) -> None:
+        return None
+
+    def server_close(self) -> None:
+        return None
+
+
+def test_autorun_starts_the_evening_and_only_after_the_socket_is_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bound first: the browser must land on a page that is already narrating, and a second
+    double-click must meet the launcher's 'already running' branch rather than a second server."""
+    from qalpha.live import browser
+
+    order: list[str] = []
+
+    class _Bound(_StubServer):
+        def __init__(self, addr: object, handler: object) -> None:
+            order.append("bound")
+            super().__init__(addr, handler)
+
+    started: list[str] = []
+    monkeypatch.setattr(server, "ThreadingHTTPServer", _Bound)
+    monkeypatch.setattr(browser, "open_url", lambda url: True)
+    monkeypatch.setattr(
+        server.JOBS,
+        "start",
+        lambda name, work: (order.append("started"), started.append(name), True)[-1],
+    )
+
+    server.serve(9998, open_browser=False, autorun=True)
+    assert started == ["Run the evening"], "the click runs the evening, not a bare server"
+    assert order == ["bound", "started"]
+
+
+def test_without_autorun_the_app_waits_to_be_asked(monkeypatch: pytest.MonkeyPatch) -> None:
+    started: list[str] = []
+    monkeypatch.setattr(server, "ThreadingHTTPServer", _StubServer)
+    monkeypatch.setattr(server.JOBS, "start", lambda name, work: started.append(name) or True)
+    server.serve(9998, open_browser=False)
+    assert started == []
+
+
+def test_the_empty_state_names_a_button_that_exists(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """It said "Press Run the analysis". There is no such button, and the one there is says a
+    different thing — an instruction that cannot be followed reads as a broken page."""
+    monkeypatch.setattr(server, "PAGE_PATH", tmp_path / "never-written.html")
+    body = server._last_report()
+    assert "Run the evening" in body and "Run the analysis" not in body
+
+
+def test_the_login_panel_names_the_file_the_session_is_written_to(app: int) -> None:
+    """It said `.env`, which is not where `auth.persist_session` puts it — the same class of defect
+    as the button label above: a true-sounding sentence pointing at the wrong thing."""
+    from qalpha.live.auth import SESSION_FILE
+
+    _status, body, _ = _get(app, "/")
+    assert SESSION_FILE.name in body

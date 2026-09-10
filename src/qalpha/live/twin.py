@@ -174,6 +174,34 @@ def assert_identical_flows(books: Sequence[TwinBook]) -> None:
             )
 
 
+def partial_export_reason(trades: Sequence[object], first_flow: date | None) -> str | None:
+    """Why this export cannot fund the books, or ``None`` when it reaches far enough back.
+
+    ### The failure this closes
+
+    ``REAL`` is replayed from the export on every run while the twins keep the flows they were
+    credited. An export that starts *after* the first flow therefore replays ``REAL`` short — it
+    buys none of the earlier lots — and every twin appears to beat it by whatever those lots are
+    worth. That is the empty-tradebook defect with one row in it instead of none, and the empty
+    check alone does not see it.
+
+    A Console export is chosen by date range in a dropdown, so this is the mistake a person actually
+    makes. Refusing is cheap; a dashboard reporting a manufactured lead is not.
+    """
+    if not trades or first_flow is None:
+        return None
+    earliest = min(t.trade_date for t in trades)  # type: ignore[attr-defined]
+    if earliest <= first_flow:
+        return None
+    return (
+        f"the export starts {earliest} but the books hold a cash flow from {first_flow}. Replaying "
+        f"REAL from it would miss every trade before {earliest}, and each missing lot would read as "
+        "a lead for every other book. Export from Zerodha Console covering "
+        f"{first_flow} to today and drop it in data/tradebooks/ (overlapping ranges are safe — "
+        "they de-duplicate on trade ids)."
+    )
+
+
 def seed_books(
     trades: Sequence[object], cfg: Config, *, names: Sequence[str] = ALL_BOOKS
 ) -> dict[str, TwinBook]:
