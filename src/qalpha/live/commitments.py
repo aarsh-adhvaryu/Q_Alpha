@@ -141,12 +141,44 @@ def load(path: Path = COMMITMENTS_PATH) -> list[Commitment]:
     return out
 
 
+#: States a commitment can never leave. A fill is a fact about money that moved; an abandonment is a
+#: decision already taken. Neither may be rewritten by a later row carrying the same id.
+_TERMINAL = ("filled", "abandoned")
+
+
 def current(commitments: Iterable[Commitment]) -> dict[str, Commitment]:
-    """The live view: the latest state per commitment id, in recording order."""
+    """The live view: the latest state per id — **except that a terminal state is final.**
+
+    Ids were ``date:ticker``. After a partial fill the commitment reads ``filled``, so
+    ``already_committed`` no longer saw an open decision and the next run THAT SAME DAY proposed the
+    name again — writing a ``proposed`` row with the identical id, which superseded the fill:
+
+        1 share of VBL bought for ₹82   → spent ₹82
+        re-proposed the same day        → spent ₹0        the purchase vanished
+
+    Two fixes, because either alone leaves a hole. New commitments get a unique id (:func:`new_id`),
+    so a re-proposal cannot collide; and a terminal row wins here regardless, so a historical
+    collision or a hand-edited ledger still cannot un-spend money.
+    """
     out: dict[str, Commitment] = {}
     for c in commitments:
+        held = out.get(c.id)
+        if held is not None and held.state in _TERMINAL and c.state not in _TERMINAL:
+            continue  # a fact about money that moved is not revised by a later intention
         out[c.id] = c
     return out
+
+
+def new_id(ticker: str, on: date, existing: Iterable[Commitment]) -> str:
+    """A unique id for a new commitment on this name.
+
+    ``date:ticker`` collided the moment a name was proposed twice in one day — which is exactly what
+    happens after a partial fill. The suffix counts prior commitments on that name, so the id stays
+    readable and sorts sensibly rather than being a uuid nobody can match to a row by eye.
+    """
+    seen = sum(1 for c in existing if c.ticker == ticker)
+    base = f"{on.isoformat()}:{ticker}"
+    return base if seen == 0 else f"{base}#{seen + 1}"
 
 
 def _in_period(day: date, period: date) -> bool:
@@ -192,7 +224,49 @@ class Allowance:
         )
 
 
-def allowance(authorised: Decimal, commitments: Iterable[Commitment], *, period: date) -> Allowance:
+def unproposed_spend(
+    trades: Sequence[object], commitments: Iterable[Commitment], *, period: date
+) -> Decimal:
+    """Money spent this month on buys the system never proposed. **It is still spent.**
+
+    Importing ₹49,766 of purchases reconciled the account correctly and left the allowance at
+    ₹50,000, so another ₹49,738 was offered — the allowance counted only its own decisions. The
+    mandate limits what goes into the market this month, not what this program takes credit for.
+
+    A buy counts as unproposed when no commitment for that ticker was filled in the same month; a
+    proposal that WAS confirmed is already in ``spent`` and must not be counted twice.
+    """
+    claimed = {
+        c.ticker
+        for c in current(commitments).values()
+        if c.spent and _in_period(c.filled_on or c.on, period)
+    }
+    total = Decimal("0")
+    for trade in trades:
+        side = getattr(trade, "side", None)
+        if side is None or getattr(side, "name", "") != "BUY":
+            continue
+        on = getattr(trade, "trade_date", None)
+        if not isinstance(on, date) or not _in_period(on, period):
+            continue
+        if str(getattr(trade, "ticker", "")) in claimed:
+            continue
+        try:
+            total += Decimal(str(getattr(trade, "quantity", 0))) * Decimal(
+                str(getattr(trade, "price", 0))
+            )
+        except (ArithmeticError, TypeError, ValueError):
+            continue
+    return total
+
+
+def allowance(
+    authorised: Decimal,
+    commitments: Iterable[Commitment],
+    *,
+    period: date,
+    trades: Sequence[object] = (),
+) -> Allowance:
     """This month's remaining allowance — the fix for "it offers ₹50,000 every single run".
 
     ``authorised`` is the mandate's monthly instalment. What has already been bought is subtracted,
@@ -208,6 +282,9 @@ def allowance(authorised: Decimal, commitments: Iterable[Commitment], *, period:
     reserved = sum(
         (c.amount for c in live if c.reserves and _in_period(c.on, period)), Decimal("0")
     )
+    # Buys the system never proposed are still buys. Without this, importing a month's purchases
+    # left the whole allowance on offer: ₹49,766 imported, another ₹49,738 proposed.
+    spent += unproposed_spend(trades, commitments, period=period)
     return Allowance(authorised=authorised, spent=spent, reserved=reserved)
 
 

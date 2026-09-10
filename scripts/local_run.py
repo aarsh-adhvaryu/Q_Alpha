@@ -36,7 +36,7 @@ from qalpha.live.commitments import Commitment, allowance, already_committed, co
 from qalpha.live.commitments import load as load_commitments
 from qalpha.live.commitments import record as record_commitment
 from qalpha.live.extraction import EXTRACTION_VERSION
-from qalpha.live.mandate import load_mandate
+from qalpha.live.mandate import Mandate, load_mandate
 from qalpha.live.progress import LOG
 from qalpha.live.report import render
 from qalpha.live.session import load_snapshot, snapshot_from
@@ -133,12 +133,26 @@ def _prices(tickers: list[str], costs: dict[str, Decimal]) -> tuple[dict[str, De
             if not Path(path).exists():
                 continue
             adj = load_parquet(path).adj_close
+            panel_end = adj.index[-1].date()
             for t in tickers:
                 if t in out or t not in adj.columns:
                     continue
                 series = adj[t].dropna()
-                if len(series):
-                    out[t] = Decimal(str(float(series.iloc[-1])))
+                if not len(series):
+                    continue
+                # A NAME'S OWN LAST QUOTE, not the panel's last date. A panel dated 10 September can
+                # carry a holding whose last print is 24 July — delisted, suspended, or simply not
+                # trading — and marking it at that price says "worth this today" about a number
+                # seven weeks old. The panel being fresh says nothing about the column.
+                quoted_on = series.index[-1].date()
+                if (panel_end - quoted_on).days > MAX_PRICE_AGE_DAYS:
+                    notes.append(
+                        f"{t.removesuffix('.NS')} last traded {quoted_on}, "
+                        f"{(panel_end - quoted_on).days} days before the panel's own last day — "
+                        "shown as unpriced rather than marked at a stale quote."
+                    )
+                    continue
+                out[t] = Decimal(str(float(series.iloc[-1])))
     except Exception as exc:
         notes.append(f"price panel unavailable ({exc})")
     missing = [t for t in tickers if t not in out]
@@ -154,7 +168,7 @@ def _prices(tickers: list[str], costs: dict[str, Decimal]) -> tuple[dict[str, De
 
 
 def _proposal(
-    account: ReconciledAccount, budget: Decimal, cfg: Config
+    account: ReconciledAccount, budget: Decimal, cfg: Config, mandate: Mandate
 ) -> tuple[list[tuple[str, int, Decimal]], list[str]]:
     """The day's basket from the deterministic screen — the one thing that would have been lost.
 
@@ -186,7 +200,9 @@ def _proposal(
             panel,
             _load_benchmark_series(),
             as_of,
-            max_names=load_mandate().max_names,
+            max_names=mandate.max_names,
+            max_sector_weight=mandate.max_sector_weight,
+            max_name_fraction=mandate.max_name_fraction,
             spend_idle_cash=False,  # the budget IS the allowance; never the whole balance
         )
         if as_of != date.today():
@@ -220,15 +236,14 @@ def _panel_sha() -> str:
 
     h = hashlib.sha256()
     try:
-        from qalpha.data.ingest import load_parquet
-
-        if SCREEN_PANEL.exists():
-            adj = load_parquet(str(SCREEN_PANEL)).adj_close
-            h.update(f"{adj.shape}|{adj.index[-1].date()}".encode())
-            # The last row is what the screen ranks on; a changed candidate price lands here.
-            h.update("|".join(f"{c}={adj[c].iloc[-1]}" for c in sorted(adj.columns)).encode())
-        if BENCHMARK_PANEL.exists():
-            h.update(str(BENCHMARK_PANEL.stat().st_size).encode())
+        # THE WHOLE FILE. Hashing shape plus the last row missed the history the strategy actually
+        # reads: `cheapness_scores` ranks on the fall from a rolling 1-YEAR high, so changing a
+        # candidate's older prices changed the basket while the digest stayed identical. A content
+        # hash of the bytes covers every row, and costs one read of a file already on disk.
+        for panel in (SCREEN_PANEL, BENCHMARK_PANEL):
+            if panel.exists():
+                h.update(panel.name.encode())
+                h.update(panel.read_bytes())
     except Exception:
         h.update(b"screening panel unreadable")
     return h.hexdigest()[:16]
@@ -374,7 +389,7 @@ def main(argv: list[str] | None = None) -> int:
             f"₹{done.amount:,.0f} — the allowance is debited, not just reserved."
         )
     commitments = load_commitments(COMMITMENTS)
-    left = allowance(mandate.monthly_budget, commitments, period=date.today())
+    left = allowance(mandate.monthly_budget, commitments, period=date.today(), trades=trades)
 
     # The snapshot must identify the DATA, not only the account. It carried an empty price hash and
     # listed only the held names, so changing a holding's price from ₹80 to ₹88 left the digest
@@ -421,7 +436,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     orders: list[tuple[str, int, Decimal]] = []
     if gate.open:
-        orders, screen_notes = _proposal(account, gate.budget, cfg)
+        orders, screen_notes = _proposal(account, gate.budget, cfg, mandate)
         notes += screen_notes
         # WRITE WHAT WAS PROPOSED. The runner read the commitment ledger and never wrote to it, so
         # the allowance never moved: ₹49,766 of imported purchases still left ₹50,000 on offer, and
@@ -460,7 +475,7 @@ def main(argv: list[str] | None = None) -> int:
         # that had just reserved ₹49,766 and printed a basket. Three statements, one screen, two of
         # them false.
         commitments = load_commitments(COMMITMENTS)
-        left = allowance(mandate.monthly_budget, commitments, period=date.today())
+        left = allowance(mandate.monthly_budget, commitments, period=date.today(), trades=trades)
 
     PAGE.parent.mkdir(parents=True, exist_ok=True)
     PAGE.write_text(
