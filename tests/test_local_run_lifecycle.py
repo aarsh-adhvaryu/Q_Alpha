@@ -201,78 +201,92 @@ def test_a_stale_screening_panel_blocks_even_when_another_panel_is_fresh(rig) ->
     assert _allowance(rig).reserved == Decimal("0"), "nothing may be proposed on 90-day-old prices"
 
 
-# --- the Windows launcher -----------------------------------------------------------------------
-def test_the_windows_launcher_checks_each_failure_separately() -> None:
-    """A missing WSL feature, a stopped distro and a wrong repo path are three different problems,
-    and only one of them is fixed by waiting. A launcher that reports them as one failure sends the
-    user to the wrong place, which for a double-click-and-walk-away tool is most of its job."""
-    bat = (Path(__file__).resolve().parent.parent / "deploy/Q-Alpha.bat").read_text(
-        encoding="utf-8"
-    )
-    assert "wsl --install" in bat, "a missing WSL must say how to install it"
-    assert "wsl --list --verbose" in bat, "a wrong distro name must say how to find the right one"
-    assert "Edit REPO" in bat, "a wrong path must say which line to edit"
-    # THE PROPERTY, NOT THE LINE. This used to assert the literal
-    # `start "" http://127.0.0.1:8787/` appeared before the server call — which pinned a real
-    # defect in place: opening the browser *immediately* meant a cold start (WSL waking, uv
-    # resolving, pandas importing) showed a connection error, and "not up yet" and "broken" look
-    # identical in a browser.
-    #
-    # Two things have to hold at once, and both still do. The opener must be LAUNCHED before the
-    # server call, because that call blocks until the window closes and nothing after it would ever
-    # run. And it must not actually open anything until the server answers.
-    opener = bat.index("Start-Process $u")
-    assert opener < bat.index("qalpha.sh --app"), "the opener must be launched before the blocker"
-    waiter = bat[bat.index('start "" /b powershell') : bat.index("qalpha.sh --app")]
-    assert "Invoke-WebRequest" in waiter, "it must wait for a real response, not a guess at timing"
-    assert "Start-Process" in waiter.split("Invoke-WebRequest", 1)[1], (
-        "the browser must open only AFTER the request succeeds"
-    )
-    assert "Start-Sleep" in waiter, "and retry rather than giving up on the first refusal"
-    assert "pause" in bat, "a failing run must not close before it can be read"
-    assert "NOTHING HERE TRADES" in bat
+# --- the Windows launcher -------------------------------------------------------------------------
+#
+# Five tests used to live here, four of them about WSL: waking a distro, naming it, reaching a repo
+# inside `\\\\wsl$\\...`, and an installer that copied the launcher OUT of WSL because a shortcut
+# into it is unreachable exactly when it is needed ("Missing Shortcut", 2026-09-10).
+#
+# None of that was the launcher's problem — it was the cost of living in the wrong filesystem.
+# Running natively from D:\\ removed the filesystem, the bridge, the installer and the drift between
+# them. What survives is the part that was always about the launcher: it must find the repo without
+# being told, and it must not open a browser at something that is not answering yet.
+def test_the_launcher_sits_in_the_repo_and_needs_no_install_step() -> None:
+    root = Path(__file__).resolve().parent.parent
+    launcher = root / "Q-Alpha.bat"
+    assert launcher.exists(), "the desktop shortcut points straight at this file"
+
+    text = launcher.read_text(encoding="utf-8", errors="replace")
+    assert 'cd /d "%~dp0"' in text, "it must locate the repo as its own folder, not a baked path"
+    # THE EXECUTABLE LINES, not the prose. The header explains why the WSL bridge is gone and
+    # names the `\\\\wsl$` path it used to live on, which is worth keeping — so the check reads
+    # what actually runs. Asserting over the whole file failed on its own explanation.
+    code = "\n".join(ln for ln in text.splitlines() if not ln.strip().upper().startswith("REM"))
+    for command in ("wsl -d", "wsl --", "wsl.exe", "\\\\wsl$"):
+        assert command not in code, f"{command!r} is back in the launcher"
+    assert not (root / "deploy").exists(), "the WSL bridge is gone; do not reintroduce it"
 
 
 def test_the_launcher_runs_the_same_entry_point_the_tests_drive() -> None:
-    """If the desktop click ran something else, none of the tests above would say anything about
-    what actually happens when he double-clicks it."""
+    """If the desktop click ran something else, nothing above would describe what happens when he
+    double-clicks it."""
     root = Path(__file__).resolve().parent.parent
-    bat = (root / "deploy/Q-Alpha.bat").read_text(encoding="utf-8")
-    sh = (root / "qalpha.sh").read_text(encoding="utf-8")
-    assert "qalpha.sh" in bat
-    assert "scripts/local_run.py" in sh
+    text = (root / "Q-Alpha.bat").read_text(encoding="utf-8", errors="replace")
+    assert "scripts/local_run.py" in text
+    assert "--app" in text
 
 
-def test_the_launcher_is_installed_to_windows_not_shortcut_inside_wsl() -> None:
-    """ "Missing Shortcut", 2026-09-10, and it was a chicken-and-egg of my own making.
+def test_the_launcher_hard_codes_no_user_and_no_absolute_repo_path() -> None:
+    """A baked username or drive letter launches for one person on one machine."""
+    text = (Path(__file__).resolve().parent.parent / "Q-Alpha.bat").read_text(
+        encoding="utf-8", errors="replace"
+    )
+    assert "dnaad" not in text
+    assert "D:\\Q-Alpha" not in text, "%~dp0 already knows where it is"
 
-    The first instruction shortcut ``deploy/Q-Alpha.bat`` where it sits — inside WSL's filesystem at
-    ``\\\\wsl$\\<distro>\\...``. **That path only exists while WSL is running**, and starting WSL is
-    the launcher's entire job, so Windows could not reach the file it needed in order to wake the
-    thing the file lives on. It failed on exactly the occasions it was needed.
 
-    The installer copies the launcher to the Windows side, where it is always reachable, and writes
-    this machine's real distro and repo into the copy.
+def test_the_launcher_waits_for_the_server_before_opening_a_browser() -> None:
+    """THE PROPERTY, NOT THE LINE.
+
+    An earlier version asserted the literal ``start "" http://127.0.0.1:8787/`` appeared before the
+    server call, which pinned a real defect in place: opening immediately meant a cold start showed
+    a connection error, and "not up yet" and "broken" look identical in a browser.
+
+    Two things must hold at once. The opener is LAUNCHED before the server call, because that call
+    blocks until the window closes and nothing after it would ever run. And it opens nothing until
+    the server actually answers.
     """
-    root = Path(__file__).resolve().parent.parent
-    installer = (root / "deploy/install-windows.sh").read_text(encoding="utf-8")
-    assert "WSL_DISTRO_NAME" in installer, "the distro must be read, never assumed"
-    assert "%USERNAME%" in installer, "the Windows user must be read, never assumed"
-    assert "OneDrive/Desktop" in installer, (
-        "a redirected Desktop is the common case, not the odd one"
+    text = (Path(__file__).resolve().parent.parent / "Q-Alpha.bat").read_text(
+        encoding="utf-8", errors="replace"
     )
-    # The shortcut must target the Windows copy. A .lnk whose TargetPath is a \\wsl$ path is the
-    # exact failure being fixed, so no TargetPath line may mention it.
-    targets = [ln for ln in installer.splitlines() if "TargetPath" in ln]
-    assert targets, "the installer must set a shortcut target"
-    for line in targets:
-        assert "USERPROFILE" in line, line
-        assert "wsl$" not in line, f"a shortcut into WSL is unreachable when WSL is asleep: {line}"
+    # The BLOCKING call specifically. `local_run.py` also appears in the "is this the repo?"
+    # check near the top, and anchoring on that compared the waiter against the wrong line.
+    blocker = text.index("run python scripts/local_run.py")
+    assert text.index("Start-Process $u") < blocker, "the opener must precede the blocking call"
+    waiter = text[text.index('start "" /b powershell') : blocker]
+    assert "Invoke-WebRequest" in waiter, "it must wait for a real response, not guess at timing"
+    assert "Start-Process" in waiter.split("Invoke-WebRequest", 1)[1], (
+        "the browser must open only AFTER the request succeeds"
+    )
+    assert "Start-Sleep" in waiter, "and retry rather than give up on the first refusal"
 
-    bat = (root / "deploy/Q-Alpha.bat").read_text(encoding="utf-8")
-    assert "DO NOT shortcut this file where it sits" in bat, (
-        "the file must warn against the thing that failed"
+
+def test_the_launcher_reports_its_two_real_failures_separately() -> None:
+    """Missing uv and a launcher moved out of the repo are different problems with different fixes.
+    A tool you double-click and walk away from has to say which one happened."""
+    text = (Path(__file__).resolve().parent.parent / "Q-Alpha.bat").read_text(
+        encoding="utf-8", errors="replace"
     )
+    assert "astral.sh/uv/install" in text, "a missing uv must say how to install it"
+    assert "local_run.py" in text and "must stay in the repo folder" in text
+    assert "pause" in text, "a failing run must not close before it can be read"
+
+
+def test_the_launcher_still_says_it_places_no_orders() -> None:
+    text = (Path(__file__).resolve().parent.parent / "Q-Alpha.bat").read_text(
+        encoding="utf-8", errors="replace"
+    )
+    assert "NOTHING HERE TRADES" in text
 
 
 # --- the pipeline, driven by the real main() -----------------------------------------------------
@@ -356,77 +370,41 @@ def test_a_failed_step_does_not_stop_the_page_being_written(rig, monkeypatch) ->
     assert "NSE refused the connection" in page
 
 
-def test_the_windows_launcher_does_not_fight_a_copy_of_itself() -> None:
+def test_the_launcher_does_not_fight_a_copy_of_itself() -> None:
     """A second double-click must open the running app, not try to bind its port again.
 
     Binding 8787 twice fails with a traceback about an address already in use, which says nothing
     about what is actually happening — the app is running and the user wants to look at it.
     """
-    bat = (Path(__file__).resolve().parent.parent / "deploy/Q-Alpha.bat").read_text(
-        encoding="utf-8"
+    text = (Path(__file__).resolve().parent.parent / "Q-Alpha.bat").read_text(
+        encoding="utf-8", errors="replace"
     )
-    head = bat[: bat.index("qalpha.sh --app")]
+    head = text[: text.index("run python scripts/local_run.py")]
     assert "already running" in head.lower()
-    assert head.index("already running") < head.index("waking"), (
-        "check before waking the distro: there is nothing to wake if it is already up"
+    assert head.lower().index("already running") < head.lower().index("where uv"), (
+        "check before doing any setup work: there is nothing to prepare if it is already up"
     )
 
 
-def test_the_windows_launcher_pauses_with_something_that_works_under_redirection() -> None:
+def test_the_launcher_pauses_with_something_that_works_under_redirection() -> None:
     """`timeout` refuses to run when stdin is redirected, printing an error over the last words the
-    user reads. `ping -n` is the pause that always works."""
-    bat = (Path(__file__).resolve().parent.parent / "deploy/Q-Alpha.bat").read_text(
-        encoding="utf-8"
-    )
-    assert "timeout /t" not in bat
-    assert "ping -n" in bat
+    user reads. `ping -n` is the pause that always works.
 
-
-def test_the_windows_launcher_still_says_it_places_no_orders() -> None:
-    """The claim belongs on the thing the user double-clicks, not only on the page it opens."""
-    bat = (Path(__file__).resolve().parent.parent / "deploy/Q-Alpha.bat").read_text(
-        encoding="utf-8"
-    )
-    assert "NOTHING HERE TRADES" in bat
-    assert "you place every order in Kite" in bat
-
-
-def test_the_installer_can_actually_rewrite_the_lines_it_targets() -> None:
-    """The installer edits the launcher with `sed`. If those two drift, it silently edits nothing.
-
-    `deploy/Q-Alpha.bat` in the repo is a TEMPLATE: it carries whichever machine's distro and path
-    were last committed, and `install-windows.sh` overwrites both when it copies the file to the
-    Windows side. The failure mode is quiet — sed that matches no line exits 0 and writes the file
-    through unchanged, so the shortcut ends up launching somebody else's checkout with no error
-    anywhere. Reformatting either line is all it takes.
-
-    The first version of this test asserted the template's own path existed on disk, which passed
-    on the machine that wrote it and failed in CI, where that path is nobody's checkout. That was
-    the test asserting a machine rather than a property.
+    This survived the rewrite by catching it: the native launcher was written fresh and used
+    `timeout /t`, reintroducing a bug that had already been fixed once. A test that outlives the
+    file it was written about is doing its job.
     """
-    import re
-
-    root = Path(__file__).resolve().parent.parent
-    installer = (root / "deploy/install-windows.sh").read_text(encoding="utf-8")
-    patterns = re.findall(r'-e "s\|(\^set [A-Z]+=)\.\*\|', installer)
-    assert {"^set DISTRO=", "^set REPO="} <= set(patterns), (
-        f"the installer rewrites {patterns}; it must rewrite both DISTRO and REPO"
+    text = (Path(__file__).resolve().parent.parent / "Q-Alpha.bat").read_text(
+        encoding="utf-8", errors="replace"
     )
-
-    for name in ("Q-Alpha", "Q-Alpha-dev"):
-        bat = (root / f"deploy/{name}.bat").read_text(encoding="utf-8")
-        for anchor in patterns:
-            line = anchor.lstrip("^")
-            assert any(ln.startswith(line) for ln in bat.splitlines()), (
-                f"{name}.bat has no line starting `{line}`, so the installer's sed for it "
-                f"matches nothing and the launcher ships with whatever was committed."
-            )
+    assert "timeout /t" not in text
+    assert "ping -n" in text
 
 
-def test_the_launchers_never_hard_code_a_windows_username() -> None:
-    """The installer reads %USERNAME% at install time. A baked-in one launches for one person."""
-    root = Path(__file__).resolve().parent.parent
-    for name in ("Q-Alpha", "Q-Alpha-dev"):
-        bat = (root / f"deploy/{name}.bat").read_text(encoding="utf-8")
-        assert "dnaad" not in bat, f"{name}.bat carries a specific Windows user"
-        assert "C:\\Users\\" not in bat, f"{name}.bat hard-codes a Users path"
+def test_the_launcher_says_it_places_no_orders_in_both_places() -> None:
+    """The claim belongs on the thing the user double-clicks, not only on the page it opens."""
+    text = (Path(__file__).resolve().parent.parent / "Q-Alpha.bat").read_text(
+        encoding="utf-8", errors="replace"
+    )
+    assert "NOTHING HERE TRADES" in text
+    assert "you place every order in Kite" in text

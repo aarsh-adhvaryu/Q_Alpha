@@ -8,6 +8,7 @@ a fallback there would put filing text on the network on the evening the user be
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -18,10 +19,21 @@ from qalpha.live.extraction import PROMPT_CHAR_BUDGET
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def _clean_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Isolate from BOTH the shell and the developer's own ``.env``.
+
+    Clearing the variables stopped being enough once ``configured()`` learned to hydrate ``.env``
+    itself — which it had to, because the app is launched from a shortcut whose shell exports
+    nothing. Without this, every assertion here would depend on whatever the author happens to have
+    configured locally, and the suite would pass or fail by machine.
+    """
+    from qalpha.live import credentials
+
     for var in (localmodel.URL_VAR, localmodel.MODEL_VAR, localmodel.CONTEXT_VAR):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(credentials, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(credentials, "_ENV_LOADED", False)
 
 
 def test_no_model_and_no_key_is_a_named_absence() -> None:
@@ -236,3 +248,41 @@ def test_the_no_fallback_promise_survives_the_extra_advice(
     backend = localmodel.choose_backend()
     assert backend.kind == "none"
     assert "did NOT fall back" in backend.note
+
+
+# --- .env has to be loaded by whoever reads it ----------------------------------------------------
+#
+# `choose_backend` reads os.environ. Nothing on the app's page path had loaded `.env`, so a freshly
+# started server reported "QALPHA_LOCAL_MODEL is unset" while it was set in the file — and told the
+# user to go and set a variable they had already set. A run moments later read it correctly, because
+# a run touches the broker and the broker loads credentials. Two surfaces, one fact, two answers,
+# depending on what else had happened to run first.
+#
+# Found on Windows on a cold start. It was invisible in WSL because a run had always happened first.
+def test_configured_hydrates_dotenv_itself(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from qalpha.live import credentials
+
+    env = tmp_path / ".env"
+    env.write_text("QALPHA_LOCAL_MODEL=from-the-file\n", encoding="utf-8")
+    monkeypatch.setattr(credentials, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(credentials, "_ENV_LOADED", False)
+    monkeypatch.delenv("QALPHA_LOCAL_MODEL", raising=False)
+
+    _url, model, _context = localmodel.configured()
+    assert model == "from-the-file", (
+        "a reader that trusts someone else to have loaded .env reports absences that are not real"
+    )
+
+
+def test_a_real_shell_variable_still_wins_over_the_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """load_dotenv does not override, and it must not start: an export is a deliberate act."""
+    from qalpha.live import credentials
+
+    (tmp_path / ".env").write_text("QALPHA_LOCAL_MODEL=from-the-file\n", encoding="utf-8")
+    monkeypatch.setattr(credentials, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(credentials, "_ENV_LOADED", False)
+    monkeypatch.setenv("QALPHA_LOCAL_MODEL", "from-the-shell")
+
+    assert localmodel.configured()[1] == "from-the-shell"

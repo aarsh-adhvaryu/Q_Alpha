@@ -16,7 +16,7 @@ Nothing here places an order. Nothing ever will. You place every order yourself.
 
 1. **Double-click Q-Alpha** on the desktop. It runs on this machine, writes one page, and opens it.
    Nothing is hosted, nothing is left running, and closing the page closes nothing.
-2. **If it says Kite was not reachable**, run it once with `--login` (or `./qalpha.sh --login`) —
+2. **If it says Kite was not reachable**, press **Log in to Zerodha** on the page —
    the session expires around 6am IST, so most days it will ask.
 3. **Read "Today's basket"** on the page. It is sized to this month's allowance — ₹50,000 — not to
    the whole balance, however much cash is sitting there.
