@@ -435,7 +435,10 @@ def _use_token(raw: str) -> str:
 
         exchange(load_credentials(), parse_request_token(raw))
     except Exception as exc:
-        return quote(f"That token was not accepted: {type(exc).__name__}: {exc}")
+        from qalpha.live.auth import explain_login_failure
+
+        key = os.environ.get("KITE_API_KEY", "")
+        return quote(f"That token was not accepted. {explain_login_failure(exc, api_key=key)}")
     return quote("Logged in. Run the analysis to use the fresh session.")
 
 
@@ -492,7 +495,16 @@ def _job_login() -> None:
         LOG.say(browser.describe_failure(url), "warn")
         LOG.say("Then paste the address you land on into the box on this page.", "warn")
     LOG.say("Waiting for the redirect (paste it on the page if it does not arrive).", "detail")
-    exchange(creds, capture_request_token())
+    token = capture_request_token()
+    try:
+        exchange(creds, token)
+    except Exception as exc:
+        # "TokenException: Invalid `checksum`" on its own reads like a bug in this code. It is
+        # Kite saying a signature it computed did not match, over three inputs it does not name.
+        from qalpha.live.auth import explain_login_failure
+
+        LOG.say(explain_login_failure(exc, api_key=creds.api_key), "error")
+        raise
     LOG.say("Session minted and written to .env.", "done")
 
 

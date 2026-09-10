@@ -101,7 +101,8 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**48 live modules · 1,122 tests green.** **There is no cron.** `paper.yml` was deleted on
+**63 live modules · 1,223 tests green + 1 xfail** (counted, not estimated — see the
+table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
 everything after it is produced locally.
@@ -304,13 +305,28 @@ one edit to a component, because it had never been allowed to know what was rend
 **idle cash and holdings together**, because a zeroed portfolio hides an entire defect class. See
 `tests/test_golden_day.py` for the full chain asserted to the paisa.
 
-⚠️ `scripts/paper.py refresh` refreshes **neither** the benchmark nor the watchlist panel. Call
-`_refresh_benchmark()` and `build_nifty100_watchlist.py --prices` too, or you audit stale data.
+**Refreshing prices.** `live/daily.py`'s `prices` step refreshes every panel a run reads —
+the screen's watchlist panel, the book's panel, and the benchmark — from `live/panels.py`, which
+names each file once and pairs it with the universe it is built from. Call that, not
+`scripts/paper.py refresh`, which still touches only the book's panel.
 
-**Secrets.** Repo Actions: `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
-`GIST_TOKEN`, `TRADEBOOK_GIST_ID`. The local run: `KITE_API_KEY`, `KITE_API_SECRET`,
-GitHub secrets are write-only — never try to read them. Without `GIST_TOKEN` the twin
-cannot read the tradebook and **correctly refuses to run**.
+This warning previously said to call three things by hand, and that was the bug rather than the
+workaround: **Refresh market data** re-pulled the book's panel while the gate checked the screen's,
+so the staleness block could not be cleared by pressing the button that exists to clear it. Fixed
+2026-09-10; `tests/test_panel_freshness_coupling.py` fails if a gated panel is not one the refresh
+writes, or if any live module spells a panel path as a literal again.
+
+**Secrets** live in `.env` at the repo root, and nowhere else now that there are no Actions.
+
+| | |
+|---|---|
+| `KITE_API_KEY` · `KITE_API_SECRET` | holdings, cash, prices; the secret only at login |
+| `QALPHA_LOCAL_MODEL` | reads filings **on this machine**. Set it only once a server answers — a name set with nothing listening does NOT fall back to the cloud, by design, so it turns reading off rather than on |
+| `ANTHROPIC_API_KEY` | filings in the cloud, and the web-searched brief (which has no local substitute) |
+| `GIST_TOKEN` | the tradebook store. Without it the twin cannot read the tradebook and **correctly refuses to run** |
+
+A missing one is never an error: the run degrades to a named absence and says which figures it
+therefore cannot confirm.
 
 ---
 
