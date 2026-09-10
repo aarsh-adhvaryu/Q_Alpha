@@ -211,25 +211,30 @@ def test_coverage_is_recorded_inside_the_loop_not_after_it() -> None:
     assert "COVERAGE_LOG," not in src, "no bulk coverage write may survive in cmd_daily()"
 
 
-def test_the_self_imposed_budget_is_strictly_inside_the_workflow_hard_cap() -> None:
-    """The invariant that makes the budget worth having, asserted across the two files that hold it.
+def test_nothing_can_kill_the_evidence_step_from_outside_any_more() -> None:
+    """The budget's reason for existing changed when the cron was retired; the budget did not.
 
-    GitHub SIGKILLs the step at ``timeout-minutes``, and ``continue-on-error: true`` then reports the
-    corpse as **success** — which is exactly how a 20m12s run on 2026-09-08 went green having written
-    no coverage at all. A budget that is not strictly smaller than the cap never fires, and the step
-    goes back to being killed. If someone lowers the cap, this fails.
+    It used to have to be strictly inside GitHub's ``timeout-minutes``, because the runner SIGKILLed
+    the step at the boundary and ``continue-on-error`` reported the corpse as success — a 20m12s run
+    on 2026-09-08 went green having written no coverage at all. There is no runner now: the step
+    stops itself, on this machine, and a stop is clean where a kill was not.
+
+    What still has to be true is that the stop is **the step's own choice** and that nothing
+    external imposes a deadline it cannot see. So: the budget exists, it is finite, and no workflow
+    file has come back to cap it.
     """
     import re
 
     src = (ROOT_SCRIPTS / "evidence.py").read_text(encoding="utf-8")
     budget_s = int(re.search(r'EVIDENCE_BUDGET_SECONDS", "(\d+)"', src).group(1))
+    assert 0 < budget_s <= 3600, "the step must stop itself, and within an evening"
+    assert "Stopping cleanly" in src, "the stop must say what it did and did not reach"
 
-    workflow = (ROOT_SCRIPTS.parent / ".github/workflows/paper.yml").read_text(encoding="utf-8")
-    spine = workflow.index("Evidence spine")
-    cap_min = int(re.search(r"timeout-minutes:\s*(\d+)", workflow[spine:]).group(1))
-
-    assert budget_s < cap_min * 60, (
-        f"budget {budget_s}s is not inside the {cap_min}-minute hard cap — it can never fire"
+    workflows = ROOT_SCRIPTS.parent / ".github/workflows"
+    scheduled = [
+        f.name for f in workflows.glob("*.yml") if "schedule:" in f.read_text(encoding="utf-8")
+    ]
+    assert scheduled == [], (
+        f"{scheduled} is scheduled again. The record is produced on the desktop now; a cron that "
+        "quietly resumes writing to the same ledgers would put two systems on one set of books."
     )
-    # And with real headroom: one in-flight name plus the report tail must fit in the gap.
-    assert cap_min * 60 - budget_s >= 240, "leave at least four minutes for the name in flight"

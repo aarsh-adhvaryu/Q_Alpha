@@ -502,6 +502,11 @@ def _marks_and_gate(books: dict, market: Market, cfg: Config, *, persist: bool =
     return marks, gaps, gate
 
 
+#: Exit code for "refused to write, nothing changed". Distinct from 1 so a caller can tell a
+#: deliberate abort from a crash, and distinct from 0 so neither reads as a completed step.
+ABORTED = 2
+
+
 def cmd_daily(cfg: Config) -> int:
     """Step every autonomous book, mark them all, grade the gate, write the report."""
     books = load_books(cfg)
@@ -534,7 +539,11 @@ def cmd_daily(cfg: Config) -> int:
             "       Check: GIST_TOKEN present in the job, and that it carries the `gist` scope.",
             file=sys.stderr,
         )
-        return 0
+        # NON-ZERO, because this is a refusal and the caller writes down what happened. Under the
+        # cron `return 0` meant "do not go red"; under `live/daily.py` it means the ledger records
+        # the twin as having STEPPED, and the page tells the user the evening completed while the
+        # model book stood still. A deliberate refusal is still a thing that did not happen.
+        return ABORTED
 
     # The AI treatment. Until 2026-08-30 this was never gathered, so `Market.ai_verdicts` was always
     # None, `policy.use_ai and market.ai_verdicts` was always False, and all four twins were
@@ -640,11 +649,16 @@ def main(argv: list[str] | None = None) -> int:
     cfg = Config()
     if args.cmd == "seed":
         return cmd_seed(cfg)
-    try:
-        return cmd_daily(cfg) if args.cmd == "daily" else cmd_status(cfg)
-    except Exception as exc:
-        print(f"[twin] failed (non-fatal, cron stays green): {exc}", file=sys.stderr)
-        return 0
+    # THE SWALLOW IS GONE, AND SO IS THE THING IT WAS FOR. This caught every exception and
+    # returned 0 so that a GitHub Actions run would not go red. There is no GitHub Actions run any
+    # more — `live/daily.py` calls this, and it RECORDS what happened. Returning 0 after a failure
+    # would have that ledger write "done" against a step that did nothing, and the resume logic
+    # would then never run it again for these inputs. Silence used to cost a red tick; it now
+    # costs the record.
+    #
+    # The caller still keeps the evening going: `run_pipeline` catches this, writes `failed` with
+    # the message, and moves to the next step. That is fail-soft. This was fail-silent.
+    return cmd_daily(cfg) if args.cmd == "daily" else cmd_status(cfg)
 
 
 if __name__ == "__main__":

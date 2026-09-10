@@ -237,3 +237,64 @@ def test_every_snapshot_is_kept_so_an_old_decision_stays_replayable(tmp_path: Pa
         )
         == first
     )
+
+
+# --- the research digest -------------------------------------------------------------------------
+#
+# Reading filings is expensive and slow; a digest that changes for a reason unrelated to the filings
+# makes the ledger useless. This was found the hard way: keying research to `digest()` meant that
+# MAKING A PROPOSAL lowered the remaining budget, changed the digest, and left every document
+# pending again — the run invalidating its own finished work with its own output, every evening.
+def test_a_proposal_does_not_make_the_filings_pending_again() -> None:
+    """THE LOAD-BEARING ONE. Spending part of the allowance changes no company's filings."""
+    before = _snap(budget=Decimal("50000"))
+    after = _snap(budget=Decimal("212"))
+    assert before.digest() != after.digest(), "the DECISION digest must still notice the budget"
+    assert before.research_digest() == after.research_digest()
+
+
+def test_settling_cash_does_not_make_the_filings_pending_again() -> None:
+    assert (
+        _snap(cash=Decimal("1")).research_digest()
+        == _snap(cash=Decimal("999999")).research_digest()
+    )
+
+
+def test_new_prices_do_make_the_research_pending_again() -> None:
+    """A different price panel is a different world; the twin must step on today's, not last week's."""
+    assert _snap(prices_sha="aaa").research_digest() != _snap(prices_sha="bbb").research_digest()
+
+
+def test_a_new_holding_makes_the_research_pending_again() -> None:
+    """A name bought today is a name whose filings nobody has read."""
+    a = _snap(holdings={"VBL.NS": 147})
+    b = _snap(holdings={"VBL.NS": 147, "ITC.NS": 30})
+    assert a.research_digest() != b.research_digest()
+
+
+def test_a_changed_quantity_alone_does_not_reread_the_same_names() -> None:
+    """Topping up a holding does not create a document nobody has looked at."""
+    a = _snap(holdings={"VBL.NS": 147})
+    b = _snap(holdings={"VBL.NS": 200})
+    assert a.research_digest() == b.research_digest()
+
+
+def test_a_new_extraction_version_makes_everything_pending_again() -> None:
+    """A task completed under EX-1 is not a task completed under EX-2."""
+    assert (
+        _snap(extraction_version="EX-1").research_digest()
+        != _snap(extraction_version="EX-2").research_digest()
+    )
+
+
+def test_an_input_that_became_available_makes_the_research_pending_again() -> None:
+    """Work finished while the exchange file was missing is not work finished now it is here."""
+    blind = _snap(stale=("exchange surveillance file unreachable",))
+    seeing = _snap(stale=())
+    assert blind.research_digest() != seeing.research_digest()
+
+
+def test_the_two_digests_are_not_the_same_string() -> None:
+    """They answer different questions and must never be used interchangeably by accident."""
+    snap = _snap()
+    assert snap.digest() != snap.research_digest()

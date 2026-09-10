@@ -66,7 +66,11 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         lambda tickers, costs: ({t: Decimal("400") for t in tickers}, []),
     )
     monkeypatch.setattr(
-        local_run, "_proposal", lambda account, budget, cfg: (_fit(state["orders"], budget), [])
+        local_run,
+        "_proposal",
+        # `mandate` joined the signature when the sector and name caps were threaded through — the
+        # stub follows the real one, or it stops testing the real one.
+        lambda account, budget, cfg, mandate: (_fit(state["orders"], budget), []),
     )
     state["tmp"] = tmp_path
     return state
@@ -102,7 +106,7 @@ def _buy(t: str, q: str, p: str) -> TradebookTrade:
 def test_a_healthy_run_proposes_once_and_the_page_agrees_with_what_it_reserved(rig) -> None:
     """FINDING 6. The page showed "₹50,000 available" and "nothing cleared the screen" on the very
     run that had just reserved ₹49,766 and printed a basket. Three statements, one screen."""
-    assert local_run.main(["--no-open"]) == 0
+    assert local_run.main(["--no-open", "--no-pipeline"]) == 0
 
     left = _allowance(rig)
     assert left.reserved > 0, "the run must record what it proposed"
@@ -115,9 +119,9 @@ def test_a_healthy_run_proposes_once_and_the_page_agrees_with_what_it_reserved(r
 
 
 def test_a_restart_does_not_propose_the_same_money_again(rig) -> None:
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
     first = _allowance(rig).reserved
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
     assert _allowance(rig).reserved == first, "a second run must not re-reserve the same names"
 
 
@@ -132,8 +136,8 @@ def test_reservations_can_never_exceed_the_cash_that_exists(rig) -> None:
     )
     rig["orders"] = [("A.NS", 10, Decimal("1000")), ("B.NS", 10, Decimal("1000"))]
 
-    local_run.main(["--no-open"])
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
+    local_run.main(["--no-open", "--no-pipeline"])
     left = _allowance(rig)
     assert left.reserved <= Decimal("12000"), (
         f"reserved ₹{left.reserved:,.0f} against ₹12,000 of cash"
@@ -143,7 +147,7 @@ def test_reservations_can_never_exceed_the_cash_that_exists(rig) -> None:
 def test_imported_purchases_move_the_allowance_from_reserved_to_spent(rig) -> None:
     """FINDING 1. Importing ₹49,766 of confirmed purchases left spending at ₹0 and offered another
     ₹49,738. Recording a proposal is only half the lifecycle."""
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
     proposed = _allowance(rig).reserved
     assert proposed > 0
 
@@ -155,7 +159,7 @@ def test_imported_purchases_move_the_allowance_from_reserved_to_spent(rig) -> No
         CASH - proposed,
         [],
     )
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
 
     left = _allowance(rig)
     assert left.spent > 0, "a confirmed fill must become SPENT, not stay reserved for ever"
@@ -165,9 +169,9 @@ def test_imported_purchases_move_the_allowance_from_reserved_to_spent(rig) -> No
 def test_an_outage_keeps_the_last_known_balance_for_display(rig) -> None:
     """FINDING 3. Buying stopped, correctly — but the account, the saved snapshot and the displayed
     cash all became ₹0. A broker outage is not a confirmed empty account."""
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
     rig["broker"] = ({}, {}, None, ["Kite unreachable"])
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
 
     saved = json.loads((rig["tmp"] / "snapshot.json").read_text(encoding="utf-8"))
     assert Decimal(saved["cash"]) == CASH, (
@@ -180,11 +184,11 @@ def test_an_outage_keeps_the_last_known_balance_for_display(rig) -> None:
 def test_a_candidate_price_change_changes_the_snapshot_identity(rig) -> None:
     """FINDING 5. Changing an unheld candidate's price changed its recommended quantity and left the
     digest identical — so a resumed run would inherit work done against different numbers."""
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
     first = json.loads((rig["tmp"] / "snapshot.json").read_text(encoding="utf-8"))["digest"]
 
     rig["orders"] = [("INFY.NS", 25, Decimal("900")), ("TCS.NS", 10, Decimal("2203"))]
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
     second = json.loads((rig["tmp"] / "snapshot.json").read_text(encoding="utf-8"))["digest"]
     assert first != second, "different candidate prices must not share one identity"
 
@@ -193,7 +197,7 @@ def test_a_stale_screening_panel_blocks_even_when_another_panel_is_fresh(rig) ->
     """FINDING 4. Freshness took the NEWEST date across two files while the screen reads one
     specific file, so a fresh secondary panel licensed a 90-day-old screening panel."""
     rig["price_as_of"] = TODAY - timedelta(days=90)
-    local_run.main(["--no-open"])
+    local_run.main(["--no-open", "--no-pipeline"])
     assert _allowance(rig).reserved == Decimal("0"), "nothing may be proposed on 90-day-old prices"
 
 
@@ -208,8 +212,9 @@ def test_the_windows_launcher_checks_each_failure_separately() -> None:
     assert "wsl --install" in bat, "a missing WSL must say how to install it"
     assert "wsl --list --verbose" in bat, "a wrong distro name must say how to find the right one"
     assert "Edit REPO" in bat, "a wrong path must say which line to edit"
-    # It must open the page even on failure: a page that says what went wrong beats a closed console.
-    assert bat.index('start "" "!PAGE!"') < bat.index("The run reported a problem")
+    # The browser is opened BEFORE the server starts: the app runs in the foreground
+    # until the window closes, so opening it afterwards would never happen.
+    assert bat.index('start "" http://127.0.0.1:8787/') < bat.index("qalpha.sh --app")
     assert "pause" in bat, "a failing run must not close before it can be read"
     assert "NOTHING HERE TRADES" in bat
 
@@ -222,3 +227,116 @@ def test_the_launcher_runs_the_same_entry_point_the_tests_drive() -> None:
     sh = (root / "qalpha.sh").read_text(encoding="utf-8")
     assert "qalpha.sh" in bat
     assert "scripts/local_run.py" in sh
+
+
+def test_the_launcher_is_installed_to_windows_not_shortcut_inside_wsl() -> None:
+    """ "Missing Shortcut", 2026-09-10, and it was a chicken-and-egg of my own making.
+
+    The first instruction shortcut ``deploy/Q-Alpha.bat`` where it sits — inside WSL's filesystem at
+    ``\\\\wsl$\\<distro>\\...``. **That path only exists while WSL is running**, and starting WSL is
+    the launcher's entire job, so Windows could not reach the file it needed in order to wake the
+    thing the file lives on. It failed on exactly the occasions it was needed.
+
+    The installer copies the launcher to the Windows side, where it is always reachable, and writes
+    this machine's real distro and repo into the copy.
+    """
+    root = Path(__file__).resolve().parent.parent
+    installer = (root / "deploy/install-windows.sh").read_text(encoding="utf-8")
+    assert "WSL_DISTRO_NAME" in installer, "the distro must be read, never assumed"
+    assert "%USERNAME%" in installer, "the Windows user must be read, never assumed"
+    assert "OneDrive/Desktop" in installer, (
+        "a redirected Desktop is the common case, not the odd one"
+    )
+    # The shortcut must target the Windows copy. A .lnk whose TargetPath is a \\wsl$ path is the
+    # exact failure being fixed, so no TargetPath line may mention it.
+    targets = [ln for ln in installer.splitlines() if "TargetPath" in ln]
+    assert targets, "the installer must set a shortcut target"
+    for line in targets:
+        assert "USERPROFILE" in line, line
+        assert "wsl$" not in line, f"a shortcut into WSL is unreachable when WSL is asleep: {line}"
+
+    bat = (root / "deploy/Q-Alpha.bat").read_text(encoding="utf-8")
+    assert "DO NOT shortcut this file where it sits" in bat, (
+        "the file must warn against the thing that failed"
+    )
+
+
+# --- the pipeline, driven by the real main() -----------------------------------------------------
+#
+# Every test above passes `--no-pipeline`, which is right for testing the decision layer and wrong
+# as the only thing that reaches `main()`. The first version of this file did exactly that, and
+# `main()` then shipped `run_pipeline(snapshot.digest)` — a bound METHOD where a digest string was
+# wanted, so every ledger row would have been unwritable. Nothing caught it until a test ran the
+# caller with the pipeline switched on. That is rule 4, again, in the same file that exists because
+# of rule 4.
+def test_main_runs_the_pipeline_and_keys_it_to_a_real_digest(rig, monkeypatch) -> None:
+    from qalpha.live import daily
+
+    seen: list[tuple[str, str]] = []
+
+    def _spy(name: str):
+        def run() -> None:
+            seen.append(("ran", name))
+
+        return daily.Step(name, f"doing {name}", run)
+
+    monkeypatch.setattr(local_run, "LEDGER", rig["tmp"] / "ledger.jsonl")
+    monkeypatch.setattr(daily, "refresh_steps", lambda: [_spy("prices")])
+    monkeypatch.setattr(daily, "research_steps", lambda: [_spy("evidence")])
+    monkeypatch.setattr(local_run, "refresh_steps", lambda: [_spy("prices")])
+    monkeypatch.setattr(local_run, "research_steps", lambda: [_spy("evidence")])
+
+    real = daily.run_pipeline
+    keys: list[str] = []
+
+    def _record(digest: str, **kw: object):
+        keys.append(digest)
+        return real(digest, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(local_run, "run_pipeline", _record)
+
+    assert local_run.main(["--no-open"]) == 0
+    assert seen == [("ran", "prices"), ("ran", "evidence")], "refresh must precede research"
+    assert len(keys) == 2
+    assert keys[0].startswith("day:"), "the refresh phase is scoped to the calendar day"
+    # The research phase is keyed to the INPUTS. A bound method stringifies to something starting
+    # with "<bound method", which is why this asserts the shape rather than merely that it is a str.
+    assert keys[1].isalnum() and "method" not in keys[1], keys[1]
+
+
+def test_a_second_run_does_not_redo_finished_research(rig, monkeypatch) -> None:
+    """'Stop for two days and it continues' — asserted against the real entry point."""
+    from qalpha.live import daily
+
+    ran: list[str] = []
+    ledger = rig["tmp"] / "ledger.jsonl"
+
+    def _plan():
+        return [daily.Step("evidence", "reading", lambda: ran.append("evidence"))]
+
+    monkeypatch.setattr(local_run, "LEDGER", ledger)
+    monkeypatch.setattr(local_run, "refresh_steps", list)
+    monkeypatch.setattr(local_run, "research_steps", _plan)
+
+    local_run.main(["--no-open"])
+    local_run.main(["--no-open"])
+    assert ran == ["evidence"], "the same inputs must not be researched twice"
+
+
+def test_a_failed_step_does_not_stop_the_page_being_written(rig, monkeypatch) -> None:
+    """A dead filings step must still leave a page, with the failure named on it."""
+    from qalpha.live import daily
+
+    def _boom() -> None:
+        raise RuntimeError("NSE refused the connection")
+
+    monkeypatch.setattr(local_run, "LEDGER", rig["tmp"] / "ledger.jsonl")
+    monkeypatch.setattr(local_run, "refresh_steps", list)
+    monkeypatch.setattr(
+        local_run, "research_steps", lambda: [daily.Step("evidence", "reading", _boom)]
+    )
+
+    assert local_run.main(["--no-open"]) == 0
+    page = _page(rig)
+    assert "evidence FAILED" in page
+    assert "NSE refused the connection" in page

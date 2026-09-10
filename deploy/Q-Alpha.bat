@@ -3,15 +3,20 @@ setlocal EnableDelayedExpansion
 REM ============================================================================
 REM  Q-Alpha — one click, from the Windows desktop.
 REM
-REM  Right-click this file -> Send to -> Desktop (create shortcut). Then one
-REM  double-click: it starts WSL if it is asleep, runs the pipeline inside it,
-REM  and opens the page it wrote in your Windows browser.
+REM  DO NOT shortcut this file where it sits. It lives inside WSL's filesystem,
+REM  at \\wsl$\<distro>\..., and that path only exists WHILE WSL IS RUNNING —
+REM  while starting WSL is this file's entire job. A .lnk to it fails with
+REM  "Missing Shortcut" on exactly the occasions you need it.
+REM
+REM  Run  ./deploy/install-windows.sh  from WSL instead. It copies this to the
+REM  Windows side with your real distro and repo path baked in, and makes the
+REM  shortcut. Then one double-click: WSL wakes, the pipeline runs, the page opens.
 REM
 REM  NOTHING HERE TRADES. It reads, it decides, it writes a page. Every order is
 REM  placed by you, in Kite.
 REM ============================================================================
 
-set DISTRO=Ubuntu
+set DISTRO=Ubuntu-24.04
 set REPO=/home/aarsh/q-alpha/Q_Alpha
 
 title Q-Alpha
@@ -50,20 +55,14 @@ if errorlevel 1 (
 
 echo   [2/3] running the pipeline...
 echo.
-wsl -d %DISTRO% -e bash -lc "cd '%REPO%' && ./qalpha.sh --no-open"
+REM The app: buttons, live progress, the Kite login, token status. It serves on loopback inside
+REM WSL and Windows can reach it at the same address, so the browser opens on this side.
+start "" http://127.0.0.1:8787/
+wsl -d %DISTRO% -e bash -lc "cd '%REPO%' && ./qalpha.sh --app --no-open --port 8787"
 set RUN_RC=%errorlevel%
 echo.
 
-REM --- 4. Open the page even if the run reported a problem. A page that says
-REM ---    what went wrong is more useful than a console that closed.
-for /f "delims=" %%p in ('wsl -d %DISTRO% -e wslpath -w "%REPO%/data/session/qalpha.html" 2^>nul') do set PAGE=%%p
-if defined PAGE (
-  if exist "!PAGE!" (
-    echo   [3/3] opening the page...
-    start "" "!PAGE!"
-  )
-)
-
+REM --- 4. The app runs until you close this window; the browser was opened above.
 if not "%RUN_RC%"=="0" (
   echo.
   echo   The run reported a problem ^(exit %RUN_RC%^). The page above, if it

@@ -1,18 +1,18 @@
 {
-  "as_of": "2026-09-09",
-  "taken_at": "2026-09-09T15:13:29.059412+00:00",
+  "as_of": "2026-09-10",
+  "taken_at": "2026-09-10T06:11:25.859346+00:00",
   "holdings": {},
   "cash": "0",
   "budget": "50000",
   "universe": [],
-  "prices_sha": "261af43c2bad91f7",
+  "prices_sha": "bc9e21be2fa2786f:5a26efcb61068bc4",
   "stale": [
-    "prices are from 2026-08-28, 12 days old",
+    "prices are from 2026-08-27, 14 days old",
     "cash balance unconfirmed \u2014 the broker was not reachable",
     "lots are undated \u2014 tax is an estimate"
   ],
   "missing_critical": [],
   "extraction_version": "EX-2",
   "policy_version": "",
-  "digest": "e120eaec9335c2b2"
+  "digest": "65b594959de6e7bd"
 }
