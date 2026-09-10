@@ -316,6 +316,34 @@ def propose(
             "not a clean bill of health, and no order should rest on it",
             holdings_review=review,
         )
+    # AND THE SAME TEST FOR THE OTHER FEED. The guard above covered the exchange's file and nothing
+    # covered the filings reader, so with no reader configured every candidate came back UNKNOWN on
+    # corporate announcements, every one was skipped, the whole budget went to the anchor — and the
+    # report was headed **EXECUTE**, above the line "0 name(s) cleared every check" and a coverage
+    # line reading "0 of 15 fully read". Three true statements arranged into a false one.
+    #
+    # The distinction this restores is the one the module is built on: "I could not read ONE filing
+    # about ONE candidate" is resolved by moving on, and "nothing read a filing at all today" is a
+    # dead feed. `extraction_ran` separates them exactly — it is true when a name's documents were
+    # read, when they were already read and carry receipts, and when there was nothing filed to
+    # read. False for every candidate means no model was ever called, or every call failed.
+    #
+    # Deliberately narrow, because `evidence.py` warns what happens if these collapse together:
+    # ONE assessed candidate is enough to leave this alone and let the per-name rule work.
+    if candidates and not any(
+        (coverage or {}).get(order.ticker, AnnouncementCoverage()).extraction_ran
+        for order in candidates
+    ):
+        return DayProposal(
+            as_of,
+            HUMAN_REQUIRED,
+            f"not one of the {len(candidates)} candidates had its filings read by anything today "
+            "— no extraction ran at all. That is an evidence layer that is off, not a day on which "
+            f"{len(candidates)} companies had nothing to report, and the difference is invisible "
+            "once the money is in the anchor. Configure a reader (QALPHA_LOCAL_MODEL, or "
+            "ANTHROPIC_API_KEY) and run again.",
+            holdings_review=review,
+        )
 
     # --- walk the ranking ------------------------------------------------------------------
     taken: list[ProposedOrder] = []
