@@ -266,13 +266,16 @@ def gather(
     cost_basis: Mapping[str, Decimal],
     proposal: Sequence[str] = (),
     watchlist: Sequence[str] = (),
-    panel_path: str = "data/historical/prices_watchlist.parquet",
+    panel_path: str | None = None,
 ) -> Desk:
     """:func:`assemble`, with the on-disk artefacts read for you. Fail-soft **and loud**.
 
     Each source is read in its own ``try``: one unreadable file must degrade one column, not the
     page. Every failure becomes a note, because a silently empty column reads as "nothing to see".
     """
+    from qalpha.live.panels import SCREEN_PANEL
+
+    panel_path = panel_path or str(SCREEN_PANEL)
     notes: list[str] = []
     scope = sorted(set(positions) | set(proposal) | set(watchlist))
 
