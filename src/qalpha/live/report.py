@@ -24,10 +24,13 @@ because a stale page that does not announce its age is worse than no page.
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from html import escape
+from pathlib import Path
 
 from qalpha.live import evidence, ui
 from qalpha.live.account import ReconciledAccount
@@ -193,6 +196,92 @@ def _proposal_table(orders: Sequence[tuple[str, int, Decimal]], allowance: Allow
         + "<p><b>You place these yourself, in Kite — CNC/delivery, no stop-loss, no target.</b> "
         f"Sized against {escape(ui.inr(allowance.remaining))} of allowance, at the run's prices; "
         "the fill you get will differ. Nothing here has been ordered.</p>"
+    )
+
+
+# --- the market brief ----------------------------------------------------------------------------
+BRIEF_MD = Path("reports/ai_brief.md")
+BRIEF_STAMP = Path("reports/ai_brief.json")
+
+#: Older than this and the brief is history, not news. Shown anyway — with its age in the heading,
+#: because hiding it would leave the page silent about a market it has an opinion on.
+BRIEF_FRESH_DAYS = 3
+
+
+def _brief_age(today: date, stamp: Path = BRIEF_STAMP) -> int | None:
+    """Days since the brief was written, or ``None`` when it does not say.
+
+    An unstamped brief is undated, and this returns ``None`` rather than falling back to the file's
+    mtime — a mtime is reset by a fresh checkout, so it would date a three-week-old brief as this
+    morning's with nothing on the page to contradict it.
+    """
+    try:
+        written = json.loads(stamp.read_text(encoding="utf-8"))["as_of"]
+        return (today - date.fromisoformat(str(written))).days
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _markdownish(text: str) -> str:
+    """Just enough markdown for this one document: **bold**, numbered items, blank-line paragraphs.
+
+    Deliberately not a markdown library. The brief is one known shape written by one known caller,
+    and a general renderer here would be a dependency plus an escaping surface for model output.
+    Everything is escaped first, so nothing the model writes can become markup.
+    """
+    out: list[str] = []
+    for block in escape(text.strip()).split("\n\n"):
+        block = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", block.strip())
+        if not block:
+            continue
+        lines = [ln for ln in block.split("\n") if ln.strip()]
+        # A block is usually a heading line followed by numbered drivers ("**Drivers**:\n1. …"),
+        # so the two halves are split rather than the whole block being all-or-nothing.
+        head = [ln for ln in lines if not re.match(r"^\d+\.\s", ln.strip())]
+        items = [ln for ln in lines if re.match(r"^\d+\.\s", ln.strip())]
+        if head:
+            out.append("<p>" + "<br>".join(head) + "</p>")
+        if items:
+            cells = "".join(f"<li>{re.sub(r'^\d+\.\s*', '', ln.strip())}</li>" for ln in items)
+            out.append(f"<ol>{cells}</ol>")
+    return "".join(out)
+
+
+def _brief_panel(today: date, *, path: Path = BRIEF_MD, stamp: Path = BRIEF_STAMP) -> str:
+    """The market narrative — labelled, every time, as the thing it is.
+
+    ``ai_brief`` is explicit that this is a **language model's narrative**, including a directional
+    "likely reaction" that is its non-validated opinion. Nothing on this page acts on it and nothing
+    ever will: the basket comes from the deterministic screen, and the AI layer may only ever
+    subtract from that. It is here because a market moved today and the user should be able to read
+    what it moved on — not because anything downstream reads it.
+    """
+    if not path.exists():
+        return (
+            ui.section("The market, in words")
+            + '<div class="qa-empty">No brief on file. It needs a cloud key: it is built on web '
+            "search, and a model on this machine has nothing to search. Its absence means nobody "
+            "wrote one — not that the day was quiet.</div>"
+        )
+    age = _brief_age(today, stamp)
+    if age is None:
+        note = "undated — it does not say when it was written, so it is not being dated for it"
+    elif age <= 0:
+        note = "written today"
+    elif age <= BRIEF_FRESH_DAYS:
+        note = f"{age} day{'s' if age != 1 else ''} old"
+    else:
+        note = f"{age} days old — this is history, not news"
+    body = path.read_text(encoding="utf-8")
+    # The machine-readable SIGNAL line is for the twin's AI arm, not for a person to act on.
+    body = re.sub(r"^SIGNAL:.*$", "", body, flags=re.M)
+    return (
+        ui.section("The market, in words", note=note)
+        + f'<div class="qa-note">{_markdownish(body)}</div>'
+        + '<p class="qa-foot"><b>This is a language model&#8217;s narrative, and the &#8220;likely '
+        "reaction&#8221; in it is its own non-validated opinion.</b> Nothing on this page acts on "
+        "it. The basket below comes from the deterministic screen; the AI layer may only ever "
+        "remove a name from that screen, never add one, and never size anything.</p>"
     )
 
 
@@ -473,6 +562,7 @@ def render(
 {warnings}
 {ui.section("Holdings", note="marked at the run's prices")}
 {_holdings_table(account, prices)}
+{_brief_panel(ist.date())}
 {_desk_panel(desk)}
 {_concerns_panel(desk)}
 {ui.section("Today's basket", note="the screen, sized to this month's allowance")}
