@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from qalpha.config import Config
 from qalpha.live.account import ReconciledAccount, reconcile
 from qalpha.live.buygate import MAX_PRICE_AGE_DAYS, evaluate
-from qalpha.live.commitments import Commitment, allowance, already_committed
+from qalpha.live.commitments import Commitment, allowance, already_committed, confirm_fills
 from qalpha.live.commitments import load as load_commitments
 from qalpha.live.commitments import record as record_commitment
 from qalpha.live.extraction import EXTRACTION_VERSION
@@ -43,6 +43,14 @@ from qalpha.live.tradebook import TradebookTrade, parse_tradebook
 
 PAGE = Path("data/session/qalpha.html")
 TRADEBOOK_DIR = Path("data/tradebooks")
+#: Every file this run reads or writes, in one place and passed explicitly.
+#:
+#: They used to be default arguments bound at import time, which is a large part of why NO TEST
+#: COULD REACH `main()` — and six defects survived a PR that claimed to fix them, because the gate
+#: was tested with prepared inputs while nothing checked that `main` supplied them correctly.
+SNAPSHOT = Path("data/session/snapshot.json")
+SNAPSHOT_ARCHIVE = Path("data/session/snapshots")
+COMMITMENTS = Path("data/session/commitments.jsonl")
 
 
 def _trades() -> tuple[list[TradebookTrade], list[str]]:
@@ -245,6 +253,19 @@ def main(argv: list[str] | None = None) -> int:
     quantities, costs, cash, broker_notes = _broker(cfg)
     notes += broker_notes
 
+    # AN OUTAGE IS NOT A CONFIRMED EMPTY ACCOUNT. Buying already stopped correctly, but the account,
+    # the saved snapshot and the displayed cash all became ₹0 — a known ₹2,01,117 overwritten by a
+    # network failure. The last figure on file is carried forward FOR DISPLAY ONLY; `cash_confirmed`
+    # stays False, so the gate still refuses to spend against it.
+    last = load_snapshot(SNAPSHOT)
+    cash_confirmed = cash is not None
+    if cash is None and last is not None:
+        cash = last.cash
+        notes.append(
+            f"Showing the last known balance, ₹{cash:,.0f} from {last.as_of} — not confirmed with "
+            "the broker just now, and nothing will be bought against it."
+        )
+
     # The ledger replay needs a number to set the balance to; the GATE gets the honest `None`.
     # Keeping the two apart is the point: the page may display a last-known figure, and nothing may
     # be bought against one.
@@ -261,7 +282,18 @@ def main(argv: list[str] | None = None) -> int:
 
     price_as_of = _price_as_of()
     mandate = load_mandate()
-    commitments = load_commitments()
+    commitments = load_commitments(COMMITMENTS)
+
+    # CONFIRM WHAT THE BROKER ACTUALLY EXECUTED, before deciding anything new. Recording a proposal
+    # was only half the lifecycle: importing its purchases left it marked `proposed` with spending
+    # still ₹0, so ₹49,766 of real buys still showed a full ₹50,000 allowance.
+    for done in confirm_fills(commitments, trades, today=date.today()):
+        record_commitment(done, COMMITMENTS)
+        notes.append(
+            f"{done.ticker.removesuffix('.NS')}: proposal confirmed as bought for "
+            f"₹{done.amount:,.0f} — the allowance is debited, not just reserved."
+        )
+    commitments = load_commitments(COMMITMENTS)
     left = allowance(mandate.monthly_budget, commitments, period=date.today())
 
     # The snapshot must identify the DATA, not only the account. It carried an empty price hash and
@@ -270,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     stale: list[str] = []
     if price_as_of is not None and (date.today() - price_as_of).days > MAX_PRICE_AGE_DAYS:
         stale.append(f"prices are from {price_as_of}, {(date.today() - price_as_of).days} days old")
-    if cash is None:
+    if not cash_confirmed:
         stale.append("cash balance unconfirmed — the broker was not reachable")
     snapshot = snapshot_from(
         account,
@@ -281,11 +313,11 @@ def main(argv: list[str] | None = None) -> int:
         stale=stale,
         extraction_version=EXTRACTION_VERSION,
     )
-    previous = load_snapshot()
+    previous = last
     changes = snapshot.changes_against(previous)
     if changes and previous is not None:
         notes.append("Changed since the last run: " + "; ".join(changes))
-    snapshot.save()
+    snapshot.save(SNAPSHOT, archive=SNAPSHOT_ARCHIVE)
 
     # THE GATE. Every check it makes already existed and was tested; NONE was in the buying path,
     # so a ₹100 account was offered a ₹49,658 basket and a book that did not reconcile got one
@@ -294,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         snapshot=snapshot,
         allowance=left,
         settled_cash=cash,
-        cash_confirmed=cash is not None,
+        cash_confirmed=cash_confirmed,
         price_as_of=price_as_of,
         today=date.today(),
         floor=mandate.idle_cash_floor,
@@ -322,7 +354,14 @@ def main(argv: list[str] | None = None) -> int:
                     on=date.today(),
                     reason=f"screen basket, {qty} @ {price}",
                 ),
+                COMMITMENTS,
             )
+        # RE-READ. The page must show the allowance AFTER this run's reservations, not before —
+        # the first page said "₹50,000 available" and "nothing cleared the screen" on the very run
+        # that had just reserved ₹49,766 and printed a basket. Three statements, one screen, two of
+        # them false.
+        commitments = load_commitments(COMMITMENTS)
+        left = allowance(mandate.monthly_budget, commitments, period=date.today())
 
     PAGE.parent.mkdir(parents=True, exist_ok=True)
     PAGE.write_text(
