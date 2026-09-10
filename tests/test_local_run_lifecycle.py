@@ -391,15 +391,42 @@ def test_the_windows_launcher_still_says_it_places_no_orders() -> None:
     assert "you place every order in Kite" in bat
 
 
-def test_the_launcher_and_the_installer_agree_on_where_the_repo_is() -> None:
-    """The installer bakes this machine's values in. A hard-coded path that has drifted from the
-    checkout would send the launcher to a directory that is not this one."""
+def test_the_installer_can_actually_rewrite_the_lines_it_targets() -> None:
+    """The installer edits the launcher with `sed`. If those two drift, it silently edits nothing.
+
+    `deploy/Q-Alpha.bat` in the repo is a TEMPLATE: it carries whichever machine's distro and path
+    were last committed, and `install-windows.sh` overwrites both when it copies the file to the
+    Windows side. The failure mode is quiet — sed that matches no line exits 0 and writes the file
+    through unchanged, so the shortcut ends up launching somebody else's checkout with no error
+    anywhere. Reformatting either line is all it takes.
+
+    The first version of this test asserted the template's own path existed on disk, which passed
+    on the machine that wrote it and failed in CI, where that path is nobody's checkout. That was
+    the test asserting a machine rather than a property.
+    """
+    import re
+
     root = Path(__file__).resolve().parent.parent
-    bat = (root / "deploy/Q-Alpha.bat").read_text(encoding="utf-8")
-    baked = next(
-        line.split("=", 1)[1].strip() for line in bat.splitlines() if line.startswith("set REPO=")
+    installer = (root / "deploy/install-windows.sh").read_text(encoding="utf-8")
+    patterns = re.findall(r'-e "s\|(\^set [A-Z]+=)\.\*\|', installer)
+    assert {"^set DISTRO=", "^set REPO="} <= set(patterns), (
+        f"the installer rewrites {patterns}; it must rewrite both DISTRO and REPO"
     )
-    assert (Path(baked) / "scripts/local_run.py").exists(), (
-        f"the launcher points at {baked}, which has no local_run.py. "
-        "Re-run ./deploy/install-windows.sh from the checkout you actually use."
-    )
+
+    for name in ("Q-Alpha", "Q-Alpha-dev"):
+        bat = (root / f"deploy/{name}.bat").read_text(encoding="utf-8")
+        for anchor in patterns:
+            line = anchor.lstrip("^")
+            assert any(ln.startswith(line) for ln in bat.splitlines()), (
+                f"{name}.bat has no line starting `{line}`, so the installer's sed for it "
+                f"matches nothing and the launcher ships with whatever was committed."
+            )
+
+
+def test_the_launchers_never_hard_code_a_windows_username() -> None:
+    """The installer reads %USERNAME% at install time. A baked-in one launches for one person."""
+    root = Path(__file__).resolve().parent.parent
+    for name in ("Q-Alpha", "Q-Alpha-dev"):
+        bat = (root / f"deploy/{name}.bat").read_text(encoding="utf-8")
+        assert "dnaad" not in bat, f"{name}.bat carries a specific Windows user"
+        assert "C:\\Users\\" not in bat, f"{name}.bat hard-codes a Users path"
