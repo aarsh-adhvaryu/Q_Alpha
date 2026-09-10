@@ -69,11 +69,35 @@ class ReconciledAccount:
     #: Held names carried at the broker's average cost with no purchase date. Their VALUE is exact
     #: and their TAX is not — the two are tracked separately because they fail separately.
     undated_tickers: tuple[str, ...] = ()
+    #: **Was the broker actually asked?** An empty disagreement list means one of two things and
+    #: they are not the same: the replay matched, or nobody checked. With no session and no trades
+    #: the page printed "✓ Reconstructed holdings match your broker account exactly" beside a log
+    #: line reading "Account NOT checked against the broker" — a tick nobody earned, on the surface
+    #: where a tick means it is safe to act. Defaults True so every caller that does reach the
+    #: broker is unchanged.
+    broker_checked: bool = True
 
     @property
     def tallies(self) -> bool:
         """True only when the replay reproduces the broker exactly. Anything else is not a base."""
         return not (self.mismatched or self.broker_only or self.tradebook_only)
+
+    @property
+    def broker_confirmed(self) -> bool:
+        """Has the replay been checked against the broker AND agreed with it?
+
+        The distinction :attr:`tallies` cannot make. `tallies` answers "were any disagreements
+        found", which is vacuously yes when nothing was compared — right for its own question and
+        wrong as the thing a green tick rests on.
+        """
+        return self.broker_checked and self.tallies
+
+    @property
+    def broker_state(self) -> str:
+        """Three states, because there are three: ``confirmed`` | ``unchecked`` | ``disagrees``."""
+        if not self.broker_checked:
+            return "unchecked"
+        return "confirmed" if self.tallies else "disagrees"
 
     @property
     def blocking(self) -> tuple[str, ...]:
@@ -110,8 +134,13 @@ class ReconciledAccount:
             f"{n} holding{'s' if n != 1 else ''} · cash ₹{self.cash:,.0f} · "
             + ("dated FIFO lots" if self.dated else "undated lots (broker average cost)")
         ]
-        if self.tallies:
+        if self.broker_confirmed:
             lines.append("✓ Reconstructed holdings match your broker account exactly.")
+        elif not self.broker_checked:
+            lines.append(
+                "⚠️ The broker was NOT asked this run, so nothing here has been checked against "
+                "your account. Agreement was not found — it was not looked for."
+            )
         if self.broker_only:
             names = ", ".join(t.removesuffix(".NS") for t in self.broker_only)
             lines.append(
@@ -152,13 +181,15 @@ def reconcile(
     as_of: date,
     *,
     broker_costs: dict[str, Decimal] | None = None,
+    broker_checked: bool = True,
 ) -> ReconciledAccount:
     """Replay the ledger and check it against the broker. The result is track 1.
 
     ``broker_quantities`` is what Kite says you hold. An **empty** mapping means "the broker was not
     asked", not "you hold nothing" — with no trades either, that is an empty account; with trades, it
     is an unchecked replay, and every name reads as ``tradebook_only`` because nothing confirmed it.
-    Callers that could not reach the broker should say so rather than passing ``{}``.
+    Callers that could not reach the broker say so with ``broker_checked=False``. Without it an
+    unreachable broker is indistinguishable from a broker that agreed, and the page prints a tick.
     """
     result = replay_tradebook(trades, cfg, cash=cash)
     replayed = result.portfolio.positions()
@@ -207,4 +238,5 @@ def reconcile(
         replay_warnings=tuple(result.warnings),
         realized_tax=result.realized_tax,
         undated_tickers=tuple(broker_only),
+        broker_checked=broker_checked,
     )

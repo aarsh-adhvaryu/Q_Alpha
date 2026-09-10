@@ -229,3 +229,29 @@ def test_the_page_points_at_the_basket_as_the_only_proposal() -> None:
 
 def _row_of(desk, ticker: str):
     return next(r for r in desk.rows if r.ticker == ticker)
+
+
+def test_the_page_never_claims_a_match_the_broker_was_not_asked_for() -> None:
+    """The caller test for it: the strip, the chip and the note must agree with each other.
+
+    The page said "reconciled ✓" while the run's own log said the broker had not been asked. One
+    screen, two statements, one of them false — and the false one was the reassuring one.
+    """
+    from qalpha.live.account import reconcile
+
+    unchecked = reconcile([], {}, Decimal("0"), Config(), AS_OF, broker_checked=False)
+    page = render(
+        account=unchecked,
+        prices={},
+        allowance=allowance(Decimal("50000"), [], period=AS_OF),
+        commitments=[],
+        generated_at=WHEN,
+    )
+    assert "reconciled ✓" not in page
+    assert "NOT checked against the broker" in page
+    assert "match your broker account exactly" not in page
+
+
+def test_a_confirmed_account_still_reads_as_confirmed_on_the_page() -> None:
+    page = _page(_desk())
+    assert "reconciled ✓" in page
