@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-import webbrowser
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -31,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from qalpha.config import Config
 from qalpha.live.account import ReconciledAccount, reconcile
+from qalpha.live.browser import describe_failure, open_url
 from qalpha.live.buygate import MAX_PRICE_AGE_DAYS, evaluate
 from qalpha.live.commitments import Commitment, allowance, already_committed, confirm_fills
 from qalpha.live.commitments import load as load_commitments
@@ -379,8 +379,10 @@ def main(argv: list[str] | None = None) -> int:
         from qalpha.live.credentials import load_credentials
 
         creds = load_credentials()
-        print(f"Opening Kite login…\n  {login_url(creds.api_key)}")
-        webbrowser.open(login_url(creds.api_key))
+        url = login_url(creds.api_key)
+        print(f"Opening Kite login…\n  {url}")
+        if not open_url(url):
+            print(describe_failure(url))
         token = capture_request_token()
         exchange(creds, token)
         print("Session refreshed.")
@@ -613,8 +615,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Wrote {PAGE.resolve()}")
     for note in notes:
         print(f"  · {note}")
-    if not args.no_open:
-        webbrowser.open(PAGE.resolve().as_uri())
+    if not args.no_open and not open_url(PAGE.resolve().as_uri()):
+        # A page written and not shown is not a page. Naming the file beats a silent no-op.
+        print(f"Could not open a browser. The page is at {PAGE.resolve()}")
     return 0
 
 
