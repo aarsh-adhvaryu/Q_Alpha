@@ -35,6 +35,14 @@ from qalpha.live.buygate import MAX_PRICE_AGE_DAYS, evaluate
 from qalpha.live.commitments import Commitment, allowance, already_committed, confirm_fills
 from qalpha.live.commitments import load as load_commitments
 from qalpha.live.commitments import record as record_commitment
+from qalpha.live.daily import (
+    PipelineResult,
+    day_scope,
+    refresh_steps,
+    research_steps,
+    run_pipeline,
+)
+from qalpha.live.desk import Desk, gather
 from qalpha.live.extraction import EXTRACTION_VERSION
 from qalpha.live.mandate import Mandate, load_mandate
 from qalpha.live.progress import LOG
@@ -52,6 +60,9 @@ TRADEBOOK_DIR = Path("data/tradebooks")
 SNAPSHOT = Path("data/session/snapshot.json")
 SNAPSHOT_ARCHIVE = Path("data/session/snapshots")
 COMMITMENTS = Path("data/session/commitments.jsonl")
+#: Which pipeline steps have finished, and against which inputs. Passed explicitly for the
+#: reason recorded above: a default argument binds at import and no test can reach past it.
+LEDGER = Path("data/session/ledger.jsonl")
 
 
 def _trades() -> tuple[list[TradebookTrade], list[str]]:
@@ -221,6 +232,42 @@ def _proposal(
         ]
 
 
+#: How many watchlist names get a research row when nothing is held or proposed. Enough to read a
+#: market from; small enough that the filings layer could realistically cover them.
+WATCH_ROWS = 12
+
+
+def _watchlist_focus(limit: int = WATCH_ROWS) -> tuple[list[str], list[str]]:
+    """The most pulled-back watchlist names, **for research rows only**.
+
+    Not a basket, not a ranking to buy from, and deliberately unsized: the desk shows these with no
+    quantity and no rupee figure. They exist because a page that goes blank when the gate is shut
+    reads as "nothing to see" on exactly the run where something was wrong enough to shut it.
+
+    Ordered by :func:`~qalpha.live.deploy.cheapness_scores`, which is the same *ordering* the screen
+    uses — a technical pullback measure, not a valuation — so what appears here is what the screen
+    would be looking at if it were allowed to look. Returns ``(tickers, notes)`` and never raises.
+    """
+    try:
+        import pandas as pd
+
+        from qalpha.data.ingest import load_parquet
+        from qalpha.live.deploy import cheapness_scores
+
+        wl = pd.read_csv("data/universes/nifty100_watchlist.csv")
+        tickers = [str(t) for t in wl["ticker"]]
+        panel = load_parquet(str(SCREEN_PANEL))
+        as_of = min(date.today(), panel.adj_close.index[-1].date())
+        scores = cheapness_scores(panel, tickers, as_of)
+        ranked = sorted(scores, key=lambda t: scores[t], reverse=True)[:limit]
+        return ranked, []
+    except Exception as exc:
+        return [], [
+            f"The watchlist could not be ranked ({type(exc).__name__}: {exc}), so the desk below "
+            "covers only what is held. That is not a statement about the rest of the market."
+        ]
+
+
 def _panel_sha() -> str:
     """A fingerprint of the SCREENING data, not just the held names' marks.
 
@@ -304,6 +351,16 @@ def main(argv: list[str] | None = None) -> int:
         help="open the local app instead: buttons, live progress, the Kite login, token status",
     )
     ap.add_argument("--port", type=int, default=8787, help="port for --app (loopback only)")
+    ap.add_argument(
+        "--no-pipeline",
+        action="store_true",
+        help="reconcile and decide only — skip prices, filings, the twin and the brief",
+    )
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="re-run pipeline steps the ledger already marks done for these inputs",
+    )
     args = ap.parse_args(argv)
 
     if args.app:
@@ -327,6 +384,15 @@ def main(argv: list[str] | None = None) -> int:
         token = capture_request_token()
         exchange(creds, token)
         print("Session refreshed.")
+
+    # THE REFRESH PHASE, FIRST. It is what *creates* today's inputs, so it cannot be keyed to a
+    # digest of them; it is scoped to the calendar day instead. Everything read below marks against
+    # what this pulls.
+    if not args.no_pipeline:
+        refresh = run_pipeline(
+            day_scope(date.today()), plan=refresh_steps(), ledger=LEDGER, force=args.force
+        )
+        notes += refresh.notes()
 
     LOG.say(f"Reading tradebook exports from {TRADEBOOK_DIR}/", "step")
     trades, tb_notes = _trades()
@@ -415,6 +481,24 @@ def main(argv: list[str] | None = None) -> int:
         notes.append("Changed since the last run: " + "; ".join(changes))
     snapshot.save(SNAPSHOT, archive=SNAPSHOT_ARCHIVE)
 
+    # THE RESEARCH PHASE, keyed to the snapshot's digest. This is where "stop for two days and it
+    # continues" lives: a step finished against these exact holdings and these exact prices is not
+    # done again, and a step that failed is pending again tomorrow.
+    #
+    # It runs BEFORE the gate on purpose. A proposal that had not read the filings would be a buy
+    # list made in the dark, and the whole evidence layer exists so that it is not one.
+    research = PipelineResult()
+    if not args.no_pipeline:
+        research = run_pipeline(
+            snapshot.research_digest(), plan=research_steps(), ledger=LEDGER, force=args.force
+        )
+        notes += research.notes()
+        if not research.complete:
+            LOG.say(
+                "The evening is INCOMPLETE — see the notes for which step and why.",
+                "warn",
+            )
+
     # THE GATE. Every check it makes already existed and was tested; NONE was in the buying path,
     # so a ₹100 account was offered a ₹49,658 basket and a book that did not reconcile got one
     # anyway. Nothing reaches the screen without passing here first.
@@ -477,6 +561,32 @@ def main(argv: list[str] | None = None) -> int:
         commitments = load_commitments(COMMITMENTS)
         left = allowance(mandate.monthly_budget, commitments, period=date.today(), trades=trades)
 
+    # THE DESK. Assembled last, after the basket is known, so a proposed name appears on it with
+    # everything the run knows about it — including that nobody read its filings, when nobody did.
+    # `gather` reads five artefacts the pipeline wrote and degrades one column at a time, loudly.
+    desk: Desk | None = None
+    watching, watch_notes = _watchlist_focus()
+    notes += watch_notes
+    try:
+        desk = gather(
+            as_of=date.today(),
+            positions=account.portfolio.positions(),
+            prices=prices,
+            cost_basis={
+                t: account.portfolio.ledger.open_lots(t)[0].cost_basis_per_share
+                for t in account.portfolio.positions()
+                if account.portfolio.ledger.open_lots(t)
+            },
+            proposal=[t for t, _q, _p in orders],
+            watchlist=watching,
+        )
+        LOG.say(desk.coverage_line(), "detail" if not desk.unread else "warn")
+    except Exception as exc:
+        notes.append(
+            f"The research desk could not be assembled ({type(exc).__name__}: {exc}). The page "
+            "below shows the account and the basket only — not that there was nothing to flag."
+        )
+
     PAGE.parent.mkdir(parents=True, exist_ok=True)
     PAGE.write_text(
         render(
@@ -487,6 +597,7 @@ def main(argv: list[str] | None = None) -> int:
             generated_at=datetime.now(UTC),
             notes=notes,
             proposal=orders,
+            desk=desk,
         ),
         encoding="utf-8",
     )

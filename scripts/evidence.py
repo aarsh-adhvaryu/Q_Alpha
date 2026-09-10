@@ -58,11 +58,13 @@ from qalpha.live.evidence import (
 from qalpha.live.extraction import (
     DEFAULT_MODEL,
     EXTRACTION_VERSION,
+    PROMPT_CHAR_BUDGET,
     ExtractedEvent,
-    default_generate,
+    GenerateFn,
     event_rows,
     extract,
 )
+from qalpha.live.localmodel import choose_backend
 from qalpha.live.pipeline import (
     ANCHOR_TICKER,
     ProposedOrder,
@@ -488,7 +490,12 @@ def _window_days(ticker: str) -> int:
 
 
 def _cover_name(
-    ticker: str, as_of: date, cutoff: date, generate: object | None, model: str
+    ticker: str,
+    as_of: date,
+    cutoff: date,
+    generate: GenerateFn | None,
+    model: str,
+    batch_chars: int = PROMPT_CHAR_BUDGET,
 ) -> tuple[AnnouncementCoverage, list[ExtractedEvent], int]:
     """Fetch, archive, read and extract one name. Returns ``(coverage, events, unverified)``."""
     anns, index_prov = fetch_and_archive_index(ticker, as_of)
@@ -547,7 +554,12 @@ def _cover_name(
     else:
         docs_to_read = fresh
     if generate is not None and docs_to_read:
-        found, discarded, _raw, usage = extract(docs_to_read, generate=generate, model=model)  # type: ignore[arg-type]
+        found, discarded, _raw, usage = extract(
+            docs_to_read,
+            generate=generate,
+            model=model,
+            batch_chars=batch_chars,
+        )
         extraction_ran = usage.get("failed_batches", 0) == 0
         events, unverified = found, discarded
         if not extraction_ran:
@@ -655,13 +667,19 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
         f"{len(basket.held)} held · filings since {as_of - timedelta(days=LOOKBACK_DAYS)}"
     )
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    model = os.environ.get("ANTHROPIC_MODEL") or DEFAULT_MODEL
-    generate = default_generate(api_key) if api_key else None
+    # WHICH MODEL READS THE FILINGS IS A DECISION, NOT A DEFAULT. `choose_backend` prefers a local
+    # model when one is configured and NEVER silently falls back to the cloud when it is
+    # unreachable — sending documents over the network on the one evening the user believed
+    # nothing was would be the worst kind of quiet substitution.
+    backend = choose_backend()
+    model = backend.model or (os.environ.get("ANTHROPIC_MODEL") or DEFAULT_MODEL)
+    generate = backend.generate
+    batch_chars = backend.batch_chars or PROMPT_CHAR_BUDGET
+    print(f"[evidence] {backend.note}")
     if generate is None:
         print(
-            "[evidence] no ANTHROPIC_API_KEY — filings will be archived but NOT read. Coverage "
-            "stays incomplete and every name reads UNKNOWN, which is the honest answer."
+            "[evidence] coverage stays incomplete and every name reads UNKNOWN, which is the "
+            "honest answer. Unread is not clean."
         )
 
     coverage: dict[str, AnnouncementCoverage] = {}
@@ -692,7 +710,9 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
             print(
                 f"  {ticker:<16} first sighting — reading {days} days of filings, not {LOOKBACK_DAYS}"
             )
-        cov, found, bad = _cover_name(ticker, as_of, as_of - timedelta(days=days), generate, model)
+        cov, found, bad = _cover_name(
+            ticker, as_of, as_of - timedelta(days=days), generate, model, batch_chars
+        )
         coverage[ticker] = cov
         events[ticker] = found
         unverified[ticker] = bad

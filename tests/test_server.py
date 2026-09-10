@@ -55,7 +55,7 @@ def test_the_page_serves_and_says_it_cannot_trade(app: int) -> None:
     status, body, _ = _get(app, "/")
     assert status == 200
     assert "nothing here places an order" in body
-    assert "Run the analysis" in body and "Log in to Zerodha" in body
+    assert "Run the evening" in body and "Log in to Zerodha" in body
 
 
 def test_the_account_page_is_never_cached_or_framed(app: int) -> None:
@@ -166,3 +166,67 @@ def test_the_server_binds_loopback_only() -> None:
     assert server.HOST == "127.0.0.1"
     src = __import__("inspect").getsource(server.serve)
     assert "0.0.0.0" not in src
+
+
+# --- what the app says about the reader -----------------------------------------------------------
+#
+# The page must never claim a privacy posture the next run will not honour. It resolves the backend
+# live for that reason: a remembered answer would say "local" for as long as it took someone to
+# notice their Ollama had stopped.
+def test_the_page_says_who_will_read_the_filings(app: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("QALPHA_LOCAL_MODEL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    _status, body, _ = _get(app, "/")
+    assert "Who reads the filings" in body
+    assert "unread is not clean" in body.lower()
+
+
+def test_the_page_offers_the_local_route_when_there_is_none_configured(app: int) -> None:
+    _status, body, _ = _get(app, "/")
+    assert "ollama pull" in body.lower()
+    assert "QALPHA_LOCAL_MODEL" in body
+
+
+def test_the_page_never_prints_a_credential_value(
+    app: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Names and presence only — the rule the token panel exists to keep."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-do-not-render-me")
+    _status, body, _ = _get(app, "/")
+    assert "ANTHROPIC_API_KEY" in body
+    assert "sk-ant-do-not-render-me" not in body
+
+
+def test_the_local_model_variables_are_listed_as_credentials(app: int) -> None:
+    _status, body, _ = _get(app, "/")
+    assert "QALPHA_LOCAL_MODEL_URL" in body
+
+
+# --- the two run buttons --------------------------------------------------------------------------
+def test_both_run_routes_exist_and_are_distinct() -> None:
+    assert "/run" in server._ACTIONS
+    assert "/decide" in server._ACTIONS
+    assert server._ACTIONS["/run"][1] is not server._ACTIONS["/decide"][1]
+
+
+def test_decide_only_asks_the_runner_to_skip_the_research(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The button's whole meaning is the flag it passes. Assert the flag, not the label."""
+    import sys
+    import types
+
+    seen: list[list[str]] = []
+    stub = types.ModuleType("local_run")
+    stub.main = lambda argv: seen.append(list(argv)) or 0  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "local_run", stub)
+
+    server._job_decide()
+    assert seen == [["--no-open", "--no-pipeline"]]
+
+    seen.clear()
+    server._job_run()
+    assert seen == [["--no-open"]], "the full evening must NOT skip the research"
+
+
+def test_the_trail_panel_reports_an_empty_history_rather_than_nothing(app: int) -> None:
+    _status, body, _ = _get(app, "/")
+    assert "What has run" in body

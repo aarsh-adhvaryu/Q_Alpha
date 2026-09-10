@@ -353,11 +353,17 @@ def extract(
     *,
     generate: GenerateFn,
     model: str,
+    batch_chars: int = PROMPT_CHAR_BUDGET,
 ) -> tuple[list[ExtractedEvent], int, str, dict[str, int]]:
     """Extract over **every character** of every document. ``(events, discarded, raw, usage)``.
 
     Long filings are chunked, not truncated, so "read" means read. Events found twice in
     overlapping chunks are collapsed on (ticker, type, normalised passage).
+
+    ``batch_chars`` is how much document text may go into one call. It defaults to the cloud
+    model's budget and is lowered for a local model with a smaller context — a batch that overruns
+    the window is truncated by the server, silently, while coverage still counts the documents as
+    read. That is the "25 of 30 filings, reported as 25 of 25" defect with a different cause.
 
     Fail-soft **per batch**: a call that raises contributes no events and its error text, and is
     counted in ``usage["failed_batches"]`` so a caller can refuse to claim coverage it did not get.
@@ -371,7 +377,7 @@ def extract(
     discarded = 0
     raws: list[str] = []
     usage: dict[str, int] = {"input": 0, "output": 0, "calls": 0, "failed_batches": 0}
-    for batch in batch_chunks(all_chunks):
+    for batch in batch_chunks(all_chunks, budget=batch_chars):
         try:
             raw, call_usage = generate(model, build_prompt(batch))
         except Exception as exc:
