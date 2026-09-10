@@ -101,7 +101,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**63 live modules · 1,270 tests green + 1 xfail** (counted, not estimated — see the
+**64 live modules · 1,299 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -163,6 +163,18 @@ cannot act.
 Under the basket on the page, `live/flags.py` prints what the exchange and the filings say about
 those exact names, linked to the filing. **Flags, never vetoes** — there is no path from it back into
 selection or sizing.
+
+Below that, `live/twinpanel.py` prints the record: the eight model books, both tracks against the
+equal-weight fund, the six gate criteria, the account against the same money in the index, and a
+capability register saying what each part has earned. It **computes nothing** — every figure is read
+from the file that produced it (`data/twin/history.jsonl`, `data/twin/gate.json`,
+`reports/NULL_MATCHED.json`, `track_record`), because a number invented on a display surface is how
+every labelling defect here has started.
+
+The two gaps against the fund are **in different units from different start dates and can disagree
+in sign** — today `core_v1` reads +₹5,389 and G −0.0023 on the same comparison, because the rupee
+figure runs from the first cash flow and G from the registered window. Both are shown, both are
+labelled, and the rupee one is never the criterion.
 
 A name is "clear" only when the exchange passes **and** a complete, current-version, recent coverage
 row says its filings were read. Anything else prints *"Filings NOT read — that is a gap, not a clean
@@ -255,6 +267,7 @@ live/         account (the reconciled account) · session (snapshot + resume) ·
               advisor · deploy (the buy screen) · position_health · price_integrity · cooling_off
               satellite · governor · hedge · nav · twin · runner · policy · go_gate · verdicts
               ai_brief · track_record · measures · safety · scan · notify · auth · client
+              twinpanel (the record on the page: books · tracks · gate · what is trusted)
               holdings · tradebook(+store) · taxpnl · ticker
               evidence (NSE regulatory indicators) · announcements (filings + provenance)
               extraction (the model reports what a filing says) · pretrade (may we buy this?)
