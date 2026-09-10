@@ -377,6 +377,66 @@ def _record_coverage(as_of: date, ticker: str, cov: AnnouncementCoverage, window
         print(f"[evidence] WARNING: coverage not recorded for {ticker} ({exc})", file=sys.stderr)
 
 
+def _recall_events(hashes: set[str], path: Path = EVENT_LOG) -> list[ExtractedEvent]:
+    """Reload the findings already on file for these documents. **The cache must not lose warnings.**
+
+    A cached document counted toward coverage and returned NOTHING to the assessment, so the same
+    archived filing produced ``WATCH`` on the run that read it and ``PASS`` on every run after:
+
+        first run   coverage complete · 1 verified concern · WATCH
+        cached run  coverage complete · 0 findings         · PASS
+
+    The event was on disk the whole time. The cached path simply never read it back — which turns a
+    real auditor-resignation warning into a clean bill on the second day, silently. Reading the
+    document again would cost the tokens the cache exists to save; reading its FINDINGS costs a file
+    scan.
+
+    Only current-version, verified rows are returned, for the same reasons the live path applies:
+    EX-1 rated routine results ``high``, and an unverified quote is a fabrication.
+    """
+    if not hashes or not path.exists():
+        return []
+    out: list[ExtractedEvent] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("kind") != "event" or str(row.get("doc_sha256", "")) not in hashes:
+            continue
+        if row.get("extraction_version") != EXTRACTION_VERSION or not row.get("verified"):
+            continue
+        try:
+            out.append(
+                ExtractedEvent(
+                    ticker=str(row["ticker"]),
+                    event_type=str(row.get("event_type", "")),
+                    event_date=(
+                        date.fromisoformat(str(row["event_date"]))
+                        if row.get("event_date")
+                        else None
+                    ),
+                    materiality=str(row.get("materiality", "")),
+                    passage=str(row.get("passage", "")),
+                    summary=str(row.get("summary", "")),
+                    uncertainty=str(row.get("uncertainty", "")),
+                    doc_sha256=str(row.get("doc_sha256", "")),
+                    doc_url=str(row.get("doc_url", "")),
+                    disseminated_at=datetime.fromisoformat(
+                        str(row.get("disseminated_at", "1970-01-01T00:00:00+00:00"))
+                    ),
+                    model=str(row.get("model", "")),
+                    extraction_version=str(row.get("extraction_version", "")),
+                    verified=True,
+                )
+            )
+        except (KeyError, ValueError):
+            continue
+    return out
+
+
 def _persist_events(events: list[ExtractedEvent], as_of: date) -> bool:
     """Append one name's events to the log. ``True`` only if they are durably on disk.
 
@@ -471,6 +531,11 @@ def _cover_name(
             f"{MAX_EXTRACT_PER_RUN} this run, the rest resume tomorrow"
         )
         fresh = fresh[:MAX_EXTRACT_PER_RUN]
+    # WHAT THE CACHE ALREADY KNOWS. Without this the findings of a cached document never reach the
+    # assessment, and a filing that produced WATCH on Monday produces PASS on Tuesday.
+    recalled = _recall_events({d.provenance.sha256 for d in already})
+    if recalled:
+        print(f"  {ticker:<16} {len(recalled)} concern(s) recalled from earlier runs")
     if docs and not fresh:
         # Every document in this window carries a receipt proving its findings reached events.jsonl
         # (``_already_extracted`` only counts rows that do). Re-reading would cost the same tokens
@@ -518,7 +583,9 @@ def _cover_name(
         f"{len(events):>2} event(s) · {unverified} discarded"
         + (f" · index sha {index_prov.sha256[:12]}…" if index_prov else "")
     )
-    return coverage, events, unverified
+    # Recalled first: they are the older findings, and the order a reader sees them in should be
+    # the order they were found in.
+    return coverage, [*recalled, *events], unverified
 
 
 def _record_gaps(as_of: date) -> None:

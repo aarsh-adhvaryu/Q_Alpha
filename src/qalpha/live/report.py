@@ -42,7 +42,7 @@ def _holdings_table(account: ReconciledAccount, prices: Mapping[str, Decimal]) -
         ui.Column("Price", "right"),
         ui.Column("Value", "right"),
         ui.Column("P&L", "right"),
-        ui.Column("% of equity", "right"),
+        ui.Column("% of priced", "right"),
         ui.Column("Tax basis"),
     ]
     positions = account.portfolio.positions()
@@ -80,6 +80,8 @@ def _holdings_table(account: ReconciledAccount, prices: Mapping[str, Decimal]) -
                         f"{ui.delta_glyph(pnl)} {ui.signed_inr(pnl)}" if priced else "—",
                         tone=ui.tone_for(pnl) if priced else "neutral",
                     ),
+                    # "% of equity" where equity omits unpriced names would read 100% for a book
+                    # that is half unvalued. It says "of priced" instead, which is true.
                     ui.Cell(
                         f"{float(value / equity * 100):.1f}%" if priced and equity > 0 else "—"
                     ),
@@ -91,9 +93,19 @@ def _holdings_table(account: ReconciledAccount, prices: Mapping[str, Decimal]) -
                 muted=not priced,
             )
         )
+    unpriced = [t for t in positions if t not in prices]
+    # A PARTIAL VALUATION IS NOT A TOTAL. With two holdings and one quoted, the page showed the
+    # quoted holding's ₹1,000 as total equity and called it 100% of equity — the missing row said
+    # "no quote" while every aggregate beside it treated the book as fully valued. The label now
+    # carries the gap; a number that cannot be complete must not be spelled like one.
+    label = (
+        f"Total ({len(positions)} names)"
+        if not unpriced
+        else f"Partial — {len(positions) - len(unpriced)} of {len(positions)} priced"
+    )
     footer = ui.Row(
         cells=[
-            ui.Cell(f"Total ({len(positions)} names)"),
+            ui.Cell(label, tone="neutral" if not unpriced else "warn"),
             ui.Cell(""),
             ui.Cell(""),
             ui.Cell(""),
@@ -196,6 +208,7 @@ def render(
     """One self-contained page. No server, no network, no fonts to fetch — it opens from a file."""
     ist = generated_at.astimezone(ui.IST)
     positions = account.portfolio.positions()
+    unpriced_names = sorted(t for t in positions if t not in prices)
     equity = sum((q * prices[t] for t, q in positions.items() if t in prices), Decimal("0"))
     cost = sum(
         (
@@ -213,7 +226,15 @@ def render(
             ui.Tile(
                 label="Equity (shares only)",
                 value=ui.inr(equity),
-                note=f"{len(positions)} name{'s' if len(positions) != 1 else ''}",
+                note=(
+                    f"{len(positions)} name{'s' if len(positions) != 1 else ''}"
+                    if not unpriced_names
+                    else f"{len(positions) - len(unpriced_names)} of {len(positions)} priced — "
+                    f"{', '.join(t.removesuffix('.NS') for t in unpriced_names)} not valued, so "
+                    "the account is worth MORE than this"
+                ),
+                delta=None if not unpriced_names else "incomplete",
+                delta_tone="neutral" if not unpriced_names else "warn",
             ),
             ui.Tile(
                 label="Cash",
