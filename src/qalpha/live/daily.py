@@ -118,9 +118,64 @@ def _checked(name: str, code: int) -> None:
 
 
 def _step_prices() -> None:
-    import paper
+    """Bring EVERY panel a run reads up to date, not just the paper book's.
 
-    paper._refresh_prices()
+    This used to call ``paper._refresh_prices()`` alone, which rebuilds the book's panel from the
+    Nifty-50 membership list. The screen reads a different panel built from the 96-name watchlist,
+    and nothing refreshed it — so the gate said "prices are 13 days old" and pressing **Refresh
+    market data** could never make that untrue. See :mod:`qalpha.live.panels`.
+    """
+    from qalpha.data.ingest import download_prices, save_parquet
+    from qalpha.data.prices import PriceData
+    from qalpha.live.panels import BENCHMARK_PANEL, BENCHMARK_TICKER, refresh_targets
+
+    failures: list[str] = []
+    for panel, universe in refresh_targets():
+        if not universe.exists():
+            # NOT skipped quietly: a missing ticker list means this panel silently stops being
+            # refreshed, which is the exact failure this function was rewritten to end.
+            failures.append(
+                f"{panel.name}: its universe {universe} is missing, so it was NOT refreshed"
+            )
+            continue
+        tickers = [str(t) for t in _universe_tickers(universe)]
+        LOG.say(f"{panel.name}: {len(tickers)} names…", "detail")
+        frame = download_prices(tickers, "2012-01-01", None)
+        save_parquet(frame, str(panel))
+        LOG.say(f"{panel.name} → {PriceData.from_long(frame).dates[-1].date()}", "detail")
+
+    # The benchmark, inline rather than through `paper._refresh_benchmark`: this is three lines,
+    # and a module under src/ reaching into scripts/ only works when scripts/ happens to be on
+    # sys.path — which is true when launched by local_run and false everywhere else, tests included.
+    LOG.say(f"{BENCHMARK_PANEL.name}: the Nifty TRI proxy…", "detail")
+    save_parquet(download_prices([BENCHMARK_TICKER], "2012-01-01", None), str(BENCHMARK_PANEL))
+
+    if failures:
+        raise RuntimeError("; ".join(failures))
+
+
+def _universe_tickers(path: Path) -> list[str]:
+    """The distinct tickers of a universe CSV, in file order.
+
+    **De-duplicated, and that is not tidiness.** The two universes have different shapes: the
+    watchlist is one row per name, while the book's file is point-in-time *membership* — one row per
+    name PER SPELL, so a name that left the index and came back appears twice (GRASIM and VEDL do).
+    Passing the raw column downloads those names twice and the resulting frame cannot be pivoted::
+
+        ValueError: Index contains duplicate entries, cannot reshape
+
+    The first version returned the column verbatim, which is right for one file and wrong for the
+    other. Found by running the refresh, not by reading it.
+    """
+    import csv
+
+    seen: dict[str, None] = {}
+    with path.open(encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            ticker = (row.get("ticker") or "").strip()
+            if ticker:
+                seen.setdefault(ticker, None)
+    return list(seen)
 
 
 def _step_mark() -> None:

@@ -199,6 +199,36 @@ def _proposal_table(orders: Sequence[tuple[str, int, Decimal]], allowance: Allow
     )
 
 
+# --- how the account reads, in the three states it actually has ----------------------------------
+#
+# It had two: reconciled or not. With no broker session and no trades there is nothing to disagree
+# with, so "not reconciled" was false and the page showed a green **reconciled ✓** — beside a log
+# line saying the broker had NOT been asked. A tick means "safe to act on" here.
+_ACCOUNT_STRIP = {
+    "confirmed": "reconciled ✓",
+    "unchecked": "NOT checked against the broker",
+    "disagrees": "does NOT tally — see below",
+}
+_ACCOUNT_CHIP = {
+    "confirmed": "reconciled",
+    "unchecked": "unchecked",
+    "disagrees": "not reconciled",
+}
+_ACCOUNT_TONE: dict[str, ui.Tone] = {
+    "confirmed": "good",
+    "unchecked": "warn",
+    "disagrees": "warn",
+}
+_ACCOUNT_WHY = {
+    "confirmed": "The replay was compared with your broker holdings and matched exactly.",
+    "unchecked": (
+        "The broker was not reachable this run, so nothing here has been compared with your "
+        "account. Agreement was not found — it was not looked for."
+    ),
+    "disagrees": "The replay and your broker holdings disagree. See the notes.",
+}
+
+
 # --- the market brief ----------------------------------------------------------------------------
 BRIEF_MD = Path("reports/ai_brief.md")
 BRIEF_STAMP = Path("reports/ai_brief.json")
@@ -509,7 +539,7 @@ def render(
     strip = ui.strip(
         [
             ("Generated", f"{ist:%d %b %Y, %H:%M} IST"),
-            ("Account", "reconciled ✓" if account.tallies else "does NOT tally — see below"),
+            ("Account", _ACCOUNT_STRIP[account.broker_state]),
             ("Tax", "exact (dated FIFO lots)" if account.tax_exact else "estimated"),
             ("Orders", "you place every one, in Kite — nothing here trades"),
         ]
@@ -546,8 +576,9 @@ def render(
             chips=[
                 ui.Chip(f"{ist:%d %b %H:%M} IST", tone="neutral", dot=False),
                 ui.Chip(
-                    "reconciled" if account.tallies else "not reconciled",
-                    tone="good" if account.tallies else "warn",
+                    _ACCOUNT_CHIP[account.broker_state],
+                    tone=_ACCOUNT_TONE[account.broker_state],
+                    title=_ACCOUNT_WHY[account.broker_state],
                 ),
                 ui.Chip(
                     "read-only",
