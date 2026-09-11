@@ -100,3 +100,139 @@ def test_load_watchlist_lines(tmp_path: Path) -> None:
     csv.write_text("ticker,sector\nRELIANCE.NS,ENERGY\nITC.NS,FMCG\n", encoding="utf-8")
     lines = load_watchlist_lines(str(csv))
     assert lines == ["RELIANCE:ENERGY", "ITC:FMCG"]  # .NS stripped, TICKER:SECTOR form
+
+
+# --- the brief written here, from headlines this run archived (BRIEF-2-local) -----------------------
+#
+# The objection to a local brief was never the model: it was that a model with no retrieval, asked
+# what happened today, answers from its training data — a fluent page with today's date on it, which
+# is the worst thing this repo could ship and would look exactly like the feature working. The guard
+# moves to where it belongs: no archived headlines, no brief.
+from qalpha.live.ai_brief import (  # noqa: E402
+    BRIEF_VERSION,
+    Headline,
+    IndexMove,
+    build_local_prompt,
+    check_local_brief,
+    generate_local_brief,
+    index_move,
+    parse_citations,
+)
+
+HEADS = [
+    Headline(id="a1b2c3d4", title="Sebi bars a promoter", source="ET", when="2026-09-10"),
+    Headline(id="e5f6a7b8", title="Steel prices firm up", source="Mint", when="2026-09-10"),
+]
+
+
+def test_the_local_prompt_carries_every_headline_and_its_id() -> None:
+    prompt = build_local_prompt(HEADS, ["TATASTEEL:METALS"])
+    for head in HEADS:
+        assert head.id in prompt and head.title in prompt
+    assert "TATASTEEL:METALS" in prompt
+
+
+def test_the_local_prompt_demands_a_citation_per_sentence() -> None:
+    prompt = build_local_prompt(HEADS, [])
+    assert "must end with the id" in prompt
+    assert "A sentence you cannot cite is one you must not write" in prompt
+
+
+def test_the_local_prompt_asks_for_no_forecast_and_no_signal_line() -> None:
+    """The web-searched brief has a 'likely reaction' section, labelled as opinion. A model reading
+    twenty headlines has no basis for one, and it would sit two inches from a real basket."""
+    prompt = build_local_prompt(HEADS, [])
+    assert "DO NOT forecast" in prompt
+    assert "SIGNAL:" not in prompt
+    assert "likely reaction" in prompt.lower(), "it must name the thing it is forbidding"
+
+
+def test_a_brief_citing_an_id_it_was_never_given_is_rejected() -> None:
+    problems = check_local_brief("Steel rallied [ffffffff].", [h.id for h in HEADS])
+    assert problems and "never supplied" in problems[0]
+
+
+def test_a_brief_that_cites_nothing_is_rejected() -> None:
+    assert "cites nothing" in check_local_brief("It was a mixed day.", ["a1b2c3d4"])[0]
+
+
+def test_a_brief_that_forecasts_is_rejected() -> None:
+    problems = check_local_brief("Sebi acted [a1b2c3d4]. We expect a bounce.", ["a1b2c3d4"])
+    assert any("forecast" in p for p in problems)
+
+
+def test_a_clean_brief_passes() -> None:
+    assert check_local_brief("Sebi acted against a promoter [a1b2c3d4].", ["a1b2c3d4"]) == []
+
+
+def test_citations_are_parsed_from_the_body() -> None:
+    assert parse_citations("one [a1b2c3d4] two [e5f6a7b8] three") == {"a1b2c3d4", "e5f6a7b8"}
+
+
+def test_no_headlines_means_no_brief_rather_than_one_from_memory() -> None:
+    """THE LOAD-BEARING ONE. A brief written with nothing to read is recalled training data."""
+    called: list[str] = []
+    result = generate_local_brief(
+        [], [], generate=lambda m, p: (called.append(p), ("x", {}))[1], model="qwen"
+    )
+    assert result is None and called == []
+
+
+def test_a_rejected_brief_is_not_returned() -> None:
+    result = generate_local_brief(
+        HEADS, [], generate=lambda m, p: ("Everything rallied.", {}), model="qwen"
+    )
+    assert result is None, "an uncitable brief must not reach the page"
+
+
+def test_an_accepted_brief_carries_the_context_preamble() -> None:
+    result = generate_local_brief(
+        HEADS, [], generate=lambda m, p: ("Sebi acted [a1b2c3d4].", {"input": 9}), model="qwen"
+    )
+    assert result is not None
+    assert result.raw.startswith(CONTEXT_PREAMBLE)
+    assert result.model == "qwen"
+
+
+def test_the_version_is_stamped_and_distinct() -> None:
+    assert BRIEF_VERSION == "BRIEF-2-local"
+
+
+# --- the index move is computed, never asked -------------------------------------------------------
+def test_the_move_names_both_dates_because_a_session_can_be_missing() -> None:
+    """The 2026 benchmark panel has 09-08 and 09-10 and no 09-09. 'Yesterday' would be wrong."""
+    move = IndexMove("NIFTYBEES", "2026-09-08", 270.05, "2026-09-10", 267.17)
+    sentence = move.sentence()
+    assert "2026-09-08" in sentence and "2026-09-10" in sentence
+    assert "-1.07%" in sentence
+    assert "2 days apart" in sentence
+    assert "ETF" in sentence, "it is a proxy, and the page has to say so"
+
+
+def test_consecutive_sessions_say_so() -> None:
+    assert "consecutive" in IndexMove("X", "2026-09-09", 100.0, "2026-09-10", 101.0).sentence()
+
+
+def test_a_panel_with_one_close_is_none_rather_than_zero_percent(tmp_path) -> None:
+    """A benchmark window with no data once reported 0.0%. Flat and unknown are not the same
+    market — that row is in CLAUDE.md's table."""
+    pd = pytest.importorskip("pandas")
+    path = tmp_path / "bench.parquet"
+    pd.DataFrame({"date": ["2026-09-10"], "close": [100.0]}).to_parquet(path)
+    assert index_move(str(path)) is None
+
+
+def test_a_missing_panel_is_none(tmp_path) -> None:
+    assert index_move(str(tmp_path / "absent.parquet")) is None
+
+
+def test_the_move_reads_the_last_two_closes(tmp_path) -> None:
+    pd = pytest.importorskip("pandas")
+    path = tmp_path / "bench.parquet"
+    pd.DataFrame(
+        {"date": ["2026-09-07", "2026-09-08", "2026-09-10"], "close": [271.21, 270.05, 267.17]}
+    ).to_parquet(path)
+    move = index_move(str(path))
+    assert move is not None
+    assert (move.prev_date, move.last_date) == ("2026-09-08", "2026-09-10")
+    assert round(move.pct, 2) == -1.07

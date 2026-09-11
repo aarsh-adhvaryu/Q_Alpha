@@ -47,6 +47,10 @@ class Step:
     #: Environment variables without which this step cannot do its job. A step missing one is
     #: **skipped and said so**, never run into a confusing failure.
     needs: tuple[str, ...] = ()
+    #: Variables of which **at least one** must be set. For work that has two routes: the brief can
+    #: be written by a local model over archived headlines or by a cloud model over web search, and
+    #: requiring the cloud key alone would skip it on a machine that can do the job.
+    needs_any: tuple[str, ...] = ()
     #: Why it is worth the wait, shown when it is the slow one.
     slow: bool = False
 
@@ -190,6 +194,12 @@ def _step_evidence() -> None:
     _checked("evidence", evidence.main(["daily"]))
 
 
+def _step_news() -> None:
+    import news
+
+    _checked("news", news.main(["daily"]))
+
+
 def _step_twin() -> None:
     import twin
 
@@ -220,9 +230,10 @@ def day_scope(on: date) -> str:
 def research_steps() -> list[Step]:
     """The work done **against** a fixed set of inputs, and therefore resumable across days.
 
-    Filings before the twin, so the autonomous books step on the evidence rather than ahead of it.
-    The account layer is **not** in this list — it runs after, in ``local_run``, because a proposal
-    must be the last thing decided and must see everything above it.
+    Filings, then headlines, then the twin — so the autonomous books step on the evidence rather
+    than ahead of it, and the brief is written from headlines this run actually fetched. The account
+    layer is **not** in this list: it runs after, in ``local_run``, because a proposal must be the
+    last thing decided and must see everything above it.
     """
     return [
         Step(
@@ -237,6 +248,12 @@ def research_steps() -> list[Step]:
             slow=True,
         ),
         Step(
+            "news",
+            "Fetching, archiving and reading the day's headlines",
+            _step_news,
+            slow=True,
+        ),
+        Step(
             "twin",
             "Stepping the autonomous books and grading them against the fund",
             _step_twin,
@@ -245,11 +262,13 @@ def research_steps() -> list[Step]:
             "brief",
             "Writing the market brief",
             _step_brief,
-            # The brief is built on server-side web search. There is no local substitute: a local
-            # model asked for today's news would produce fluent recalled training data with
-            # today's date on it, which is this repo's worst failure mode wearing the feature's
-            # clothes. Absent a key it does not run, and the page says the brief is missing.
-            needs=("ANTHROPIC_API_KEY",),
+            # **The objection was never the model; it was the retrieval.** A local model asked for
+            # today's news would produce fluent recalled training data with today's date on it,
+            # which is this repo's worst failure mode wearing the feature's clothes. The `news`
+            # step above now archives real headlines, so a local model has something to read and
+            # every claim in the brief cites an item on disk. Either route works; with neither, it
+            # does not run and the page says the brief is missing.
+            needs_any=("QALPHA_LOCAL_MODEL", "ANTHROPIC_API_KEY"),
         ),
     ]
 
@@ -262,7 +281,18 @@ def steps() -> list[Step]:
 def _missing(needs: Sequence[str]) -> list[str]:
     import os
 
+    from qalpha.live.credentials import load_env
+
+    # HYDRATE .env FIRST. The app is launched from a shortcut whose shell exports nothing, so a
+    # check reading os.environ alone would skip a step for a credential the user had already set —
+    # the defect `localmodel.configured` and `server._token_rows` were both fixed for.
+    load_env()
     return [name for name in needs if not os.environ.get(name, "").strip()]
+
+
+def _none_of(names: Sequence[str]) -> bool:
+    """True when a step's alternatives are ALL absent. Empty means the step has no alternatives."""
+    return bool(names) and len(_missing(names)) == len(names)
 
 
 def run_pipeline(
@@ -292,8 +322,14 @@ def run_pipeline(
             continue
 
         absent = _missing(step.needs)
+        if not absent and _none_of(step.needs_any):
+            absent = list(step.needs_any)
         if absent:
-            detail = f"{', '.join(absent)} is not set, so it could not run"
+            detail = (
+                f"{', '.join(absent)} is not set, so it could not run"
+                if len(absent) == 1
+                else f"none of {', '.join(absent)} is set, so it could not run"
+            )
             log.say(f"{step.name}: {detail}.", "warn")
             # NOT written to the ledger. A skip is not a completion, and tomorrow — with the
             # credential in place — this step must be pending again rather than counted as done.

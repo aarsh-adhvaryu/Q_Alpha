@@ -19,6 +19,7 @@ between good and bad, and it is load-bearing:
     exchange    CLEAR / WATCH / BLOCK      — and **UNKNOWN**, which is not CLEAR
     filings     read / **not read**        — and a name nobody read has no concerns *reported*,
                                              which is a different fact from having none
+    news        counts / no item matched   — and **not read**, which is not "a quiet week"
 
 The worst defect this repo has recorded in this area was a panel calling a name "clear" when its
 filings had never been opened. Every ``None`` and every ``"unknown"`` below exists so that cannot
@@ -85,6 +86,15 @@ class NameView:
     #: reassuring when :attr:`filings_read` is true.
     concerns: tuple[str, ...] = ()
 
+    #: Whether the day's headlines were read for this name, at the current news version.
+    news_read: bool = False
+    #: High-materiality headline items, newest first, as ``(stance, summary)``. Empty means none
+    #: were labelled — which is only reassuring when :attr:`news_read` is true.
+    news: tuple[tuple[str, str], ...] = ()
+    #: How many snippets the alias table matched to this name. Zero with :attr:`news_read` true is
+    #: "the feeds carried nothing about it", which is a real answer.
+    news_items: int = 0
+
     #: True when this name is in the basket the screen proposed today.
     proposed: bool = False
     #: True when this name is here to be watched rather than because it is held or proposed. It
@@ -119,6 +129,31 @@ class NameView:
         return "filings read, nothing flagged"
 
     @property
+    def news_state(self) -> str:
+        """One phrase for the headlines, honest about the case where nobody looked.
+
+        **Counts, never a score.** The pre-registration is explicit: a number in [0, 1] invites
+        being ranked and optimised against, and a local 8B model labelling a headline has earned
+        none of that.
+        """
+        if not self.news_read:
+            return "news not read"
+        negative = sum(1 for stance, _ in self.news if stance == "negative")
+        positive = sum(1 for stance, _ in self.news if stance == "positive")
+        if not self.news:
+            return (
+                "no item matched"
+                if not self.news_items
+                else f"{self.news_items} read, none flagged"
+            )
+        return f"{negative} neg / {positive} pos"
+
+    @property
+    def news_concerns(self) -> tuple[str, ...]:
+        """The negative half — the only half that flags."""
+        return tuple(summary for stance, summary in self.news if stance == "negative")
+
+    @property
     def attention(self) -> bool:
         """Does a person need to look at this name? Unknown counts; that is the point."""
         return (
@@ -128,6 +163,7 @@ class NameView:
             or self.exchange != evidence.PASS
             or not self.filings_read
             or bool(self.concerns)
+            or bool(self.news_concerns)
         )
 
 
@@ -163,6 +199,32 @@ class Desk:
     def unread(self) -> tuple[NameView, ...]:
         return tuple(r for r in self.rows if not r.filings_read)
 
+    @property
+    def news_unread(self) -> tuple[NameView, ...]:
+        return tuple(r for r in self.rows if not r.news_read)
+
+    def news_line(self) -> str:
+        """One sentence on the headlines: how many names were read, and what was found.
+
+        The figure counts **items**, and several outlets carry one story — nine flagged items on
+        one name in the first archived run were nine reports of a single court order. Said plainly
+        here, because "9 negative" reads as nine problems.
+        """
+        total = len(self.rows)
+        if not total:
+            return ""
+        heard = total - len(self.news_unread)
+        if not heard:
+            return (
+                f"Headlines were not read for any of the {total} names — a gap, not a quiet week."
+            )
+        negative = sum(len(r.news_concerns) for r in self.rows)
+        return (
+            f"Headlines read for {heard} of {total} names; {negative} high-materiality negative "
+            "item(s) across them — reports rather than events, since outlets repeat a story. "
+            "Counts, not a score."
+        )
+
     def coverage_line(self) -> str:
         """One sentence on how much of this page is founded on documents somebody read."""
         total = len(self.rows)
@@ -195,6 +257,9 @@ def assemble(
     assessments: Mapping[str, Any] | None = None,
     filings_read: Sequence[str] = (),
     concerns: Mapping[str, Sequence[Mapping[str, str]]] | None = None,
+    news_read: Sequence[str] = (),
+    news: Mapping[str, Sequence[Mapping[str, str]]] | None = None,
+    news_matched: Mapping[str, int] | None = None,
     exchange_file_age: int | None = None,
     notes: Sequence[str] = (),
 ) -> Desk:
@@ -206,6 +271,9 @@ def assemble(
     """
     assessments = dict(assessments or {})
     concerns = dict(concerns or {})
+    news = dict(news or {})
+    news_matched = dict(news_matched or {})
+    heard = {t.removesuffix(".NS") for t in news_read}
     read = {t.removesuffix(".NS") for t in filings_read}
     proposed = set(proposal)
     by_health = _health_rows(health)
@@ -246,6 +314,12 @@ def assemble(
                 concerns=tuple(
                     f"{e.get('type', 'event')}: {e.get('summary', '')}".strip(": ") for e in found
                 ),
+                news_read=bare in heard,
+                news=tuple(
+                    (str(i.get("stance", "")), f"{i.get('type', 'item')}: {i.get('summary', '')}")
+                    for i in news.get(bare, ())
+                ),
+                news_items=int(news_matched.get(bare, 0)),
                 proposed=ticker in proposed,
                 watching=quantity == 0 and ticker not in proposed,
             )
@@ -355,6 +429,28 @@ def gather(
             "'filings not read'."
         )
 
+    heard: set[str] = set()
+    headlines: dict[str, list[dict[str, str]]] = {}
+    matched: dict[str, int] = {}
+    try:
+        from qalpha.live.flags import news_read as _news_read
+        from qalpha.live.flags import recent_news
+        from qalpha.live.news import LOOKBACK_DAYS, read_items
+
+        heard = _news_read(scope, as_of=as_of)
+        headlines = recent_news(scope, since=as_of - timedelta(days=LOOKBACK_DAYS))
+        wanted = {t.removesuffix(".NS") for t in scope}
+        for item in read_items(as_of):
+            for ticker in item.tickers:
+                bare = ticker.removesuffix(".NS")
+                if bare in wanted:
+                    matched[bare] = matched.get(bare, 0) + 1
+    except Exception as exc:
+        notes.append(
+            f"the headline log could not be read ({type(exc).__name__}: {exc}) — every name reads "
+            "'news not read'."
+        )
+
     return assemble(
         as_of=as_of,
         positions=positions,
@@ -366,6 +462,9 @@ def gather(
         assessments=assessments,
         filings_read=sorted(read),
         concerns=found,
+        news_read=sorted(heard),
+        news=headlines,
+        news_matched=matched,
         exchange_file_age=age,
         notes=notes,
     )

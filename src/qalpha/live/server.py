@@ -332,8 +332,8 @@ def _reader_panel() -> str:
             "Modelfile is what sets the 32k window, because the chat API has nowhere to send it. "
             f"Then set <code>{MODEL_VAR}=qwen3-8b-32k</code> in <code>.env</code> and restart this "
             "app. It is slower — minutes per filing — and no document leaves the machine. "
-            "The market brief still needs a cloud key, because it is built on web search and "
-            "a local model has nothing to search.</p>"
+            "The same model then writes the market brief, from the headlines the evening "
+            "archives; without a local model that needs a cloud key instead.</p>"
         )
     return body.replace('class="qa-note"', f'class="qa-note qa-{tone}"', 1)
 

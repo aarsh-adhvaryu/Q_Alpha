@@ -201,10 +201,50 @@ def test_the_real_plan_reads_filings_before_the_twin_steps() -> None:
     assert names.index("evidence") < names.index("twin")
 
 
-def test_the_brief_is_the_only_step_that_needs_a_cloud_key() -> None:
-    """Everything except the web-searched brief must run with no credential at all."""
-    needing = {s.name for s in daily.steps() if "ANTHROPIC_API_KEY" in s.needs}
-    assert needing == {"brief"}
+def test_no_step_requires_the_cloud_key_alone() -> None:
+    """**Nothing** in the evening may be blocked by a credential this machine does not need.
+
+    The brief used to require ANTHROPIC_API_KEY outright, on the grounds that it was built on
+    server-side web search and a local model has nothing to search. The objection was the
+    retrieval, not the model: the `news` step archives real headlines, so the brief has a local
+    route and requiring the cloud key would skip work the machine can do.
+    """
+    assert {s.name for s in daily.steps() if "ANTHROPIC_API_KEY" in s.needs} == set()
+    brief = next(s for s in daily.steps() if s.name == "brief")
+    assert set(brief.needs_any) == {"QALPHA_LOCAL_MODEL", "ANTHROPIC_API_KEY"}
+
+
+def test_a_step_with_alternatives_runs_when_either_is_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+    plan = [daily.Step("brief", "writing", lambda: calls.append("brief"), needs_any=("A", "B"))]
+    monkeypatch.delenv("A", raising=False)
+    monkeypatch.setenv("B", "present")
+    daily.run_pipeline("d1", plan=plan, ledger=tmp_path / "l.jsonl", log=Progress(), now=lambda: AT)
+    assert calls == ["brief"]
+
+
+def test_a_step_with_alternatives_skips_only_when_all_are_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+    plan = [daily.Step("brief", "writing", lambda: calls.append("brief"), needs_any=("A", "B"))]
+    monkeypatch.delenv("A", raising=False)
+    monkeypatch.delenv("B", raising=False)
+    result = daily.run_pipeline(
+        "d1", plan=plan, ledger=tmp_path / "l.jsonl", log=Progress(), now=lambda: AT
+    )
+    assert calls == []
+    assert [o.name for o in result.skipped] == ["brief"]
+    assert "none of A, B is set" in result.notes()[0]
+
+
+def test_the_news_step_runs_after_the_filings_and_before_the_twin() -> None:
+    """The books must step on the evidence, and the brief on headlines this run fetched."""
+    names = [s.name for s in daily.steps()]
+    assert names.index("evidence") < names.index("news") < names.index("twin")
+    assert names.index("news") < names.index("brief")
 
 
 # --- the entry points must let a failure out ------------------------------------------------------
@@ -242,6 +282,15 @@ def test_the_brief_entry_point_lets_a_failure_reach_its_caller(
 
     monkeypatch.setattr(ai_brief.Path, "exists", lambda self: True)
     monkeypatch.setattr(ai_brief, "load_watchlist_lines", lambda p: ["INFY | 1100"])
+    # PICK THE ROUTE EXPLICITLY. The brief has two, and which one runs depends on what is
+    # configured on the machine — so left alone this asserts something different on the author's
+    # desk than in CI, which is the defect `test_server.py` records for the reader panel. Clearing
+    # the variable is not enough either: `choose_backend` hydrates `.env` itself.
+    from qalpha.live.localmodel import Backend
+
+    monkeypatch.setattr(
+        ai_brief, "choose_backend", lambda: Backend(None, "", "none", "no reader configured")
+    )
 
     def _boom(watchlist: object) -> object:
         raise RuntimeError("the API refused")

@@ -92,6 +92,11 @@ in the last 30 days, with a link to the filing itself.
 Clear: VBL, TCS, MARUTI.
 ```
 
+Beside those, a **News** column: what the day's headlines said about each name, read on this
+machine from feeds the run archived first. It shows counts — *2 neg / 1 pos* — never a score, and
+they are **reports rather than events**: six outlets carrying one court order count six. **news not
+read** means nobody looked, which is a gap and not a quiet week.
+
 **These are flags, not vetoes.** Nothing there removed a name from the basket. The screen chose it,
 and whether to buy it is your call.
 
