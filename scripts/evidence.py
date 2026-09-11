@@ -667,10 +667,17 @@ def _cover_name(
             if cut:
                 why += f", {cut} of them cut off at the model's token cap"
             print(f"  {ticker:<16} extraction had {why}")
+        # NOT `elif`. A failed batch is a warning about the documents IN that batch; it is not a
+        # reason to throw away the findings of the ones that succeeded. Written as `elif`, VEDL read
+        # 128 of 228 documents on 2026-09-11, found their events, and discarded every one of them
+        # because 100 others failed during an API credit outage — while coverage went on claiming
+        # 128 read. A count asserting a reading whose evidence is not on file is the defect this
+        # module exists to prevent, and no receipt meant paying to read those 128 again.
+        #
         # ORDER IS THE WHOLE FIX. Events first, receipt second — and no receipt at all if the events
         # did not land. An interruption here can lose a receipt, which costs one re-read tomorrow.
         # It can no longer lose the evidence while keeping the receipt, which cost 199 documents.
-        elif _persist_events(found, as_of):
+        if _persist_events(found, as_of):
             # Receipts ONLY for documents this run actually read. A receipt over a document in a
             # failed batch would turn an unread filing into a permanent cache hit — the 199-row
             # defect, one file over.

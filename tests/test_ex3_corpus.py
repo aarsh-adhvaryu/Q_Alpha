@@ -387,3 +387,51 @@ def test_progress_is_reported_and_changes_nothing() -> None:
     assert seen[-1][0] == seen[-1][1], "the last tick reports every batch finished"
     assert quiet.usage == loud.usage
     assert [e.render() for e in quiet.events] == [e.render() for e in loud.events]
+
+
+def test_a_partly_failed_name_still_keeps_what_it_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Coverage may never claim a reading whose evidence is not on file.
+
+    Written as ``elif``, the failed-batch warning swallowed persistence: on 2026-09-11 VEDL read 128
+    of 228 documents during an API credit outage, found their events, and discarded every one —
+    while the coverage row went on saying 128 read, and no receipt meant paying to read them again.
+    A count asserting evidence that does not exist is the defect this whole module is built around.
+
+    This tests the CALLER, because the caller is where the bug was. ``extract`` was correct.
+    """
+    import evidence
+
+    monkeypatch.setattr(evidence, "EVENT_LOG", tmp_path / "events.jsonl")
+    monkeypatch.setattr(evidence, "EXTRACTED_LOG", tmp_path / "extracted.jsonl")
+
+    docs = [
+        _doc("VBL", f"Filing {tag}. " + LONG_TEXT * 40, tag * 64) for tag in ("a", "b", "c", "d")
+    ]
+    quote = " ".join(docs[0].text.split())[40:180]
+
+    def half_broken(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        if "Filing d." in prompt:
+            raise RuntimeError("credits exhausted")
+        return (
+            "EVENT: ticker=VBL; type=litigation; date=2026-08-25; materiality=high; "
+            f'passage="{quote}"; summary=a real quote; uncertainty=-',
+            {"input": 10, "output": 5},
+        )
+
+    result = extract(docs, generate=half_broken, model=corpus_reader(), workers=1)
+    assert result.usage["failed_batches"] > 0, "the fixture must fail at least one batch"
+    assert result.events, "and must still find events in the batches that worked"
+
+    read_docs = [d for d in docs if d.provenance.sha256 not in result.unread]
+    assert evidence._persist_events(result.events, date(2026, 9, 11)), "events must land"
+    evidence._mark_extracted(
+        [d.provenance.sha256 for d in read_docs],
+        events_recorded=len(result.events),
+        reader=corpus_reader(),
+    )
+
+    # Every document counted as read must carry a receipt proving its findings reached the log.
+    assert evidence._already_extracted() == {d.provenance.sha256 for d in read_docs}
+    assert (tmp_path / "events.jsonl").read_text(encoding="utf-8").strip(), "events on disk"
