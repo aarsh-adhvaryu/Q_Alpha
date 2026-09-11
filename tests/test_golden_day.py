@@ -244,7 +244,7 @@ def test_a_fabricated_event_cannot_reach_the_proposal() -> None:
         'passage="SEBI has initiated adjudication proceedings against the company and its board"; '
         "summary=invented; uncertainty=-"
     )
-    events, discarded, _raw, usage = extract(
+    events, discarded, _raw, usage, _unread = extract(
         docs, generate=lambda m, p: (fabricated, {}), model=corpus_reader()
     )
     assert events == [] and discarded > 0 and usage["failed_batches"] == 0
@@ -276,7 +276,7 @@ def test_a_verified_high_materiality_event_skips_that_name() -> None:
         "EVENT: ticker=VBL; type=litigation; date=2026-08-25; materiality=high; "
         f'passage="{quote}"; summary=a real quote from the filing; uncertainty=-'
     )
-    events, discarded, _raw, _usage = extract(
+    events, discarded, _raw, _usage, _unread = extract(
         docs, generate=lambda m, p: (line, {}), model=corpus_reader()
     )
     assert len(events) == 1 and events[0].verified

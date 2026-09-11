@@ -32,11 +32,13 @@ from paper import _load_benchmark_series, _load_market
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.live import atomic
+from qalpha.live.ai_brief import NameVerdict
 from qalpha.live.console import use_utf8
 from qalpha.live.extraction import EXTRACTION_VERSION
-from qalpha.live.go_gate import Evidence, build_gate
+from qalpha.live.go_gate import Evidence, GateReport, build_gate
 from qalpha.live.policy import ALL_POLICIES, Decision, decisions_markdown
 from qalpha.live.runner import Market, step
+from qalpha.live.tradebook import TradebookTrade
 from qalpha.live.twin import (
     AI_VERDICT_HISTORY,
     CORE_EVALUATION_START,
@@ -46,6 +48,8 @@ from qalpha.live.twin import (
     REAL,
     TWIN_FULL,
     TWIN_HISTORY,
+    BookMark,
+    Gap,
     TwinBook,
     append_ai_attempt,
     append_ai_verdicts,
@@ -87,7 +91,7 @@ EW_CSV = Path("data/universes/nifty50_membership_2026.csv")
 #: PR-8c, AI-V2 — is recorded there.
 
 
-def _tradebook() -> tuple[list[object], list[str]]:
+def _tradebook() -> tuple[list[TradebookTrade], list[str]]:
     """The user's real trades — the ONLY source of cash flows for every book (§4c).
 
     **The same folder the page reads**, :data:`qalpha.live.tradebook.EXPORT_DIR`. It used to be a
@@ -225,7 +229,7 @@ def _ew_fund_series() -> pd.Series | None:
 _VERDICT_SOURCE = f"rule:AI-V2 over verified {EXTRACTION_VERSION} filings (news demoted to leads)"
 
 
-def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
+def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dict[str, NameVerdict]:
     """Decide keep/drop for the basket ``TWIN_FULL`` is about to buy — the run's single AI treatment.
 
     Asked about **TWIN_FULL's** candidates specifically, because that is the only book whose policy
@@ -404,7 +408,9 @@ def cmd_seed(cfg: Config) -> int:
     return 0
 
 
-def _marks_and_gate(books: dict, market: Market, cfg: Config, *, persist: bool = True):
+def _marks_and_gate(
+    books: dict[str, TwinBook], market: Market, cfg: Config, *, persist: bool = True
+) -> tuple[dict[str, BookMark], list[Gap], GateReport]:
     """Mark every book, add both baselines, and grade the gate on what is actually known.
 
     ``persist=False`` makes this **genuinely read-only**. ``twin.py status`` is documented as a

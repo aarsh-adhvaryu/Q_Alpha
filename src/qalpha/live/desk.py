@@ -248,7 +248,9 @@ def _health_rows(report: Any) -> dict[str, Any]:
 def assemble(
     *,
     as_of: date,
-    positions: Mapping[str, int],
+    # Decimal because that is what a Portfolio holds; the body converts. Annotating this `int`
+    # made every real caller a type error and nothing checked it until 2026-09-11.
+    positions: Mapping[str, Decimal | int],
     prices: Mapping[str, Decimal],
     cost_basis: Mapping[str, Decimal],
     proposal: Sequence[str] = (),
@@ -335,7 +337,9 @@ def assemble(
 def gather(
     *,
     as_of: date,
-    positions: Mapping[str, int],
+    # Decimal because that is what a Portfolio holds; the body converts. Annotating this `int`
+    # made every real caller a type error and nothing checked it until 2026-09-11.
+    positions: Mapping[str, Decimal | int],
     prices: Mapping[str, Decimal],
     cost_basis: Mapping[str, Decimal],
     proposal: Sequence[str] = (),

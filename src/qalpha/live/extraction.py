@@ -30,7 +30,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from qalpha.live.announcements import MAX_DOCUMENT_CHARS, SourceDocument
 
@@ -136,6 +136,34 @@ _USAGE_FIELDS = (
     #: fixes differ, and counted AT ALL because an empty reply is not a filing with nothing in it.
     "refused_batches",
 )
+
+
+class Extraction(NamedTuple):
+    """What one extraction produced, and **which documents it failed to read**.
+
+    ``unread`` is the change that made a 228-filing name possible. Coverage used to be
+    all-or-nothing per name: ``extraction_ran = failed_batches == 0``, so ONE cut-off reply among
+    six hundred calls meant every document in that name counted as unread. VEDL, the biggest name
+    on the book, lost all 228 documents to 4 failed batches on 2026-09-11 having paid for every one
+    of them — and would have done so on every future run, because a name that size makes some
+    failure near-certain. It could never complete, at full price each time.
+
+    Per-document granularity is not a loosening. A document in a failed batch is still unread and
+    still counted so; a document whose batches all succeeded is read, and the name's coverage is
+    now the honest sum of the two instead of zero.
+    """
+
+    events: list[ExtractedEvent]
+    discarded: int
+    raw: str
+    usage: dict[str, int]
+    #: sha256 of every document that was in a batch which failed, refused or was cut off.
+    unread: frozenset[str]
+
+
+#: Called once per finished batch, for a caller that wants to show progress on a long run.
+#: ``(batches_done, batches_total, events_so_far)``. It may not change what is extracted.
+ProgressFn = Callable[[int, int, int], None]
 
 #: Concurrent model calls when a caller asks for them. One is the daily default: the local reader
 #: is a single GPU holding a single model, so parallel calls there queue rather than overlap.
@@ -484,7 +512,8 @@ def extract(
     model: str,
     batch_chars: int = PROMPT_CHAR_BUDGET,
     workers: int = DEFAULT_WORKERS,
-) -> tuple[list[ExtractedEvent], int, str, dict[str, int]]:
+    progress: ProgressFn | None = None,
+) -> Extraction:
     """Extract over **every character** of every document. ``(events, discarded, raw, usage)``.
 
     Long filings are chunked, not truncated, so "read" means read. Events found twice in
@@ -519,21 +548,30 @@ def extract(
     they arrive alongside a count that stops them being read as a complete answer.
     """
     if not documents:
-        return [], 0, "", dict.fromkeys(_USAGE_FIELDS, 0)
+        return Extraction([], 0, "", dict.fromkeys(_USAGE_FIELDS, 0), frozenset())
     all_chunks = [c for doc in documents for c in chunks_for(doc)]
     usage: dict[str, int] = dict.fromkeys(_USAGE_FIELDS, 0)
     # (path, raw, parseable). Collected across rounds, then sorted by path, so the transcript and
     # the event order do not depend on how many calls were in flight.
     collected: list[tuple[tuple[int, ...], str, bool]] = []
+    # Documents this run could not read. A batch that fails takes every document in it, and a
+    # multi-document batch that is retried one at a time clears the ones that then succeed.
+    unread: set[str] = set()
     pending: list[tuple[tuple[int, ...], list[DocumentChunk]]] = [
         ((i,), batch) for i, batch in enumerate(batch_chunks(all_chunks, budget=batch_chars))
     ]
+    done = 0
+    total = len(pending)
     while pending:
         next_round: list[tuple[tuple[int, ...], list[DocumentChunk]]] = []
         for out in _run_round(pending, generate=generate, model=model, workers=workers):
+            done += 1
+            if progress is not None:
+                progress(done, total, len(collected))
             if out.error is not None:
                 collected.append((out.path, f"extraction failed: {out.error}", False))
                 usage["failed_batches"] += 1
+                unread.update(c.document.provenance.sha256 for c in out.batch)
                 continue
             spent = {field: int(out.call_usage.get(field, 0)) for field in ("input", "output")}
             if out.call_usage.get("refused"):
@@ -542,6 +580,7 @@ def extract(
                 collected.append((out.path, "[REFUSED] the model declined this batch", False))
                 usage["refused_batches"] += 1
                 usage["failed_batches"] += 1
+                unread.update(c.document.provenance.sha256 for c in out.batch)
                 usage["calls"] += 1
                 for field, spent_tokens in spent.items():
                     usage[field] += spent_tokens
@@ -556,6 +595,7 @@ def extract(
                     usage[field] += spent_tokens
                 collected.append((out.path, "[TRUNCATED] retried one document at a time", False))
                 next_round.extend(((*out.path, j), [chunk]) for j, chunk in enumerate(out.batch))
+                total += len(out.batch)
                 continue
             collected.append((out.path, out.raw, True))
             usage["calls"] += 1
@@ -566,6 +606,7 @@ def extract(
                 # it did not reach is unknown, and unknown is what the caller has to be told.
                 usage["truncated_batches"] += 1
                 usage["failed_batches"] += 1
+                unread.update(c.document.provenance.sha256 for c in out.batch)
         pending = next_round
     collected.sort(key=lambda item: item[0])
 
@@ -586,11 +627,21 @@ def extract(
         if key not in seen:
             seen.add(key)
             unique.append(event)
-    return unique, discarded, "\n\n".join(raw for _p, raw, _ok in collected), usage
+    return Extraction(
+        unique,
+        discarded,
+        "\n\n".join(raw for _p, raw, _ok in collected),
+        usage,
+        frozenset(unread),
+    )
 
 
-#: Output cap per extraction call. Events are one short line each; this is generous for a batch.
-MAX_OUTPUT_TOKENS = 3000
+#: Output cap per extraction call. Events are one short line each, but a dense batch of filings
+#: genuinely carries dozens, and a reply cut off at the cap is a FAILED read that costs the whole
+#: batch and then costs it again on the one-document retry. Three thousand cut off 3 of VEDL's
+#: batches on 2026-09-11. Raising it does not change what a complete reply says — only how often
+#: one is complete.
+MAX_OUTPUT_TOKENS = 8000
 DEFAULT_MODEL = "claude-haiku-4-5"
 
 

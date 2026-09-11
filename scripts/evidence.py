@@ -24,7 +24,7 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -341,7 +341,7 @@ def _already_extracted() -> set[str]:
     return out
 
 
-def _mark_extracted(hashes: object, *, events_recorded: int, reader: str) -> None:
+def _mark_extracted(hashes: Iterable[str], *, events_recorded: int, reader: str) -> None:
     """Record that these documents were read **and that their findings reached the log**.
 
     Call this LAST — after the events and the coverage row are on disk. The receipt is written after
@@ -554,6 +554,7 @@ def _cover_name(
     batch_chars: int = PROMPT_CHAR_BUDGET,
     max_extract: int = MAX_EXTRACT_PER_RUN,
     workers: int = 1,
+    show_progress: bool = False,
 ) -> tuple[AnnouncementCoverage, list[ExtractedEvent], int]:
     """Fetch, archive, read and extract one name. Returns ``(coverage, events, unverified)``.
 
@@ -607,6 +608,7 @@ def _cover_name(
     recalled = _recall_events({d.provenance.sha256 for d in already})
     if recalled:
         print(f"  {ticker:<16} {len(recalled)} concern(s) recalled from earlier runs")
+    read_docs: list[SourceDocument] = []
     if docs and not fresh:
         # Every document in this window carries a receipt proving its findings reached events.jsonl
         # (``_already_extracted`` only counts rows that do). Re-reading would cost the same tokens
@@ -618,13 +620,30 @@ def _cover_name(
     else:
         docs_to_read = fresh
     if generate is not None and docs_to_read:
-        found, discarded, _raw, usage = extract(
+        # A LONG RUN THAT PRINTS NOTHING IS INDISTINGUISHABLE FROM A HUNG ONE. VEDL's 228
+        # filings took most of an hour in silence while the bill ran. One line, rewritten in
+        # place, so a name's progress is visible without a thousand lines of log.
+        def _tick(done: int, total: int, events: int) -> None:
+            if not show_progress:
+                return
+            pct = 100 * done / max(1, total)
+            print(
+                f"\r  {ticker:<16} reading… batch {done}/{total} ({pct:3.0f}%) · "
+                f"{events} reply(s) in",
+                end="",
+                flush=True,
+            )
+
+        found, discarded, _raw, usage, unread = extract(
             docs_to_read,
             generate=generate,
             model=model,
             batch_chars=batch_chars,
             workers=workers,
+            progress=_tick if show_progress else None,
         )
+        if show_progress:
+            print()  # close the rewritten line before anything else prints
         _TOKENS["input"] += usage.get("input", 0)
         _TOKENS["output"] += usage.get("output", 0)
         _TOKENS["calls"] += usage.get("calls", 0)
@@ -633,9 +652,14 @@ def _cover_name(
                 f"  {ticker:<16} {usage['refused_batches']} batch(es) DECLINED by the model — "
                 "those documents are unread, not clean"
             )
-        extraction_ran = usage.get("failed_batches", 0) == 0
+        # PER DOCUMENT, NOT PER NAME. This was `failed_batches == 0`, so one cut-off reply among
+        # six hundred calls marked every document in the name unread — VEDL lost all 228 on
+        # 2026-09-11 having paid for every one, and would have every run after. A document whose
+        # batches all succeeded has been read; only the ones in a failed batch have not.
+        read_docs = [d for d in docs_to_read if d.provenance.sha256 not in unread]
+        extraction_ran = usage.get("calls", 0) > 0
         events, unverified = found, discarded
-        if not extraction_ran:
+        if usage.get("failed_batches", 0):
             cut = usage.get("truncated_batches", 0)
             # "The call died" and "the reply ran out of room" are different problems with different
             # fixes — a dead server against a token cap that cannot hold the batch it was given.
@@ -647,8 +671,11 @@ def _cover_name(
         # did not land. An interruption here can lose a receipt, which costs one re-read tomorrow.
         # It can no longer lose the evidence while keeping the receipt, which cost 199 documents.
         elif _persist_events(found, as_of):
+            # Receipts ONLY for documents this run actually read. A receipt over a document in a
+            # failed batch would turn an unread filing into a permanent cache hit — the 199-row
+            # defect, one file over.
             _mark_extracted(
-                [d.provenance.sha256 for d in docs_to_read],
+                [d.provenance.sha256 for d in read_docs],
                 events_recorded=len(found),
                 reader=model,
             )
@@ -662,7 +689,7 @@ def _cover_name(
     # Read = carries a receipt. `already` were read on earlier runs; the fresh batch joins them only
     # if this run's extraction actually landed. Counting len(docs) counted FETCHED, not read, which
     # is the same "listing is not reading" defect AnnouncementCoverage was created to stop.
-    read_now = len(already) + (len(fresh) if extraction_ran else 0)
+    read_now = len(already) + (len(read_docs) if extraction_ran else 0)
     coverage = AnnouncementCoverage(
         # The true window size, not the capped slice. This is the number that decides completeness.
         filings_in_window=len(in_window),
@@ -854,10 +881,15 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
     # observations when it is one. A decision is recorded only when the money behind it changed.
     if _budget_is_new(basket.cash):
         try:
-            rows = [{**r, "budget": str(basket.cash)} for r in decision_rows(proposal)]
-            if rows:
-                n = _append_jsonl(DECISION_LOG, rows, key="_key")
-                print(f"[evidence] {len(rows)} decision(s) recorded → {DECISION_LOG} ({n} on file)")
+            # Named apart from the reg-ind `rows` above it: one function, two meanings for one
+            # name is how a reader ends up auditing the wrong thing.
+            decisions = [{**r, "budget": str(basket.cash)} for r in decision_rows(proposal)]
+            if decisions:
+                n = _append_jsonl(DECISION_LOG, decisions, key="_key")
+                print(
+                    f"[evidence] {len(decisions)} decision(s) recorded → {DECISION_LOG} "
+                    f"({n} on file)"
+                )
         except Exception as exc:
             print(f"[evidence] WARNING: decisions not recorded ({exc})", file=sys.stderr)
     else:
@@ -1029,7 +1061,7 @@ def cmd_compare_readers(
     findings: dict[str, set[tuple[str, str, str]]] = {}
     for reader in readers:
         started = datetime.now(UTC)
-        events, discarded, _raw, usage = extract(
+        events, discarded, _raw, usage, _unread = extract(
             docs, generate=generate, model=reader, batch_chars=PROMPT_CHAR_BUDGET, workers=workers
         )
         elapsed = (datetime.now(UTC) - started).total_seconds()
@@ -1145,6 +1177,7 @@ def cmd_backfill(
             backend.batch_chars or PROMPT_CHAR_BUDGET,
             max_extract=MAX_EXTRACT_BACKFILL,
             workers=workers,
+            show_progress=True,
         )
         _record_coverage(as_of, ticker, cov, days, backend.model)
         covered += 1

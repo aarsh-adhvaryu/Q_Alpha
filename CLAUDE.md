@@ -98,7 +98,14 @@ answering the right question), and *operation* (the scheduled process actually r
 - **Never tune a parameter to manufacture a GO.**
 - **Pre-registration before any experiment; negatives get published.**
 - **Flag, don't veto** on the buy list. Selection stays deterministic and the decision stays his.
-- **All four gates green before every commit**: `ruff`, `ruff format`, `mypy --strict`, `pytest`.
+- **All four gates green before every commit**: `ruff`, `ruff format`, `mypy --strict src scripts`,
+  `pytest`. **`src` alone is not the gate.** It was until 2026-09-11, and `scripts/` — where every
+  entry point lives — was the one part of this repo nothing verified. Two live defects shipped
+  through that hole: `atomic.write_text(..., encoding="utf-8")`, which failed the twin step on
+  every run, and `_log_applied` handed bare tuples where it reads `.amount`, an AttributeError
+  waiting in the deposit path. `mypy_path = "src"` in `pyproject.toml` is what makes checking
+  `scripts/` real — without it `ignore_missing_imports` resolves the whole `qalpha` package to
+  `Any` from outside `src/` and the check passes while verifying nothing.
 - **Always branch + PR.** The harness blocks self-merges; the user clicks merge.
 
 ---
@@ -373,7 +380,7 @@ key, because requiring the key alone would skip work this machine can do. Three 
 uv sync --extra dev
 uv run pytest                                          # must stay green
 uv run ruff check . && uv run ruff format --check .
-uv run mypy src
+uv run mypy src scripts                                # scripts too — see Iron rules
 uv run python scripts/local_run.py                     # THE entry point: pipeline → page
 uv run python scripts/evidence.py daily                # the evidence spine (shadow)
 uv run python scripts/evidence.py backfill --workers 8 # the corpus, once, in the cloud

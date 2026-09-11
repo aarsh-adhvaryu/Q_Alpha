@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -101,9 +102,11 @@ def _deploy(
         price = row.get(ticker)
         if price is None or not np.isfinite(price) or price <= 0:
             continue
-        qty = int(per_name / Decimal(str(float(price))))
+        # Checked finite and positive on the line above; the stub still types it as a Series.
+        px = float(cast(float, price))
+        qty = int(per_name / Decimal(str(px)))
         if qty > 0:
-            portfolio.buy(on, ticker, Decimal(qty), Decimal(str(float(price))))
+            portfolio.buy(on, ticker, Decimal(qty), Decimal(str(px)))
 
 
 def one_draw(
@@ -151,7 +154,7 @@ def one_draw(
         qty_snapshots[day] = {t: float(q) for t, q in portfolio.positions().items() if q > 0}
         cash_snapshots[day] = float(portfolio.cash)
 
-        level = float(ew_level.asof(day))
+        level = float(cast(float, ew_level.asof(day)))
         if not np.isfinite(level) or level <= 0:
             return None
         bench_units += float(amount) / level

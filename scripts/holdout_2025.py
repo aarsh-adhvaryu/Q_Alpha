@@ -24,7 +24,8 @@ from qalpha.backtest.baselines import equal_weight_pit
 from qalpha.backtest.engine import run_backtest
 from qalpha.backtest.metrics import compute_metrics, max_drawdown
 from qalpha.config import Config
-from qalpha.data.ingest import PriceData, download_prices, load_parquet, save_parquet
+from qalpha.data.ingest import download_prices, load_parquet, save_parquet
+from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 
 CSV = "data/universes/nifty50_membership_2026.csv"
