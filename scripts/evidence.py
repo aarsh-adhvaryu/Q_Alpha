@@ -634,6 +634,20 @@ def _cover_name(
                 flush=True,
             )
 
+        # RESUMABILITY, and it is worth the indirection. Receipts used to be written once, after
+        # every document in the name had been read — so VEDL's 228 filings, an hour of reading,
+        # survived only if nothing interrupted them. Twice on 2026-09-11 something did (an API
+        # credit outage, then a Ctrl-C) and the whole name was paid for again. Now each finished
+        # document is made durable as it finishes, in the same order as before: events first, then
+        # the receipt that attests to them, and no receipt at all if the events did not land.
+        checkpointed: list[str] = []
+
+        def _checkpoint(events_so_far: list[ExtractedEvent], finished: frozenset[str]) -> None:
+            if not _persist_events(events_so_far, as_of):
+                return  # the findings are not on file, so nothing may attest that they are
+            _mark_extracted(sorted(finished), events_recorded=len(events_so_far), reader=model)
+            checkpointed.extend(finished)
+
         found, discarded, _raw, usage, unread = extract(
             docs_to_read,
             generate=generate,
@@ -641,6 +655,7 @@ def _cover_name(
             batch_chars=batch_chars,
             workers=workers,
             progress=_tick if show_progress else None,
+            checkpoint=_checkpoint,
         )
         if show_progress:
             print()  # close the rewritten line before anything else prints
