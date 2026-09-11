@@ -139,7 +139,7 @@ def test_a_refused_batch_is_counted_as_unread_not_as_clean() -> None:
     def refuses(model: str, prompt: str) -> tuple[str, dict[str, int]]:
         return "", {"input": 100, "output": 0, "refused": 1}
 
-    events, discarded, raw, usage = extract(docs, generate=refuses, model=corpus_reader())
+    events, discarded, raw, usage, _unread = extract(docs, generate=refuses, model=corpus_reader())
     assert events == [] and discarded == 0
     assert usage["refused_batches"] >= 1
     # The caller decides coverage on `failed_batches`, so a refusal has to reach that counter or
@@ -318,3 +318,72 @@ def test_the_recorded_reader_is_the_one_that_ran_not_the_one_configured(
     assert row["complete"], "it is a real, complete reading — by a different reader"
     assert not evidence._seen_before("VBL.NS"), "and so it must not satisfy the corpus"
     assert evidence._already_extracted() == set(), "nor count that document as corpus-read"
+
+
+# --- one bad batch must not void a whole name ---------------------------------------------------
+
+
+def test_a_failed_batch_loses_only_its_own_documents() -> None:
+    """The defect that cost a real ₹1,400 on 2026-09-11, pinned.
+
+    VEDL filed 228 documents. Four batches of roughly six hundred failed — one refusal, three
+    replies cut off at the token cap — and because coverage was ``failed_batches == 0`` for the
+    whole name, **all 228 counted as unread** after every one of them had been paid for. A name
+    that size makes some failure near-certain, so it could never have completed, at full price
+    each attempt.
+
+    ``unread`` carries the sha256 of each document in a failed batch and nothing else, so the
+    caller can count what was genuinely read. This is a tightening, not a loosening: a document in
+    a failed batch is still unread and still says so.
+    """
+    # Distinguishable text per document, so "fail the batches carrying THIS one" is meaningful.
+    docs = [
+        _doc("VBL", f"Filing {tag}. " + LONG_TEXT * 40, tag * 64) for tag in ("a", "b", "c", "d")
+    ]
+    doomed = docs[1].provenance.sha256
+
+    def flaky(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        if "Filing b." in prompt:
+            raise RuntimeError("upstream said no")
+        return "", {"input": 10, "output": 1}
+
+    result = extract(docs, generate=flaky, model=corpus_reader(), workers=4)
+
+    assert result.usage["failed_batches"] > 0, "the fixture must actually fail something"
+    assert doomed in result.unread, "a document in a failed batch is unread"
+    # GRANULARITY IS PER BATCH, not per document, and that is the honest guarantee: one reply
+    # covers every document in its call, so a failure takes all of them. What it must NOT take is
+    # documents the model answered for in other calls. Under the old rule the whole NAME was lost.
+    assert len(result.unread) < len(docs), "documents answered in other batches must survive"
+    assert docs[-1].provenance.sha256 not in result.unread
+
+
+def test_a_refusal_marks_only_that_batch_unread() -> None:
+    docs = _corpus()[:1]
+
+    def refuses(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        return "", {"input": 100, "output": 0, "refused": 1}
+
+    result = extract(docs, generate=refuses, model=corpus_reader())
+    assert result.unread == {docs[0].provenance.sha256}
+
+
+def test_progress_is_reported_and_changes_nothing() -> None:
+    """A long paid run must show progress — and showing it must not alter the reading."""
+    docs = _corpus()
+    seen: list[tuple[int, int, int]] = []
+
+    quiet = extract(docs, generate=_reply_for(docs), model=corpus_reader(), workers=1)
+    loud = extract(
+        docs,
+        generate=_reply_for(docs),
+        model=corpus_reader(),
+        workers=1,
+        progress=lambda done, total, events: seen.append((done, total, events)),
+    )
+
+    assert seen, "progress must actually be called"
+    assert [d for d, _t, _e in seen] == list(range(1, len(seen) + 1)), "done counts up by one"
+    assert seen[-1][0] == seen[-1][1], "the last tick reports every batch finished"
+    assert quiet.usage == loud.usage
+    assert [e.render() for e in quiet.events] == [e.render() for e in loud.events]

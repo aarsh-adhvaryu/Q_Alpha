@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pandas as pd
 
@@ -34,7 +35,8 @@ START, END = "2012-01-01", "2024-12-31"
 
 def _seg_return(curve: pd.Series, year: int) -> tuple[float, float]:
     """(% return, % max drawdown) of an equity curve within one calendar year."""
-    seg = curve[curve.index.year == year]
+    # pandas-stubs types `.index` as the base Index; these curves are built with a DatetimeIndex.
+    seg = curve[cast(pd.DatetimeIndex, curve.index).year == year]
     if len(seg) < 2:
         return 0.0, 0.0
     ret = float(seg.iloc[-1] / seg.iloc[0] - 1.0) * 100.0
@@ -72,7 +74,7 @@ def main() -> None:
     print(header)
     print("-" * len(header))
     for year in range(2013, 2025):  # 2012 is warm-up (no trades yet)
-        tri_seg = tri[tri.index.year == year]
+        tri_seg = tri[cast(pd.DatetimeIndex, tri.index).year == year]
         tri_ret = (
             float(tri_seg.iloc[-1] / tri_seg.iloc[0] - 1.0) * 100.0 if len(tri_seg) > 1 else 0.0
         )

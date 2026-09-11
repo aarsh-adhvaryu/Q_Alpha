@@ -236,7 +236,7 @@ def test_every_chunk_of_a_long_filing_reaches_the_model() -> None:
 
 
 def test_extract_returns_nothing_when_there_is_nothing_to_read() -> None:
-    events, discarded, raw, usage = extract([], generate=lambda m, p: ("", {}), model="m")
+    events, discarded, raw, usage, _unread = extract([], generate=lambda m, p: ("", {}), model="m")
     assert (events, discarded, raw) == ([], 0, "")
     assert usage["calls"] == 0 and usage["failed_batches"] == 0
 
@@ -247,7 +247,7 @@ def test_a_failed_call_yields_no_events_and_says_why() -> None:
     def _boom(model: str, prompt: str) -> tuple[str, dict[str, int]]:
         raise RuntimeError("quota exceeded")
 
-    events, discarded, raw, usage = extract([_doc()], generate=_boom, model="m")
+    events, discarded, raw, usage, _unread = extract([_doc()], generate=_boom, model="m")
     assert events == [] and discarded == 0 and "quota exceeded" in raw
     assert usage["failed_batches"] == 1, "a caller must be able to refuse to claim coverage"
 
@@ -262,20 +262,20 @@ def test_one_failed_batch_does_not_lose_the_others() -> None:
         return _line(), {}
 
     doc = _doc(text=TEXT + "w" * 40_000)
-    events, _, _, usage = extract([doc], generate=_flaky, model="m")
+    events, _, _, usage, _unread = extract([doc], generate=_flaky, model="m")
     assert usage["failed_batches"] == 1 and usage["calls"] >= 1
     assert len(events) == 1
 
 
 def test_the_same_event_found_in_overlapping_chunks_is_recorded_once() -> None:
     doc = _doc(text=TEXT + "p" * 30_000)
-    events, _, _, _ = extract([doc], generate=lambda m, p: (_line(), {}), model="m")
+    events, _, _, _, _ = extract([doc], generate=lambda m, p: (_line(), {}), model="m")
     assert len(events) == 1
 
 
 def test_extract_verifies_end_to_end() -> None:
     canned = _line() + "\n" + _line(passage="an entirely invented sentence about a regulator")
-    events, discarded, _, _ = extract([_doc()], generate=lambda m, p: (canned, {}), model="m")
+    events, discarded, _, _, _ = extract([_doc()], generate=lambda m, p: (canned, {}), model="m")
     assert len(events) == 1 and discarded == 1
 
 
@@ -316,7 +316,7 @@ def test_a_truncated_single_document_is_not_counted_as_read() -> None:
     def _cut_off(model: str, prompt: str) -> tuple[str, dict[str, int]]:
         return _line(), {"truncated": 1}
 
-    events, _discarded, _raw, usage = extract([_doc()], generate=_cut_off, model="m")
+    events, _discarded, _raw, usage, _unread = extract([_doc()], generate=_cut_off, model="m")
     assert usage["truncated_batches"] == 1
     assert usage["failed_batches"] == 1, "a caller must be able to refuse to claim coverage"
     assert len(events) == 1, "what it did verify is still evidence; the count is what stops it"
@@ -333,7 +333,9 @@ def test_a_truncated_multi_document_batch_is_retried_one_document_at_a_time() ->
         return (_line(), {"truncated": 1}) if documents > 1 else (_line(), {})
 
     docs = [_doc(sha="a" * 64), _doc(symbol="TCS", text=OTHER_TEXT, sha="b" * 64)]
-    _events, _discarded, raw, usage = extract(docs, generate=_cut_off_when_crowded, model="m")
+    _events, _discarded, raw, usage, _unread = extract(
+        docs, generate=_cut_off_when_crowded, model="m"
+    )
     assert seen == [2, 1, 1], "the crowded call, then each document alone"
     assert usage["retried_batches"] == 1
     assert usage["failed_batches"] == 0, "the retry succeeded, so nothing was left unread"
@@ -341,7 +343,9 @@ def test_a_truncated_multi_document_batch_is_retried_one_document_at_a_time() ->
 
 
 def test_the_empty_run_carries_the_same_counters_as_a_busy_one() -> None:
-    _events, _discarded, _raw, usage = extract([], generate=lambda m, p: ("", {}), model="m")
+    _events, _discarded, _raw, usage, _unread = extract(
+        [], generate=lambda m, p: ("", {}), model="m"
+    )
     assert usage["truncated_batches"] == 0 and usage["retried_batches"] == 0
 
 

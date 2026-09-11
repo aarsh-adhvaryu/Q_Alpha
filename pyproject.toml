@@ -70,6 +70,13 @@ ignore = ["E501", "RUF001", "RUF002", "RUF003"]
 
 [tool.mypy]
 python_version = "3.12"
+# WITHOUT THIS, CHECKING scripts/ IS VACUOUS. `ignore_missing_imports` below is set for yfinance
+# and sklearn, but it applies to every unresolvable import — and from outside src/ that includes
+# `qalpha` itself, so the whole package resolved to Any and every call through it went unchecked.
+# scripts/ holds the entry points, so the programs were the one part of this repo nothing verified:
+# `atomic.write_text(..., encoding="utf-8")` shipped and raised TypeError on every twin run until
+# 2026-09-11. Naming the source root here makes `mypy src scripts` real.
+mypy_path = "src"
 strict = true
 warn_unreachable = true
 disallow_untyped_defs = true
