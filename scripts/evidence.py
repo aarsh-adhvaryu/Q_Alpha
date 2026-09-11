@@ -754,6 +754,18 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
             "[evidence] coverage stays incomplete and every name reads UNKNOWN, which is the "
             "honest answer. Unread is not clean."
         )
+    elif not reader_matches(model):
+        # SAY IT, DO NOT SILENTLY WASTE THE EVENING. Under EX-3 a row only counts toward the corpus
+        # when the reader that produced it IS the corpus reader. A nightly run under any other model
+        # still reads real filings and still records real events — it simply cannot make a name read
+        # on the buy screen, and without this line the user would watch a GPU work for an hour and
+        # then see "Filings NOT read" against every name with nothing explaining why.
+        print(
+            f"[evidence] NOTE: {model} is not the corpus reader ({corpus_reader()}). These rows are "
+            "a real reading and are kept, but they do not count toward EX-3 coverage, so the buy "
+            "screen will keep saying the filings were not read. Point both at one reader — see "
+            "reports/PREREGISTRATION_EX3_CORPUS.md."
+        )
 
     coverage: dict[str, AnnouncementCoverage] = {}
     windows: dict[str, int] = {}
