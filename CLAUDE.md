@@ -162,6 +162,19 @@ which skips a name. **Good news rejected candidates.** EX-2 defines materiality 
 who owns the shares*. `pretrade` acts only on the current version, so EX-1 rows stay on file and
 cannot act.
 
+The reader is **`claude-sonnet-5`**, chosen by measurement under a rule fixed before the numbers
+existed (`reports/READER_COMPARISON_EX3.md`). **Two readers agree on 22% of findings** — the reader
+substantially determines the event stream, which is the whole reason the label names it.
+
+**~29% of even the winning reader's quotes fail verification, and they are not fabrications.**
+Seventy documents were re-read: every failure was a true statement that is not a contiguous verbatim
+span — clauses joined across a sentence, a summary built from real fragments, and one case where PDF
+extraction had split a word so the *archive* was wrong, not the model. The guard works; its cost is
+**recall**, ~30% of genuine findings, biased against documents with poor text extraction. **The
+corpus under-counts events, systematically. Absence in it is not evidence of no event.** Fixing that
+means relaxing the verification rule or tightening the prompt — both are **EX-4** and need their own
+registration.
+
 **EX-3 changed no instruction. It made the reader part of the label** (2026-09-11). A version now
 means "these instructions, read by `corpus_reader()`" — and a row from any other model satisfies
 nothing: not `_seen_before`, not the extraction receipt, not `filings_read` on the buy screen, not a
@@ -453,12 +466,13 @@ task."**
    noise — that is where the 200-year figure comes from. The same information at the *event* level
    is thousands of observations, and an event study can reach significance in months of work.
 
-   The machinery is built and registered (2026-09-11). It is **not run**. What it needs:
-   `ANTHROPIC_API_KEY` in `.env`, `uv sync --extra ai` (the SDK is an optional extra and is not
-   installed), then `compare-readers` to choose between Haiku and Sonnet by measurement, then
-   `backfill`. Measured from the archive: ~2,100 documents, ~2,000 calls, ~13.5M input tokens,
-   roughly $20–45 at list depending on the reader. At eight concurrent calls that is one session,
-   against the ~84 evening runs the local path needed.
+   The machinery is built, registered and the reader is chosen (2026-09-11). The corpus itself is
+   **not built yet**. `compare-readers` ran on 150 filings across 22 names: Haiku discarded 59% of
+   its own quotes as not in the document against Sonnet's 29%, and found 59 events to Sonnet's 109 —
+   half the findings at twice the miss rate — so rule 1 of the registration picked
+   **`claude-sonnet-5`**. Projected from that run's measured throughput: **~2,100 documents in about
+   30 minutes at eight workers, ~$38 at list.** Against ~84 evening runs on the local path.
+   `uv sync --extra dev --extra ai` — `--extra ai` alone drops ruff and mypy.
 
    **The local reader is not obsolete and the choice was not free.** It reads the nightly 10-day
    window for nothing and sends nothing anywhere; the corpus goes to the cloud because eighty-four

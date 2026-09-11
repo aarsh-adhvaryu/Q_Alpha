@@ -144,3 +144,26 @@ that as a stated limitation rather than discover it afterwards.
 
 - **2026-09-11** — registered. Comparison not yet run; `CORPUS_READER_DEFAULT` stands at
   `claude-haiku-4-5` pending it. Backfill not yet run.
+
+- **2026-09-11, later** — comparison run on 150 archived filings across 22 names. **Rule 1 fired and
+  decided it: `claude-sonnet-5` is the corpus reader.** Haiku discarded 86 of 145 claims as not in
+  the document (59%) against Sonnet's 44 of 153 (29%), and returned 59 verified events to Sonnet's
+  109 — half the findings at twice the miss rate. Rule 3 agrees independently: agreement between the
+  two is **22%**, stable across a second run at 40 documents (24%), so they are not substitutable.
+  `CORPUS_READER_DEFAULT` set to `claude-sonnet-5`. Full numbers:
+  [`READER_COMPARISON_EX3.md`](READER_COMPARISON_EX3.md).
+
+- **2026-09-11, the negative this registration promised to publish either way** — 22% agreement means
+  **the reader substantially determines the event stream**. Any event study over this corpus carries
+  that as a stated limitation from the start rather than discovering it afterwards.
+
+- **2026-09-11, a limitation found while checking the discard rate** — the 29% of Sonnet's quotes that
+  fail verification are **not fabrications**. Seventy documents were re-read and all eight failures
+  were true statements that are not contiguous verbatim spans: clauses joined across a sentence, a
+  summary composed from real fragments, and one case where the PDF text extraction had split a word
+  and the *archive* was wrong rather than the model. The guard is working as designed; its cost is
+  **recall**, roughly 30% of genuine findings, biased against documents with poor text extraction.
+  **The corpus will under-count events, systematically and non-randomly.** Absence in it is not
+  evidence of no event. Relaxing the verification rule or tightening the prompt would both be
+  **EX-4** and need their own registration; neither is applied here, because a label that spans two
+  rules has already cost this project four days of run 2.
