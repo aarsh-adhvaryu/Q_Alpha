@@ -408,3 +408,78 @@ def test_the_launcher_says_it_places_no_orders_in_both_places() -> None:
     )
     assert "NOTHING HERE TRADES" in text
     assert "you place every order in Kite" in text
+
+
+# --- what the click actually does ------------------------------------------------------------------
+#
+# The launcher started a server and nothing else: `--app` returns from `main()` before a single line
+# of the pipeline runs, so a double-click served whatever page the last run had left behind. On
+# 2026-09-10 that was an empty account under a four-hour-old date, next to an OPERATING.md that said
+# the click "runs on this machine, writes one page, and opens it". Reading that as broken was the
+# correct reading of what was on the screen.
+def _launcher() -> str:
+    return (Path(__file__).resolve().parent.parent / "Q-Alpha.bat").read_text(
+        encoding="utf-8", errors="replace"
+    )
+
+
+def _code_lines(text: str) -> str:
+    return "\n".join(ln for ln in text.splitlines() if not ln.strip().upper().startswith("REM"))
+
+
+def test_the_click_starts_the_evening_rather_than_only_a_server() -> None:
+    text = _launcher()
+    blocker = text[text.index("run python scripts/local_run.py") :].splitlines()[0]
+    assert "--autorun" in blocker, "the click must run the evening, not serve yesterday's page"
+
+
+def test_main_passes_autorun_through_to_the_server(monkeypatch) -> None:
+    """THE COUPLING, not the flag. A flag parsed and dropped looks identical from the launcher."""
+    from qalpha.live import server
+
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(
+        server, "serve", lambda port, **kw: seen.update({"port": port, **kw}), raising=True
+    )
+    assert local_run.main(["--app", "--autorun", "--no-open", "--port", "8791"]) == 0
+    assert seen == {"port": 8791, "open_browser": False, "autorun": True}
+
+    seen.clear()
+    assert local_run.main(["--app", "--no-open"]) == 0
+    assert seen["autorun"] is False, "without the flag the app must wait to be asked"
+
+
+def test_the_launcher_is_crlf_because_cmd_is_what_reads_it() -> None:
+    """`core.autocrlf` is false here, so nothing else keeps this true on a fresh checkout.
+
+    cmd.exe reads a batch file in chunks as it executes it, and an LF-only file can lose a `goto`
+    label that falls across a boundary — this file has three `goto :fail`s and the label at its tail.
+    """
+    root = Path(__file__).resolve().parent.parent
+    raw = (root / "Q-Alpha.bat").read_bytes()
+    assert raw.count(b"\r\n") == raw.count(b"\n") > 0, "every line ending must be CRLF"
+    attrs = (root / ".gitattributes").read_text(encoding="utf-8")
+    assert "*.bat text eol=crlf" in attrs, "and git must keep it that way on the next checkout"
+
+
+def test_the_launcher_does_not_uninstall_the_toolchain_on_every_click() -> None:
+    """A bare `uv run` resolves against the base dependencies and removes the dev extra — 23
+    packages out and back per click, inside the window the browser watcher is counting down."""
+    code = _code_lines(_launcher())
+    prepare = code[: code.index("run python scripts/local_run.py")]
+    assert "sync" in prepare and "--extra dev" in prepare
+    assert "UV_NO_SYNC=1" in prepare, "and `uv run` must not undo it a line later"
+
+
+def test_the_watcher_says_so_when_it_gives_up() -> None:
+    """Silence after two minutes is indistinguishable from a page that will never come."""
+    text = _launcher()
+    waiter = text[text.index('start "" /b powershell') : text.index("run python scripts/local")]
+    assert "did not answer" in waiter
+    bound = int(waiter.split("$i -lt ", 1)[1].split(";", 1)[0])
+    assert bound >= 300, "a cold start that prepares an environment can exceed two minutes"
+
+
+def test_the_watcher_does_not_hide_the_console_it_shares() -> None:
+    """`start /b` shares this window, so hiding it hid the window the launcher says to leave open."""
+    assert "-WindowStyle Hidden" not in _code_lines(_launcher())

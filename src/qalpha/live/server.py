@@ -245,8 +245,8 @@ that cannot catch it, copy the whole address bar and paste it here.</p>
          autocomplete="off">
   <button class="qa-btn">Use this token</button>
 </form>
-<p>The session is minted locally and written to your <code>.env</code>. It is never sent anywhere
-except to Kite, and this page never displays it.</p>"""
+<p>The session is minted locally and written to <code>.kite_session.json</code> in the repo
+folder. It is never sent anywhere except to Kite, and this page never displays it.</p>"""
     )
 
 
@@ -295,7 +295,7 @@ def _last_report() -> str:
     if not PAGE_PATH.exists():
         return (
             ui.section("The account")
-            + '<div class="qa-empty">No run yet this install. Press <b>Run the analysis</b>.</div>'
+            + '<div class="qa-empty">No run yet this install. Press <b>Run the evening</b>.</div>'
         )
     html = PAGE_PATH.read_text(encoding="utf-8")
     body = html.split("<body>", 1)[-1].split("</body>", 1)[0] if "<body>" in html else ""
@@ -326,12 +326,14 @@ def _reader_panel() -> str:
     )
     if backend.kind != "local":
         body += (
-            "<p>To read them here instead: install <b>Ollama</b>, run "
-            "<code>ollama pull qwen2.5:7b</code>, then set <code>"
-            f"{MODEL_VAR}=qwen2.5:7b</code> in <code>.env</code> and restart this app. "
-            "It is slower — minutes per filing on a CPU — and no document leaves the machine. "
-            "The market brief still needs a cloud key, because it is built on web search and "
-            "a local model has nothing to search.</p>"
+            "<p>To read them here instead: install <b>Ollama</b>, then "
+            "<code>ollama pull qwen3:8b</code> and "
+            "<code>ollama create qwen3-8b-32k -f docs/ollama/Modelfile.qwen3-8b-32k</code> — the "
+            "Modelfile is what sets the 32k window, because the chat API has nowhere to send it. "
+            f"Then set <code>{MODEL_VAR}=qwen3-8b-32k</code> in <code>.env</code> and restart this "
+            "app. It is slower — minutes per filing — and no document leaves the machine. "
+            "The same model then writes the market brief, from the headlines the evening "
+            "archives; without a local model that needs a cloud key instead.</p>"
         )
     return body.replace('class="qa-note"', f'class="qa-note qa-{tone}"', 1)
 
@@ -526,12 +528,25 @@ _ACTIONS: dict[str, tuple[str, Callable[[], None]]] = {
 }
 
 
-def serve(port: int = DEFAULT_PORT, *, open_browser: bool = True) -> None:
-    """Run until interrupted. Loopback only — this page shows an account."""
+def serve(port: int = DEFAULT_PORT, *, open_browser: bool = True, autorun: bool = False) -> None:
+    """Run until interrupted. Loopback only — this page shows an account.
+
+    ``autorun`` starts *Run the evening* as the first job, which is what the desktop click asks for.
+    Without it the click started a server over yesterday's page and ran nothing, while OPERATING.md
+    said it "runs on this machine, writes one page, and opens it" — so the honest reading of a stale
+    account was that the system was broken.
+
+    **Bound before started.** The socket is listening before the job begins, so the browser lands on
+    a page that is already narrating, and a second double-click meets the launcher's "already
+    running" branch instead of a second server fighting for the port.
+    """
     httpd = ThreadingHTTPServer((HOST, port), Handler)
     url = f"http://{HOST}:{port}/"
     print(f"Q-Alpha is at {url}")
     print("Nothing here places an order. Ctrl-C to stop.")
+    if autorun:
+        name, work = _ACTIONS["/run"]
+        JOBS.start(name, work)
     if open_browser and not browser.open_url(url):
         print(browser.describe_failure(url))
     try:

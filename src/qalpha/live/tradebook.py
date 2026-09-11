@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from typing import IO
 
 import pandas as pd
@@ -34,6 +35,16 @@ _UNCONSTRAINED_CASH = Decimal("1000000000000")
 
 # Column aliases seen across Zerodha Console tradebook exports (headers normalized to snake_case).
 _REQUIRED = ("symbol", "trade_date", "trade_type", "quantity", "price")
+
+#: Where every reader looks for Console exports. **One folder, one spelling.**
+#:
+#: The page read this directory while ``scripts/twin.py`` read a private gist and a filename that no
+#: longer exists, so following OPERATING.md ("drop the export in ``data/tradebooks/``") dated the
+#: page's lots and left the twin aborting every evening — with a message about a credential the
+#: desktop does not use. Two spellings of "the tradebook" is the same class of defect as two
+#: spellings of "the prices" was: the fix the user is told to apply cannot reach the thing that is
+#: broken.
+EXPORT_DIR = Path("data/tradebooks")
 
 
 @dataclass(frozen=True)
@@ -91,6 +102,41 @@ def parse_tradebook(source: str | IO[bytes] | IO[str]) -> list[TradebookTrade]:
             )
         )
     return trades
+
+
+def read_exports(directory: Path = EXPORT_DIR) -> tuple[list[TradebookTrade], list[str]]:
+    """Every Console export in ``directory``, de-duped on Zerodha trade ids. ``(trades, notes)``.
+
+    A folder rather than an upload widget: dropping a CSV in is the whole interaction, overlapping
+    date ranges are safe because the ids de-dupe, and there is nothing to keep open.
+
+    **Never raises.** A missing folder and an unreadable file are named absences in ``notes`` — the
+    page prints them and the twin refuses on them, and neither may be silently read as "no trades".
+    """
+    notes: list[str] = []
+    if not directory.exists():
+        return [], [
+            f"No tradebook yet. Drop a Zerodha Console export into {directory}/ — until then "
+            "lots have no purchase dates and every tax figure is an estimate."
+        ]
+    seen: dict[str, TradebookTrade] = {}
+    for csv in sorted(directory.glob("*.csv")):
+        try:
+            for t in parse_tradebook(str(csv)):
+                # THE SIDE IS PART OF THE IDENTITY. Without it a same-day BUY and SELL of the
+                # same quantity at the same price share a key and collapse into one row — one of
+                # the two transactions simply disappears from the ledger, taking its tax with it.
+                # Trade ids make this moot when the export has them; this is the fallback for when
+                # it does not, and a fallback that loses a trade is worse than refusing to guess.
+                key = t.trade_id or (
+                    f"{t.trade_date}:{t.ticker}:{t.side.name}:{t.quantity}:{t.price}:{t.exec_time}"
+                )
+                seen[key] = t
+        except Exception as exc:
+            notes.append(f"{csv.name} could not be read ({exc}) — skipped, not guessed at.")
+    if not seen:
+        notes.append(f"No readable export in {directory}/ — tax figures are estimates.")
+    return sorted(seen.values(), key=lambda t: (t.trade_date, t.exec_time)), notes
 
 
 def replay_tradebook(

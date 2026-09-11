@@ -563,7 +563,13 @@ def _cover_name(
         extraction_ran = usage.get("failed_batches", 0) == 0
         events, unverified = found, discarded
         if not extraction_ran:
-            print(f"  {ticker:<16} extraction had {usage['failed_batches']} failed batch(es)")
+            cut = usage.get("truncated_batches", 0)
+            # "The call died" and "the reply ran out of room" are different problems with different
+            # fixes — a dead server against a token cap that cannot hold the batch it was given.
+            why = f"{usage['failed_batches']} failed batch(es)"
+            if cut:
+                why += f", {cut} of them cut off at the model's token cap"
+            print(f"  {ticker:<16} extraction had {why}")
         # ORDER IS THE WHOLE FIX. Events first, receipt second — and no receipt at all if the events
         # did not land. An interruption here can lose a receipt, which costs one re-read tomorrow.
         # It can no longer lose the evidence while keeping the receipt, which cost 199 documents.

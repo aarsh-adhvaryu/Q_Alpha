@@ -1,14 +1,20 @@
-"""Q-Alpha, local. One command, one page. No server, no cloud, no browser tab left open.
+"""Q-Alpha, local. One click, one page — the analysis, then the account, then the basket.
 
-    uv run python scripts/qalpha.py            # sync what it can, run, write the page, open it
-    uv run python scripts/qalpha.py --no-open  # same, but do not launch a browser
-    uv run python scripts/qalpha.py --login    # refresh the Kite session first (needs a browser)
+    uv run python scripts/local_run.py                  # run, write the page, open it
+    uv run python scripts/local_run.py --no-open        # same, but do not launch a browser
+    uv run python scripts/local_run.py --app --autorun  # the app: buttons, live progress, and the
+                                                        # evening started for you (what the desktop
+                                                        # shortcut runs)
+    uv run python scripts/local_run.py --login          # refresh the Kite session first
 
 ### What clicking actually does
 
 A page opened over ``file://`` cannot run Python, read your tradebook or call Kite — browsers block
 all of it, correctly. So the clickable thing on the desktop is a launcher that runs *this*, and this
-writes the page and opens it. **The HTML is the result, never the engine.**
+writes the page. **The HTML is the result, never the engine.**
+
+The launcher runs the ``--app`` form, which serves that page on loopback so there are buttons to
+press and a feed to watch. The console window it opens **is** the app; closing it stops the server.
 
 ### What it does when it cannot reach anything
 
@@ -49,10 +55,12 @@ from qalpha.live.panels import BENCHMARK_PANEL, SCREEN_PANEL
 from qalpha.live.progress import LOG
 from qalpha.live.report import render
 from qalpha.live.session import load_snapshot, snapshot_from
-from qalpha.live.tradebook import TradebookTrade, parse_tradebook
+from qalpha.live.tradebook import EXPORT_DIR, TradebookTrade, read_exports
 
 PAGE = Path("data/session/qalpha.html")
-TRADEBOOK_DIR = Path("data/tradebooks")
+#: Imported, never re-spelled: the twin reads the same constant, and the drift between two
+#: spellings of one folder is exactly the defect this replaced.
+TRADEBOOK_DIR = EXPORT_DIR
 #: Every file this run reads or writes, in one place and passed explicitly.
 #:
 #: They used to be default arguments bound at import time, which is a large part of why NO TEST
@@ -67,35 +75,14 @@ LEDGER = Path("data/session/ledger.jsonl")
 
 
 def _trades() -> tuple[list[TradebookTrade], list[str]]:
-    """Every Console export in ``data/tradebooks/``, de-duped on Zerodha trade ids.
+    """Every Console export in ``data/tradebooks/`` — **the same folder the twin reads**.
 
-    A folder rather than an upload widget: dropping a CSV in is the whole interaction, overlapping
-    date ranges are safe because the ids de-dupe, and there is nothing to keep open.
+    The body of this lived here, and `scripts/twin.py` read a private gist and a filename that no
+    longer exists. So the instruction in OPERATING.md dated the page's lots and left the twin
+    aborting every evening about a credential this desktop does not use. One reader now:
+    :func:`qalpha.live.tradebook.read_exports`.
     """
-    notes: list[str] = []
-    if not TRADEBOOK_DIR.exists():
-        return [], [
-            f"No tradebook yet. Drop a Zerodha Console export into {TRADEBOOK_DIR}/ — until then "
-            "lots have no purchase dates and every tax figure is an estimate."
-        ]
-    seen: dict[str, TradebookTrade] = {}
-    for csv in sorted(TRADEBOOK_DIR.glob("*.csv")):
-        try:
-            for t in parse_tradebook(str(csv)):
-                # THE SIDE IS PART OF THE IDENTITY. Without it a same-day BUY and SELL of the
-                # same quantity at the same price share a key and collapse into one row — one of
-                # the two transactions simply disappears from the ledger, taking its tax with it.
-                # Trade ids make this moot when the export has them; this is the fallback for when
-                # it does not, and a fallback that loses a trade is worse than refusing to guess.
-                key = t.trade_id or (
-                    f"{t.trade_date}:{t.ticker}:{t.side.name}:{t.quantity}:{t.price}:{t.exec_time}"
-                )
-                seen[key] = t
-        except Exception as exc:
-            notes.append(f"{csv.name} could not be read ({exc}) — skipped, not guessed at.")
-    if not seen:
-        notes.append(f"No readable export in {TRADEBOOK_DIR}/ — tax figures are estimates.")
-    return sorted(seen.values(), key=lambda t: (t.trade_date, t.exec_time)), notes
+    return read_exports(TRADEBOOK_DIR)
 
 
 def _broker(
@@ -232,6 +219,33 @@ def _proposal(
         ]
 
 
+def _track(
+    trades: list[TradebookTrade],
+    account: ReconciledAccount,
+    prices: dict[str, Decimal],
+) -> object | None:
+    """Your account beside the same money in the index. ``None`` when it cannot be measured.
+
+    **Shares only.** The value handed over excludes cash, because the idle balance here is next
+    month's instalment rather than performance — counting it is the ₹4,01,677 "+444%" defect, and
+    this is the one panel where that number would be quoted back at the user as a track record.
+
+    Never raises: a missing benchmark or an unreadable tradebook is a panel that says so.
+    """
+    try:
+        from paper import _load_benchmark_series
+
+        from qalpha.live.track_record import track_record
+
+        equity = sum(
+            (qty * prices[t] for t, qty in account.portfolio.positions().items() if t in prices),
+            Decimal("0"),
+        )
+        return track_record(trades, equity, _load_benchmark_series(), date.today())
+    except Exception:
+        return None
+
+
 #: How many watchlist names get a research row when nothing is held or proposed. Enough to read a
 #: market from; small enough that the filings layer could realistically cover them.
 WATCH_ROWS = 12
@@ -353,6 +367,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--port", type=int, default=8787, help="port for --app (loopback only)")
     ap.add_argument(
+        "--autorun",
+        action="store_true",
+        help="with --app: start 'Run the evening' as the first job, rather than waiting to be asked",
+    )
+    ap.add_argument(
         "--no-pipeline",
         action="store_true",
         help="reconcile and decide only — skip prices, filings, the twin and the brief",
@@ -369,7 +388,7 @@ def main(argv: list[str] | None = None) -> int:
         # file this script writes is still the record; the app is a way to make it and read it.
         from qalpha.live.server import serve
 
-        serve(args.port, open_browser=not args.no_open)
+        serve(args.port, open_browser=not args.no_open, autorun=args.autorun)
         return 0
 
     cfg = Config()
@@ -603,6 +622,7 @@ def main(argv: list[str] | None = None) -> int:
             notes=notes,
             proposal=orders,
             desk=desk,
+            track=_track(trades, account, prices),
         ),
         encoding="utf-8",
     )

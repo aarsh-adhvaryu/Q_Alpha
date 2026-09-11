@@ -15,8 +15,16 @@ factors, backtest, and CI never touch it, so the product stays deterministic whe
 consumer beyond a human reader is the auto-pilot's Book B, which acts on the machine-readable ``SIGNAL``
 line via a fixed rule — the AI *supplies* the read, deterministic code *acts* on it.
 
-**Model:** Anthropic **Claude Haiku 4.5** with the server-side **web-search tool**, so the brief
-reflects *today's* news without any RSS plumbing (Haiku was chosen over Opus deliberately — the brief
+**Two routes, and they are not the same brief.** ``BRIEF-1`` is Anthropic Claude Haiku with the
+server-side web-search tool. ``BRIEF-2-local`` is whatever model is on this machine, reading the
+headlines :mod:`qalpha.live.news` fetched and archived **this run**, citing an item id for every
+claim — so each sentence can be checked against a snippet on disk. The objection to a local brief
+was never the model; it was that a model with no retrieval asked for today's news produces fluent
+recalled training data with today's date on it. The archive is the retrieval, and with no headlines
+the local brief refuses to be written at all.
+
+**Model (BRIEF-1):** Anthropic **Claude Haiku 4.5** with the server-side **web-search tool**, so the
+brief reflects *today's* news without any RSS plumbing (Haiku was chosen over Opus deliberately — the brief
 is context-only, so provider capability has nowhere to propagate; a templated news digest doesn't need
 Opus-tier reasoning). Haiku is an older-tier model, so it uses the basic ``web_search_20250305`` tool
 variant; thinking/effort don't apply to Haiku and a news summary needs neither, so both are omitted.
@@ -32,7 +40,7 @@ hiccuped.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 # The opening line every brief must carry — the whole point is that this can never read as a signal.
@@ -96,6 +104,210 @@ def build_prompt(watchlist_lines: list[str]) -> str:
         "that measures, forward, whether acting on your read helps — it changes no real allocation.\n\n"
         f"Watchlist (TICKER:SECTOR): {watchlist}"
     )
+
+
+# ---- the local brief, over archived headlines (BRIEF-2) -------------------------------------------
+#
+# Everything here is pure. The headlines come from `qalpha.live.news`, which archived the bytes they
+# were parsed from; the index move is computed by CODE from the benchmark panel and written above the
+# model's text rather than asked for; and a brief that cites an id it was not given is REJECTED
+# rather than published, because an uncheckable citation is the failure this repo already had once.
+
+BRIEF_VERSION = "BRIEF-2-local"
+
+#: Phrases that mean the model has stopped describing and started predicting. The web-searched brief
+#: has a "likely reaction" section, labelled as its own non-validated opinion; the local one does
+#: not get one. A model reading twenty headlines has no basis for a forecast, and a forecast on this
+#: page would sit two inches from a basket the user is about to buy.
+_FORECAST_PHRASES = (
+    "likely reaction",
+    "i expect",
+    "we expect",
+    "should rise",
+    "should fall",
+    "will rise",
+    "will fall",
+    "target price",
+    "buy ",
+    "sell ",
+)
+
+
+@dataclass(frozen=True)
+class Headline:
+    """One archived snippet, as the brief is allowed to see it."""
+
+    id: str
+    title: str
+    source: str = ""
+    when: str = ""
+
+
+@dataclass(frozen=True)
+class IndexMove:
+    """What the benchmark actually did, computed here and never asked of a model.
+
+    **Both dates are named.** The panel can be missing a session — 2026-09-09 is absent from the
+    2026 benchmark file — so "yesterday" would be wrong and "the last two closes" is what this is.
+    """
+
+    ticker: str
+    prev_date: str
+    prev_close: float
+    last_date: str
+    last_close: float
+
+    @property
+    def pct(self) -> float:
+        return (self.last_close / self.prev_close - 1.0) * 100.0 if self.prev_close else 0.0
+
+    def sentence(self) -> str:
+        gap = ""
+        if self.prev_date and self.last_date:
+            from datetime import date as _date
+
+            try:
+                days = (
+                    _date.fromisoformat(self.last_date) - _date.fromisoformat(self.prev_date)
+                ).days
+                gap = " (consecutive sessions)" if days <= 1 else f" ({days} days apart)"
+            except ValueError:
+                gap = ""
+        return (
+            f"{self.ticker} closed {self.last_close:,.2f} on {self.last_date}, "
+            f"{self.pct:+.2f}% from {self.prev_close:,.2f} on {self.prev_date}{gap}. "
+            "It is an ETF's own close, a proxy for the index and not the index itself."
+        )
+
+
+def index_move(path: str, *, ticker: str = "NIFTYBEES") -> IndexMove | None:
+    """The last two closes in the benchmark panel. ``None`` below two rows — **never 0.0%**.
+
+    A benchmark window with no data once reported ``0.0%``, and flat and unknown are not the same
+    market. That row is in CLAUDE.md's table.
+    """
+    try:
+        import pandas as pd
+
+        frame = pd.read_parquet(path)
+        if "date" in frame.columns:
+            frame = frame.sort_values("date")
+            dates = [str(d)[:10] for d in frame["date"].tolist()[-2:]]
+        else:
+            frame = frame.sort_index()
+            dates = [str(d)[:10] for d in frame.index.tolist()[-2:]]
+        column = "adj_close" if "adj_close" in frame.columns else "close"
+        closes = [float(v) for v in frame[column].tolist()[-2:]]
+    except Exception:
+        return None
+    if len(closes) < 2 or len(dates) < 2 or not closes[0]:
+        return None
+    return IndexMove(
+        ticker=ticker,
+        prev_date=dates[0],
+        prev_close=closes[0],
+        last_date=dates[1],
+        last_close=closes[1],
+    )
+
+
+def build_local_prompt(headlines: Sequence[Headline], watchlist_lines: Sequence[str]) -> str:
+    """Ask for a description of the day **from these snippets only**, every claim cited.
+
+    The index move is deliberately absent from this prompt: it is a number this system computes, and
+    a model restating it in its own words is a number that can drift from the one beside it.
+    """
+    listing = "\n".join(
+        f"[{h.id}] {h.title}" + (f" — {h.source}" if h.source else "") for h in headlines
+    )
+    watchlist = ", ".join(watchlist_lines)
+    return (
+        "You are writing a short market note for someone who owns Indian equities.\n\n"
+        "You have ONLY the headlines listed below. You have no other source, no memory of today, "
+        "and no access to prices. Write only what these headlines say.\n\n"
+        "**Every factual sentence must end with the id of the headline it came from, like "
+        "[a1b2c3d4].** A sentence you cannot cite is one you must not write. Do not use an id that "
+        "is not in the list.\n\n"
+        "Write four short sections in Telegram-friendly markdown, under 1500 characters:\n"
+        "1. **What the headlines say** — the two or three themes actually present, each cited.\n"
+        "2. **Names on the watchlist** — any of the names below that appear, and what was said "
+        "about them. If none appear, say so plainly.\n"
+        "3. **What is not here** — what these headlines do NOT cover, so the reader knows the "
+        "shape of the gap. Sectors, or a name they hold that nothing was said about.\n"
+        "4. **One line on what to watch**, phrased as a question rather than a prediction.\n\n"
+        "DO NOT forecast. No price targets, no direction for tomorrow, no 'likely reaction', no "
+        "buy or sell. You are describing what was published, not what will happen — a forecast "
+        "from twenty headlines is invention, and this note sits beside a real decision.\n\n"
+        f"Watchlist: {watchlist}\n\n"
+        f"Headlines:\n{listing}\n"
+    )
+
+
+def parse_citations(text: str) -> set[str]:
+    """Every ``[id]`` the model cited."""
+    import re
+
+    return set(re.findall(r"\[([0-9a-f]{8,32})\]", text))
+
+
+def check_local_brief(text: str, ids: Sequence[str]) -> list[str]:
+    """What is wrong with this brief, or ``[]``. **A brief that fails is not written.**
+
+    Three refusals, each of them a thing that has gone wrong on this project before: an uncheckable
+    citation (the veto that cited a stock quote page), an unsourced claim (a narrative with nothing
+    behind it), and a forecast presented beside a basket.
+    """
+    problems: list[str] = []
+    cited = parse_citations(text)
+    known = set(ids)
+    invented = sorted(cited - known)
+    if invented:
+        problems.append(f"cites {len(invented)} id(s) that were never supplied: {invented[:3]}")
+    if not cited:
+        problems.append("cites nothing, so no sentence in it can be checked")
+    lowered = text.lower()
+    for phrase in _FORECAST_PHRASES:
+        if phrase in lowered:
+            problems.append(
+                f"reads as a forecast ({phrase.strip()!r}), which this note must not be"
+            )
+            break
+    if "SIGNAL:" in text:
+        problems.append("carries a SIGNAL line, which belongs to a mechanism that was retired")
+    return problems
+
+
+def generate_local_brief(
+    headlines: Sequence[Headline],
+    watchlist_lines: Sequence[str],
+    *,
+    generate: GenerateFn,
+    model: str,
+) -> BriefResult | None:
+    """Write the brief here. ``None`` when there is nothing to write it from, or it failed a check.
+
+    **No headlines, no brief.** That is the whole guard: this refuses to run rather than let a model
+    answer "what happened today" out of its training data, which is the single worst failure this
+    repo could ship and would look exactly like the feature working.
+    """
+    if not headlines:
+        print("[ai-brief] no archived headlines — refusing to write a brief from memory.")
+        return None
+    try:
+        raw, usage = generate(model, build_local_prompt(headlines, watchlist_lines))
+    except Exception as exc:
+        print(f"[ai-brief] local generation failed (non-fatal): {exc}")
+        return None
+    if not raw.strip():
+        print("[ai-brief] empty response — skipping.")
+        return None
+    problems = check_local_brief(raw, [h.id for h in headlines])
+    if problems:
+        for problem in problems:
+            print(f"[ai-brief] REJECTED: the brief {problem}")
+        return None
+    body = f"{CONTEXT_PREAMBLE}\n\n{raw.strip()}"
+    return BriefResult(text=format_for_telegram(body), raw=body, model=model, usage=usage)
 
 
 # ---- the per-name verdict (PLAN_TRUST_REPAIR.md PR-8) --------------------------------------------

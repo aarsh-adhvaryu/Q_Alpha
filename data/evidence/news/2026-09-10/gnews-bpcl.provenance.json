@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Bharat+Petroleum%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-10T17:17:00Z",
+ "http_status": 200,
+ "bytes": 73734,
+ "sha256": "79682f44cfecdd5f70f11a929dfe7ca0fa8a1ccb0561386a9bfbf6fabb941895",
+ "document_date": "2026-09-10",
+ "feed": "gnews-bpcl",
+ "kind": "name",
+ "ticker": "BPCL.NS"
+}

@@ -79,6 +79,18 @@ CHUNK_OVERLAP = 500
 #: Document text per model call. Chunks are packed up to this; a chunk is never split across calls.
 PROMPT_CHAR_BUDGET = 24_000
 
+#: Every counter :func:`extract` reports. Named in one place so an empty run and a busy one carry
+#: the same keys — a caller reading ``usage["failed_batches"]`` on the empty path used to get a
+#: KeyError's worth of nothing.
+_USAGE_FIELDS = (
+    "input",
+    "output",
+    "calls",
+    "failed_batches",
+    "truncated_batches",
+    "retried_batches",
+)
+
 
 @dataclass(frozen=True)
 class DocumentChunk:
@@ -182,6 +194,36 @@ def verify_passage(passage: str, document_text: str) -> bool:
     return normalise(passage) in normalise(document_text)
 
 
+#: What ``high``, ``medium`` and ``low`` mean, in one string.
+#:
+#: **Shared with the news reader**, which asks the same question of a headline. It is one constant
+#: rather than two prompts that agree today: EX-1 rated routine results ``high`` because the
+#: instruction never said material *to whom*, and 77 of 193 events came back high — good news
+#: rejecting candidates. A second copy of this text is a second chance to make that mistake in one
+#: place and not the other.
+MATERIALITY_RUBRIC = (
+    "WHAT 'MATERIALITY' MEANS HERE — read this before rating anything:\n"
+    "Materiality is **how much this should worry someone who already owns the shares**. It is "
+    "NOT how newsworthy, how large, or how interesting the item is.\n\n"
+    "  high   — a reason to stop and think before buying more: a regulator or court acting "
+    "against the company or its officers, insolvency, an auditor resigning or qualifying, a "
+    "default or downgrade, promoter pledges rising sharply, a large related-party transaction, "
+    "a plant or business shut down, guidance withdrawn or cut sharply, a restatement.\n"
+    "  medium — worth knowing, not alarming on its own: a change of key management, a "
+    "moderate acquisition or divestment, a fundraise, an ordinary rating affirmation.\n"
+    "  low    — routine disclosure.\n\n"
+    "THESE ARE NOT MATERIAL, whatever the numbers involved. Rate them 'low' or omit them:\n"
+    "  - quarterly or annual results, however good or bad the growth\n"
+    "  - revenue, EBITDA, margin or profit figures on their own\n"
+    "  - dividends, bonuses, splits and record dates\n"
+    "  - analyst or investor meet intimations, presentations, transcripts\n"
+    "  - trading-window closures, newspaper publications, compliance certificates\n"
+    "  - a contract win, expansion or investment, however large\n\n"
+    "**Good news is never high materiality.** A company growing 10% is not a reason to worry "
+    "about owning it. If the only thing it says is that the business did well, it is 'low'.\n\n"
+)
+
+
 def build_prompt(chunks: Sequence[DocumentChunk]) -> str:
     """The extraction prompt. It asks for description and forbids recommendation."""
     header = (
@@ -189,27 +231,8 @@ def build_prompt(chunks: Sequence[DocumentChunk]) -> str:
         "Extract material events. DO NOT recommend, rank, rate, or advise. Do not say whether a "
         "stock should be bought, held or sold — that decision is made elsewhere by rules, and an "
         "opinion here would be discarded.\n\n"
-        "WHAT 'MATERIALITY' MEANS HERE — read this before rating anything:\n"
-        "Materiality is **how much this should worry someone who already owns the shares**. It is "
-        "NOT how newsworthy, how large, or how interesting the item is.\n\n"
-        "  high   — a reason to stop and think before buying more: a regulator or court acting "
-        "against the company or its officers, insolvency, an auditor resigning or qualifying, a "
-        "default or downgrade, promoter pledges rising sharply, a large related-party transaction, "
-        "a plant or business shut down, guidance withdrawn or cut sharply, a restatement.\n"
-        "  medium — worth knowing, not alarming on its own: a change of key management, a "
-        "moderate acquisition or divestment, a fundraise, an ordinary rating affirmation.\n"
-        "  low    — routine disclosure.\n\n"
-        "THESE ARE NOT MATERIAL, whatever the numbers involved. Rate them 'low' or omit them:\n"
-        "  - quarterly or annual results, however good or bad the growth\n"
-        "  - revenue, EBITDA, margin or profit figures on their own\n"
-        "  - dividends, bonuses, splits and record dates\n"
-        "  - analyst or investor meet intimations, presentations, transcripts\n"
-        "  - trading-window closures, newspaper publications, compliance certificates\n"
-        "  - a contract win, expansion or investment, however large\n\n"
-        "**Good news is never high materiality.** A company growing 10% is not a reason to worry "
-        "about owning it. If the only thing a filing says is that the business did well, it is "
-        "'low'.\n\n"
-        "For every material event, emit one line in EXACTLY this format:\n\n"
+        + MATERIALITY_RUBRIC
+        + "For every material event, emit one line in EXACTLY this format:\n\n"
         "EVENT: ticker=<SYMBOL>; type=<TYPE>; date=<YYYY-MM-DD or ->; materiality=<high|medium|low>; "
         'passage="<VERBATIM QUOTE FROM THE DOCUMENT>"; summary=<one clause>; uncertainty=<one clause or ->\n\n'
         f"TYPE must be one of: {', '.join(EVENT_TYPES)}\n\n"
@@ -234,9 +257,14 @@ def build_prompt(chunks: Sequence[DocumentChunk]) -> str:
     return header + "\n".join(body)
 
 
-def _parse_fields(line: str) -> dict[str, str]:
-    """Split one EVENT line. ``passage="..."`` is read first so its semicolons survive."""
-    rest = line.strip()[len(_EVENT_PREFIX) :]
+def parse_fields(line: str, *, prefix: str = _EVENT_PREFIX) -> dict[str, str]:
+    """Split one tagged line. ``passage="..."`` is read first so its semicolons survive.
+
+    ``prefix`` is the tag being stripped, so the news reader splits its own lines with this parser
+    rather than a second one that would drift from it — the quoting rule below is the subtle part,
+    and it is worth having exactly once.
+    """
+    rest = line.strip()[len(prefix) :]
     fields: dict[str, str] = {}
     quoted = re.search(r'passage\s*=\s*"(.*?)"\s*(?:;|$)', rest, flags=re.DOTALL)
     if quoted:
@@ -278,7 +306,7 @@ def parse_events(
         stripped = line.strip()
         if not stripped.startswith(_EVENT_PREFIX):
             continue
-        f = _parse_fields(stripped)
+        f = parse_fields(stripped)
         ticker = f.get("ticker", "").upper().removesuffix(".NS")
         docs = by_ticker.get(ticker)
         if not docs:
@@ -369,25 +397,52 @@ def extract(
     counted in ``usage["failed_batches"]`` so a caller can refuse to claim coverage it did not get.
     An extraction that did not happen must look different from one that found nothing, and neither
     may look like approval.
+
+    **The same is true of a reply that ran out of room.** The input fitting the window says nothing
+    about the OUTPUT fitting ``max_tokens``: a batch of filings that genuinely carries a dozen events
+    can be cut off mid-list, and every document after the cut has then been sent and not reported on.
+    A multi-document batch is retried one document at a time, which is usually enough; a single
+    document whose reply is still cut off counts in ``failed_batches`` (and in
+    ``truncated_batches``), so no caller may claim coverage from it. Its verified events are still
+    returned — a quote checked against the archived bytes is evidence whatever else went wrong — but
+    they arrive alongside a count that stops them being read as a complete answer.
     """
     if not documents:
-        return [], 0, "", {"input": 0, "output": 0, "calls": 0, "failed_batches": 0}
+        return [], 0, "", dict.fromkeys(_USAGE_FIELDS, 0)
     all_chunks = [c for doc in documents for c in chunks_for(doc)]
     events: list[ExtractedEvent] = []
     discarded = 0
     raws: list[str] = []
-    usage: dict[str, int] = {"input": 0, "output": 0, "calls": 0, "failed_batches": 0}
-    for batch in batch_chunks(all_chunks, budget=batch_chars):
+    usage: dict[str, int] = dict.fromkeys(_USAGE_FIELDS, 0)
+    pending: list[list[DocumentChunk]] = list(batch_chunks(all_chunks, budget=batch_chars))
+    while pending:
+        batch = pending.pop(0)
         try:
             raw, call_usage = generate(model, build_prompt(batch))
         except Exception as exc:
             raws.append(f"extraction failed: {exc}")
             usage["failed_batches"] += 1
             continue
+        if call_usage.get("truncated") and len(batch) > 1:
+            # The reply ran out of room with several documents in the call. Splitting is the only
+            # thing worth trying: temperature is zero, so asking again unchanged truncates again in
+            # the same place. The tokens spent are still counted — they were spent.
+            usage["retried_batches"] += 1
+            usage["calls"] += 1
+            for field in ("input", "output"):
+                usage[field] += int(call_usage.get(field, 0))
+            raws.append("[TRUNCATED] retried one document at a time")
+            pending = [[chunk] for chunk in batch] + pending
+            continue
         raws.append(raw)
         usage["calls"] += 1
         for field in ("input", "output"):
             usage[field] += int(call_usage.get(field, 0))
+        if call_usage.get("truncated"):
+            # One document, and the reply STILL ran out of room. Whatever it found is kept; what it
+            # did not reach is unknown, and unknown is what the caller has to be told.
+            usage["truncated_batches"] += 1
+            usage["failed_batches"] += 1
         # Verified against the WHOLE documents, never just this batch's slices, so a quote spanning
         # a chunk boundary still resolves to the document it came from.
         found, dropped = parse_events(raw, documents, model=model)
@@ -435,6 +490,9 @@ def default_generate(api_key: str, *, max_tokens: int = MAX_OUTPUT_TOKENS) -> Ge
         return text, {
             "input": int(getattr(resp.usage, "input_tokens", 0) or 0),
             "output": int(getattr(resp.usage, "output_tokens", 0) or 0),
+            # The cloud's spelling of the same fact. A cut-off reply is not a reading of the
+            # documents that produced it, wherever the model ran.
+            "truncated": 1 if resp.stop_reason == "max_tokens" else 0,
         }
 
     return generate

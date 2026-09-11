@@ -99,7 +99,7 @@ def test_a_missing_brief_says_nobody_wrote_one(tmp_path: Path) -> None:
     panel = _brief_panel(TODAY, path=tmp_path / "gone.md", stamp=tmp_path / "gone.json")
     assert "No brief on file" in panel
     assert "not that the day was quiet" in panel
-    assert "nothing to search" in panel, "say why a local model cannot do this one"
+    assert "needs a reader and something to read" in panel, "say what is missing, not just that"
 
 
 # --- rendering ------------------------------------------------------------------------------------
@@ -120,3 +120,57 @@ def test_bold_and_numbered_drivers_survive_as_structure() -> None:
 
 def test_an_empty_brief_renders_nothing_rather_than_a_stray_paragraph() -> None:
     assert _markdownish("   \n\n  ") == ""
+
+
+# --- which model wrote it, and from what ----------------------------------------------------------
+#
+# "The market, in words" means something different depending on where the words came from: a model
+# that searched the web, or a model on this desk reading twenty archived headlines. A page that
+# showed both the same way would be making the same claim for two different things.
+def test_a_local_brief_says_the_model_and_the_headline_count(tmp_path: Path) -> None:
+    import json
+
+    md = tmp_path / "brief.md"
+    md.write_text("Steel names dominated the day [a1b2c3d4].", encoding="utf-8")
+    stamp = tmp_path / "brief.json"
+    stamp.write_text(
+        json.dumps(
+            {
+                "as_of": TODAY.isoformat(),
+                "model": "qwen3-8b-32k",
+                "source": "local-rss",
+                "headlines": 42,
+                "brief_version": "BRIEF-2-local",
+            }
+        ),
+        encoding="utf-8",
+    )
+    panel = _brief_panel(TODAY, path=md, stamp=stamp)
+    assert "qwen3-8b-32k" in panel and "42 archived headlines" in panel
+    assert "cites an item id you can open" in panel
+    assert "likely reaction" not in panel, "the local brief has no forecast section to disclaim"
+
+
+def test_a_web_searched_brief_still_carries_its_own_disclaimer(tmp_path: Path) -> None:
+    import json
+
+    md = tmp_path / "brief.md"
+    md.write_text("**Sentiment**: steady.", encoding="utf-8")
+    stamp = tmp_path / "brief.json"
+    stamp.write_text(
+        json.dumps(
+            {"as_of": TODAY.isoformat(), "model": "claude-haiku-4-5", "source": "web-search"}
+        ),
+        encoding="utf-8",
+    )
+    panel = _brief_panel(TODAY, path=md, stamp=stamp)
+    assert "claude-haiku-4-5" in panel
+    assert "non-validated opinion" in panel
+
+
+def test_an_unstamped_brief_makes_no_claim_about_who_wrote_it(tmp_path: Path) -> None:
+    md = tmp_path / "brief.md"
+    md.write_text("Something happened.", encoding="utf-8")
+    panel = _brief_panel(TODAY, path=md, stamp=tmp_path / "absent.json")
+    assert "local-rss" not in panel and "archived headline" not in panel
+    assert "undated" in panel

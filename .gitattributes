@@ -1,0 +1,4 @@
+# cmd.exe reads batch files line by line in 512-byte chunks, and an LF-only file can lose a
+# `goto` label that straddles a boundary. `core.autocrlf` is false in this repo, so this is
+# the only thing that keeps the launcher in the format the shell that runs it expects.
+*.bat text eol=crlf
