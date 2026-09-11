@@ -167,3 +167,20 @@ that as a stated limitation rather than discover it afterwards.
   evidence of no event. Relaxing the verification rule or tightening the prompt would both be
   **EX-4** and need their own registration; neither is applied here, because a label that spans two
   rules has already cost this project four days of run 2.
+
+- **2026-09-11, EX-4 was built, measured and rejected.** Both repairs named in the line above were
+  tried. The graded verification threshold was **rejected before it cost anything**: coverage of the
+  failing passages runs continuously from 0.59 to 0.96 with no gap to cut at, so any threshold would
+  have been a tuned parameter buying paraphrase-as-quotation. The prompt tightening was built and
+  measured paired — same 220 filings, 3,164,235 characters, same reader, one prompt changed — and
+  **lost on both axes: 155 events kept against EX-3's 200, and a 34.9% discard rate against 25.1%.**
+  Reverted. The corpus is built on EX-3 exactly as registered above.
+  Full write-up: [`EX4_PROMPT_NEGATIVE.md`](EX4_PROMPT_NEGATIVE.md).
+
+- **2026-09-11, the methodological lesson from that failure.** An initial 120-document sample showed
+  EX-4 *improving* the discard rate from 23.4% to 14.0% and was reported internally as a 40% win.
+  The 220-document sample reversed the sign. Round-robin sampling reaches only each name's first few
+  filings at small sizes, and those are short and formulaic; depth brings annual reports and rating
+  letters. **A sample small enough to be cheap was large enough to be confidently wrong.** Any future
+  reader or prompt comparison in this project uses at least 220 documents, and states the sample
+  size and character count beside every rate it quotes.

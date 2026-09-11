@@ -108,7 +108,17 @@ BOOTSTRAP_DAYS = 365
 #: case. **Hitting it makes coverage incomplete, which reads UNKNOWN — it never silently passes.**
 MAX_DOCUMENTS_PER_NAME = 25  # retained: other modules import it
 #: Filings fetched per name per run. Fetching is a cached GET; this only bounds a pathological name.
-MAX_FETCH_PER_NAME = 200
+#:
+#: **It was 200, and 200 was below a real name's window.** VEDL filed 228 documents in 365 days, so
+#: the backfill fetched 200, read 194, and wrote INCOMPLETE — and `complete` requires
+#: ``documents_read >= filings_in_window``, which 194 of 228 can never satisfy. The name would have
+#: read "Filings NOT read" on the buy screen for ever, and every rebuild would have paid to
+#: reproduce that. This is the same defect the comment two blocks down describes being fixed once
+#: already, at a different cap: a fetch budget silently redefining what was filed.
+#:
+#: A cap still exists because an unbounded loop against a remote server is not a thing to ship, but
+#: it is now well above the busiest name NSE has shown us rather than just above the quiet ones.
+MAX_FETCH_PER_NAME = 1_000
 #: Documents sent to the MODEL per name per run — the cap that actually costs tokens and minutes.
 #: Unread documents carry over, so a 365-day bootstrap closes over several runs rather than never.
 MAX_EXTRACT_PER_RUN = 25
