@@ -354,6 +354,7 @@ def capability_panel() -> str:
     from qalpha.live.extraction import EXTRACTION_VERSION
     from qalpha.live.localmodel import MODEL_VAR
     from qalpha.live.twin import AUTHORIZING_PAIR, NULL_P95_LOG_REL_WEALTH
+    from qalpha.live.verdicts import AI_PROMPT_VERSION
 
     authorises = "nothing authorizes a GO today" if AUTHORIZING_PAIR is None else "authorising"
     bar = "no matched bar exists" if NULL_P95_LOG_REL_WEALTH is None else "a bar is registered"
@@ -377,9 +378,9 @@ def capability_panel() -> str:
             "it will not earn a veto — the model classifies, and classification is not evidence",
         ),
         (
-            "The AI arm",
+            f"The AI arm ({AI_PROMPT_VERSION})",
             "may drop a name from a fake-money book",
-            f"experimental, fake money only, and {authorises}",
+            f"a rule over verified filing events — no model is asked; {authorises}",
             "a measured gap between TWIN_FULL and TWIN_NO_AI over a registered window",
         ),
         (
