@@ -32,6 +32,7 @@ from zoneinfo import ZoneInfo
 from kiteconnect import KiteConnect
 from kiteconnect.exceptions import KiteException
 
+from qalpha.live import atomic
 from qalpha.live.credentials import REPO_ROOT, KiteCredentials, load_credentials
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -202,7 +203,7 @@ def mint_session(creds: KiteCredentials, request_token: str) -> KiteSession:
 
 
 def persist_session(session: KiteSession) -> None:
-    SESSION_FILE.write_text(json.dumps(asdict(session), indent=2) + "\n")
+    atomic.write_text(SESSION_FILE, json.dumps(asdict(session), indent=2) + "\n")
 
 
 def load_cached_session() -> KiteSession | None:

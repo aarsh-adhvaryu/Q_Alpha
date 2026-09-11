@@ -413,11 +413,15 @@ def test_an_empty_tradebook_read_must_not_be_treated_as_an_empty_account() -> No
     src = inspect.getsource(runner_script.cmd_daily)
     assert "if not trades and books[REAL].flows:" in src
     assert "ABORT" in src
-    # And it must not write a report on that path.
+    # And it must not write a report on that path. THE PROPERTY, NOT THE LINE: this used to name
+    # `REPORT.write_text`, and broke the day that writer became atomic — pinning the spelling of a
+    # call rather than the fact that the abort comes first.
     abort_at = src.index("ABORT")
-    write_at = src.index("REPORT.write_text")
+    write_at = min(
+        src.index(name) for name in ("REPORT", "MARKS", "DECISIONS_LOG") if name in src[abort_at:]
+    )
     assert abort_at < write_at, "the abort must precede any write"
-    assert "return 0" in src[abort_at : abort_at + 600], "abort must return before writing"
+    assert "return ABORTED" in src[abort_at : abort_at + 900], "abort must return before writing"
 
 
 def test_holdings_frame_survives_a_book_with_nothing_in_it() -> None:

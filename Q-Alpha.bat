@@ -24,6 +24,9 @@ REM  is placed by you, in Kite.
 REM ============================================================================
 
 cd /d "%~dp0"
+REM Windows' console codepage is 1252, which has no rupee sign. Python falls back to it
+REM whenever stdout is a pipe, and a program about money prints a lot of them.
+set PYTHONUTF8=1
 set PORT=8787
 set URL=http://127.0.0.1:%PORT%/
 

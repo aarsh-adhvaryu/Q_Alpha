@@ -31,6 +31,8 @@ from paper import _load_benchmark_series, _load_market
 
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
+from qalpha.live import atomic
+from qalpha.live.console import use_utf8
 from qalpha.live.go_gate import Evidence, build_gate
 from qalpha.live.policy import ALL_POLICIES, Decision, decisions_markdown
 from qalpha.live.runner import Market, step
@@ -607,21 +609,22 @@ def cmd_daily(cfg: Config) -> int:
 
     marks, gaps, gate = _marks_and_gate(books, market, cfg)
     REPORT.parent.mkdir(parents=True, exist_ok=True)
-    REPORT.write_text(
+    atomic.write_text(
+        REPORT,
         f"# The twin — {as_of}\n\n_Generated {datetime.now(UTC):%Y-%m-%d %H:%M UTC}. "
         "Fake money; the real account is the state source and is never traded._\n\n"
         + comparison_markdown(marks, gaps)
         + "\n\n---\n\n"
         + gate.render()
         + "\n",
-        encoding="utf-8",
     )
     # The same grading the report just rendered, for the page to read. Snapshot, not record: the
     # append-only history below is the evidence, and this is overwritten every run like the marks.
     GATE_JSON.write_text(json.dumps(gate.to_dict(), indent=2) + "\n", encoding="utf-8")
     # Persist the marks the report was built from, so the dashboard charts plot exactly these
     # numbers rather than recomputing and quietly disagreeing with the table above them.
-    MARKS.write_text(
+    atomic.write_text(
+        MARKS,
         json.dumps(
             {
                 "as_of": as_of.isoformat(),
@@ -630,10 +633,11 @@ def cmd_daily(cfg: Config) -> int:
             indent=2,
         )
         + "\n",
-        encoding="utf-8",
     )
-    DECISIONS_LOG.write_text(
-        f"# Twin decisions — {as_of}\n\n" + decisions_markdown(decisions) + "\n", encoding="utf-8"
+    atomic.write_text(
+        DECISIONS_LOG,
+        f"# Twin decisions — {as_of}\n\n" + decisions_markdown(decisions) + "\n",
+        encoding="utf-8",
     )
     # The append-only record. Everything above this line is a snapshot that the next run destroys;
     # this is the only thing that accumulates. It is written LAST and fail-soft — a history write
@@ -664,6 +668,9 @@ def cmd_status(cfg: Config) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # UTF-8 FIRST, before anything prints. Windows falls back to cp1252 when stdout is a pipe,
+    # and `uv run` pipes its child: on 2026-09-11 the `mark` step died on a rupee sign.
+    use_utf8()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("cmd", choices=["seed", "daily", "status"])
     args = ap.parse_args(argv)
