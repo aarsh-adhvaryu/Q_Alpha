@@ -60,7 +60,12 @@ EXTRACTION_VERSION = "EX-3"
 #: Overridable for a measured comparison (``QALPHA_CORPUS_READER``), because the alternative is
 #: picking a model by assertion — but the override names the corpus, so a run under it cannot be
 #: mistaken for a run under the default.
-CORPUS_READER_DEFAULT = "claude-haiku-4-5"
+#: Measured on 150 archived filings across 22 names on 2026-09-11, not assumed. Haiku returned 59
+#: verified events and 86 quotes that were not in the document — a 59% discard rate — against
+#: Sonnet's 109 events and 44 discards, 29%. Half the findings at twice the miss rate decided it
+#: under the registration's first rule, before agreement was even consulted. Full numbers in
+#: ``reports/READER_COMPARISON_EX3.md``.
+CORPUS_READER_DEFAULT = "claude-sonnet-5"
 
 #: Environment override for the corpus reader. Named so a comparison run is self-labelling.
 CORPUS_READER_VAR = "QALPHA_CORPUS_READER"
