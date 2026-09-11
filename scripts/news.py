@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from qalpha.config import Config
+from qalpha.live.console import use_utf8
 from qalpha.live.localmodel import choose_backend
 from qalpha.live.news import (
     ALIASES,
@@ -237,6 +238,9 @@ def cmd_daily(cfg: Config, as_of: date, *, dry_run: bool = False) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # UTF-8 FIRST, before anything prints. Windows falls back to cp1252 when stdout is a pipe,
+    # and `uv run` pipes its child: on 2026-09-11 the `mark` step died on a rupee sign.
+    use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
     daily = sub.add_parser("daily", help="fetch, archive, map and read today's headlines")
