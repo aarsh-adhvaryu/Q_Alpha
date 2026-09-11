@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Avenue+Supermarts%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-10T17:17:02Z",
+ "http_status": 200,
+ "bytes": 91913,
+ "sha256": "743b3d7f4718d284ef77e636ce655e84cc0e8db5478326fdb3f36363e38e0887",
+ "document_date": "2026-09-10",
+ "feed": "gnews-dmart",
+ "kind": "name",
+ "ticker": "DMART.NS"
+}

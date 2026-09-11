@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Shree+Cement%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-10T17:16:54Z",
+ "http_status": 200,
+ "bytes": 87929,
+ "sha256": "2facfeff10d14983b710fa1492c675f5925451da359d5fc141801d89eeae3e18",
+ "document_date": "2026-09-10",
+ "feed": "gnews-shreecem",
+ "kind": "name",
+ "ticker": "SHREECEM.NS"
+}

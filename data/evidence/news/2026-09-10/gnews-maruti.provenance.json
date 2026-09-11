@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Maruti+Suzuki%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-10T17:17:03Z",
+ "http_status": 200,
+ "bytes": 168119,
+ "sha256": "67ccad6b47cb1f6747705217b8a13db9beababd895972cc272696e8a232b5512",
+ "document_date": "2026-09-10",
+ "feed": "gnews-maruti",
+ "kind": "name",
+ "ticker": "MARUTI.NS"
+}
