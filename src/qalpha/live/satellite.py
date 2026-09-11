@@ -35,6 +35,7 @@ from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
+from qalpha.live import atomic
 from qalpha.live.advisor import SellAdvice, advise_sell
 
 _ZERO = Decimal("0")
@@ -97,7 +98,7 @@ class SatelliteRegistry:
     def save(self, path: Path = REGISTRY_PATH) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {t: d.isoformat() for t, d in sorted(self.listed_on.items())}
-        path.write_text(json.dumps(payload, indent=2) + "\n")
+        atomic.write_text(path, json.dumps(payload, indent=2) + "\n")
 
 
 def register_ipo(

@@ -35,12 +35,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from qalpha.config import Config
+from qalpha.live import atomic
 from qalpha.live.account import ReconciledAccount, reconcile
 from qalpha.live.browser import describe_failure, open_url
 from qalpha.live.buygate import MAX_PRICE_AGE_DAYS, evaluate
 from qalpha.live.commitments import Commitment, allowance, already_committed, confirm_fills
 from qalpha.live.commitments import load as load_commitments
 from qalpha.live.commitments import record as record_commitment
+from qalpha.live.console import use_utf8
 from qalpha.live.daily import (
     PipelineResult,
     day_scope,
@@ -357,6 +359,9 @@ def _price_as_of() -> date | None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # UTF-8 FIRST, before anything prints. Windows falls back to cp1252 when stdout is a pipe,
+    # and `uv run` pipes its child: on 2026-09-11 the `mark` step died on a rupee sign.
+    use_utf8()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--no-open", action="store_true", help="write the page, do not open a browser")
     ap.add_argument("--login", action="store_true", help="refresh the Kite session first")
@@ -612,7 +617,8 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     PAGE.parent.mkdir(parents=True, exist_ok=True)
-    PAGE.write_text(
+    atomic.write_text(
+        PAGE,
         render(
             account=account,
             prices=prices,
@@ -624,7 +630,6 @@ def main(argv: list[str] | None = None) -> int:
             desk=desk,
             track=_track(trades, account, prices),
         ),
-        encoding="utf-8",
     )
     # "matches the broker" is false when the broker was never asked — with both sides empty,
     # `tallies` is trivially true and would have printed a reassurance nobody earned.

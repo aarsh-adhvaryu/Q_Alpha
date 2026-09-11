@@ -35,6 +35,7 @@ from qalpha.live.ai_brief import (
     index_move,
     load_watchlist_lines,
 )
+from qalpha.live.console import use_utf8
 from qalpha.live.localmodel import choose_backend
 from qalpha.live.news import MARKET_FEEDS, market_headlines
 from qalpha.live.notify import send_telegram
@@ -57,6 +58,9 @@ def _usage_footer(result: BriefResult) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # UTF-8 FIRST, before anything prints. Windows falls back to cp1252 when stdout is a pipe,
+    # and `uv run` pipes its child: on 2026-09-11 the `mark` step died on a rupee sign.
+    use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
     p_daily = sub.add_parser("daily", help="generate today's brief, archive it, send to Telegram")

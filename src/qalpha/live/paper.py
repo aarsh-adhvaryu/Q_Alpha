@@ -31,6 +31,7 @@ from qalpha.config import Config
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 from qalpha.factors.regime import Regime
+from qalpha.live import atomic
 
 
 @dataclass(frozen=True)
@@ -194,7 +195,7 @@ class PaperBook:
             "equity_curve": self.equity_curve,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(payload, indent=2) + "\n")
+        atomic.write_text(self.path, json.dumps(payload, indent=2) + "\n")
 
     # ---- rebalance cadence (the live mirror of engine._rebalance_dates) ---
 
