@@ -166,14 +166,24 @@ The reader is **`claude-sonnet-5`**, chosen by measurement under a rule fixed be
 existed (`reports/READER_COMPARISON_EX3.md`). **Two readers agree on 22% of findings** — the reader
 substantially determines the event stream, which is the whole reason the label names it.
 
-**~29% of even the winning reader's quotes fail verification, and they are not fabrications.**
-Seventy documents were re-read: every failure was a true statement that is not a contiguous verbatim
-span — clauses joined across a sentence, a summary built from real fragments, and one case where PDF
-extraction had split a word so the *archive* was wrong, not the model. The guard works; its cost is
-**recall**, ~30% of genuine findings, biased against documents with poor text extraction. **The
-corpus under-counts events, systematically. Absence in it is not evidence of no event.** Fixing that
-means relaxing the verification rule or tightening the prompt — both are **EX-4** and need their own
-registration.
+**~25–29% of even the winning reader's quotes fail verification, and they are not fabrications.**
+Documents were re-read passage by passage: every failure was a true statement that is not a
+contiguous verbatim span — clauses joined across a sentence, a summary built from real fragments,
+and one case where PDF extraction had split a word so the *archive* was wrong, not the model. The
+guard works; its cost is **recall**, biased against documents with poor text extraction. **The
+corpus under-counts events, systematically. Absence in it is not evidence of no event.**
+
+**Both repairs were tried and both were rejected on measurement** (`reports/EX4_PROMPT_NEGATIVE.md`).
+A graded "close enough" threshold died before costing anything: coverage of the failing passages runs
+continuously 0.59→0.96 with no gap to cut at, so any threshold is a tuned parameter buying
+paraphrase-as-quotation. Tightening the prompt was built as EX-4, measured paired on 220 identical
+filings, and **lost on both axes — 155 events kept against 200, and 34.9% discarded against 25.1%.**
+Reverted.
+
+> **A sample small enough to be cheap was large enough to be confidently wrong.** EX-4 looked like a
+> 40% improvement on 120 documents and reversed sign on 220. Round-robin sampling reaches only each
+> name's first few filings at small sizes, and those are short and formulaic. **Reader and prompt
+> comparisons here use ≥220 documents and quote the sample size beside every rate.**
 
 **EX-3 changed no instruction. It made the reader part of the label** (2026-09-11). A version now
 means "these instructions, read by `corpus_reader()`" — and a row from any other model satisfies
