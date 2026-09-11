@@ -91,6 +91,12 @@ JOBS = Jobs()
 
 
 def _token_rows() -> list[ui.Row]:
+    # Same reason as `localmodel.configured`: this table renders before anything has loaded .env,
+    # and a table of credentials that reports "missing" for variables that are set is worse than
+    # no table — it sends someone to fix what is already right.
+    from qalpha.live.credentials import load_env
+
+    load_env()
     rows = []
     for name, unlocks in TOKENS:
         present = bool(os.environ.get(name, "").strip())

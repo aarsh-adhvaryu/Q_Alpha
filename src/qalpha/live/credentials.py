@@ -19,8 +19,17 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 _ENV_LOADED = False
 
 
-def _ensure_env_loaded() -> None:
-    """Load ``<repo>/.env`` once. Harmless (and silent) if the file is absent."""
+def load_env() -> None:
+    """Load ``<repo>/.env`` into the process once. Harmless (and silent) if the file is absent.
+
+    **Anything that reads a QALPHA_* or KITE_* variable must call this first.** It used to be
+    private and called only from :func:`load_credentials`, so a surface that read ``os.environ``
+    directly saw whatever the shell happened to export — nothing, when launched from a shortcut.
+    The app's own reader panel then said *"QALPHA_LOCAL_MODEL is unset"* and told the user to go
+    and set a variable they had already set, while a run moments later read it correctly because
+    the run touches the broker and the broker loads credentials. Two surfaces, one fact, different
+    answers depending on what else had happened to run first.
+    """
     global _ENV_LOADED
     if not _ENV_LOADED:
         load_dotenv(REPO_ROOT / ".env")
@@ -44,7 +53,7 @@ def load_credentials(*, require_secret: bool = True) -> KiteCredentials:
     ``require_secret=False`` is for read paths that only need the api_key plus an already-minted
     access token (the secret is only used at login time to exchange the request_token).
     """
-    _ensure_env_loaded()
+    load_env()
     api_key = os.environ.get("KITE_API_KEY", "").strip()
     api_secret = os.environ.get("KITE_API_SECRET", "").strip()
     access_token = os.environ.get("KITE_ACCESS_TOKEN", "").strip() or None

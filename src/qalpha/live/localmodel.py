@@ -100,7 +100,14 @@ def budget_for(
 
 
 def configured() -> tuple[str, str, int]:
-    """``(url, model, context)`` from the environment. ``model`` is ``""`` when unset."""
+    """``(url, model, context)`` from the environment. ``model`` is ``""`` when unset.
+
+    Hydrates ``.env`` itself rather than trusting a caller to have done it: this is read by the
+    app's reader panel, which renders before anything has touched the broker.
+    """
+    from qalpha.live.credentials import load_env
+
+    load_env()
     url = os.environ.get(URL_VAR, "").strip() or DEFAULT_URL
     model = os.environ.get(MODEL_VAR, "").strip()
     raw = os.environ.get(CONTEXT_VAR, "").strip()
