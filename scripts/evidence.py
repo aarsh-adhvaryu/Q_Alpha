@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pandas as pd
 
 from qalpha.config import Config
+from qalpha.live import atomic
 from qalpha.live.announcements import (
     Announcement,
     SourceDocument,
@@ -43,6 +44,7 @@ from qalpha.live.announcements import (
     fetch_document,
     since,
 )
+from qalpha.live.console import use_utf8
 from qalpha.live.evidence import (
     STALENESS_TOLERANCE_DAYS,
     Assessment,
@@ -779,7 +781,8 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     complete = sum(1 for c in coverage.values() if c.complete)
-    REPORT.write_text(
+    atomic.write_text(
+        REPORT,
         f"# Pre-trade evidence — {as_of}\n\n"
         f"_Generated {datetime.now(UTC):%Y-%m-%d %H:%M UTC}. **Shadow mode: this changes nothing.** "
         "No book, basket or order is affected, and the CORE_V1 clock is untouched._\n\n"
@@ -792,7 +795,6 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
         + "\n\n## Detail\n\n```\n"
         + "\n\n".join(a.render() for a in report.values())
         + "\n```\n",
-        encoding="utf-8",
     )
     print(f"[evidence] report → {REPORT}  ({complete}/{len(tickers)} fully covered)")
     for ticker, a in report.items():
@@ -802,6 +804,9 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # UTF-8 FIRST, before anything prints. Windows falls back to cp1252 when stdout is a pipe,
+    # and `uv run` pipes its child: on 2026-09-11 the `mark` step died on a rupee sign.
+    use_utf8()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("cmd", choices=["daily"])
     ap.add_argument("--as-of", default=None, help="override the date (default: today, UTC)")

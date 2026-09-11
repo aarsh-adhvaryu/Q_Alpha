@@ -28,6 +28,8 @@ from qalpha.config import Config
 from qalpha.data.ingest import download_prices, load_parquet, save_parquet
 from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
+from qalpha.live import atomic
+from qalpha.live.console import use_utf8
 from qalpha.live.dashboard import equity_csv, paper_freshness, render_markdown
 from qalpha.live.go_scorecard import build_scorecard
 from qalpha.live.paper import PaperBook
@@ -142,9 +144,8 @@ def _generate_dashboard(
         append_run(entry)
     run_log = load_runs(limit=50)
 
-    DASHBOARD_MD.parent.mkdir(parents=True, exist_ok=True)
-    DASHBOARD_MD.write_text(render_markdown(book, prices, benchmark, plan, as_of, run_log))
-    EQUITY_CSV.write_text(equity_csv(book))
+    atomic.write_text(DASHBOARD_MD, render_markdown(book, prices, benchmark, plan, as_of, run_log))
+    atomic.write_text(EQUITY_CSV, equity_csv(book))
     return plan.has_orders, applied
 
 
@@ -187,6 +188,9 @@ def _print_plan(
 
 
 def main(argv: list[str] | None = None) -> int:
+    # UTF-8 FIRST, before anything prints. Windows falls back to cp1252 when stdout is a pipe,
+    # and `uv run` pipes its child: on 2026-09-11 the `mark` step died on a rupee sign.
+    use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 

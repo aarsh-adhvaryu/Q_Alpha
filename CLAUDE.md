@@ -58,6 +58,7 @@ not.** Not arithmetic errors — the arithmetic is almost always right. The *lab
 | a benchmark window with no data, reported `0.0%` | unmeasured. Flat and unknown are not the same market |
 | "Clear" on the buy screen | **nobody had read that company's filings** |
 | "12 high-materiality negative items" | **4** — the reader counted lines in an append-only log, not events at their current revision |
+| a step that failed, having left yesterday's report standing | **zero bytes** — `write_text` truncates before it encodes, so the failure destroyed what it was replacing |
 | "The build is closed" | four defects were found that same day |
 
 **Passing tests have caught almost none of them.** Unit tests verify that a function works. These are
@@ -102,7 +103,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**65 live modules · 1,423 tests green + 1 xfail** (counted, not estimated — see the
+**67 live modules · 1,443 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -283,6 +284,7 @@ backtest/     walk-forward engine · portfolio · baselines · metrics · signif
 live/         account (the reconciled account) · session (snapshot + resume) · seed (one common
               start) · commitments (what it already decided) · mandate (the limits, once)
               report (the HTML page) · ui (how a number looks, never what it is)
+              console (UTF-8 before anything prints) · atomic (a failed write keeps the old file)
               advisor · deploy (the buy screen) · position_health · price_integrity · cooling_off
               satellite · governor · hedge · nav · twin · runner · policy · go_gate
               verdicts (AI-V2: keep/drop as a RULE over verified events — nothing is asked)
@@ -301,6 +303,16 @@ config.py     every tunable parameter in one place
 **Conventions.** Money is `Decimal` everywhere it touches accounting, never float. No look-ahead ever
 — historical reads go through `PriceData.as_of(date)`; fundamentals carry a 90-day effective lag; a
 test fails on look-ahead. Reuse before adding. Reference the spec by section (`§4.6`) in comments.
+
+**Two rules the first real run taught, on 2026-09-11:**
+
+- **`live/console.use_utf8()` first, in every entry point.** Windows falls back to cp1252 when
+  stdout is a pipe, and `uv run` pipes its child. The `mark` step died on a `₹`. A rule that every
+  print must remember to be ASCII is a rule the next print will break; the stream is fixed instead.
+- **`live/atomic.write_text` for anything a later run or a person reads.** `Path.write_text` opens
+  (truncating) and *then* encodes, so that same failure left `reports/paper_dashboard.md` **empty**.
+  `save_parquet` learned this on 2026-09-07; the markdown and JSON writers had not, and one of them
+  holds the paper book.
 
 **Nothing runs unattended.** `live/daily.py` holds the step list the cron used to hold — prices →
 mark the model book → **filings** → **headlines** → twin → brief — and runs it when the user presses
@@ -392,24 +404,69 @@ therefore cannot confirm.
 
 ## Open work
 
-**The build is not closed and saying so was itself a defect.** But there is no queue of features
-here, and adding one is not the default. The list below is short on purpose.
+**The system ran end to end on the user's desk for the first time on 2026-09-11**, and it found two
+defects in its own plumbing (both fixed and in the table above). The product operates. What is not
+established is whether its *choices* are worth anything, and that is now the whole of the work.
 
-1. **Nothing.** The system runs, the flags reach the buy screen, and the record accrues. The correct
-   next action is usually to let it run.
-2. **Done, and the next one needs registering too.** The twin's veto is `AI-V2`: a rule over
-   verified filing events, no model asked, no key, and a drop that can be re-opened from archived
-   bytes a year later. A headline can only leave a demoted lead. Registered in
-   `reports/PREREGISTRATION_AI_V2.md`; `PR-8c` rows stay on file and cannot act. Letting a headline
-   drop a name is `AI-V2.1` and needs its own registration.
-3. **If the user asks about the experiments:** the superiority question cannot be answered (see the
-   null). The honest options are to abandon it in writing, or re-register as non-inferiority. Leaving
-   it ambiguous invites someone to install a null later and retroactively authorize a window that
-   started before it was settled.
-4. **Deferred, none of it breaking:** dataset hashes so reports reproduce · raw prices for execution
-   and FIFO basis · date-dependent tax rates · `_cap_renorm` · durable off-repo document storage.
-5. **Never without a separate registered experiment:** mid/small-cap, IPO, F&O. **No engine inherits
-   another's authority.**
+### What the measurement actually says
+
+`reports/SCREEN_OOS_FIRST_READ.md` tested the live ranking over 163 months on a point-in-time
+universe. Every interval includes zero and the screen picks winners in half of all months:
+
+| Basket | Annualised spread vs 1/N | t | 95% CI |
+|---:|---:|---:|---|
+| 8 | +2.65% | 0.60 | includes zero |
+| 15 | +1.45% | 0.54 | includes zero |
+
+**Survivorship bias on the universe the money actually runs on is worth ~3.8 points a year** — more
+than the entire signal. So the honest position is not "the rule fails"; it is **"the rule has never
+been measured on a clean universe, and the measurement that would settle it is blocked on one data
+task."**
+
+### The next four things, in this order
+
+1. **Fill `NEXT_50_CHANGES` in `scripts/build_nifty100_pit.py`.** It is an empty list and the script
+   **refuses to write anything** while it is — correctly. Until point-in-time Nifty-100 membership
+   exists, no result computed on `nifty100_watchlist.csv` means anything, because today's members
+   applied to the past is worth more than the effect being measured. Source: NSE's Next-50
+   reconstitution circulars. This is bounded data entry, not research.
+2. **Replay the policy the money runs, not the ranking.** `exp_screen_oos.py` tests monthly
+   rankings. The live policy is buy-and-hold with a ₹50,000 monthly allowance, the §4.7 exits, the
+   sector cap, costs and tax. Those are different strategies and only one of them is being run.
+3. **Build the historical filing corpus.** This became possible on 2026-09-10: the local reader
+   works, so thirteen years of filings can be read for free on this machine. **It is the only route
+   to evidence that does not need centuries.** A portfolio over twelve months is *one* observation
+   of a small signal inside large noise — that is where the 200-year figure comes from. The same
+   information at the *event* level is thousands of observations, and an event study can reach
+   significance in months of work. `PLAN_SYSTEM.md` §5 says this and calls the corpus the GPU's
+   real job.
+4. **Then, and only then, ask the predictive question.** *Given what was knowable on a date, does a
+   model over events plus price context beat the price-only screen?* Train on early years, test on
+   late years nobody looked at, measure after costs. **Nothing in this repo learns that mapping
+   today** — the AI reads and reports; deterministic policy decides. That gap is real and it is not
+   hidden: `AI-V2` is a rule over verified events, not a predictor, and it is registered as such.
+
+### Standing constraints on all four
+
+- **Pre-register first.** Every one of these is an experiment, and this project has twice adopted a
+  result as the expected value after seeing it.
+- **Never tune until an old backtest looks good.** That fits historical noise, and at this effect
+  size noise is most of what there is.
+- The realistic prize is not a large edge. It is (i) knowing whether the rule works at all,
+  (ii) avoiding the blow-ups, and (iii) the levers already proven here — cost, tax, and staying
+  invested. Those beat most retail behaviour. They do not beat an index fund by construction.
+
+### Still open, unchanged
+
+- **The gate question.** The superiority test cannot be answered (`reports/NULL_MATCHED.md`). The
+  honest options remain: abandon it in writing, or re-register as non-inferiority. Leaving it
+  ambiguous invites someone to install a null later and retroactively authorize a window that
+  started before it was settled. **The user has not chosen.**
+- **Letting a headline drop a name** is `AI-V2.1` and needs its own registration.
+- **Deferred, none of it breaking:** dataset hashes so reports reproduce · raw prices for execution
+  and FIFO basis · date-dependent tax rates · `_cap_renorm` · durable off-repo document storage.
+- **Never without a separate registered experiment:** mid/small-cap, IPO, F&O. **No engine inherits
+  another's authority.**
 
 ### Do not disturb
 
