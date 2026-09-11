@@ -102,7 +102,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**65 live modules · 1,400 tests green + 1 xfail** (counted, not estimated — see the
+**65 live modules · 1,423 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -284,7 +284,8 @@ live/         account (the reconciled account) · session (snapshot + resume) ·
               start) · commitments (what it already decided) · mandate (the limits, once)
               report (the HTML page) · ui (how a number looks, never what it is)
               advisor · deploy (the buy screen) · position_health · price_integrity · cooling_off
-              satellite · governor · hedge · nav · twin · runner · policy · go_gate · verdicts
+              satellite · governor · hedge · nav · twin · runner · policy · go_gate
+              verdicts (AI-V2: keep/drop as a RULE over verified events — nothing is asked)
               ai_brief · track_record · measures · safety · scan · notify · auth · client
               twinpanel (the record on the page: books · tracks · gate · what is trusted)
               holdings · tradebook(+store) · taxpnl · ticker
@@ -396,11 +397,11 @@ here, and adding one is not the default. The list below is short on purpose.
 
 1. **Nothing.** The system runs, the flags reach the buy screen, and the record accrues. The correct
    next action is usually to let it run.
-2. **If the user asks for the AI to do more:** the live twin veto is still the web-search one whose
-   source rule checks only a hostname. `extraction.py` and `news.py` are the safer design and
-   neither feeds it. Replacing it is a treatment change and needs registering — the draft is
-   `AI-V2`: drop a name only on a verified high-materiality **filing** event of a veto-shaped type,
-   with a news item demoted to a lead, exactly as `PR-8c` demotes a secondary source.
+2. **Done, and the next one needs registering too.** The twin's veto is `AI-V2`: a rule over
+   verified filing events, no model asked, no key, and a drop that can be re-opened from archived
+   bytes a year later. A headline can only leave a demoted lead. Registered in
+   `reports/PREREGISTRATION_AI_V2.md`; `PR-8c` rows stay on file and cannot act. Letting a headline
+   drop a name is `AI-V2.1` and needs its own registration.
 3. **If the user asks about the experiments:** the superiority question cannot be answered (see the
    null). The honest options are to abandon it in writing, or re-register as non-inferiority. Leaving
    it ambiguous invites someone to install a null later and retroactively authorize a window that
