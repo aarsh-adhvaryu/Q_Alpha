@@ -165,6 +165,16 @@ class Extraction(NamedTuple):
 #: ``(batches_done, batches_total, events_so_far)``. It may not change what is extracted.
 ProgressFn = Callable[[int, int, int], None]
 
+#: Called when documents finish, so a caller can make them durable **before the name is over**.
+#: ``(events_found_since_the_last_call, sha256s_of_documents_now_fully_read)``.
+#:
+#: This is what makes a long name resumable. Receipts used to be written once, after every
+#: document in the name had been read — so a 228-filing name killed at minute 55 of 60 lost the
+#: lot and was paid for again. That happened twice on 2026-09-11, once to an API credit outage and
+#: once to a Ctrl-C. A document is released only when **every** chunk of it has been answered,
+#: and never if any of its chunks failed.
+CheckpointFn = Callable[[list["ExtractedEvent"], frozenset[str]], None]
+
 #: Concurrent model calls when a caller asks for them. One is the daily default: the local reader
 #: is a single GPU holding a single model, so parallel calls there queue rather than overlap.
 DEFAULT_WORKERS = 1
@@ -513,6 +523,7 @@ def extract(
     batch_chars: int = PROMPT_CHAR_BUDGET,
     workers: int = DEFAULT_WORKERS,
     progress: ProgressFn | None = None,
+    checkpoint: CheckpointFn | None = None,
 ) -> Extraction:
     """Extract over **every character** of every document. ``(events, discarded, raw, usage)``.
 
@@ -557,6 +568,17 @@ def extract(
     # Documents this run could not read. A batch that fails takes every document in it, and a
     # multi-document batch that is retried one at a time clears the ones that then succeed.
     unread: set[str] = set()
+    # How many chunks of each document are still unanswered. A document is finished — and may be
+    # checkpointed — only when this reaches zero and none of its chunks failed.
+    outstanding: dict[str, int] = {}
+    for chunk in all_chunks:
+        sha = chunk.document.provenance.sha256
+        outstanding[sha] = outstanding.get(sha, 0) + 1
+    # Events parsed as each batch lands, so a checkpoint has something to persist. Keyed by path so
+    # the final order is still batch order however many calls were in flight.
+    parsed: dict[tuple[int, ...], tuple[list[ExtractedEvent], int]] = {}
+    checkpointed: set[tuple[int, ...]] = set()
+    released: set[str] = set()
     pending: list[tuple[tuple[int, ...], list[DocumentChunk]]] = [
         ((i,), batch) for i, batch in enumerate(batch_chunks(all_chunks, budget=batch_chars))
     ]
@@ -601,23 +623,46 @@ def extract(
             usage["calls"] += 1
             for field, spent_tokens in spent.items():
                 usage[field] += spent_tokens
+            # Verified against the WHOLE documents, never just this batch's slices, so a quote
+            # spanning a chunk boundary still resolves to the document it came from.
+            parsed[out.path] = parse_events(out.raw, documents, model=model)
+            for chunk in out.batch:
+                sha = chunk.document.provenance.sha256
+                outstanding[sha] = outstanding.get(sha, 1) - 1
             if out.call_usage.get("truncated"):
                 # One document, and the reply STILL ran out of room. Whatever it found is kept; what
                 # it did not reach is unknown, and unknown is what the caller has to be told.
                 usage["truncated_batches"] += 1
                 usage["failed_batches"] += 1
                 unread.update(c.document.provenance.sha256 for c in out.batch)
+            # PER BATCH, not per round. A document split across several batches is released only
+            # when the last of them lands — `outstanding` reaching zero is exactly that — so a
+            # half-read filing is never marked read, and a name killed partway keeps the rest.
+            if checkpoint is not None:
+                finished = frozenset(
+                    sha
+                    for sha, left in outstanding.items()
+                    if left <= 0 and sha not in unread and sha not in released
+                )
+                if finished:
+                    fresh = [
+                        e
+                        for path in sorted(parsed)
+                        if path not in checkpointed
+                        for e in parsed[path][0]
+                    ]
+                    checkpointed.update(parsed)
+                    released.update(finished)
+                    checkpoint(fresh, finished)
         pending = next_round
     collected.sort(key=lambda item: item[0])
 
     events: list[ExtractedEvent] = []
     discarded = 0
-    for _path, raw, parseable in collected:
+    for path, _raw, parseable in collected:
         if not parseable:
             continue
-        # Verified against the WHOLE documents, never just this batch's slices, so a quote spanning
-        # a chunk boundary still resolves to the document it came from.
-        found, dropped = parse_events(raw, documents, model=model)
+        found, dropped = parsed[path]
         events.extend(found)
         discarded += dropped
     seen: set[tuple[str, str, str]] = set()

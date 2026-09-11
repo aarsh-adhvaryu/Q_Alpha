@@ -31,6 +31,7 @@ from qalpha.live.announcements import Announcement, SourceDocument
 from qalpha.live.evidence import Provenance
 from qalpha.live.extraction import (
     EXTRACTION_VERSION,
+    chunks_for,
     corpus_reader,
     extract,
     reader_matches,
@@ -435,3 +436,65 @@ def test_a_partly_failed_name_still_keeps_what_it_read(
     # Every document counted as read must carry a receipt proving its findings reached the log.
     assert evidence._already_extracted() == {d.provenance.sha256 for d in read_docs}
     assert (tmp_path / "events.jsonl").read_text(encoding="utf-8").strip(), "events on disk"
+
+
+# --- a long name must survive being interrupted ---------------------------------------------------
+
+
+def test_documents_are_released_as_they_finish_not_at_the_end() -> None:
+    """Resumability. Receipts used to be written once, after the whole name.
+
+    VEDL is 228 filings and about an hour of reading. Killed at minute 55 — an API credit outage on
+    2026-09-11, then a Ctrl-C an hour later — every one of them was lost and paid for again. The
+    checkpoint releases each document the moment its last chunk lands, so an interrupted name keeps
+    what it read.
+    """
+    docs = [
+        _doc("VBL", f"Filing {tag}. " + LONG_TEXT * 120, tag * 64) for tag in ("a", "b", "c", "d")
+    ]
+    releases: list[frozenset[str]] = []
+
+    def generate(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        return "", {"input": 10, "output": 1}
+
+    result = extract(
+        docs,
+        generate=generate,
+        model=corpus_reader(),
+        workers=1,
+        checkpoint=lambda _events, finished: releases.append(finished),
+    )
+
+    assert len(releases) > 1, (
+        "a multi-batch name must checkpoint more than once, or it is not resumable"
+    )
+    assert set().union(*releases) == {d.provenance.sha256 for d in docs}
+    assert sum(len(r) for r in releases) == len(docs), "a document is released exactly once"
+    assert not result.unread
+
+
+def test_a_document_is_never_released_before_all_of_its_chunks_land() -> None:
+    """Half a filing read is not a filing read — and a receipt over one is a permanent cache hit."""
+    big = _doc("VBL", LONG_TEXT * 400, "a" * 64)  # long enough to span several chunks
+    assert len(chunks_for(big)) > 2, "the fixture must actually chunk"
+    seen: list[frozenset[str]] = []
+
+    calls = {"n": 0}
+
+    def fail_the_last(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "", {"input": 10, "output": 1}
+        raise RuntimeError("died partway through the document")
+
+    result = extract(
+        [big],
+        generate=fail_the_last,
+        model=corpus_reader(),
+        workers=1,
+        checkpoint=lambda _e, finished: seen.append(finished),
+    )
+    assert big.provenance.sha256 in result.unread
+    assert not any(big.provenance.sha256 in r for r in seen), (
+        "a document with a failed chunk must never be released"
+    )
