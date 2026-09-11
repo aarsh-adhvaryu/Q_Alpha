@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -501,3 +502,93 @@ def test_inception_is_the_first_marked_day_not_the_first_row() -> None:
     assert born == {"B": "2026-09-01", "A": "2026-09-02"}, (
         "a book listed with no value that day has not been marked and is not alive yet"
     )
+
+
+# ---- the export has to reach back to the first flow ---------------------------------------------
+#
+# `REAL` is replayed from the export on every run while the twins keep the flows they were credited.
+# An export that starts after the first flow therefore replays REAL SHORT, and every twin reads as
+# beating it by whatever the missing lots are worth. The empty-tradebook check cannot see this: one
+# row is not zero rows. A Console export is chosen by date range in a dropdown, so it is the mistake
+# a person actually makes.
+def test_an_export_that_starts_after_the_first_flow_is_refused() -> None:
+    from qalpha.live.twin import partial_export_reason
+
+    reason = partial_export_reason(_trades()[1:], date(2026, 6, 15))
+    assert reason is not None
+    assert "2026-06-15" in reason and "2026-08-28" in reason
+    assert "data/tradebooks/" in reason
+
+
+def test_an_export_reaching_the_first_flow_is_accepted() -> None:
+    from qalpha.live.twin import partial_export_reason
+
+    assert partial_export_reason(_trades(), date(2026, 6, 15)) is None
+    # Earlier than the first flow is fine too — extra history is not a gap.
+    assert partial_export_reason(_trades(), date(2026, 7, 1)) is None
+
+
+def test_no_flows_and_no_trades_are_not_this_guard_s_business() -> None:
+    """The empty read has its own refusal, with its own message. Two guards, two sentences."""
+    from qalpha.live.twin import partial_export_reason
+
+    assert partial_export_reason([], date(2026, 6, 15)) is None
+    assert partial_export_reason(_trades(), None) is None
+
+
+def test_the_twin_reads_the_same_folder_the_page_does(tmp_path, monkeypatch) -> None:
+    """The integration, not the function. Both readers were correct and read different places."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import twin as twin_script
+
+    from qalpha.live import tradebook
+
+    monkeypatch.delenv("GIST_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    (tmp_path / "export.csv").write_text(
+        "symbol,trade_date,trade_type,quantity,price,trade_id\nINFY,2026-06-15,buy,5,1136,11\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(tradebook, "EXPORT_DIR", tmp_path)
+    trades, notes = twin_script._tradebook()
+    assert [t.ticker for t in trades] == ["INFY.NS"]  # type: ignore[attr-defined]
+    assert notes == []
+
+
+def test_the_abort_tells_the_user_about_the_folder_not_about_a_job() -> None:
+    """It said "Check: GIST_TOKEN present in the job". There is no job, and the credential is
+    optional — the thing to actually go and do is drop a Console export in a folder."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import inspect
+
+    import twin as twin_script
+
+    source = inspect.getsource(twin_script.cmd_daily)
+    assert "data/tradebooks/" in source
+    assert "GIST_TOKEN present in the job" not in source
+
+
+def test_the_daily_run_snapshots_the_gate_for_the_page() -> None:
+    """The page must show what the twin graded, not grade it a second time and disagree.
+
+    Source-level, like the coverage-write check in the evidence caller: the write happens deep
+    inside a run that needs a market, a tradebook and eight books, and what matters is that it is in
+    the same place as the report it belongs to.
+    """
+    import inspect
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import twin as twin_script
+
+    source = inspect.getsource(twin_script.cmd_daily)
+    assert "GATE_JSON.write_text" in source
+    assert "gate.to_dict()" in source
+
+    from qalpha.live.twinpanel import GATE_JSON
+
+    assert twin_script.GATE_JSON is GATE_JSON, "one path, imported — not two that agree today"

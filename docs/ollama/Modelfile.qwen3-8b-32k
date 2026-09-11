@@ -1,0 +1,15 @@
+# Q-Alpha's local reader: Qwen3 8B with a window big enough to hold a batch of filings.
+#
+#   ollama pull qwen3:8b
+#   ollama create qwen3-8b-32k -f docs/ollama/Modelfile.qwen3-8b-32k
+#
+# WHY THE CONTEXT LIVES HERE. Ollama's OpenAI-compatible route (/v1/chat/completions), which is what
+# `qalpha.live.localmodel` speaks, has nowhere to put `num_ctx` — that option exists only on the
+# native /api/chat route. So a server started with the default 4k window would silently truncate the
+# tail of every batch while coverage counted the documents as read, which is this repo's oldest
+# defect wearing a new hat. Baking it into the model is the only place it cannot be forgotten.
+#
+# One extraction call carries up to 24,000 characters of filing (~7k tokens) and asks for up to
+# 3,000 back, so 32k leaves roughly 3x headroom.
+FROM qwen3:8b
+PARAMETER num_ctx 32768

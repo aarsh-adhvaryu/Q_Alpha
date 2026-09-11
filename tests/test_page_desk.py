@@ -148,13 +148,13 @@ def test_a_verified_filing_concern_is_quoted_in_its_own_panel() -> None:
             concerns={"VBL": [{"type": "litigation", "summary": "SEBI show-cause notice"}]},
         )
     )
-    assert "What the filings said" in page
+    assert "What the filings and the headlines said" in page
     assert "SEBI show-cause notice" in page
 
 
 def test_the_concerns_panel_is_absent_when_nothing_was_found() -> None:
     """An empty 'concerns' heading would imply somebody checked and found nothing."""
-    assert "What the filings said" not in _page(_desk(filings_read=["VBL"]))
+    assert "What the filings and the headlines said" not in _page(_desk(filings_read=["VBL"]))
 
 
 def test_names_needing_attention_sort_above_quiet_ones() -> None:
@@ -255,3 +255,63 @@ def test_the_page_never_claims_a_match_the_broker_was_not_asked_for() -> None:
 def test_a_confirmed_account_still_reads_as_confirmed_on_the_page() -> None:
     page = _page(_desk())
     assert "reconciled ✓" in page
+
+
+# --- the record reaches the page the user actually opens ------------------------------------------
+#
+# tests/test_twinpanel.py establishes that the panels render correctly. That is not enough, and this
+# repo has the scar: a correct panel that never reaches the surface is indistinguishable from one
+# that was never written. These drive `render` and read the page back.
+def test_the_page_carries_the_record_and_the_gate(tmp_path, monkeypatch) -> None:
+    import json
+
+    from qalpha.live import twinpanel
+    from qalpha.live.go_gate import Evidence, build_gate
+
+    history = tmp_path / "history.jsonl"
+    history.write_text(
+        json.dumps(
+            {
+                "as_of": "2026-09-09",
+                "books": {
+                    "CORE_V1": {"value": "301289.98", "net_invested": "304144.01", "xirr": None}
+                },
+                "tracks": {
+                    "core_v1": {
+                        "pair": ["CORE_V1", "BASELINE_EW"],
+                        "rupees": "5389.24",
+                        "log_rel_wealth": -0.0023,
+                        "months": 0,
+                        "null_p95": None,
+                        "authorizes": False,
+                    }
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    gate = tmp_path / "gate.json"
+    gate.write_text(json.dumps(build_gate(Evidence(), AS_OF).to_dict()), encoding="utf-8")
+    monkeypatch.setattr(twinpanel, "TWIN_HISTORY", history)
+    monkeypatch.setattr(twinpanel, "GATE_JSON", gate)
+
+    page = _page()
+    assert "The model books" in page
+    assert "Against the fund" in page
+    assert "The GO gate" in page and "6 of 6 criteria are not green" in page
+    assert "What is trusted, and what is not" in page
+    assert "you, in Kite" in page
+
+
+def test_the_page_says_what_is_missing_rather_than_going_quiet(tmp_path, monkeypatch) -> None:
+    """Absent evidence has to read as absent. A page that simply omits the comparison when there is
+    no history looks exactly like a page reporting that there is nothing to say."""
+    from qalpha.live import twinpanel
+
+    monkeypatch.setattr(twinpanel, "TWIN_HISTORY", tmp_path / "none.jsonl")
+    monkeypatch.setattr(twinpanel, "GATE_JSON", tmp_path / "none.json")
+    page = _page()
+    assert "Nothing has been marked" in page
+    assert "Not graded is not passed" in page
+    assert "No track record yet" in page

@@ -303,3 +303,75 @@ def test_event_rows_key_on_the_document_so_a_rerun_corrects(tmp_path: object) ->
     (row,) = event_rows(events, as_of=date(2026, 9, 5))
     assert row["_key"].startswith(f"{'a' * 16}:VBL:acquisition:")
     assert row["verified"] is True and row["kind"] == "event"
+
+
+# --- a reply that ran out of room is not a reading -------------------------------------------------
+#
+# `failed_batches` covered the call that RAISED. A call that answered, and was cut off at max_tokens
+# halfway down its list of events, looked identical to one that had read everything and found what
+# it found — and coverage counted every document in that batch as read. That is the "25 of 30
+# filings, reported as 25 of 25" defect with a new cause, and a local model with thinking on walks
+# straight into it.
+def test_a_truncated_single_document_is_not_counted_as_read() -> None:
+    def _cut_off(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        return _line(), {"truncated": 1}
+
+    events, _discarded, _raw, usage = extract([_doc()], generate=_cut_off, model="m")
+    assert usage["truncated_batches"] == 1
+    assert usage["failed_batches"] == 1, "a caller must be able to refuse to claim coverage"
+    assert len(events) == 1, "what it did verify is still evidence; the count is what stops it"
+
+
+def test_a_truncated_multi_document_batch_is_retried_one_document_at_a_time() -> None:
+    """Temperature is zero, so asking again unchanged truncates in the same place. Splitting is the
+    only thing worth trying, and usually it is enough."""
+    seen: list[int] = []
+
+    def _cut_off_when_crowded(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        documents = prompt.count("--- DOCUMENT ")
+        seen.append(documents)
+        return (_line(), {"truncated": 1}) if documents > 1 else (_line(), {})
+
+    docs = [_doc(sha="a" * 64), _doc(symbol="TCS", text=OTHER_TEXT, sha="b" * 64)]
+    _events, _discarded, raw, usage = extract(docs, generate=_cut_off_when_crowded, model="m")
+    assert seen == [2, 1, 1], "the crowded call, then each document alone"
+    assert usage["retried_batches"] == 1
+    assert usage["failed_batches"] == 0, "the retry succeeded, so nothing was left unread"
+    assert "[TRUNCATED]" in raw
+
+
+def test_the_empty_run_carries_the_same_counters_as_a_busy_one() -> None:
+    _events, _discarded, _raw, usage = extract([], generate=lambda m, p: ("", {}), model="m")
+    assert usage["truncated_batches"] == 0 and usage["retried_batches"] == 0
+
+
+def test_the_cloud_reader_reports_the_same_fact(monkeypatch) -> None:
+    """Rule 1: fix it at the thing, not at one call site. Both readers say when they were cut off."""
+    import sys
+    import types
+
+    class _Usage:
+        input_tokens = 10
+        output_tokens = 3000
+
+    class _Block:
+        type = "text"
+        text = "EVENT: one"
+
+    class _Resp:
+        stop_reason = "max_tokens"
+        usage = _Usage()
+
+        def __init__(self) -> None:
+            self.content = [_Block()]
+
+    fake = types.ModuleType("anthropic")
+    fake.Anthropic = lambda api_key: types.SimpleNamespace(  # type: ignore[attr-defined]
+        messages=types.SimpleNamespace(create=lambda **kw: _Resp())
+    )
+    monkeypatch.setitem(sys.modules, "anthropic", fake)
+
+    from qalpha.live.extraction import default_generate
+
+    _text, usage = default_generate("sk-test")("claude-haiku-4-5", "read this")
+    assert usage["truncated"] == 1

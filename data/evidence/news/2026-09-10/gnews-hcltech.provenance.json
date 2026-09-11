@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22HCL+Technologies%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-10T17:16:56Z",
+ "http_status": 200,
+ "bytes": 93535,
+ "sha256": "fa8aa4d0010d510833a623958c1e33031d9dc51b7931e919be3a990a59c14cc0",
+ "document_date": "2026-09-10",
+ "feed": "gnews-hcltech",
+ "kind": "name",
+ "ticker": "HCLTECH.NS"
+}

@@ -1,9 +1,14 @@
 """Daily AI market brief CLI — the "macro analyst" that rides the paper cron.
 
-**Context only, never a signal** (see :mod:`qalpha.live.ai_brief`). One web-searched Claude Haiku call
-per trading day → archive to ``reports/ai_brief.md`` (committed, read by the Auto-pilot tab) → emit the
-machine-readable ``SIGNAL`` line the auto-pilot's Book B acts on via a fixed rule. Optionally pushes to
-Telegram if configured. **Rule (a) intact:** it never computes a number for the validated engine.
+**Context only, never a signal** (see :mod:`qalpha.live.ai_brief`). One call per trading day →
+archive to ``reports/ai_brief.md`` → optionally push to Telegram. **Rule (a) intact:** it never
+computes a number for the validated engine.
+
+**Two routes.** A local model reads the headlines the `news` step archived this run and cites an
+item id for every claim (``BRIEF-2-local``); with a cloud key and no local model, Claude searches the
+web (``BRIEF-1``). The stamp records which, because they are not the same brief. With neither, and
+with no headlines, nothing is written — a model asked what happened today with nothing to read would
+answer from its training data, and that answer would look exactly like the feature working.
 
     ai_brief.py daily              # generate → write reports/ai_brief.md (+ Telegram if configured)
     ai_brief.py daily --dry-run    # generate + print only (no send, no file write)
@@ -21,8 +26,19 @@ import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from qalpha.live.ai_brief import BriefResult, generate_brief, load_watchlist_lines
+from qalpha.live.ai_brief import (
+    BRIEF_VERSION,
+    BriefResult,
+    Headline,
+    generate_brief,
+    generate_local_brief,
+    index_move,
+    load_watchlist_lines,
+)
+from qalpha.live.localmodel import choose_backend
+from qalpha.live.news import MARKET_FEEDS, market_headlines
 from qalpha.live.notify import send_telegram
+from qalpha.live.panels import BENCHMARK_PANEL
 
 WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
 BRIEF_MD = Path("reports/ai_brief.md")
@@ -56,7 +72,31 @@ def main(argv: list[str] | None = None) -> int:
     if not watchlist:
         print(f"[ai-brief] watchlist missing at {WATCHLIST_CSV} — skipping.")
         return 0
-    result = generate_brief(watchlist)
+
+    # WHICH ROUTE, AND SAY SO. A local model reads headlines this run archived; the cloud one
+    # searches the web. They are different briefs and the stamp records which was written, because
+    # "the market, in words" means something different depending on where the words came from.
+    backend = choose_backend()
+    move = index_move(str(BENCHMARK_PANEL))
+    source, headlines = "web-search", []
+    if backend.kind == "local" and backend.generate is not None:
+        items = market_headlines(date.today())
+        headlines = [
+            Headline(
+                id=i.id,
+                title=i.title,
+                source=i.source or i.feed_id,
+                when=i.published_at.strftime("%Y-%m-%d"),
+            )
+            for i in items
+        ]
+        print(f"[ai-brief] {backend.model}, from {len(headlines)} archived headline(s)")
+        result = generate_local_brief(
+            headlines, watchlist, generate=backend.generate, model=backend.model
+        )
+        source = "local-rss"
+    else:
+        result = generate_brief(watchlist)
 
     if result is None:
         return 0  # already logged the reason
@@ -69,13 +109,23 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     BRIEF_MD.parent.mkdir(parents=True, exist_ok=True)
-    BRIEF_MD.write_text(result.raw + footer + "\n", encoding="utf-8")
+    # THE NUMBER IS WRITTEN BY CODE, ABOVE THE MODEL'S WORDS. Asking a model to restate a figure
+    # this system already computed is how two versions of one number end up on one page.
+    heading = f"_{move.sentence()}_\n\n" if move is not None else ""
+    if move is None:
+        heading = "_The benchmark panel does not carry two closes, so no move is quoted here. "
+        heading += "Unmeasured, not flat._\n\n"
+    BRIEF_MD.write_text(heading + result.raw + footer + "\n", encoding="utf-8")
     BRIEF_STAMP.write_text(
         json.dumps(
             {
                 "as_of": date.today().isoformat(),
                 "written_at": datetime.now(UTC).isoformat(),
                 "model": result.model,
+                "brief_version": BRIEF_VERSION if source == "local-rss" else "BRIEF-1",
+                "source": source,
+                "headlines": len(headlines),
+                "feeds": [f.id for f in MARKET_FEEDS] if source == "local-rss" else ["web search"],
             }
         )
         + "\n",
