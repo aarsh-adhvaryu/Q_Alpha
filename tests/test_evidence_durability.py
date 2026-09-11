@@ -58,6 +58,7 @@ def test_a_receipt_that_proves_its_events_landed_does_count(
     good = {
         "sha256": "abc",
         "extraction_version": evidence.EXTRACTION_VERSION,
+        "reader": evidence.corpus_reader(),
         "events_recorded": 3,
         "_key": "k",
     }
@@ -74,7 +75,7 @@ def test_zero_events_is_a_real_answer_and_still_counts(
     quiet filing forever — the cost the cache exists to avoid.
     """
     monkeypatch.setattr(evidence, "EXTRACTED_LOG", tmp_path / "extracted.jsonl")
-    evidence._mark_extracted(["quiet"], events_recorded=0)
+    evidence._mark_extracted(["quiet"], events_recorded=0, reader=evidence.corpus_reader())
     assert evidence._already_extracted() == {"quiet"}
 
 
@@ -82,7 +83,14 @@ def test_a_receipt_from_a_superseded_extractor_still_does_not_count(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """EX-1 rated routine results `high`, so its findings are not the findings EX-2 would produce."""
-    stale = {"sha256": "abc", "extraction_version": "EX-1", "events_recorded": 3, "_key": "k"}
+    # The right reader on purpose, so the VERSION is the only thing that can reject this row.
+    stale = {
+        "sha256": "abc",
+        "extraction_version": "EX-1",
+        "reader": evidence.corpus_reader(),
+        "events_recorded": 3,
+        "_key": "k",
+    }
     monkeypatch.setattr(evidence, "EXTRACTED_LOG", _log(tmp_path, stale))
     assert evidence._already_extracted() == set()
 
@@ -92,7 +100,7 @@ def test_the_receipt_records_the_count_it_was_given(
 ) -> None:
     path = tmp_path / "extracted.jsonl"
     monkeypatch.setattr(evidence, "EXTRACTED_LOG", path)
-    evidence._mark_extracted(["a", "b"], events_recorded=2)
+    evidence._mark_extracted(["a", "b"], events_recorded=2, reader=evidence.corpus_reader())
     rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
     assert {r["sha256"] for r in rows} == {"a", "b"}
     assert all(r["events_recorded"] == 2 for r in rows)
@@ -160,7 +168,7 @@ def test_a_coverage_row_is_written_the_moment_its_name_is_finished(
     cov = AnnouncementCoverage(
         filings_in_window=2, documents_read=2, extraction_ran=True, index_fetched=True
     )
-    evidence._record_coverage(date(2026, 9, 9), "VBL.NS", cov, 10)
+    evidence._record_coverage(date(2026, 9, 9), "VBL.NS", cov, 10, evidence.corpus_reader())
 
     rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
     assert len(rows) == 1
@@ -188,8 +196,8 @@ def test_a_later_run_supersedes_a_coverage_row_without_erasing_it(
     whole = AnnouncementCoverage(
         filings_in_window=5, documents_read=5, extraction_ran=True, index_fetched=True
     )
-    evidence._record_coverage(date(2026, 9, 9), "VBL.NS", partial, 365)
-    evidence._record_coverage(date(2026, 9, 9), "VBL.NS", whole, 365)
+    evidence._record_coverage(date(2026, 9, 9), "VBL.NS", partial, 365, evidence.corpus_reader())
+    evidence._record_coverage(date(2026, 9, 9), "VBL.NS", whole, 365, evidence.corpus_reader())
 
     rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
     assert len(rows) == 2, "the failed attempt must survive its own correction"

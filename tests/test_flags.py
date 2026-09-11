@@ -13,7 +13,7 @@ from pathlib import Path
 
 from qalpha.live import flags, news
 from qalpha.live.evidence import load_archive
-from qalpha.live.extraction import EXTRACTION_VERSION
+from qalpha.live.extraction import EXTRACTION_VERSION, corpus_reader
 from qalpha.live.flags import MAX_FILE_AGE_DAYS, flags_markdown, recent_concerns
 
 AS_OF = date(2026, 8, 27)
@@ -31,6 +31,7 @@ def _event(**over: object) -> str:
         "doc_url": "https://nsearchives.nseindia.com/corporate/VBL.pdf",
         "verified": True,
         "extraction_version": EXTRACTION_VERSION,
+        "model": corpus_reader(),
     }
     row.update(over)
     return json.dumps(row)
@@ -126,6 +127,7 @@ def _coverage(tmp_path: Path, **over: object) -> Path:
         "ticker": "VBL.NS",
         "complete": True,
         "extraction_version": EXTRACTION_VERSION,
+        "reader": corpus_reader(),
     }
     row.update(over)
     p = tmp_path / "coverage.jsonl"

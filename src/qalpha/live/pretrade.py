@@ -36,7 +36,7 @@ from qalpha.live.evidence import (
     WATCH,
     Assessment,
 )
-from qalpha.live.extraction import EXTRACTION_VERSION, ExtractedEvent
+from qalpha.live.extraction import EXTRACTION_VERSION, ExtractedEvent, reader_matches
 from qalpha.live.news import NEWS_VERSION
 
 #: Worst wins. ``UNKNOWN`` outranks ``WATCH`` on purpose: a known warning can be read and weighed,
@@ -205,10 +205,16 @@ def _announcement_dimension(
         else:
             why = "documents archived but no extraction ran"
         return Dimension(ANNOUNCEMENTS, UNKNOWN, why), ()
-    # Only events from the CURRENT extraction version may flag. EX-1 rated routine results `high`
-    # because the prompt never said material to whom; those rows stay on file as a record and must
-    # never act. One label covering two rules is the defect that cost run 2 its first four days.
-    verified = [e for e in events if e.verified and e.extraction_version == EXTRACTION_VERSION]
+    # Only events from the CURRENT extraction version AND the corpus reader may flag. EX-1 rated
+    # routine results `high` because the prompt never said material to whom; those rows stay on file
+    # as a record and must never act. One label covering two rules is the defect that cost run 2 its
+    # first four days — and under EX-3 a label covers a reader too, because two models disagree on
+    # the same filing the way two analysts do.
+    verified = [
+        e
+        for e in events
+        if e.verified and e.extraction_version == EXTRACTION_VERSION and reader_matches(e.model)
+    ]
     flagged = tuple(e for e in verified if e.materiality == _FLAGGING_MATERIALITY)
     if flagged:
         kinds = ", ".join(sorted({e.event_type for e in flagged}))
