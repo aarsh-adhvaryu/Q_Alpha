@@ -57,6 +57,7 @@ not.** Not arithmetic errors — the arithmetic is almost always right. The *lab
 | "25 of 25 filings read" | **25 of 30** — the cap sliced the window, then counted the slice |
 | a benchmark window with no data, reported `0.0%` | unmeasured. Flat and unknown are not the same market |
 | "Clear" on the buy screen | **nobody had read that company's filings** |
+| "12 high-materiality negative items" | **4** — the reader counted lines in an append-only log, not events at their current revision |
 | "The build is closed" | four defects were found that same day |
 
 **Passing tests have caught almost none of them.** Unit tests verify that a function works. These are
@@ -101,7 +102,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**64 live modules · 1,299 tests green + 1 xfail** (counted, not estimated — see the
+**65 live modules · 1,400 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -141,7 +142,7 @@ The bar was 1.5–2.3× too low, and too low is the direction that makes noise l
 > edge were entirely real, and detecting it at 95% needs roughly **200 years**. A twelve-month
 > superiority test cannot answer this question. Full detail in `reports/NULL_MATCHED.md`.
 
-### The evidence spine — reads filings, decides nothing
+### The evidence spine — reads filings and headlines, decides nothing
 
 Runs daily **before** the twin. Fetches and archives NSE's regulatory-indicator file (`REG1_IND`,
 which carries the P/E>50 caution) and each candidate's corporate announcements, downloads the
@@ -157,6 +158,24 @@ of 193 came back `high` — "revenue up 10%", "EBITDA grew 8%" — and a high ev
 which skips a name. **Good news rejected candidates.** EX-2 defines materiality as *concern to someone
 who owns the shares*. `pretrade` acts only on the current version, so EX-1 rows stay on file and
 cannot act.
+
+**`live/news.py` does the same for headlines (`NEWS-1`).** Four market RSS feeds plus one Google News
+search per in-scope name, archived with provenance **before** anything parses them; the alias table
+in `data/universes/nifty100_aliases.csv` decides which company an item is about, and the model cannot
+widen that. Only a verified, current-version item that is **both `high` and `negative`** raises a
+flag, and a flag is `WATCH` — news can never `BLOCK`, asserted in `pretrade.assess_candidate`.
+Rules and first-run findings: `reports/PREREGISTRATION_NEWS_V1.md`.
+
+Three things it is careful about, each learned on the first archived run:
+
+- **An item is a report, not an event.** Nine outlets carried one Meghalaya court order about
+  SHREECEM. Every surface that prints the count says what it counts; clustering would mean inventing
+  a similarity score, which the registration forbids.
+- **The same snippet is labelled differently in different batches.** Temperature is zero, but the
+  batch is part of the prompt. Labels are stable within a run and not across one. Recorded as a
+  limit of the method, not re-prompted until the answers agree.
+- **A batch is limited by what the REPLY can hold**, not by the context — 60 headlines in one call
+  came back cut off at `max_tokens`, which counts as a failed read. Capped at 20 items.
 
 ### What reaches the user
 
@@ -270,6 +289,7 @@ live/         account (the reconciled account) · session (snapshot + resume) ·
               twinpanel (the record on the page: books · tracks · gate · what is trusted)
               holdings · tradebook(+store) · taxpnl · ticker
               evidence (NSE regulatory indicators) · announcements (filings + provenance)
+              news (headlines: fetch · archive · map · read — flags only, never a veto)
               extraction (the model reports what a filing says) · pretrade (may we buy this?)
               pipeline (rank → skip → anchor → one outcome) · flags (what the user sees)
 scripts/      local_run.py (the click — the only entry point) · twin.py · evidence.py (the spine)
@@ -282,8 +302,9 @@ config.py     every tunable parameter in one place
 test fails on look-ahead. Reuse before adding. Reference the spec by section (`§4.6`) in comments.
 
 **Nothing runs unattended.** `live/daily.py` holds the step list the cron used to hold — prices →
-mark the model book → **evidence spine** → twin → brief — and runs it when the user presses *Run the
-evening*. Three properties make that a replacement rather than a regression:
+mark the model book → **filings** → **headlines** → twin → brief — and runs it when the user presses
+*Run the evening*. A step may declare `needs_any`: the brief runs with a local model **or** a cloud
+key, because requiring the key alone would skip work this machine can do. Three properties make that a replacement rather than a regression:
 
 - **A failed step is recorded and the run continues.** The cron was fail-soft too; the problem was
   that it was fail-*silent*. A failure here is written to `data/session/ledger.jsonl` and printed on
@@ -307,6 +328,8 @@ uv run ruff check . && uv run ruff format --check .
 uv run mypy src
 uv run python scripts/local_run.py                     # THE entry point: pipeline → page
 uv run python scripts/evidence.py daily                # the evidence spine (shadow)
+uv run python scripts/news.py daily                    # the headlines (archive → map → read)
+uv run python scripts/news.py daily --dry-run          # archive only; read nothing
 uv run python scripts/run_phase0.py                    # the validated backtest
 uv run python scripts/exp_null.py --draws 2000         # the matched null
 uv run python scripts/local_run.py --app               # the app: buttons, live progress, tokens
@@ -358,7 +381,7 @@ writes, or if any live module spells a panel path as a literal again.
 | `KITE_API_KEY` · `KITE_API_SECRET` | holdings, cash, prices; the secret only at login |
 | `QALPHA_LOCAL_MODEL` | reads filings **on this machine**. Must be a tag the server actually lists; a name with nothing listening — or a name the server does not have — does NOT fall back to the cloud, by design, so it turns reading off rather than on. Recipe: `ollama create qwen3-8b-32k -f docs/ollama/Modelfile.qwen3-8b-32k` |
 | `QALPHA_LOCAL_MODEL_CONTEXT` | what that model was **built** with (32768 for the above). It states the window, it cannot set it: the OpenAI-compatible route has nowhere to send `num_ctx`, which is why the Modelfile is committed |
-| `ANTHROPIC_API_KEY` | filings in the cloud, and the web-searched brief (which has no local substitute) |
+| `ANTHROPIC_API_KEY` | filings in the cloud, and the web-searched brief (`BRIEF-1`). **No step requires it any more:** with a local model the brief is written here from the headlines the evening archived (`BRIEF-2-local`), citing an item id per claim |
 | `GIST_TOKEN` | **optional.** A private-gist tradebook store, for whoever keeps one. Unset, the twin reads `data/tradebooks/` — the same folder the page reads and the one OPERATING.md names |
 
 A missing one is never an error: the run degrades to a named absence and says which figures it
@@ -374,8 +397,10 @@ here, and adding one is not the default. The list below is short on purpose.
 1. **Nothing.** The system runs, the flags reach the buy screen, and the record accrues. The correct
    next action is usually to let it run.
 2. **If the user asks for the AI to do more:** the live twin veto is still the web-search one whose
-   source rule checks only a hostname. `extraction.py` is the safer design and does not feed it.
-   Replacing it is a treatment change and needs registering.
+   source rule checks only a hostname. `extraction.py` and `news.py` are the safer design and
+   neither feeds it. Replacing it is a treatment change and needs registering — the draft is
+   `AI-V2`: drop a name only on a verified high-materiality **filing** event of a veto-shaped type,
+   with a news item demoted to a lead, exactly as `PR-8c` demotes a secondary source.
 3. **If the user asks about the experiments:** the superiority question cannot be answered (see the
    null). The honest options are to abandon it in writing, or re-register as non-inferiority. Leaving
    it ambiguous invites someone to install a null later and retroactively authorize a window that

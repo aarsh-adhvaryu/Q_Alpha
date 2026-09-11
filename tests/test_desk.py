@@ -18,7 +18,7 @@ from datetime import date
 from decimal import Decimal
 
 from qalpha.live import evidence
-from qalpha.live.desk import UNREADABLE, assemble
+from qalpha.live.desk import UNREADABLE, NameView, assemble
 
 AS_OF = date(2026, 9, 10)
 
@@ -232,3 +232,81 @@ def test_not_covered_still_asks_for_a_person() -> None:
         )
     )
     assert row.attention is True
+
+
+# --- the News column, and its third state -----------------------------------------------------------
+#
+# Same rule as every other column here: a blank cell reads as "fine". "Nobody read the headlines" and
+# "the headlines carried nothing" are different facts, and only one of them is reassuring.
+def test_news_not_read_is_a_gap_not_a_quiet_week() -> None:
+    view = NameView(ticker="VBL.NS")
+    assert view.news_state == "news not read"
+    assert view.attention
+
+
+def test_no_item_matched_is_a_real_answer() -> None:
+    view = NameView(ticker="VBL.NS", news_read=True, news_items=0)
+    assert view.news_state == "no item matched"
+
+
+def test_items_read_with_nothing_flagged_says_how_many() -> None:
+    view = NameView(ticker="VBL.NS", news_read=True, news_items=4)
+    assert view.news_state == "4 read, none flagged"
+
+
+def test_the_column_is_counts_and_never_a_score() -> None:
+    """A number in [0, 1] invites being ranked and optimised against. Two integers can be checked
+    by opening the items behind them."""
+    view = NameView(
+        ticker="VBL.NS",
+        news_read=True,
+        news_items=6,
+        news=(("negative", "regulatory_action: excise notice"), ("positive", "results: strong")),
+    )
+    assert view.news_state == "1 neg / 1 pos"
+    assert view.news_concerns == ("regulatory_action: excise notice",)
+
+
+def test_a_negative_headline_puts_the_name_on_the_attention_list() -> None:
+    view = NameView(
+        ticker="VBL.NS",
+        filings_read=True,
+        exchange=evidence.PASS,
+        health="healthy",
+        news_read=True,
+        news=(("negative", "litigation: a suit was filed"),),
+    )
+    assert view.attention
+
+
+def test_a_positive_headline_does_not() -> None:
+    view = NameView(
+        ticker="VBL.NS",
+        filings_read=True,
+        exchange=evidence.PASS,
+        health="healthy",
+        news_read=True,
+        news=(("positive", "results: strong quarter"),),
+    )
+    assert not view.attention
+
+
+def test_the_desk_says_how_many_names_had_their_headlines_read() -> None:
+    desk = assemble(
+        as_of=date(2026, 9, 10),
+        positions={"VBL.NS": 10},
+        prices={},
+        cost_basis={},
+        watchlist=["TCS.NS"],
+        news_read=["VBL"],
+        news={"VBL": [{"stance": "negative", "type": "litigation", "summary": "a suit"}]},
+        news_matched={"VBL": 3},
+    )
+    line = desk.news_line()
+    assert "1 of 2" in line and "1 high-materiality negative" in line
+    assert "not a score" in line
+
+
+def test_no_headlines_read_at_all_says_gap_rather_than_quiet() -> None:
+    desk = assemble(as_of=date(2026, 9, 10), positions={"VBL.NS": 10}, prices={}, cost_basis={})
+    assert "a gap, not a quiet week" in desk.news_line()

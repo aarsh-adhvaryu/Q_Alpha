@@ -17,6 +17,7 @@ import pytest
 
 from qalpha.live.evidence import (
     BLOCK,
+    NOT_COVERED,
     PASS,
     UNKNOWN,
     WATCH,
@@ -277,3 +278,141 @@ def test_an_event_from_a_superseded_extractor_never_flags() -> None:
     )
     a = assess_candidate("X", exchange=_exchange(), events=[stale], coverage=FULL)
     assert a.state == PASS and a.flagged_events == ()
+
+
+# --- the news dimension: it may warn, and it may never exclude --------------------------------------
+#
+# A headline is the weakest evidence in this system — one step further from the source than a filing,
+# read from a snippet, labelled by a local 8B model. It gets the weakest power, and the assertion in
+# `assess_candidate` is what stops that from quietly changing.
+from qalpha.live.news import NEWS_VERSION  # noqa: E402
+from qalpha.live.pretrade import NEWS, NewsCoverage  # noqa: E402
+
+
+class _NewsEvent:
+    def __init__(
+        self, *, materiality="high", stance="negative", version=NEWS_VERSION, verified=True
+    ):
+        self.materiality = materiality
+        self.stance = stance
+        self.news_version = version
+        self.verified = verified
+        self.event_type = "regulatory_action"
+        self.summary = "regulator restrained the promoter"
+        self.passage = "Sebi bars the promoter from the securities market"
+        self.link = "https://example.com/x"
+
+    @property
+    def flags(self) -> bool:
+        return self.verified and self.materiality == "high" and self.stance == "negative"
+
+
+def _read(**kw) -> NewsCoverage:
+    base = {
+        "feeds_attempted": 5,
+        "feeds_failed": 0,
+        "items_scanned": 200,
+        "items_for_name": 3,
+        "extraction_ran": True,
+        "news_version": NEWS_VERSION,
+    }
+    base.update(kw)
+    return NewsCoverage(**base)  # type: ignore[arg-type]
+
+
+def _dim(assessment, name):
+    return next(d for d in assessment.dimensions if d.name == name)
+
+
+def test_a_high_negative_headline_warns() -> None:
+    a = assess_candidate(
+        "VBL.NS", exchange=_exchange(), news_events=[_NewsEvent()], news_coverage=_read()
+    )
+    assert _dim(a, NEWS).state == WATCH
+    assert a.needs_human and not a.blocked
+    assert a.flagged_news
+
+
+def test_news_can_never_block() -> None:
+    """THE PROPERTY. Only NSE's published lists exclude a name without a human."""
+    a = assess_candidate(
+        "VBL.NS",
+        exchange=_exchange(),
+        news_events=[_NewsEvent() for _ in range(20)],
+        news_coverage=_read(),
+    )
+    assert a.state != BLOCK
+
+
+def test_a_positive_or_medium_item_does_not_warn() -> None:
+    for over in ({"stance": "positive"}, {"materiality": "medium"}, {"stance": "neutral"}):
+        a = assess_candidate(
+            "VBL.NS",
+            exchange=_exchange(),
+            news_events=[_NewsEvent(**over)],
+            news_coverage=_read(),
+        )
+        assert _dim(a, NEWS).state == PASS, over
+
+
+def test_an_older_news_version_cannot_act() -> None:
+    """The same rule EX-1 rows live under: one label spanning two rules makes both unusable."""
+    a = assess_candidate(
+        "VBL.NS",
+        exchange=_exchange(),
+        news_events=[_NewsEvent(version="NEWS-0")],
+        news_coverage=_read(),
+    )
+    assert _dim(a, NEWS).state == PASS
+
+
+def test_a_failed_feed_is_unknown_and_says_so() -> None:
+    a = assess_candidate("VBL.NS", exchange=_exchange(), news_coverage=_read(feeds_failed=2))
+    dim = _dim(a, NEWS)
+    assert dim.state == UNKNOWN and "2 of 5" in dim.detail
+
+
+def test_a_dead_feed_does_not_empty_the_basket() -> None:
+    """`HUMAN_REQUIRED` is for the account or the evidence spine. A newspaper being down is not
+    a reason to stop, and NEWS-1 says so: the UNKNOWN is rendered and does not govern."""
+    a = assess_candidate(
+        "VBL.NS",
+        exchange=_exchange(),
+        coverage=NOTHING_FILED,  # the filings ARE read; only the newspaper is down
+        news_coverage=_read(feeds_failed=5),
+    )
+    assert _dim(a, NEWS).state == UNKNOWN
+    assert not _dim(a, NEWS).governs
+    assert a.eligible, "a dead RSS feed must not make a clean name ineligible"
+
+
+def test_a_news_watch_does_govern() -> None:
+    """Something was read and it was bad. That is the one case the dimension is allowed to decide."""
+    a = assess_candidate(
+        "VBL.NS",
+        exchange=_exchange(),
+        coverage=NOTHING_FILED,
+        news_events=[_NewsEvent()],
+        news_coverage=_read(),
+    )
+    assert _dim(a, NEWS).governs
+    assert a.state == WATCH and not a.eligible
+
+
+def test_archived_but_unread_is_unknown_not_clean() -> None:
+    a = assess_candidate("VBL.NS", exchange=_exchange(), news_coverage=_read(extraction_ran=False))
+    dim = _dim(a, NEWS)
+    assert dim.state == UNKNOWN and "nothing read them" in dim.detail
+
+
+def test_news_not_attempted_is_not_covered_rather_than_unknown() -> None:
+    """`UNKNOWN` means we should know and do not. `NOT_COVERED` means this version never claimed to
+    look. Collapsing them is how a gap becomes a warning and a warning becomes noise."""
+    a = assess_candidate("VBL.NS", exchange=_exchange())
+    assert _dim(a, NEWS).state == NOT_COVERED
+
+
+def test_no_item_matched_is_a_pass_that_says_how_many_were_read() -> None:
+    a = assess_candidate("VBL.NS", exchange=_exchange(), news_coverage=_read(items_for_name=0))
+    dim = _dim(a, NEWS)
+    assert dim.state == PASS and "200 snippet(s)" in dim.detail

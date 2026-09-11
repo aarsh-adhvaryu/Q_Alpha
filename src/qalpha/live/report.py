@@ -253,6 +253,28 @@ def _brief_age(today: date, stamp: Path = BRIEF_STAMP) -> int | None:
         return None
 
 
+def _brief_source(stamp: Path = BRIEF_STAMP) -> str:
+    """Who wrote the brief and from what — or ``""`` when the stamp does not say.
+
+    "The market, in words" means something different depending on where the words came from: a
+    model that searched the web, or a model on this desk reading twenty archived headlines. The
+    page has to say which, and an unstamped brief gets no claim made for it.
+    """
+    try:
+        data = json.loads(stamp.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    model = str(data.get("model", "")).strip()
+    source = str(data.get("source", "")).strip()
+    if source == "local-rss":
+        count = data.get("headlines")
+        many = f" from {count} archived headline{'s' if count != 1 else ''}" if count else ""
+        return f"{model}{many} · local-rss"
+    if source:
+        return f"{model} · {source}"
+    return model
+
+
 def _markdownish(text: str) -> str:
     """Just enough markdown for this one document: **bold**, numbered items, blank-line paragraphs.
 
@@ -290,10 +312,12 @@ def _brief_panel(today: date, *, path: Path = BRIEF_MD, stamp: Path = BRIEF_STAM
     if not path.exists():
         return (
             ui.section("The market, in words")
-            + '<div class="qa-empty">No brief on file. It needs a cloud key: it is built on web '
-            "search, and a model on this machine has nothing to search. Its absence means nobody "
-            "wrote one — not that the day was quiet.</div>"
+            + '<div class="qa-empty">No brief on file. It needs a reader and something to read: '
+            "a local model over the headlines the evening archives, or a cloud key for the "
+            "web-searched one. Its absence means nobody wrote one — not that the day was quiet."
+            "</div>"
         )
+    written_by = _brief_source(stamp)
     age = _brief_age(today, stamp)
     if age is None:
         note = "undated — it does not say when it was written, so it is not being dated for it"
@@ -306,11 +330,20 @@ def _brief_panel(today: date, *, path: Path = BRIEF_MD, stamp: Path = BRIEF_STAM
     body = path.read_text(encoding="utf-8")
     # The machine-readable SIGNAL line is for the twin's AI arm, not for a person to act on.
     body = re.sub(r"^SIGNAL:.*$", "", body, flags=re.M)
+    local = "local-rss" in written_by
+    provenance = (
+        "<b>Written on this machine, from headlines this run archived.</b> Every claim in it cites "
+        "an item id you can open under <code>data/evidence/news/</code>, and it was rejected rather "
+        "than published if it cited something it was not given, cited nothing, or read as a "
+        "forecast. "
+        if local
+        else "<b>This is a language model&#8217;s narrative, and the &#8220;likely reaction&#8221; "
+        "in it is its own non-validated opinion.</b> "
+    )
     return (
-        ui.section("The market, in words", note=note)
+        ui.section("The market, in words", note=f"{note} · {written_by}" if written_by else note)
         + f'<div class="qa-note">{_markdownish(body)}</div>'
-        + '<p class="qa-foot"><b>This is a language model&#8217;s narrative, and the &#8220;likely '
-        "reaction&#8221; in it is its own non-validated opinion.</b> Nothing on this page acts on "
+        + f'<p class="qa-foot">{provenance}Nothing on this page acts on '
         "it. The basket below comes from the deterministic screen; the AI layer may only ever "
         "remove a name from that screen, never add one, and never size anything.</p>"
     )
@@ -396,6 +429,11 @@ def _desk_row(view: NameView) -> ui.Row:
                 tone=("bad" if view.concerns else ("good" if view.filings_read else "warn")),
                 title="\n".join(view.concerns) if view.concerns else None,
             ),
+            ui.Cell(
+                view.news_state,
+                tone=("bad" if view.news_concerns else ("good" if view.news_read else "warn")),
+                title="\n".join(view.news_concerns) if view.news_concerns else None,
+            ),
         ]
     )
 
@@ -419,6 +457,7 @@ def _desk_panel(desk: Desk | None) -> str:
         ui.Column("Trend"),
         ui.Column("Exchange"),
         ui.Column("Filings"),
+        ui.Column("News"),
     ]
     ordered = sorted(desk.rows, key=lambda r: (not r.attention, not r.held, r.ticker))
     age = desk.exchange_file_age
@@ -431,6 +470,7 @@ def _desk_panel(desk: Desk | None) -> str:
         columns, [_desk_row(r) for r in ordered], empty="No names in scope."
     )
     body += f'<p class="qa-foot">{escape(desk.coverage_line())}</p>'
+    body += f'<p class="qa-foot">{escape(desk.news_line())}</p>'
     if desk.notes:
         body += (
             '<div class="qa-note">' + "".join(f"<p>{escape(n)}</p>" for n in desk.notes) + "</div>"
@@ -444,6 +484,10 @@ def _desk_panel(desk: Desk | None) -> str:
         "<b>UNKNOWN</b> on Exchange means the surveillance file could not be read for this name; "
         "it is not CLEAR. <b>filings not read</b> means nobody opened this company&#8217;s "
         "announcements, so the absence of a concern below is not evidence of one&#8217;s absence. "
+        "<b>News</b> counts high-materiality headline items over the last week, labelled by a "
+        "model from archived snippets — <b>not a sentiment score</b>, and <b>news not read</b> is "
+        "a gap rather than a quiet week. They are <b>reports, not events</b>: six outlets carrying "
+        "one court order count six. A headline can flag a name and can never remove one. "
         "<b>watching</b> in the quantity column means the row is here so the market is visible "
         "when the gate is shut &#8212; it is neither held nor proposed, and it is not a suggestion "
         "to buy. The only thing this system ever proposes is in <i>Today&#8217;s basket</i> below."
@@ -456,15 +500,21 @@ def _concerns_panel(desk: Desk | None) -> str:
     """What the filings actually said, quoted, for the names where anything was found."""
     if desk is None:
         return ""
-    flagged = [r for r in desk.rows if r.concerns]
+    flagged = [r for r in desk.rows if r.concerns or r.news_concerns]
     if not flagged:
         return ""
     items = []
     for view in flagged:
         lines = "".join(f"<li>{escape(c)}</li>" for c in view.concerns)
+        lines += "".join(
+            f"<li>{escape(c)} <i>(headline, not a filing)</i></li>" for c in view.news_concerns
+        )
         items.append(f"<p><b>{escape(view.ticker.removesuffix('.NS'))}</b></p><ul>{lines}</ul>")
     return (
-        ui.section("What the filings said", note="verified quotes, current extractor only")
+        ui.section(
+            "What the filings and the headlines said",
+            note="verified quotes, current versions only",
+        )
         + '<div class="qa-note">'
         + "".join(items)
         + "</div>"

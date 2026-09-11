@@ -10,11 +10,15 @@ passage it returns is checked against the archived bytes by :func:`~qalpha.live.
 verify_passage` before it counts. That verifier is why a smaller model is tolerable here: invention
 is caught mechanically rather than trusted away. **This job goes local.**
 
-**The brief** (:mod:`qalpha.live.ai_brief`) is built on Anthropic's *server-side web search*. A model
-running on this desktop has no crawler and no search index, so there is nothing for a local backend
-to be a drop-in for. Pointing the brief at a local model would produce a fluent page of remembered
-training data with today's date on it — the single worst failure this repo has, dressed as the
-feature. **This job does not go local**; it runs with a key or it says it did not run.
+**The brief** (:mod:`qalpha.live.ai_brief`) needs *retrieval*, and that was the whole objection: a
+model on this desktop has no crawler, and one asked what happened today with nothing to read answers
+from its training data — a fluent page with today's date on it, which is the single worst failure
+this repo could ship, dressed as the feature.
+
+:mod:`qalpha.live.news` now archives the day's headlines before anything reads them, so the local
+brief is written **from bytes on disk**, cites an item id for every claim, and is rejected rather
+than published if it cites one it was not given. **With no headlines it does not run** — the guard
+survives, moved from "no local model" to "nothing to read", which is where it belonged.
 
 ### What the local path wants
 

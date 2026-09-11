@@ -148,13 +148,13 @@ def test_a_verified_filing_concern_is_quoted_in_its_own_panel() -> None:
             concerns={"VBL": [{"type": "litigation", "summary": "SEBI show-cause notice"}]},
         )
     )
-    assert "What the filings said" in page
+    assert "What the filings and the headlines said" in page
     assert "SEBI show-cause notice" in page
 
 
 def test_the_concerns_panel_is_absent_when_nothing_was_found() -> None:
     """An empty 'concerns' heading would imply somebody checked and found nothing."""
-    assert "What the filings said" not in _page(_desk(filings_read=["VBL"]))
+    assert "What the filings and the headlines said" not in _page(_desk(filings_read=["VBL"]))
 
 
 def test_names_needing_attention_sort_above_quiet_ones() -> None:

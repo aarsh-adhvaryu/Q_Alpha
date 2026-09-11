@@ -194,6 +194,36 @@ def verify_passage(passage: str, document_text: str) -> bool:
     return normalise(passage) in normalise(document_text)
 
 
+#: What ``high``, ``medium`` and ``low`` mean, in one string.
+#:
+#: **Shared with the news reader**, which asks the same question of a headline. It is one constant
+#: rather than two prompts that agree today: EX-1 rated routine results ``high`` because the
+#: instruction never said material *to whom*, and 77 of 193 events came back high — good news
+#: rejecting candidates. A second copy of this text is a second chance to make that mistake in one
+#: place and not the other.
+MATERIALITY_RUBRIC = (
+    "WHAT 'MATERIALITY' MEANS HERE — read this before rating anything:\n"
+    "Materiality is **how much this should worry someone who already owns the shares**. It is "
+    "NOT how newsworthy, how large, or how interesting the item is.\n\n"
+    "  high   — a reason to stop and think before buying more: a regulator or court acting "
+    "against the company or its officers, insolvency, an auditor resigning or qualifying, a "
+    "default or downgrade, promoter pledges rising sharply, a large related-party transaction, "
+    "a plant or business shut down, guidance withdrawn or cut sharply, a restatement.\n"
+    "  medium — worth knowing, not alarming on its own: a change of key management, a "
+    "moderate acquisition or divestment, a fundraise, an ordinary rating affirmation.\n"
+    "  low    — routine disclosure.\n\n"
+    "THESE ARE NOT MATERIAL, whatever the numbers involved. Rate them 'low' or omit them:\n"
+    "  - quarterly or annual results, however good or bad the growth\n"
+    "  - revenue, EBITDA, margin or profit figures on their own\n"
+    "  - dividends, bonuses, splits and record dates\n"
+    "  - analyst or investor meet intimations, presentations, transcripts\n"
+    "  - trading-window closures, newspaper publications, compliance certificates\n"
+    "  - a contract win, expansion or investment, however large\n\n"
+    "**Good news is never high materiality.** A company growing 10% is not a reason to worry "
+    "about owning it. If the only thing it says is that the business did well, it is 'low'.\n\n"
+)
+
+
 def build_prompt(chunks: Sequence[DocumentChunk]) -> str:
     """The extraction prompt. It asks for description and forbids recommendation."""
     header = (
@@ -201,27 +231,8 @@ def build_prompt(chunks: Sequence[DocumentChunk]) -> str:
         "Extract material events. DO NOT recommend, rank, rate, or advise. Do not say whether a "
         "stock should be bought, held or sold — that decision is made elsewhere by rules, and an "
         "opinion here would be discarded.\n\n"
-        "WHAT 'MATERIALITY' MEANS HERE — read this before rating anything:\n"
-        "Materiality is **how much this should worry someone who already owns the shares**. It is "
-        "NOT how newsworthy, how large, or how interesting the item is.\n\n"
-        "  high   — a reason to stop and think before buying more: a regulator or court acting "
-        "against the company or its officers, insolvency, an auditor resigning or qualifying, a "
-        "default or downgrade, promoter pledges rising sharply, a large related-party transaction, "
-        "a plant or business shut down, guidance withdrawn or cut sharply, a restatement.\n"
-        "  medium — worth knowing, not alarming on its own: a change of key management, a "
-        "moderate acquisition or divestment, a fundraise, an ordinary rating affirmation.\n"
-        "  low    — routine disclosure.\n\n"
-        "THESE ARE NOT MATERIAL, whatever the numbers involved. Rate them 'low' or omit them:\n"
-        "  - quarterly or annual results, however good or bad the growth\n"
-        "  - revenue, EBITDA, margin or profit figures on their own\n"
-        "  - dividends, bonuses, splits and record dates\n"
-        "  - analyst or investor meet intimations, presentations, transcripts\n"
-        "  - trading-window closures, newspaper publications, compliance certificates\n"
-        "  - a contract win, expansion or investment, however large\n\n"
-        "**Good news is never high materiality.** A company growing 10% is not a reason to worry "
-        "about owning it. If the only thing a filing says is that the business did well, it is "
-        "'low'.\n\n"
-        "For every material event, emit one line in EXACTLY this format:\n\n"
+        + MATERIALITY_RUBRIC
+        + "For every material event, emit one line in EXACTLY this format:\n\n"
         "EVENT: ticker=<SYMBOL>; type=<TYPE>; date=<YYYY-MM-DD or ->; materiality=<high|medium|low>; "
         'passage="<VERBATIM QUOTE FROM THE DOCUMENT>"; summary=<one clause>; uncertainty=<one clause or ->\n\n'
         f"TYPE must be one of: {', '.join(EVENT_TYPES)}\n\n"
@@ -246,9 +257,14 @@ def build_prompt(chunks: Sequence[DocumentChunk]) -> str:
     return header + "\n".join(body)
 
 
-def _parse_fields(line: str) -> dict[str, str]:
-    """Split one EVENT line. ``passage="..."`` is read first so its semicolons survive."""
-    rest = line.strip()[len(_EVENT_PREFIX) :]
+def parse_fields(line: str, *, prefix: str = _EVENT_PREFIX) -> dict[str, str]:
+    """Split one tagged line. ``passage="..."`` is read first so its semicolons survive.
+
+    ``prefix`` is the tag being stripped, so the news reader splits its own lines with this parser
+    rather than a second one that would drift from it — the quoting rule below is the subtle part,
+    and it is worth having exactly once.
+    """
+    rest = line.strip()[len(prefix) :]
     fields: dict[str, str] = {}
     quoted = re.search(r'passage\s*=\s*"(.*?)"\s*(?:;|$)', rest, flags=re.DOTALL)
     if quoted:
@@ -290,7 +306,7 @@ def parse_events(
         stripped = line.strip()
         if not stripped.startswith(_EVENT_PREFIX):
             continue
-        f = _parse_fields(stripped)
+        f = parse_fields(stripped)
         ticker = f.get("ticker", "").upper().removesuffix(".NS")
         docs = by_ticker.get(ticker)
         if not docs:

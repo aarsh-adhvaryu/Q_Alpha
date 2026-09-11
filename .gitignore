@@ -77,6 +77,15 @@ data/evidence/announcements/**/*.pdf
 !data/evidence/announcements/**/*.txt.gz
 data/evidence/announcements/**/index/*.json
 data/evidence/reg_ind/*.csv
+# A day's raw feed XML is large and mostly about companies nobody here holds. The SNIPPETS
+# are what a later reader needs to check a quote, and those are `items.jsonl` — small, and
+# tracked, like the filings' extracted text. The provenance sidecars are tracked below.
+data/evidence/news/**/*.xml
+# And the day's parsed snippets, for the same reason the PDFs are ignored: it is a corpus,
+# ~500 KB a day, and most of it is about companies nobody here holds. What has to be durable
+# is the EVIDENCE — `news_events.jsonl` carries each verified quote with its link, its source
+# and the sha256 of the feed it came from, and the provenance sidecars prove the fetch.
+data/evidence/news/**/items.jsonl
 # ...except the documents the test-suite reads back, which must ship with the repo:
 !data/evidence/reg_ind/REG1_IND270826.csv
 !data/evidence/reg_ind/REG1_IND040926.csv

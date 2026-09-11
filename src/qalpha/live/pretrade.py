@@ -37,6 +37,7 @@ from qalpha.live.evidence import (
     Assessment,
 )
 from qalpha.live.extraction import EXTRACTION_VERSION, ExtractedEvent
+from qalpha.live.news import NEWS_VERSION
 
 #: Worst wins. ``UNKNOWN`` outranks ``WATCH`` on purpose: a known warning can be read and weighed,
 #: an unmeasured dimension cannot, and the report must lead with the gap rather than the finding.
@@ -61,6 +62,7 @@ NOT_COVERED_DIMENSIONS: tuple[str, ...] = (
 
 EXCHANGE_INDICATORS = "exchange regulatory indicators"
 ANNOUNCEMENTS = "corporate announcements"
+NEWS = "news snippets"
 
 
 def worst(states: Sequence[str]) -> str:
@@ -79,6 +81,13 @@ class Dimension:
     state: str
     detail: str = ""
     sources: tuple[str, ...] = ()
+    #: Does this dimension's state decide the candidate's? **Reported either way.**
+    #:
+    #: `NEWS-1` reads an RSS feed that can die without telling anyone — Moneycontrol's answers 200
+    #: with items from 2024. An UNKNOWN from a dead feed must not empty a basket, because
+    #: `HUMAN_REQUIRED` is for the account or the evidence spine, not for a newspaper being down.
+    #: A news WATCH still governs: something was read and it was bad.
+    governs: bool = True
 
     def render(self) -> str:
         line = f"  {self.state:<12} {self.name}"
@@ -96,6 +105,9 @@ class PreTradeAssessment:
     dimensions: tuple[Dimension, ...] = ()
     #: Verified events that raised the flag. Never the reason for a ``BLOCK`` — see the module note.
     flagged_events: tuple[ExtractedEvent, ...] = ()
+    #: Verified headline items that raised the flag. Weaker evidence than a filing, and weaker
+    #: still than the exchange: a snippet can warn and can do nothing else.
+    flagged_news: tuple[object, ...] = ()
     #: Events the model returned whose quote was **not** in the document. Reported, never acted on.
     unverified_events: int = 0
     not_covered: tuple[str, ...] = field(default=NOT_COVERED_DIMENSIONS)
@@ -120,6 +132,14 @@ class PreTradeAssessment:
             out.append(f"  flag         {event.event_type} ({event.materiality}) — {event.summary}")
             out.append(f'               "{event.passage[:120]}"')
             out.append(f"               {event.doc_url} · sha256 {event.doc_sha256[:16]}…")
+        for item in self.flagged_news:
+            out.append(
+                f"  news         {getattr(item, 'event_type', 'other')} "
+                f"({getattr(item, 'materiality', '?')}, {getattr(item, 'stance', '?')}) — "
+                f"{getattr(item, 'summary', '')}"
+            )
+            out.append(f'               "{str(getattr(item, "passage", ""))[:120]}"')
+            out.append(f"               {getattr(item, 'link', '')}")
         if self.unverified_events:
             out.append(
                 f"  discarded    {self.unverified_events} event(s) whose quote was not in the "
@@ -208,6 +228,71 @@ def _announcement_dimension(
     return Dimension(ANNOUNCEMENTS, PASS, detail), ()
 
 
+@dataclass(frozen=True)
+class NewsCoverage:
+    """How much of the day's news was actually read for this name — and whether it could be.
+
+    The same distinction :class:`AnnouncementCoverage` exists for: a feed that failed and a feed
+    that carried nothing are different facts, and only one of them is reassuring.
+    """
+
+    #: Feeds attempted for this name (market feeds plus its own search).
+    feeds_attempted: int = 0
+    #: Of those, how many did not answer, or answered with news months old.
+    feeds_failed: int = 0
+    #: Snippets archived across every feed this run.
+    items_scanned: int = 0
+    #: Of those, how many the alias table mapped to THIS name.
+    items_for_name: int = 0
+    #: Did a model actually read them? Archiving is not reading.
+    extraction_ran: bool = False
+    news_version: str = ""
+
+    @property
+    def attempted(self) -> bool:
+        return self.feeds_attempted > 0
+
+
+def _news_dimension(
+    events: Sequence[object], *, coverage: NewsCoverage
+) -> tuple[Dimension, tuple[object, ...]]:
+    """What the day's headlines said about this name. **A price move is not an event.**
+
+    Only a verified, current-version item that is BOTH high-materiality AND negative reaches
+    ``WATCH``. Everything else is counted and reported: a positive item is not a reason to buy and
+    this object does not answer that question, and a neutral one is not a reason for anything.
+    """
+    if not coverage.attempted:
+        return Dimension(NEWS, NOT_COVERED, "news was not read this run", governs=False), ()
+    if coverage.feeds_failed or not coverage.extraction_ran:
+        why = (
+            f"{coverage.feeds_failed} of {coverage.feeds_attempted} feed(s) unreachable or stale"
+            if coverage.feeds_failed
+            else f"{coverage.items_for_name} item(s) archived, but nothing read them"
+        )
+        return Dimension(NEWS, UNKNOWN, why, governs=False), ()
+    current = [
+        e
+        for e in events
+        if getattr(e, "verified", False) and getattr(e, "news_version", "") == NEWS_VERSION
+    ]
+    flagged = tuple(e for e in current if getattr(e, "flags", False))
+    if flagged:
+        kinds = ", ".join(sorted({str(getattr(e, "event_type", "other")) for e in flagged}))
+        return (
+            Dimension(NEWS, WATCH, f"{len(flagged)} high-materiality negative item(s): {kinds}"),
+            flagged,
+        )
+    if coverage.items_for_name == 0:
+        detail = f"no item matched this name in {coverage.items_scanned} snippet(s) read"
+    else:
+        detail = (
+            f"{coverage.items_for_name} item(s) read, {len(current)} labelled, "
+            "none high-materiality and negative"
+        )
+    return Dimension(NEWS, PASS, detail), ()
+
+
 def assess_candidate(
     ticker: str,
     *,
@@ -215,6 +300,8 @@ def assess_candidate(
     events: Sequence[ExtractedEvent] = (),
     coverage: AnnouncementCoverage | None = None,
     unverified_events: int = 0,
+    news_events: Sequence[object] = (),
+    news_coverage: NewsCoverage | None = None,
     not_covered: Sequence[str] = NOT_COVERED_DIMENSIONS,
 ) -> PreTradeAssessment:
     """Combine what the exchange publishes with what verified filings say.
@@ -238,8 +325,10 @@ def assess_candidate(
     ann_dim, flagged = _announcement_dimension(
         events, coverage=coverage or AnnouncementCoverage(), unverified=unverified_events
     )
-    dimensions = (exchange_dim, ann_dim)
-    state = worst([d.state for d in dimensions])
+    news_dim, news_flagged = _news_dimension(news_events, coverage=news_coverage or NewsCoverage())
+    dimensions = (exchange_dim, ann_dim, news_dim)
+    # Only the dimensions that GOVERN decide the state; all three are rendered. See `Dimension`.
+    state = worst([d.state for d in dimensions if d.governs])
 
     # The exchange is the only source of a hard exclusion. If anything else ever produced BLOCK,
     # a model's classification would be vetoing a trade — assert rather than trust review.
@@ -253,6 +342,7 @@ def assess_candidate(
         state=state,
         dimensions=dimensions,
         flagged_events=flagged,
+        flagged_news=news_flagged,
         unverified_events=unverified_events,
         not_covered=tuple(not_covered),
     )
@@ -265,6 +355,8 @@ def assess_basket(
     events: Mapping[str, Sequence[ExtractedEvent]] | None = None,
     coverage: Mapping[str, AnnouncementCoverage] | None = None,
     unverified: Mapping[str, int] | None = None,
+    news_events: Mapping[str, Sequence[object]] | None = None,
+    news_coverage: Mapping[str, NewsCoverage] | None = None,
 ) -> dict[str, PreTradeAssessment]:
     """Assess a whole basket, preserving the caller's order so a report reads in basket order."""
     return {
@@ -274,6 +366,8 @@ def assess_basket(
             events=(events or {}).get(t, ()),
             coverage=(coverage or {}).get(t),
             unverified_events=(unverified or {}).get(t, 0),
+            news_events=(news_events or {}).get(t, ()),
+            news_coverage=(news_coverage or {}).get(t),
         )
         for t in tickers
     }
@@ -281,12 +375,12 @@ def assess_basket(
 
 def basket_markdown(assessments: Mapping[str, PreTradeAssessment], *, as_of: date) -> str:
     """The panel. Leads with what is not eligible, because that is the actionable half."""
-    rows = ["| Name | Verdict | Exchange | Announcements |", "|---|---|---|---|"]
+    rows = ["| Name | Verdict | Exchange | Announcements | News |", "|---|---|---|---|---|"]
     for ticker, a in assessments.items():
         by_name = {d.name: d.state for d in a.dimensions}
         rows.append(
             f"| {ticker} | **{a.state}** | {by_name.get(EXCHANGE_INDICATORS, '—')} | "
-            f"{by_name.get(ANNOUNCEMENTS, '—')} |"
+            f"{by_name.get(ANNOUNCEMENTS, '—')} | {by_name.get(NEWS, '—')} |"
         )
     blocked = [t for t, a in assessments.items() if a.blocked]
     human = [t for t, a in assessments.items() if a.needs_human]
