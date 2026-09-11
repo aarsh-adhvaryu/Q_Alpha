@@ -643,7 +643,11 @@ def default_generate(
             # be able to tell that from a filing that simply carried nothing material. Returning
             # ``("", {})`` counted it as a clean call with no events — silence as a clean bill.
             return "", {**usage, "refused": 1}
-        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        # Same defensive read as `ai_brief`. Here the client is typed `Any` so a strict checker
+        # cannot object, which makes this the more dangerous of the two: nothing would have told us.
+        text = "".join(
+            str(getattr(b, "text", "")) for b in resp.content if getattr(b, "type", None) == "text"
+        )
         return text, {
             **usage,
             # The cloud's spelling of the same fact. A cut-off reply is not a reading of the

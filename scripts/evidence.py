@@ -911,22 +911,39 @@ def _spend_note(reader: str) -> str:
 
 
 def _archived_sample(limit: int) -> list[SourceDocument]:
-    """Documents already on disk, oldest ticker first. **Nothing is fetched and nothing is judged.**
+    """Documents already on disk, spread **round-robin across tickers**. Nothing fetched, none judged.
 
     A comparison must read the same bytes twice, so it reads the archive rather than the exchange.
+
+    The spread is the point. Taking the first N in folder order gave 36 of 40 documents from one
+    company, because that company happens to have the deepest archive — which would have measured
+    how two readers handle one issuer's house style and been reported as how they handle the corpus.
+    One document per ticker per pass instead, so a forty-document sample spans every name that has
+    an archive.
     """
     root = Path("data/evidence/announcements")
     if not root.exists():
         return []
-    out: list[SourceDocument] = []
+    by_ticker: dict[str, list[str]] = {}
     for folder in sorted(root.iterdir()):
-        if not folder.is_dir():
-            continue
-        for prov_path in sorted(folder.glob("*.provenance.json")):
-            seq = prov_path.name.removesuffix(".provenance.json")
+        if folder.is_dir():
+            seqs = [
+                p.name.removesuffix(".provenance.json")
+                for p in sorted(folder.glob("*.provenance.json"))
+            ]
+            if seqs:
+                by_ticker[folder.name] = seqs
+    out: list[SourceDocument] = []
+    depth = 0
+    while by_ticker and len(out) < limit:
+        progressed = False
+        for symbol, seqs in list(by_ticker.items()):
+            if depth >= len(seqs):
+                continue
+            progressed = True
             ann = Announcement(
-                symbol=folder.name,
-                seq_id=seq,
+                symbol=symbol,
+                seq_id=seqs[depth],
                 subject="",
                 summary="",
                 disseminated_at=datetime.now(UTC),
@@ -936,7 +953,10 @@ def _archived_sample(limit: int) -> list[SourceDocument]:
             if prov is not None and text:
                 out.append(SourceDocument(announcement=ann, text=text, provenance=prov))
             if len(out) >= limit:
-                return out
+                break
+        if not progressed:
+            break
+        depth += 1
     return out
 
 
@@ -977,9 +997,20 @@ def cmd_compare_readers(
         f"[compare] {len(docs)} archived filing(s), {chars:,} characters, "
         f"{workers} call(s) at a time. Nothing is written."
     )
+    # HYDRATE .env FIRST. `choose_backend` reaches the key through `configured()`, which loads it;
+    # this command does not go through `choose_backend`, so reading os.environ directly saw only
+    # what the shell happened to export — and told a user with the key in .env that it was unset.
+    # That is the two-surfaces-one-fact failure `credentials.load_env` was written to end.
+    from qalpha.live.credentials import load_env
+
+    load_env()
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not key:
-        print("[compare] ANTHROPIC_API_KEY is unset, so no reader can be run.", file=sys.stderr)
+        print(
+            "[compare] ANTHROPIC_API_KEY is set in neither the environment nor .env, so no reader "
+            "can be run.",
+            file=sys.stderr,
+        )
         return 2
 
     from qalpha.live.extraction import default_generate
