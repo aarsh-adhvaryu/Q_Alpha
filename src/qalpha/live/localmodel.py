@@ -99,6 +99,10 @@ class Backend:
     #: The context this backend was told it has, in tokens. Zero for the cloud, whose window is not
     #: ours to state.
     context_tokens: int = 0
+    #: How many calls this backend can usefully have in flight at once. One for a local model —
+    #: a single GPU holding a single model serialises them however many you send — and more for
+    #: the cloud, where concurrency is the whole difference between an evening and a season.
+    workers: int = 1
 
     @property
     def available(self) -> bool:
@@ -282,7 +286,7 @@ def local_generate(url: str, *, max_tokens: int = 3000, timeout: float | None = 
     return generate
 
 
-def choose_backend(*, prefer_local: bool | None = None) -> Backend:
+def choose_backend(*, prefer_local: bool | None = None, workers: int = 1) -> Backend:
     """Decide what reads the filings, and say so.
 
     Preference order, and the reason for it: a configured local model wins, because the point of
@@ -341,14 +345,17 @@ def choose_backend(*, prefer_local: bool | None = None) -> Backend:
         )
 
     if key:
-        from qalpha.live.extraction import DEFAULT_MODEL, default_generate
+        from qalpha.live.extraction import corpus_reader, default_generate
 
+        reader = corpus_reader()
         return Backend(
             default_generate(key),
-            DEFAULT_MODEL,
+            reader,
             "anthropic",
-            f"Filings read by {DEFAULT_MODEL} over the API. Document text left this machine.",
+            f"Filings read by {reader} over the API, {workers} call(s) at a time. "
+            "Document text left this machine.",
             batch_chars=PROMPT_CHAR_BUDGET,
+            workers=workers,
         )
 
     return Backend(

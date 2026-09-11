@@ -33,6 +33,7 @@ from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.live import atomic
 from qalpha.live.console import use_utf8
+from qalpha.live.extraction import EXTRACTION_VERSION
 from qalpha.live.go_gate import Evidence, build_gate
 from qalpha.live.policy import ALL_POLICIES, Decision, decisions_markdown
 from qalpha.live.runner import Market, step
@@ -219,7 +220,9 @@ def _ew_fund_series() -> pd.Series | None:
 #: What produced the verdicts, recorded on every row. It names a RULE, not a chat model, because
 #: under AI-V2 nothing is asked — the reading happened earlier, in the evidence layers, and this is
 #: policy over what they wrote down.
-_VERDICT_SOURCE = "rule:AI-V2 over verified EX-2 filings (news demoted to leads)"
+#: Spelled from the constant so a version bump cannot leave a user-visible label naming the
+#: version before it. This line read "EX-2" by hand until 2026-09-11.
+_VERDICT_SOURCE = f"rule:AI-V2 over verified {EXTRACTION_VERSION} filings (news demoted to leads)"
 
 
 def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:

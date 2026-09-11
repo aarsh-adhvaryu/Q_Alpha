@@ -146,13 +146,14 @@ def test_the_brief_never_reads_as_a_signal() -> None:
 def _cov_row(tmp_path: Path, **over: object) -> Path:
     import json
 
-    from qalpha.live.extraction import EXTRACTION_VERSION
+    from qalpha.live.extraction import EXTRACTION_VERSION, corpus_reader
 
     row: dict[str, object] = {
         "as_of": "2026-09-07",
         "ticker": "VBL.NS",
         "complete": True,
         "extraction_version": EXTRACTION_VERSION,
+        "reader": corpus_reader(),
     }
     row.update(over)
     p = tmp_path / "coverage.jsonl"

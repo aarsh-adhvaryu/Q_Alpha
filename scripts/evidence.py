@@ -42,6 +42,7 @@ from qalpha.live.announcements import (
     documents_for,
     fetch_and_archive_index,
     fetch_document,
+    load_document,
     since,
 )
 from qalpha.live.console import use_utf8
@@ -63,8 +64,10 @@ from qalpha.live.extraction import (
     PROMPT_CHAR_BUDGET,
     ExtractedEvent,
     GenerateFn,
+    corpus_reader,
     event_rows,
     extract,
+    reader_matches,
 )
 from qalpha.live.localmodel import choose_backend
 from qalpha.live.pipeline import (
@@ -109,6 +112,17 @@ MAX_FETCH_PER_NAME = 200
 #: Documents sent to the MODEL per name per run — the cap that actually costs tokens and minutes.
 #: Unread documents carry over, so a 365-day bootstrap closes over several runs rather than never.
 MAX_EXTRACT_PER_RUN = 25
+#: The same cap during a backfill. High enough to finish any real window in one pass, and a number
+#: rather than ``None`` so a pathological name still ends.
+MAX_EXTRACT_BACKFILL = 2_000
+#: Concurrent calls a backfill makes by default. The reads are independent and the sequential loop
+#: spent nearly all its wall clock waiting on the network. Eight is deliberately unambitious: it is
+#: well inside a starting rate limit, and the SDK backs off and retries a 429 rather than dropping
+#: the batch.
+BACKFILL_WORKERS = 8
+#: A backfill stops itself after this long. Four hours is longer than the whole corpus should take
+#: and short enough that a run left going wrong does not run until morning.
+BACKFILL_BUDGET_SECONDS = 14_400
 
 
 def _fetch_one_reg_ind(day: date) -> tuple[dict[str, dict[str, str]], Provenance | None]:
@@ -308,12 +322,16 @@ def _already_extracted() -> set[str]:
             row = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if row.get("extraction_version") == EXTRACTION_VERSION and "events_recorded" in row:
+        if (
+            row.get("extraction_version") == EXTRACTION_VERSION
+            and reader_matches(row.get("reader"))
+            and "events_recorded" in row
+        ):
             out.add(str(row.get("sha256", "")))
     return out
 
 
-def _mark_extracted(hashes: object, *, events_recorded: int) -> None:
+def _mark_extracted(hashes: object, *, events_recorded: int, reader: str) -> None:
     """Record that these documents were read **and that their findings reached the log**.
 
     Call this LAST — after the events and the coverage row are on disk. The receipt is written after
@@ -325,13 +343,23 @@ def _mark_extracted(hashes: object, *, events_recorded: int) -> None:
     ``events_recorded`` is the count for this batch, and **zero is a real answer** — a filing that
     genuinely says nothing a shareholder need worry about is a no-event receipt, which is different
     from a document nobody read.
+
+    ``reader`` is **the model that actually read it**, passed in from the backend that ran, never
+    :func:`corpus_reader`. Those two are the same thing only when the configured corpus reader is
+    the one that ran, and the whole point of the field is to be able to tell when they are not: a
+    row stamped with the reader we *meant* to use would be the labelling defect this repo keeps
+    finding, written by the very mechanism built to prevent it.
     """
     rows = [
         {
             "sha256": h,
             "extraction_version": EXTRACTION_VERSION,
+            # WHO READ IT, not just under which instructions. A receipt that names only the version
+            # would let a document read by the local 8B satisfy a corpus defined as one reader's
+            # work — the mixture EX-3 exists to make impossible.
+            "reader": reader,
             "events_recorded": events_recorded,
-            "_key": f"{EXTRACTION_VERSION}:{h}",
+            "_key": f"{EXTRACTION_VERSION}:{reader}:{h}",
         }
         for h in hashes
     ]
@@ -343,7 +371,9 @@ def _mark_extracted(hashes: object, *, events_recorded: int) -> None:
         print(f"[evidence] WARNING: extraction ledger not updated ({exc})", file=sys.stderr)
 
 
-def _record_coverage(as_of: date, ticker: str, cov: AnnouncementCoverage, window_days: int) -> None:
+def _record_coverage(
+    as_of: date, ticker: str, cov: AnnouncementCoverage, window_days: int, reader: str
+) -> None:
     """Write one name's coverage row the moment that name is finished.
 
     This was a single bulk write after the whole loop, which meant a run that did not reach the end
@@ -355,6 +385,10 @@ def _record_coverage(as_of: date, ticker: str, cov: AnnouncementCoverage, window
     ``_append_jsonl`` supersedes by revision rather than replacing, so a row written here can be
     corrected by a later run and never lost — including the incomplete rows a killed run leaves,
     which is what ``_seen_before`` needs in order not to burn a name's 365-day bootstrap.
+
+    ``reader`` is the model that actually ran, and is empty when none did. Never
+    :func:`corpus_reader`: stamping the reader we intended would make a local read look like a
+    corpus read, which is the one thing the field exists to catch.
     """
     try:
         _append_jsonl(
@@ -372,6 +406,8 @@ def _record_coverage(as_of: date, ticker: str, cov: AnnouncementCoverage, window
                     # ten-day look from a year's, and both would print the same word.
                     "window_days": window_days,
                     "extraction_version": EXTRACTION_VERSION,
+                    #: Which model produced this verdict. A reader is part of what a reading IS.
+                    "reader": reader,
                     "_key": f"{as_of.isoformat()}:{ticker}",
                 }
             ],
@@ -410,7 +446,11 @@ def _recall_events(hashes: set[str], path: Path = EVENT_LOG) -> list[ExtractedEv
             continue
         if row.get("kind") != "event" or str(row.get("doc_sha256", "")) not in hashes:
             continue
-        if row.get("extraction_version") != EXTRACTION_VERSION or not row.get("verified"):
+        if (
+            row.get("extraction_version") != EXTRACTION_VERSION
+            or not reader_matches(row.get("model"))
+            or not row.get("verified")
+        ):
             continue
         try:
             out.append(
@@ -481,6 +521,10 @@ def _seen_before(ticker: str) -> bool:
             row.get("ticker") == ticker
             and row.get("complete")
             and row.get("extraction_version") == EXTRACTION_VERSION
+            # AND BY THE CORPUS READER. Without this a name fully read by yesterday's local model
+            # would count as seen, the 365-day bootstrap would be skipped, and the corpus would
+            # quietly become two readers' work wearing one label.
+            and reader_matches(row.get("reader"))
         ):
             return True
     return False
@@ -498,8 +542,16 @@ def _cover_name(
     generate: GenerateFn | None,
     model: str,
     batch_chars: int = PROMPT_CHAR_BUDGET,
+    max_extract: int = MAX_EXTRACT_PER_RUN,
+    workers: int = 1,
 ) -> tuple[AnnouncementCoverage, list[ExtractedEvent], int]:
-    """Fetch, archive, read and extract one name. Returns ``(coverage, events, unverified)``."""
+    """Fetch, archive, read and extract one name. Returns ``(coverage, events, unverified)``.
+
+    ``max_extract`` and ``workers`` are the two dials the backfill turns. The nightly run keeps the
+    defaults — 25 documents, one call at a time — because it is metered against a local GPU and a
+    fifteen-minute window. The backfill lifts both because it is a different job: read everything
+    once, against a reader that can take the load.
+    """
     anns, index_prov = fetch_and_archive_index(ticker, as_of)
     if anns is None:
         print(f"  {ticker:<16} index UNREACHABLE — dimension reads UNKNOWN")
@@ -534,12 +586,12 @@ def _cover_name(
     # across capped runs").
     already = [d for d in docs if d.provenance.sha256 in done]
     fresh = [d for d in docs if d.provenance.sha256 not in done]
-    if len(fresh) > MAX_EXTRACT_PER_RUN:
+    if len(fresh) > max_extract:
         print(
             f"  {ticker:<16} {len(fresh)} unread of {len(in_window)} filed — extracting "
-            f"{MAX_EXTRACT_PER_RUN} this run, the rest resume tomorrow"
+            f"{max_extract} this run, the rest resume tomorrow"
         )
-        fresh = fresh[:MAX_EXTRACT_PER_RUN]
+        fresh = fresh[:max_extract]
     # WHAT THE CACHE ALREADY KNOWS. Without this the findings of a cached document never reach the
     # assessment, and a filing that produced WATCH on Monday produces PASS on Tuesday.
     recalled = _recall_events({d.provenance.sha256 for d in already})
@@ -561,7 +613,16 @@ def _cover_name(
             generate=generate,
             model=model,
             batch_chars=batch_chars,
+            workers=workers,
         )
+        _TOKENS["input"] += usage.get("input", 0)
+        _TOKENS["output"] += usage.get("output", 0)
+        _TOKENS["calls"] += usage.get("calls", 0)
+        if usage.get("refused_batches"):
+            print(
+                f"  {ticker:<16} {usage['refused_batches']} batch(es) DECLINED by the model — "
+                "those documents are unread, not clean"
+            )
         extraction_ran = usage.get("failed_batches", 0) == 0
         events, unverified = found, discarded
         if not extraction_ran:
@@ -576,7 +637,11 @@ def _cover_name(
         # did not land. An interruption here can lose a receipt, which costs one re-read tomorrow.
         # It can no longer lose the evidence while keeping the receipt, which cost 199 documents.
         elif _persist_events(found, as_of):
-            _mark_extracted([d.provenance.sha256 for d in docs_to_read], events_recorded=len(found))
+            _mark_extracted(
+                [d.provenance.sha256 for d in docs_to_read],
+                events_recorded=len(found),
+                reader=model,
+            )
         else:
             extraction_ran = False  # the findings are not on file, so this name is NOT covered
     elif generate is None:
@@ -728,7 +793,7 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
         # loop, so the 2026-09-08 timeout produced 110 events and ZERO coverage rows — every name
         # still reading "Filings NOT read" on the buy screen while its findings sat in events.jsonl.
         # A row written here can only be superseded by a later revision, never lost.
-        _record_coverage(as_of, ticker, cov, windows[ticker])
+        _record_coverage(as_of, ticker, cov, windows[ticker], backend.model if generate else "")
 
     # Events are already on disk — ``_cover_name`` persists each name's findings before it writes
     # that name's receipt. This used to be the single bulk write for the whole run, which is what
@@ -803,15 +868,296 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
     return 0
 
 
+#: Tokens billed across this process, for the one figure a backfill is asked about afterwards.
+_TOKENS: dict[str, int] = {"input": 0, "output": 0, "calls": 0}
+
+#: List prices in USD per million tokens, for an *estimate* printed at the end of a backfill.
+#: Copied from the published price list on 2026-09-11 and never fetched at runtime, so it is a
+#: figure to sanity-check the bill against, not the bill. A reader missing from this table prints
+#: its token counts and no money.
+_LIST_PRICES: dict[str, tuple[float, float]] = {
+    "claude-haiku-4-5": (1.00, 5.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    "claude-opus-5": (5.00, 25.00),
+}
+
+
+def _spend_note(reader: str) -> str:
+    """What this run cost, labelled as what it is: metered tokens, estimated money."""
+    price = _LIST_PRICES.get(reader)
+    tokens = (
+        f"{_TOKENS['calls']:,} call(s) · {_TOKENS['input']:,} input + "
+        f"{_TOKENS['output']:,} output tokens billed"
+    )
+    if price is None:
+        return f"{tokens}. No list price on file for {reader}, so no cost is estimated here."
+    dollars = _TOKENS["input"] / 1e6 * price[0] + _TOKENS["output"] / 1e6 * price[1]
+    return (
+        f"{tokens}. At {reader}'s list price that is about ${dollars:,.2f} — an ESTIMATE from a "
+        "hard-coded price table, not a figure read from your invoice."
+    )
+
+
+def _archived_sample(limit: int) -> list[SourceDocument]:
+    """Documents already on disk, oldest ticker first. **Nothing is fetched and nothing is judged.**
+
+    A comparison must read the same bytes twice, so it reads the archive rather than the exchange.
+    """
+    root = Path("data/evidence/announcements")
+    if not root.exists():
+        return []
+    out: list[SourceDocument] = []
+    for folder in sorted(root.iterdir()):
+        if not folder.is_dir():
+            continue
+        for prov_path in sorted(folder.glob("*.provenance.json")):
+            seq = prov_path.name.removesuffix(".provenance.json")
+            ann = Announcement(
+                symbol=folder.name,
+                seq_id=seq,
+                subject="",
+                summary="",
+                disseminated_at=datetime.now(UTC),
+                attachment_url="",
+            )
+            text, prov = load_document(ann)
+            if prov is not None and text:
+                out.append(SourceDocument(announcement=ann, text=text, provenance=prov))
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def cmd_compare_readers(
+    as_of: date,
+    *,
+    readers: Sequence[str],
+    sample: int,
+    workers: int,
+) -> int:
+    """Read the SAME archived filings with each named model and report what differed.
+
+    **This exists because "use the better model" is not a decision anybody here can make by
+    assertion.** The two candidates differ in price by 2x and in nothing else this repo has
+    measured, and the only honest way to choose is to give both the same documents and look.
+
+    What is reported, and why each one:
+
+    * **wall clock and tokens** — the question was partly "which is faster", and a reader that is
+      twice the price and the same speed is a different trade from one that is half the time.
+    * **events found** — more is not better. A reader that returns twice as many `high` events is
+      either seeing more or repeating EX-1's mistake of calling good news material.
+    * **quotes discarded** — a quote that is not in the document is the one unambiguous error either
+      model can make, and it is checked mechanically against the archived bytes.
+    * **agreement** — where both read the same document, did they find the same kinds of thing? A
+      low number here is the finding, not a failure: it says the choice of reader changes the corpus,
+      which is precisely the claim EX-3's label is built around.
+
+    It writes nothing. No coverage row, no receipt, no event reaches the log — a comparison is not a
+    reading of the corpus, and a run under one of these readers must not look like one.
+    """
+    docs = _archived_sample(sample)
+    if not docs:
+        print("[compare] no archived documents to read.", file=sys.stderr)
+        return 2
+    chars = sum(len(d.text) for d in docs)
+    print(
+        f"[compare] {len(docs)} archived filing(s), {chars:,} characters, "
+        f"{workers} call(s) at a time. Nothing is written."
+    )
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not key:
+        print("[compare] ANTHROPIC_API_KEY is unset, so no reader can be run.", file=sys.stderr)
+        return 2
+
+    from qalpha.live.extraction import default_generate
+
+    generate = default_generate(key)
+    findings: dict[str, set[tuple[str, str, str]]] = {}
+    for reader in readers:
+        started = datetime.now(UTC)
+        events, discarded, _raw, usage = extract(
+            docs, generate=generate, model=reader, batch_chars=PROMPT_CHAR_BUDGET, workers=workers
+        )
+        elapsed = (datetime.now(UTC) - started).total_seconds()
+        findings[reader] = {(e.doc_sha256, e.event_type, e.materiality) for e in events}
+        high = sum(1 for e in events if e.materiality == "high")
+        price = _LIST_PRICES.get(reader)
+        money = (
+            f"${usage['input'] / 1e6 * price[0] + usage['output'] / 1e6 * price[1]:,.3f} at list"
+            if price
+            else "no list price on file"
+        )
+        print(
+            f"  {reader:<22} {elapsed:6.1f}s · {usage['calls']:3d} call(s) · "
+            f"{usage['input']:,} in + {usage['output']:,} out · {money}"
+        )
+        print(
+            f"  {'':<22} {len(events)} event(s), {high} of them high · "
+            f"{discarded} quote(s) discarded as not in the document · "
+            f"{usage['failed_batches']} failed batch(es)"
+        )
+    names = list(findings)
+    for i, left in enumerate(names):
+        for right in names[i + 1 :]:
+            a, b = findings[left], findings[right]
+            union = a | b
+            shared = len(a & b)
+            agree = shared / len(union) if union else 1.0
+            print(
+                f"[compare] {left} vs {right}: {shared} finding(s) in common of {len(union)} "
+                f"distinct — {agree:.0%} agreement on (document, type, materiality)."
+            )
+    print(
+        "[compare] Agreement below ~100% is the result, not a bug: it is the size of the "
+        "confound a two-reader corpus would carry. Pick one and record it as the corpus reader."
+    )
+    return 0
+
+
+def cmd_backfill(
+    cfg: Config,
+    as_of: date,
+    *,
+    workers: int,
+    budget_seconds: int,
+    only: Sequence[str] = (),
+) -> int:
+    """Read the whole declared window for every name, once, with one reader.
+
+    **This is not the nightly run with bigger numbers.** The nightly run is metered: 25 documents a
+    name, fifteen minutes a run, a local model, and a name that overruns ends the run. Those caps
+    are right for an evening on one GPU and wrong for building a corpus — at 25 documents a name and
+    one name a run, the fifteen names in scope needed roughly eighty-four evenings.
+
+    What makes it a different job rather than the same job impatient:
+
+    * **One reader, named in the label.** ``EX-3`` means these instructions read by
+      :func:`~qalpha.live.extraction.corpus_reader`. A row from anything else is not part of this
+      corpus and cannot satisfy it — see ``reports/PREREGISTRATION_EX3_CORPUS.md``.
+    * **The cloud, explicitly.** ``prefer_local=False`` is passed here and nowhere else, so the one
+      place document text leaves this machine is the one place that says it does.
+    * **No per-name document cap**, because the point is to finish a window rather than nibble it.
+    * **Concurrency**, which is the whole speed-up: the reads are independent, and the sequential
+      loop was idle waiting on the network for almost all of its wall clock.
+
+    The time budget stays, raised. A backfill that has to be killed is one that loses its in-flight
+    name's work and its summary; one that stops itself keeps both, and every finished name is
+    already durable.
+    """
+    reader = corpus_reader()
+    print(f"[backfill] corpus read for {as_of} — extractor {EXTRACTION_VERSION}, reader {reader}")
+    _rows, exchange_prov = _fetch_reg_ind(as_of)
+    basket = _screen_basket(cfg, as_of)
+    tickers = [t for t in basket.tickers if not only or t in only or t.removesuffix(".NS") in only]
+    if not tickers:
+        # NOT a completion. The nightly command returns 0 here, which is how two runs on 2026-09-10
+        # were recorded `done` having covered nothing at all.
+        print(
+            "[backfill] no names to cover. With holdings on the book that means the book or the "
+            "price panel could not be read — not that there was nothing to do.",
+            file=sys.stderr,
+        )
+        return 2
+    backend = choose_backend(prefer_local=False, workers=workers)
+    print(f"[backfill] {backend.note}")
+    if backend.generate is None:
+        print(
+            "[backfill] no cloud reader available, so nothing would be read. Set ANTHROPIC_API_KEY.",
+            file=sys.stderr,
+        )
+        return 2
+    if exchange_prov is None:
+        print("[backfill] note: the exchange indicator file was not reachable; filings still read.")
+
+    budget = timedelta(seconds=budget_seconds)
+    started = datetime.now(UTC)
+    covered = 0
+    for index, ticker in enumerate(tickers, start=1):
+        if datetime.now(UTC) - started > budget:
+            print(
+                f"[backfill] time budget {budget} reached after {covered}/{len(tickers)} name(s). "
+                "Stopping cleanly — every finished name is on disk with its receipts, so the next "
+                "run resumes past it instead of starting again."
+            )
+            break
+        days = _window_days(ticker)
+        print(f"  {ticker:<16} [{index}/{len(tickers)}] reading {days} days of filings")
+        cov, found, bad = _cover_name(
+            ticker,
+            as_of,
+            as_of - timedelta(days=days),
+            backend.generate,
+            backend.model,
+            backend.batch_chars or PROMPT_CHAR_BUDGET,
+            max_extract=MAX_EXTRACT_BACKFILL,
+            workers=workers,
+        )
+        _record_coverage(as_of, ticker, cov, days, backend.model)
+        covered += 1
+        print(
+            f"  {ticker:<16} {'complete' if cov.complete else 'INCOMPLETE'} — "
+            f"{cov.documents_read}/{cov.filings_in_window} read, {len(found)} event(s), "
+            f"{bad} unverified quote(s) discarded"
+        )
+    elapsed = (datetime.now(UTC) - started).total_seconds()
+    print(f"[backfill] {covered}/{len(tickers)} name(s) in {elapsed / 60:.1f} min.")
+    print(f"[backfill] {_spend_note(backend.model)}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     # UTF-8 FIRST, before anything prints. Windows falls back to cp1252 when stdout is a pipe,
     # and `uv run` pipes its child: on 2026-09-11 the `mark` step died on a rupee sign.
     use_utf8()
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("cmd", choices=["daily"])
+    ap.add_argument("cmd", choices=["daily", "backfill", "compare-readers"])
     ap.add_argument("--as-of", default=None, help="override the date (default: today, UTC)")
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=BACKFILL_WORKERS,
+        help="concurrent model calls during a backfill (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--budget-seconds",
+        type=int,
+        default=BACKFILL_BUDGET_SECONDS,
+        help="stop a backfill cleanly after this long (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--only",
+        default="",
+        help="comma-separated tickers to back-fill, instead of the whole basket",
+    )
+    ap.add_argument(
+        "--readers",
+        default="claude-haiku-4-5,claude-sonnet-5",
+        help="comma-separated models to compare (compare-readers only)",
+    )
+    ap.add_argument(
+        "--sample",
+        type=int,
+        default=40,
+        help="archived filings each reader is given (compare-readers only)",
+    )
     args = ap.parse_args(argv)
     as_of = date.fromisoformat(args.as_of) if args.as_of else datetime.now(UTC).date()
+    if args.cmd == "compare-readers":
+        return cmd_compare_readers(
+            as_of,
+            readers=tuple(r.strip() for r in args.readers.split(",") if r.strip()),
+            sample=max(1, int(args.sample)),
+            workers=max(1, int(args.workers)),
+        )
+    if args.cmd == "backfill":
+        return cmd_backfill(
+            Config(),
+            as_of,
+            workers=max(1, int(args.workers)),
+            budget_seconds=max(60, int(args.budget_seconds)),
+            only=tuple(t.strip() for t in args.only.split(",") if t.strip()),
+        )
     return cmd_daily(Config(), as_of)
 
 

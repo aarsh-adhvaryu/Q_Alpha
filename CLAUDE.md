@@ -60,6 +60,8 @@ not.** Not arithmetic errors — the arithmetic is almost always right. The *lab
 | "12 high-materiality negative items" | **4** — the reader counted lines in an append-only log, not events at their current revision |
 | a step that failed, having left yesterday's report standing | **zero bytes** — `write_text` truncates before it encodes, so the failure destroyed what it was replacing |
 | "The build is closed" | four defects were found that same day |
+| an evidence step recorded `done` after 216s | **zero coverage rows, zero events** — "nothing to cover" returning 0 |
+| a refused model call, counted as a clean read | **unread**. `("", {})` parsed as a filing with no bad news in it |
 
 **Passing tests have caught almost none of them.** Unit tests verify that a function works. These are
 failures of *integration* (the right data reaching that function), *methodology* (the function
@@ -103,7 +105,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**67 live modules · 1,443 tests green + 1 xfail** (counted, not estimated — see the
+**67 live modules · 1,453 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -154,11 +156,21 @@ decides what that means. Every event carries a verbatim quote **checked against 
 a quote that is not in the document is discarded and counted. It cannot introduce a name it was not
 given a document for, and cannot attribute a real quote to the wrong company.
 
-Extractor version **EX-2**. EX-1 asked for "material events" and never said material *to whom*, so 77
-of 193 came back `high` — "revenue up 10%", "EBITDA grew 8%" — and a high event triggers `WATCH`,
+Extractor version **EX-3**. EX-1 asked for "material events" and never said material *to whom*, so
+77 of 193 came back `high` — "revenue up 10%", "EBITDA grew 8%" — and a high event triggers `WATCH`,
 which skips a name. **Good news rejected candidates.** EX-2 defines materiality as *concern to someone
 who owns the shares*. `pretrade` acts only on the current version, so EX-1 rows stay on file and
 cannot act.
+
+**EX-3 changed no instruction. It made the reader part of the label** (2026-09-11). A version now
+means "these instructions, read by `corpus_reader()`" — and a row from any other model satisfies
+nothing: not `_seen_before`, not the extraction receipt, not `filings_read` on the buy screen, not a
+`pretrade` flag. **A row with no reader recorded does not match**, because every such row predates
+the field and was read by whatever was configured that evening. That is the mixture the label
+exists to prevent: two models disagree on one filing the way two analysts do, and this repo already
+records the smaller version of it — the same snippet labelled differently in different batches by
+one model at temperature zero. It cost ~1,135 documents of completed reading, which is the price of
+the corpus being one thing. Registered in `reports/PREREGISTRATION_EX3_CORPUS.md`.
 
 **`live/news.py` does the same for headlines (`NEWS-1`).** Four market RSS feeds plus one Google News
 search per in-scope name, archived with provenance **before** anything parses them; the alias table
@@ -341,6 +353,8 @@ uv run ruff check . && uv run ruff format --check .
 uv run mypy src
 uv run python scripts/local_run.py                     # THE entry point: pipeline → page
 uv run python scripts/evidence.py daily                # the evidence spine (shadow)
+uv run python scripts/evidence.py backfill --workers 8 # the corpus, once, in the cloud
+uv run python scripts/evidence.py compare-readers      # which model should read it (measures)
 uv run python scripts/news.py daily                    # the headlines (archive → map → read)
 uv run python scripts/news.py daily --dry-run          # archive only; read nothing
 uv run python scripts/run_phase0.py                    # the validated backtest
@@ -394,7 +408,8 @@ writes, or if any live module spells a panel path as a literal again.
 | `KITE_API_KEY` · `KITE_API_SECRET` | holdings, cash, prices; the secret only at login |
 | `QALPHA_LOCAL_MODEL` | reads filings **on this machine**. Must be a tag the server actually lists; a name with nothing listening — or a name the server does not have — does NOT fall back to the cloud, by design, so it turns reading off rather than on. Recipe: `ollama create qwen3-8b-32k -f docs/ollama/Modelfile.qwen3-8b-32k` |
 | `QALPHA_LOCAL_MODEL_CONTEXT` | what that model was **built** with (32768 for the above). It states the window, it cannot set it: the OpenAI-compatible route has nowhere to send `num_ctx`, which is why the Modelfile is committed |
-| `ANTHROPIC_API_KEY` | filings in the cloud, and the web-searched brief (`BRIEF-1`). **No step requires it any more:** with a local model the brief is written here from the headlines the evening archived (`BRIEF-2-local`), citing an item id per claim |
+| `ANTHROPIC_API_KEY` | filings in the cloud, and the web-searched brief (`BRIEF-1`). **No nightly step requires it:** with a local model the brief is written here from the headlines the evening archived (`BRIEF-2-local`), citing an item id per claim. The EX-3 corpus backfill *does* require it, and `uv sync --extra ai` — the SDK is an optional extra |
+| `QALPHA_CORPUS_READER` | **optional.** Names the model EX-3 rows must come from, overriding `claude-haiku-4-5`. It names the corpus, so a run under it cannot be mistaken for a run under the default |
 | `GIST_TOKEN` | **optional.** A private-gist tradebook store, for whoever keeps one. Unset, the twin reads `data/tradebooks/` — the same folder the page reads and the one OPERATING.md names |
 
 A missing one is never an error: the run degrades to a named absence and says which figures it
@@ -433,13 +448,21 @@ task."**
 2. **Replay the policy the money runs, not the ranking.** `exp_screen_oos.py` tests monthly
    rankings. The live policy is buy-and-hold with a ₹50,000 monthly allowance, the §4.7 exits, the
    sector cap, costs and tax. Those are different strategies and only one of them is being run.
-3. **Build the historical filing corpus.** This became possible on 2026-09-10: the local reader
-   works, so thirteen years of filings can be read for free on this machine. **It is the only route
-   to evidence that does not need centuries.** A portfolio over twelve months is *one* observation
-   of a small signal inside large noise — that is where the 200-year figure comes from. The same
-   information at the *event* level is thousands of observations, and an event study can reach
-   significance in months of work. `PLAN_SYSTEM.md` §5 says this and calls the corpus the GPU's
-   real job.
+3. **Build the historical filing corpus.** **It is the only route to evidence that does not need
+   centuries.** A portfolio over twelve months is *one* observation of a small signal inside large
+   noise — that is where the 200-year figure comes from. The same information at the *event* level
+   is thousands of observations, and an event study can reach significance in months of work.
+
+   The machinery is built and registered (2026-09-11). It is **not run**. What it needs:
+   `ANTHROPIC_API_KEY` in `.env`, `uv sync --extra ai` (the SDK is an optional extra and is not
+   installed), then `compare-readers` to choose between Haiku and Sonnet by measurement, then
+   `backfill`. Measured from the archive: ~2,100 documents, ~2,000 calls, ~13.5M input tokens,
+   roughly $20–45 at list depending on the reader. At eight concurrent calls that is one session,
+   against the ~84 evening runs the local path needed.
+
+   **The local reader is not obsolete and the choice was not free.** It reads the nightly 10-day
+   window for nothing and sends nothing anywhere; the corpus goes to the cloud because eighty-four
+   evenings is not a schedule. Both cannot feed one corpus — see EX-3 above.
 4. **Then, and only then, ask the predictive question.** *Given what was knowable on a date, does a
    model over events plus price context beat the price-only screen?* Train on early years, test on
    late years nobody looked at, measure after costs. **Nothing in this repo learns that mapping

@@ -366,7 +366,7 @@ def test_the_cloud_reader_reports_the_same_fact(monkeypatch) -> None:
             self.content = [_Block()]
 
     fake = types.ModuleType("anthropic")
-    fake.Anthropic = lambda api_key: types.SimpleNamespace(  # type: ignore[attr-defined]
+    fake.Anthropic = lambda **_kw: types.SimpleNamespace(  # type: ignore[attr-defined]
         messages=types.SimpleNamespace(create=lambda **kw: _Resp())
     )
     monkeypatch.setitem(sys.modules, "anthropic", fake)

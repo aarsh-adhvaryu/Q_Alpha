@@ -23,11 +23,14 @@ first, and for a while.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 from qalpha.live.announcements import MAX_DOCUMENT_CHARS, SourceDocument
 
@@ -41,7 +44,42 @@ from qalpha.live.announcements import MAX_DOCUMENT_CHARS, SourceDocument
 #: EX-2 (2026-09-08): materiality is defined as **concern to someone who owns the stock**, with the
 #: routine cases named as explicitly NOT material. Nothing about the model changed; the instruction
 #: did.
-EXTRACTION_VERSION = "EX-2"
+#: EX-3 (2026-09-11): **the reader is part of the label.** The prompt, parser, verification rule and
+#: vocabulary are EX-2's, unchanged. What changed is that a version no longer means only "read under
+#: these instructions" — it means "read under these instructions BY :data:`CORPUS_READER`". Two
+#: models reading the same filing disagree the way two analysts do, and this repo already records
+#: the smaller version of that: identical snippets get different labels in different batches from
+#: one model at temperature zero. A corpus half-read by a local 8B and half by a cloud model is not
+#: one instrument, and an event study over it would carry that confound before its first result.
+#: Pinning the reader into the label makes the mixture impossible to produce rather than merely
+#: discouraged — see :func:`reader_matches` and ``reports/PREREGISTRATION_EX3_CORPUS.md``.
+EXTRACTION_VERSION = "EX-3"
+
+#: The one reader EX-3 rows may come from. A row read by anything else is not an EX-3 row, however
+#: good it is: ``_seen_before`` refuses it, ``pretrade`` ignores it, and the name stays uncovered.
+#: Overridable for a measured comparison (``QALPHA_CORPUS_READER``), because the alternative is
+#: picking a model by assertion — but the override names the corpus, so a run under it cannot be
+#: mistaken for a run under the default.
+CORPUS_READER_DEFAULT = "claude-haiku-4-5"
+
+#: Environment override for the corpus reader. Named so a comparison run is self-labelling.
+CORPUS_READER_VAR = "QALPHA_CORPUS_READER"
+
+
+def corpus_reader() -> str:
+    """The model EX-3 rows must come from. Never guessed, never a fallback."""
+    return os.environ.get(CORPUS_READER_VAR, "").strip() or CORPUS_READER_DEFAULT
+
+
+def reader_matches(row_reader: object) -> bool:
+    """Was this row produced by the corpus reader?
+
+    **A row with no reader recorded is not a match.** Every row written before EX-3 predates the
+    field, and those were read by whatever happened to be configured that evening — which is the
+    mixture this version exists to prevent. Absent is unknown, and unknown is not the reader.
+    """
+    return isinstance(row_reader, str) and row_reader == corpus_reader()
+
 
 EVENT_LOG = Path("data/evidence/events.jsonl")
 
@@ -89,7 +127,14 @@ _USAGE_FIELDS = (
     "failed_batches",
     "truncated_batches",
     "retried_batches",
+    #: Calls the model declined on safety grounds. Counted apart from a dead call because the
+    #: fixes differ, and counted AT ALL because an empty reply is not a filing with nothing in it.
+    "refused_batches",
 )
+
+#: Concurrent model calls when a caller asks for them. One is the daily default: the local reader
+#: is a single GPU holding a single model, so parallel calls there queue rather than overlap.
+DEFAULT_WORKERS = 1
 
 
 @dataclass(frozen=True)
@@ -376,12 +421,64 @@ def event_rows(events: Sequence[ExtractedEvent], *, as_of: date) -> list[dict[st
     return rows
 
 
+@dataclass(frozen=True)
+class _Outcome:
+    """One model call's result, carrying the position it must be accounted in.
+
+    ``path`` is why a concurrent run and a sequential one produce identical output: batch 3's reply
+    is accounted after batch 2's whichever finished first, and the single-document retries that a
+    truncated batch 3 spawns sort to ``(3, 0), (3, 1)`` — immediately after ``(3,)``, exactly where
+    the old front-of-queue re-push put them.
+    """
+
+    path: tuple[int, ...]
+    batch: list[DocumentChunk]
+    raw: str
+    call_usage: dict[str, int]
+    error: str | None
+
+
+def _call_one(
+    path: tuple[int, ...],
+    batch: list[DocumentChunk],
+    generate: GenerateFn,
+    model: str,
+) -> _Outcome:
+    """One call, fail-soft. A raised exception is data about this batch, not the end of the run."""
+    try:
+        raw, call_usage = generate(model, build_prompt(batch))
+    except Exception as exc:  # one dead batch must not end the read
+        return _Outcome(path, batch, "", {}, f"{type(exc).__name__}: {exc}")
+    return _Outcome(path, batch, raw, call_usage, None)
+
+
+def _run_round(
+    work: Sequence[tuple[tuple[int, ...], list[DocumentChunk]]],
+    *,
+    generate: GenerateFn,
+    model: str,
+    workers: int,
+) -> list[_Outcome]:
+    """Run one round of batches, returning outcomes **in the order given**, not the order finished.
+
+    ``workers <= 1`` takes the sequential path and starts no pool at all, so the daily run behaves
+    exactly as it did before concurrency existed.
+    """
+    if workers <= 1:
+        return [_call_one(path, batch, generate, model) for path, batch in work]
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(lambda item: _call_one(item[0], item[1], generate, model), work))
+
+
 def extract(
     documents: Sequence[SourceDocument],
     *,
     generate: GenerateFn,
     model: str,
     batch_chars: int = PROMPT_CHAR_BUDGET,
+    workers: int = DEFAULT_WORKERS,
 ) -> tuple[list[ExtractedEvent], int, str, dict[str, int]]:
     """Extract over **every character** of every document. ``(events, discarded, raw, usage)``.
 
@@ -393,10 +490,19 @@ def extract(
     the window is truncated by the server, silently, while coverage still counts the documents as
     read. That is the "25 of 30 filings, reported as 25 of 25" defect with a different cause.
 
+    ``workers`` is how many of those calls may be in flight at once. **It changes the wall clock and
+    nothing else**: outcomes are accounted in batch order regardless of completion order, so the
+    events, the discard count, the joined raw text and every usage counter are identical to the
+    sequential run. That property is the reason it is safe to turn up, and it is asserted directly
+    rather than assumed. It is worth turning up only for a reader that can serve calls in parallel:
+    one local GPU holding one model serialises them anyway.
+
     Fail-soft **per batch**: a call that raises contributes no events and its error text, and is
     counted in ``usage["failed_batches"]`` so a caller can refuse to claim coverage it did not get.
     An extraction that did not happen must look different from one that found nothing, and neither
-    may look like approval.
+    may look like approval. **A refusal is the same kind of nothing** — the model declined, the
+    documents in that call went unread, and it is counted in ``refused_batches`` and in
+    ``failed_batches`` so it can never read as a filing with no bad news in it.
 
     **The same is true of a reply that ran out of room.** The input fitting the window says nothing
     about the OUTPUT fitting ``max_tokens``: a batch of filings that genuinely carries a dozen events
@@ -410,39 +516,59 @@ def extract(
     if not documents:
         return [], 0, "", dict.fromkeys(_USAGE_FIELDS, 0)
     all_chunks = [c for doc in documents for c in chunks_for(doc)]
+    usage: dict[str, int] = dict.fromkeys(_USAGE_FIELDS, 0)
+    # (path, raw, parseable). Collected across rounds, then sorted by path, so the transcript and
+    # the event order do not depend on how many calls were in flight.
+    collected: list[tuple[tuple[int, ...], str, bool]] = []
+    pending: list[tuple[tuple[int, ...], list[DocumentChunk]]] = [
+        ((i,), batch) for i, batch in enumerate(batch_chunks(all_chunks, budget=batch_chars))
+    ]
+    while pending:
+        next_round: list[tuple[tuple[int, ...], list[DocumentChunk]]] = []
+        for out in _run_round(pending, generate=generate, model=model, workers=workers):
+            if out.error is not None:
+                collected.append((out.path, f"extraction failed: {out.error}", False))
+                usage["failed_batches"] += 1
+                continue
+            spent = {field: int(out.call_usage.get(field, 0)) for field in ("input", "output")}
+            if out.call_usage.get("refused"):
+                # The model declined. Nothing in this batch was read, and an empty reply parsed as
+                # "no events" would put that silence on the buy screen as a clean bill.
+                collected.append((out.path, "[REFUSED] the model declined this batch", False))
+                usage["refused_batches"] += 1
+                usage["failed_batches"] += 1
+                usage["calls"] += 1
+                for field, spent_tokens in spent.items():
+                    usage[field] += spent_tokens
+                continue
+            if out.call_usage.get("truncated") and len(out.batch) > 1:
+                # The reply ran out of room with several documents in the call. Splitting is the only
+                # thing worth trying: temperature is zero, so asking again unchanged truncates again
+                # in the same place. The tokens spent are still counted — they were spent.
+                usage["retried_batches"] += 1
+                usage["calls"] += 1
+                for field, spent_tokens in spent.items():
+                    usage[field] += spent_tokens
+                collected.append((out.path, "[TRUNCATED] retried one document at a time", False))
+                next_round.extend(((*out.path, j), [chunk]) for j, chunk in enumerate(out.batch))
+                continue
+            collected.append((out.path, out.raw, True))
+            usage["calls"] += 1
+            for field, spent_tokens in spent.items():
+                usage[field] += spent_tokens
+            if out.call_usage.get("truncated"):
+                # One document, and the reply STILL ran out of room. Whatever it found is kept; what
+                # it did not reach is unknown, and unknown is what the caller has to be told.
+                usage["truncated_batches"] += 1
+                usage["failed_batches"] += 1
+        pending = next_round
+    collected.sort(key=lambda item: item[0])
+
     events: list[ExtractedEvent] = []
     discarded = 0
-    raws: list[str] = []
-    usage: dict[str, int] = dict.fromkeys(_USAGE_FIELDS, 0)
-    pending: list[list[DocumentChunk]] = list(batch_chunks(all_chunks, budget=batch_chars))
-    while pending:
-        batch = pending.pop(0)
-        try:
-            raw, call_usage = generate(model, build_prompt(batch))
-        except Exception as exc:
-            raws.append(f"extraction failed: {exc}")
-            usage["failed_batches"] += 1
+    for _path, raw, parseable in collected:
+        if not parseable:
             continue
-        if call_usage.get("truncated") and len(batch) > 1:
-            # The reply ran out of room with several documents in the call. Splitting is the only
-            # thing worth trying: temperature is zero, so asking again unchanged truncates again in
-            # the same place. The tokens spent are still counted — they were spent.
-            usage["retried_batches"] += 1
-            usage["calls"] += 1
-            for field in ("input", "output"):
-                usage[field] += int(call_usage.get(field, 0))
-            raws.append("[TRUNCATED] retried one document at a time")
-            pending = [[chunk] for chunk in batch] + pending
-            continue
-        raws.append(raw)
-        usage["calls"] += 1
-        for field in ("input", "output"):
-            usage[field] += int(call_usage.get(field, 0))
-        if call_usage.get("truncated"):
-            # One document, and the reply STILL ran out of room. Whatever it found is kept; what it
-            # did not reach is unknown, and unknown is what the caller has to be told.
-            usage["truncated_batches"] += 1
-            usage["failed_batches"] += 1
         # Verified against the WHOLE documents, never just this batch's slices, so a quote spanning
         # a chunk boundary still resolves to the document it came from.
         found, dropped = parse_events(raw, documents, model=model)
@@ -455,7 +581,7 @@ def extract(
         if key not in seen:
             seen.add(key)
             unique.append(event)
-    return unique, discarded, "\n\n".join(raws), usage
+    return unique, discarded, "\n\n".join(raw for _p, raw, _ok in collected), usage
 
 
 #: Output cap per extraction call. Events are one short line each; this is generous for a batch.
@@ -463,7 +589,13 @@ MAX_OUTPUT_TOKENS = 3000
 DEFAULT_MODEL = "claude-haiku-4-5"
 
 
-def default_generate(api_key: str, *, max_tokens: int = MAX_OUTPUT_TOKENS) -> GenerateFn:
+def default_generate(
+    api_key: str,
+    *,
+    max_tokens: int = MAX_OUTPUT_TOKENS,
+    max_retries: int = 5,
+    timeout: float = 120.0,
+) -> GenerateFn:
     """The real model call for extraction — **with no tools, deliberately**.
 
     The veto path gives the model web search. This one must not have it. The whole point is that
@@ -472,24 +604,48 @@ def default_generate(api_key: str, *, max_tokens: int = MAX_OUTPUT_TOKENS) -> Ge
     somewhere nobody archived, and the verification guard would silently have nothing to check
     against.
 
-    Lazy-imports the SDK so the module and its pure tests load without the ``ai`` extra installed.
+    **One client, built once and shared.** It was constructed per call, which opened a fresh
+    connection pool for every batch — invisible at 25 calls a night and a real cost at two thousand.
+    The SDK's client is safe to call from several threads, which is what makes ``workers`` possible
+    at all. ``max_retries`` is the SDK's own backoff over 429s and 5xx, raised from its default of 2
+    because a long backfill will meet a rate limit and the right answer to one is to wait.
+
+    **Built on first use, not here.** The SDK import stays inside the call because ``choose_backend``
+    constructs this function merely to decide what the reader *would* be, and a missing ``ai`` extra
+    must surface as a named absence on the page rather than an ImportError during selection. The
+    lock is held only for the construction, so the shared client is created exactly once.
     """
+    lock = threading.Lock()
+    cell: dict[str, Any] = {}
+
+    def client() -> Any:
+        with lock:
+            if "client" not in cell:
+                import anthropic
+
+                cell["client"] = anthropic.Anthropic(
+                    api_key=api_key, max_retries=max_retries, timeout=timeout
+                )
+            return cell["client"]
 
     def generate(model_id: str, prompt: str) -> tuple[str, dict[str, int]]:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
+        resp = client().messages.create(
             model=model_id,
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
-        if resp.stop_reason == "refusal":
-            return "", {}
-        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
-        return text, {
+        usage = {
             "input": int(getattr(resp.usage, "input_tokens", 0) or 0),
             "output": int(getattr(resp.usage, "output_tokens", 0) or 0),
+        }
+        if resp.stop_reason == "refusal":
+            # NOT an empty reading. The documents in this call went unread, and the caller has to
+            # be able to tell that from a filing that simply carried nothing material. Returning
+            # ``("", {})`` counted it as a clean call with no events — silence as a clean bill.
+            return "", {**usage, "refused": 1}
+        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        return text, {
+            **usage,
             # The cloud's spelling of the same fact. A cut-off reply is not a reading of the
             # documents that produced it, wherever the model ran.
             "truncated": 1 if resp.stop_reason == "max_tokens" else 0,
