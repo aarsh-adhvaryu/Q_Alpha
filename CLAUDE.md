@@ -101,7 +101,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**63 live modules · 1,230 tests green + 1 xfail** (counted, not estimated — see the
+**63 live modules · 1,234 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -293,8 +293,19 @@ uv run python scripts/local_run.py --app               # the app: buttons, live 
 uv run python scripts/local_run.py --no-pipeline       # decide only, on research already on disk
 uv run python scripts/local_run.py --force             # re-run steps the ledger calls done
 uv run python scripts/local_run.py --login             # refresh the Kite session first
-./qalpha.sh                                            # the same thing, from the desktop launcher
+D:\Q-Alpha\Q-Alpha.bat                                 # the desktop shortcut points here
 ```
+
+**It runs natively on Windows, from `D:\Q-Alpha`.** Moved off WSL on 2026-09-10. Python,
+`uv`, git and Ollama are all on the Windows side; the desktop shortcut points straight at
+`Q-Alpha.bat` in the repo, and `%~dp0` is the repo — so there is no path to bake, no copy step and
+no installer. The bridge that existed before (a launcher inside `\\wsl$\<distro>\...`, a path that
+only exists while WSL is running, copied out by a script that had to be re-run whenever the distro
+or repo moved) was all cost of living in the wrong filesystem, and went with it.
+
+The move also fixed the local model for free: Ollama runs on Windows and binds the Windows side's
+loopback, which WSL — a separate network namespace — could never reach. `QALPHA_LOCAL_MODEL` now
+works with no configuration at all.
 
 **There is no dashboard and no server.** Streamlit, its 2,498-line app, its config, `requirements.txt`
 and the whole `deploy/` hosting tree were removed on 2026-09-09. The system runs on this machine when

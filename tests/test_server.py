@@ -181,7 +181,18 @@ def test_the_page_says_who_will_read_the_filings(app: int, monkeypatch: pytest.M
     assert "unread is not clean" in body.lower()
 
 
-def test_the_page_offers_the_local_route_when_there_is_none_configured(app: int) -> None:
+def test_the_page_offers_the_local_route_when_there_is_none_configured(
+    app: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The env is CLEARED here rather than assumed empty.
+
+    This passed in WSL and failed on Windows, where the developer's own `.env` names a local model
+    and Ollama is actually running — so the page correctly stopped offering setup instructions and
+    the test read that as a regression. A test that only passes on machines configured like the
+    author's is testing the machine.
+    """
+    monkeypatch.delenv("QALPHA_LOCAL_MODEL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     _status, body, _ = _get(app, "/")
     assert "ollama pull" in body.lower()
     assert "QALPHA_LOCAL_MODEL" in body
@@ -309,3 +320,22 @@ def test_serve_prints_the_url_when_it_cannot_open_one(
     monkeypatch.setattr(server, "ThreadingHTTPServer", _server)
     with pytest.raises(_StopError):
         server.serve(9999, open_browser=True)
+
+
+def test_the_credentials_table_reads_the_env_file_not_just_the_shell(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """A table that reports "missing" for a variable that is set sends you to fix what is right.
+
+    The app is launched from a shortcut, so its shell exports nothing. Everything it knows about
+    credentials comes from `.env`, and the table has to load it rather than assume someone did.
+    """
+    from qalpha.live import credentials, server
+
+    (tmp_path / ".env").write_text("KITE_API_KEY=abc123\n", encoding="utf-8")
+    monkeypatch.setattr(credentials, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(credentials, "_ENV_LOADED", False)
+    monkeypatch.delenv("KITE_API_KEY", raising=False)
+
+    states = {row.cells[0].text: row.cells[1].text for row in server._token_rows()}
+    assert states["KITE_API_KEY"] == "set"
