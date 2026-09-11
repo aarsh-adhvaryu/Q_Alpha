@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import replace
 from datetime import UTC, date, datetime
@@ -67,7 +66,7 @@ from qalpha.live.twin import (
     sync_flows,
 )
 from qalpha.live.twinpanel import GATE_JSON
-from qalpha.live.verdicts import basket_verdicts, verdict_calls
+from qalpha.live.verdicts import AI_PROMPT_VERSION, event_verdicts, verdict_calls
 
 REPORT = Path("reports/twin_dashboard.md")
 DECISIONS_LOG = Path("reports/twin_decisions.md")
@@ -80,20 +79,9 @@ WATCHLIST_CSV = Path("data/universes/nifty100_watchlist.csv")
 EW_PANEL = Path("data/historical/prices_pit_2026.parquet")
 EW_CSV = Path("data/universes/nifty50_membership_2026.csv")
 
-#: Pre-registered with the treatment, and frozen for the run: a prompt change is a second
-#: treatment, not an improvement. Recorded on every verdict row so a later reader knows which
-#: prompt produced which call.
-#: The AI treatment identifier. **Bump this whenever the prompt, the parser, the model or the
-#: evidence rule changes** — the label is what a later reader uses to tell one treatment from
-#: another, and a label that spans two rules makes the rows under it unusable.
-#:
-#: PR-8b (2026-08-30): a DROP required a ``source=`` URL to be *present*.
-#: PR-8c (2026-09-05): a DROP acts only on a PRIMARY source (nseindia/bseindia/sebi/ibbi/mca);
-#:   anything else is demoted to KEEP and recorded as a lead. That rule merged in PR #88 on
-#:   2026-09-04 **without bumping this constant**, so the label would have covered both rules.
-#:   No acting verdict was recorded between the merge and this bump, so PR-8b rows are all
-#:   pre-demotion and the split is clean.
-AI_PROMPT_VERSION = "PR-8c"
+#: Imported, not re-declared: `qalpha.live.verdicts` owns the treatment identifier now, because the
+#: page's capability register reads it and `src/` cannot import from `scripts/`. Its history — PR-8b,
+#: PR-8c, AI-V2 — is recorded there.
 
 
 def _tradebook() -> tuple[list[object], list[str]]:
@@ -185,7 +173,7 @@ def _log_attempt(market: Market | None, status: str, detail: str = "", raw: str 
             status=status,
             detail=detail,
             raw=raw,
-            model=os.environ.get("ANTHROPIC_MODEL") or "claude-haiku-4-5",
+            model=_VERDICT_SOURCE,
             prompt_version=AI_PROMPT_VERSION,
         )
     except Exception as exc:
@@ -226,15 +214,22 @@ def _ew_fund_series() -> pd.Series | None:
     return equal_weight_pit(panel, universe, index, Decimal("100"))
 
 
+#: What produced the verdicts, recorded on every row. It names a RULE, not a chat model, because
+#: under AI-V2 nothing is asked — the reading happened earlier, in the evidence layers, and this is
+#: policy over what they wrote down.
+_VERDICT_SOURCE = "rule:AI-V2 over verified EX-2 filings (news demoted to leads)"
+
+
 def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
-    """Ask the AI about the basket ``TWIN_FULL`` is about to buy — the run's single AI treatment.
+    """Decide keep/drop for the basket ``TWIN_FULL`` is about to buy — the run's single AI treatment.
 
     Asked about **TWIN_FULL's** candidates specifically, because that is the only book whose policy
     consults them. The verdict for a ticker is a view on the company, not on a book, so one map
     serves every book; ``runner._deploy`` keeps any name the map does not mention.
 
-    Costs nothing on a day with no deployable cash, which is most days — the screen only runs when
-    idle cash clears ``idle_cash_floor``, so in practice the model is asked roughly when a SIP lands.
+    **Under AI-V2 no model is called here.** The filings and headlines were read earlier in the
+    evening, each claim carrying a quote checked against archived bytes; this applies the registered
+    rule to those rows. It needs no key, costs nothing, and a drop can be re-opened a year from now.
     Fail-soft throughout: any error returns ``{}``, which downstream means keep the whole basket, so
     TWIN_FULL degrades to exactly TWIN_NO_AI rather than to an empty book.
     """
@@ -268,28 +263,34 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
             spend_idle_cash=False,
         )
         basket = {o.ticker: int(o.quantity) for o in advice.deploy.buy_orders}
-        verdicts, raw, usage = basket_verdicts(
-            basket, market.sector_of or {}, market.wl_prices, market.as_of
+        verdicts = event_verdicts(basket, as_of=market.as_of)
+        # The audit row's `raw` is the evidence that fired, not a model's prose. No token count is
+        # recorded at all: this treatment spends none, and a zero would read as a call that returned
+        # nothing rather than as a call that never happened.
+        raw = "\n".join(
+            f"{v.ticker}: {'DROP' if not v.keep else 'lead'} — {v.reason} [{v.source}]"
+            for v in sorted(verdicts.values(), key=lambda v: v.ticker)
         )
     except Exception as exc:
         print(f"[twin] AI verdicts unavailable ({exc}) — TWIN_FULL keeps the whole basket")
         _log_attempt(market, "error", str(exc))
         return {}
     if not verdicts:
-        # No key, a refusal, or nothing parseable. Every one of these keeps the basket — and every
-        # one is now distinguishable from a day the model genuinely had no objection.
-        _log_attempt(market, "no_verdicts_parsed", f"{len(basket)} candidate(s)", raw=raw)
+        # Nothing on file objects to any candidate. Recorded, because "the rule found nothing" and
+        # "the rule was never applied" must not both look like silence — the distinction PR-8's
+        # attempt log exists for, and it survives the treatment change unchanged.
+        _log_attempt(market, "no_event_matched", f"{len(basket)} candidate(s) clean", raw=raw)
         return {}
     dropped = [t for t, v in verdicts.items() if not v.keep]
     demoted = [t for t, v in verdicts.items() if v.demoted]
     if demoted:
         print(
-            f"[twin] {len(demoted)} veto(es) DEMOTED for want of a primary source {demoted} — "
-            "recorded as leads, not acted on"
+            f"[twin] {len(demoted)} lead(s) from headlines {demoted} — recorded, not acted on. "
+            "Only a filing can drop a name."
         )
     print(
-        f"[twin] AI verdicts: {len(verdicts)} name(s), {len(dropped)} dropped "
-        f"{dropped} · tokens in/out {usage.get('input', 0)}/{usage.get('output', 0)}"
+        f"[twin] {AI_PROMPT_VERSION}: {len(verdicts)} name(s) matched an event, "
+        f"{len(dropped)} dropped {dropped}"
     )
     # Provenance first, and unconditionally: a verdict that is acted on but not recorded cannot be
     # scored afterwards, and scoring it afterwards is the entire point of the experiment.
@@ -321,7 +322,7 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
             status="verdicts_recorded",
             detail=f"{len(verdicts)} parsed, {len(dropped)} dropped",
             raw=raw,
-            model=os.environ.get("ANTHROPIC_MODEL") or "claude-haiku-4-5",
+            model=_VERDICT_SOURCE,
             prompt_version=AI_PROMPT_VERSION,
             undeployed_cash=str(held_back),
             cash_unit="INR"
@@ -342,7 +343,7 @@ def _ai_verdicts(books: dict, market: Market, cfg: Config) -> dict:
             },
             market.prices,
             as_of=market.as_of,
-            model=os.environ.get("ANTHROPIC_MODEL") or "claude-haiku-4-5",
+            model=_VERDICT_SOURCE,
             prompt_version=AI_PROMPT_VERSION,
         )
         print(f"✓ ai verdicts: {n} row(s) on file → {AI_VERDICT_HISTORY}")
