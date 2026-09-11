@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Tata+Consumer+Products%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-10T17:16:58Z",
+ "http_status": 200,
+ "bytes": 57013,
+ "sha256": "5f97e35ea571e1b5562eb14968c224aac98e03e7cb4d3a415d47714eb831462b",
+ "document_date": "2026-09-10",
+ "feed": "gnews-tataconsum",
+ "kind": "name",
+ "ticker": "TATACONSUM.NS"
+}

@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Canara+Bank%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-10T17:17:01Z",
+ "http_status": 200,
+ "bytes": 130606,
+ "sha256": "3197ac0a1ff32514082e692aa85654934cc93f7cb4ee0bdda3a90bca49cfad96",
+ "document_date": "2026-09-10",
+ "feed": "gnews-canbk",
+ "kind": "name",
+ "ticker": "CANBK.NS"
+}
