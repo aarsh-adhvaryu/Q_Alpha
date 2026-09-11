@@ -640,7 +640,6 @@ def cmd_daily(cfg: Config) -> int:
     atomic.write_text(
         DECISIONS_LOG,
         f"# Twin decisions — {as_of}\n\n" + decisions_markdown(decisions) + "\n",
-        encoding="utf-8",
     )
     # The append-only record. Everything above this line is a snapshot that the next run destroys;
     # this is the only thing that accumulates. It is written LAST and fail-soft — a history write
