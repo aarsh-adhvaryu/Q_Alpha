@@ -180,10 +180,16 @@ def seed_books(
 ) -> dict[str, TwinBook]:
     """Build every book from one tradebook, each funded with the identical dated flows.
 
-    ``REAL``'s holdings are the user's actual trades (replayed elsewhere); the others start as pure
-    cash and spend it according to their own policy. Seeding them here — from the same source, in
-    one place — is what makes :func:`assert_identical_flows` trivially true by construction rather
-    than a hope.
+    ``REAL``'s holdings are the user's actual trades, replayed. The baselines start as pure cash and
+    buy their index with it. Seeding them here — from the same source, in one place — is what makes
+    :func:`assert_identical_flows` trivially true by construction rather than a hope.
+
+    **SYSTEM is seeded as a copy of REAL, not as cash**, and that is the whole shape of the
+    experiment. It holds precisely what the user holds on the day it is created, follows the
+    tradebook until :data:`EVALUATION_START`, and only then begins to choose. Two books from one
+    state means every later difference between them is a decision — not a different starting point,
+    and not the luck of when the money went in, which is what nine books funded by a cash-flow tap
+    could never separate.
     """
     flows = flows_from_trades(trades)
     books: dict[str, TwinBook] = {}
@@ -331,10 +337,20 @@ NULL_P95_LOG_REL_WEALTH: float | None = None
 #: as the state-at-registration record, and the window opens on the first day the corrected code runs.
 #: The cost is one day; the alternative is twelve months of evidence whose first entry is wrong.
 #:
-#: **One window now.** There were two — this one and ``CORE_EVALUATION_START`` a week later for the
-#: separate core track. Collapsing nine books to one leaves one clock, and it is this one, which is
-#: the earlier and therefore the one that cannot be accused of having been moved to suit a result.
-EVALUATION_START = date(2026, 9, 1)
+#: **The day SYSTEM starts deciding for itself**, and therefore the day the measured window opens.
+#: Before it, SYSTEM holds exactly what the user holds — the tradebook replayed — so the two books
+#: begin from one state and every later difference is a decision rather than a different starting
+#: point. On and after it, SYSTEM chooses and the gap against ``BASELINE_EW`` is the experiment.
+#:
+#: **Registered 2026-09-12, forward-dated to the 14th, before any of those days were observed.**
+#: That direction matters and is the reason for the two-day gap: starting an experiment on days
+#: whose outcome is already known is selection on the outcome, and this project has twice adopted a
+#: result as the expected value after seeing it.
+#:
+#: It replaces a window that opened 2026-09-01 for books that no longer exist. Nine books collapsed
+#: to one on 2026-09-12 and the state was reseeded from the first trade; a clock measuring a
+#: composite that has been dissolved cannot be carried over to the thing that replaced it.
+EVALUATION_START = date(2026, 9, 14)
 
 
 def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
@@ -352,6 +368,16 @@ def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
     if as_of.day < start.day:
         months -= 1
     return max(0, months)
+
+
+def is_autonomous(as_of: date, *, start: date = EVALUATION_START) -> bool:
+    """May ``SYSTEM`` decide for itself on this day?
+
+    Before the registered start it mirrors the user: same holdings, no choices of its own. The date
+    is a constant rather than a flag so that "when did it start deciding" has exactly one answer,
+    on file, and cannot be nudged by a run that went badly.
+    """
+    return as_of >= start
 
 
 @dataclass(frozen=True)

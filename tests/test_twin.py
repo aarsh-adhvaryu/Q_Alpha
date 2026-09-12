@@ -105,7 +105,7 @@ def _marks(**values: float) -> dict[str, BookMark]:
     for name, gain in values.items():
         out[name] = BookMark(
             name=name,
-            as_of=date(2027, 9, 1),
+            as_of=date(2027, 9, 14),
             start=date(2026, 6, 15),
             net_invested=Decimal("100000"),
             value=Decimal("100000") + Decimal(str(gain)),
@@ -243,10 +243,12 @@ def test_the_window_is_the_registered_one_not_the_first_flow_ever() -> None:
     """
     from qalpha.live.twin import EVALUATION_START, evaluation_months
 
-    assert date(2026, 9, 1) == EVALUATION_START
-    assert evaluation_months(date(2026, 8, 31)) == 0, "before the window opens, nothing has elapsed"
+    assert date(2026, 9, 14) == EVALUATION_START, (
+        "the registered start is the day SYSTEM begins deciding — see PREREGISTRATION_SYSTEM.md"
+    )
+    assert evaluation_months(date(2026, 9, 13)) == 0, "before the window opens, nothing has elapsed"
     assert evaluation_months(date(2027, 6, 15)) == 9, "the June-2026 flow must not buy extra months"
-    assert evaluation_months(date(2027, 9, 1)) == 12
+    assert evaluation_months(date(2027, 9, 14)) == 12
 
 
 def test_the_null_matches_the_committed_report() -> None:
