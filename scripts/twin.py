@@ -1,7 +1,7 @@
-"""The twin — seed the books, step them daily, grade the gate. The cron entry point.
+"""The twin — seed the books, step them daily, record the gaps. The cron entry point.
 
     uv run python scripts/twin.py seed     # ONE TIME: the reset event. Refuses to overwrite.
-    uv run python scripts/twin.py daily    # the cron: step → mark → gate → write
+    uv run python scripts/twin.py daily    # the cron: step → mark → write
     uv run python scripts/twin.py status   # print the comparison without writing
 
 **Fake money only.** The twin books decide for themselves; the real Zerodha account is the *state
@@ -29,24 +29,20 @@ sys.path.insert(0, str(Path(__file__).parent))
 import pandas as pd
 from paper import _load_benchmark_series, _load_market
 
-from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.live import atomic
 from qalpha.live.ai_brief import NameVerdict
 from qalpha.live.console import use_utf8
 from qalpha.live.extraction import EXTRACTION_VERSION
-from qalpha.live.go_gate import Evidence, GateReport, build_gate
 from qalpha.live.policy import ALL_POLICIES, Decision, decisions_markdown
 from qalpha.live.runner import Market, step
 from qalpha.live.tradebook import TradebookTrade
 from qalpha.live.twin import (
     AI_VERDICT_HISTORY,
-    CORE_EVALUATION_START,
-    CORE_V1,
     DECIDING,
-    NULL_P95_LOG_REL_WEALTH,
+    EVALUATION_START,
     REAL,
-    TWIN_FULL,
+    SYSTEM,
     TWIN_HISTORY,
     BookMark,
     Gap,
@@ -62,6 +58,7 @@ from qalpha.live.twin import (
     comparison_markdown,
     ew_fund_mark,
     flows_with_off_market,
+    is_autonomous,
     load_books,
     load_history,
     load_off_market,
@@ -72,7 +69,6 @@ from qalpha.live.twin import (
     seed_books,
     sync_flows,
 )
-from qalpha.live.twinpanel import GATE_JSON
 from qalpha.live.verdicts import AI_PROMPT_VERSION, event_verdicts, verdict_calls
 
 REPORT = Path("reports/twin_dashboard.md")
@@ -193,7 +189,7 @@ def _ew_fund_series() -> pd.Series | None:
     **The defect this fixes.** Until 2026-08-30 the caller passed ``market.index_close`` — the
     NIFTYBEES series — to *both* ``baseline_mark`` and ``ew_fund_mark``. ``BASELINE_EW`` was
     therefore **cap-weighted NIFTYBEES minus a 0.41% fee**: not the equal-weight fund it is named
-    after, and strictly *easier* to beat than ``BASELINE`` sitting next to it. Since ``TWIN_FULL vs
+    after, and strictly *easier* to beat than ``BASELINE`` sitting next to it. Since ``SYSTEM vs
     BASELINE_EW`` is the **only** comparison that opens the GO gate, the gate was measuring the wrong
     thing in the wrong direction — the entire reason for gating against the fund rather than the
     index (Phase 4: 76% of the screen's gap over NIFTYBEES *is* the equal-weight premium) was
@@ -230,9 +226,9 @@ _VERDICT_SOURCE = f"rule:AI-V2 over verified {EXTRACTION_VERSION} filings (news 
 
 
 def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dict[str, NameVerdict]:
-    """Decide keep/drop for the basket ``TWIN_FULL`` is about to buy — the run's single AI treatment.
+    """Decide keep/drop for the basket ``SYSTEM`` is about to buy — the run's single AI treatment.
 
-    Asked about **TWIN_FULL's** candidates specifically, because that is the only book whose policy
+    Asked about **SYSTEM's** candidates specifically, because that is the only book whose policy
     consults them. The verdict for a ticker is a view on the company, not on a book, so one map
     serves every book; ``runner._deploy`` keeps any name the map does not mention.
 
@@ -240,12 +236,12 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
     evening, each claim carrying a quote checked against archived bytes; this applies the registered
     rule to those rows. It needs no key, costs nothing, and a drop can be re-opened a year from now.
     Fail-soft throughout: any error returns ``{}``, which downstream means keep the whole basket, so
-    TWIN_FULL degrades to exactly TWIN_NO_AI rather than to an empty book.
+    SYSTEM degrades to exactly TWIN_NO_AI rather than to an empty book.
     """
     from qalpha.data.prices import PriceData
     from qalpha.live.deploy import advise_deploy_into_weakness
 
-    book = books.get(TWIN_FULL)
+    book = books.get(SYSTEM)
     if book is None:
         return {}
     # The cash floor is checked FIRST and on its own: it is the cost control, and on most days it is
@@ -259,6 +255,9 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
     if market is None or not market.watchlist or not isinstance(market.wl_prices, PriceData):
         _log_attempt(market, "not_asked_no_watchlist")
         return {}
+    from qalpha.live.mandate import load_mandate
+
+    _mandate = load_mandate()
     try:
         advice = advise_deploy_into_weakness(
             book.portfolio,
@@ -268,7 +267,10 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
             market.wl_prices,
             market.index_close,
             market.as_of,
-            max_names=cfg.deploy_policy.max_names_default,
+            # PL-1: the mandate is the one place the limits live. See live/mandate.py.
+            max_names=_mandate.max_names,
+            exclude_breaking=_mandate.exclude_breaking,
+            concentrate=_mandate.concentrate,
             spend_idle_cash=False,
         )
         basket = {o.ticker: int(o.quantity) for o in advice.deploy.buy_orders}
@@ -281,7 +283,7 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
             for v in sorted(verdicts.values(), key=lambda v: v.ticker)
         )
     except Exception as exc:
-        print(f"[twin] AI verdicts unavailable ({exc}) — TWIN_FULL keeps the whole basket")
+        print(f"[twin] AI verdicts unavailable ({exc}) — SYSTEM keeps the whole basket")
         _log_attempt(market, "error", str(exc))
         return {}
     if not verdicts:
@@ -306,7 +308,7 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
     try:
         # The undeployed cash is logged because dropped names are NOT replaced and survivors are
         # NOT rescaled (the no-resize guard is a real safety property and stays). That means
-        # TWIN_FULL − TWIN_NO_AI measures "the veto PLUS the cash drag it causes", not selection
+        # SYSTEM − TWIN_NO_AI measures "the veto PLUS the cash drag it causes", not selection
         # skill alone. Recording the cash is what lets the two be separated afterwards instead of
         # being confounded forever.
         # RUPEES, not share counts. Until 2026-09-05 this summed ``o`` — the *quantity* — so a
@@ -357,10 +359,10 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
         )
         print(f"✓ ai verdicts: {n} row(s) on file → {AI_VERDICT_HISTORY}")
     except Exception as exc:
-        # Provenance failing is not a reason to act anyway. A DROP that changes TWIN_FULL without a
+        # Provenance failing is not a reason to act anyway. A DROP that changes SYSTEM without a
         # row recording *why* is an unauditable treatment: in twelve months nobody could tell a
         # legitimate governance veto from a hallucination, which is the whole question. Returning {}
-        # keeps every name, degrading TWIN_FULL to exactly TWIN_NO_AI — a lost treatment, not a
+        # keeps every name, degrading SYSTEM to exactly TWIN_NO_AI — a lost treatment, not a
         # corrupted one.
         print(
             f"[twin] verdicts NOT recorded ({exc}) — keeping every name rather than acting "
@@ -408,10 +410,17 @@ def cmd_seed(cfg: Config) -> int:
     return 0
 
 
-def _marks_and_gate(
+def _marks_and_gaps(
     books: dict[str, TwinBook], market: Market, cfg: Config, *, persist: bool = True
-) -> tuple[dict[str, BookMark], list[Gap], GateReport]:
-    """Mark every book, add both baselines, and grade the gate on what is actually known.
+) -> tuple[dict[str, BookMark], list[Gap]]:
+    """Mark every book and add both baselines.
+
+    **The GO gate was removed on 2026-09-12.** It asked whether the system beats the fund by
+    more than chance, and that question cannot be answered on this data: the edge is 0.42%/yr
+    against 5.3%/yr of drift, so detecting it at 95% needs roughly two hundred years. Six
+    criteria and a matched null were machinery around a measurement that was never going to
+    arrive. The gaps are still recorded — they are a description of what happened, which is
+    honest — and nothing here authorises anything, which was already true.
 
     ``persist=False`` makes this **genuinely read-only**. ``twin.py status`` is documented as a
     read-only view and called this with the default, so merely *looking* at the twin appended a
@@ -443,7 +452,7 @@ def _marks_and_gate(
     # the same date, so the second write below completes today's row rather than duplicating it.
     if persist:
         try:
-            append_history(marks, [], as_of=market.as_of, gate_verdict=None)
+            append_history(marks, [], as_of=market.as_of)
         except Exception as exc:
             print(f"[twin] WARNING: values not recorded ({exc})", file=sys.stderr)
     # One NAV basis per track. A NAV unitized from run 2's start says nothing about a window that
@@ -452,70 +461,23 @@ def _marks_and_gate(
     rows = load_history()
     navs = {f"run2:{k}": v for k, v in navs_from_history(rows).items()}
     navs.update(
-        {f"core_v1:{k}": v for k, v in navs_from_history(rows, start=CORE_EVALUATION_START).items()}
+        {f"core_v1:{k}": v for k, v in navs_from_history(rows, start=EVALUATION_START).items()}
     )
-    gaps = compare(marks, null_p95=NULL_P95_LOG_REL_WEALTH, navs=navs)
+    gaps = compare(marks, navs=navs)
     # **RUN 2 NO LONGER AUTHORISES.** Its treatment changed inside its own window — two AI rules
     # under one version label — so it was reclassified an operational rehearsal. An experiment
     # declared methodologically invalid must never later produce a GO, so it keeps its statistic
     # (recorded under `tracks`) and loses its authority. The GO gate reads the authorising track
     # only, which is CORE_V1. Until that book exists the gate has no gap and says CANNOT ASSESS,
     # which is the honest answer rather than a borrowed one.
-    rehearsal = next((g for g in gaps if g.gates and g.track == "run2"), None)
-    authorizing = next((g for g in gaps if g.authorizes), None)
-    if rehearsal is not None:
-        print(
-            f"[twin] rehearsal (non-authorising): {rehearsal.left} vs {rehearsal.right} — G = "
-            + ("n/a" if rehearsal.log_rel_wealth is None else f"{rehearsal.log_rel_wealth:+.5f}")
-        )
-    if authorizing is None:
-        print("[twin] GO gate: no authorising track yet — CORE_V1 not created, gap CANNOT ASSESS")
-    else:
-        window_note = "not yet open" if authorizing.months < 1 else f"{authorizing.months} month(s)"
-        print(
-            f"[twin] GO gate reads {authorizing.left} vs {authorizing.right} — {window_note} "
-            f"since {CORE_EVALUATION_START}, G = "
-            + (
-                "n/a"
-                if authorizing.log_rel_wealth is None
-                else f"{authorizing.log_rel_wealth:+.5f}"
-            )
-        )
-    gate_gap = authorizing.rupees if authorizing else None
-    gate_g = authorizing.log_rel_wealth if authorizing else None
-    months = authorizing.months if authorizing else None
-    # Criterion 2 measures the fall THIS BOOK LIVED THROUGH — from the first cash flow, not a
-    # trailing year. A -14.8% drop that happened before the money went in tests nothing, and the
-    # first run of this file reported exactly that as a green.
-    # The registered window, not the first flow ever recorded — criterion 2 must test the fall this
-    # *experiment* lived through, and the tradebook reaches back before the experiment began.
-    # The AUTHORISING window. Criterion 2 must test the fall the gating experiment lived through,
-    # and that experiment is now CORE_V1, whose clock opens later than run 2's.
-    gate_start = CORE_EVALUATION_START
-    start = max(gate_start, flows[0].on) if flows else gate_start
-    window = market.index_close.loc[pd.Timestamp(start) : pd.Timestamp(market.as_of)]
-    worst = float((window / window.cummax() - 1).min()) if len(window) > 1 else None
-    gate = build_gate(
-        Evidence(
-            months_of_flows=months,
-            worst_drawdown_in_window=worst,
-            gap_vs_ew_baseline=gate_gap,
-            log_rel_wealth=gate_g,
-            null_p95=NULL_P95_LOG_REL_WEALTH,
-            # These four were hard-coded: two invented REDs and two invented GREENs. The greens are
-            # the dangerous pair — `tradebook_reconciles=True` and `unguarded_price_gaps=0` asserted
-            # a clean reconciliation and a clean feed that nothing had checked, which is this repo's
-            # signature defect (a number labelled as something it is not) sitting inside the gate
-            # itself. `None` reads ⚪ CANNOT ASSESS, which blocks a GO exactly as a red does while
-            # saying honestly that nobody looked.
-            reconciled_complex_sale=None,
-            reconciled_corporate_action=None,
-            tradebook_reconciles=None,
-            unguarded_price_gaps=None,
-        ),
-        market.as_of,
-    )
-    return marks, gaps, gate
+    # The two tracks still report their own statistic, because a gap is a description of what
+    # happened and descriptions are worth keeping. What has gone is the pretence that either one
+    # could authorise anything.
+    for gap in gaps:
+        if gap.track:
+            value = "n/a" if gap.log_rel_wealth is None else f"{gap.log_rel_wealth:+.5f}"
+            print(f"[twin] {gap.track}: {gap.left} vs {gap.right} — G = {value}")
+    return marks, gaps
 
 
 #: Exit code for "refused to write, nothing changed". Distinct from 1 so a caller can tell a
@@ -524,7 +486,7 @@ ABORTED = 2
 
 
 def cmd_daily(cfg: Config) -> int:
-    """Step every autonomous book, mark them all, grade the gate, write the report."""
+    """Step every autonomous book, mark them all, write the report."""
     books = load_books(cfg)
     if not books:
         print("[twin] not seeded — run `twin.py seed` first. Nothing marked.", file=sys.stderr)
@@ -576,26 +538,9 @@ def cmd_daily(cfg: Config) -> int:
 
     # The AI treatment. Until 2026-08-30 this was never gathered, so `Market.ai_verdicts` was always
     # None, `policy.use_ai and market.ai_verdicts` was always False, and all four twins were
-    # byte-identical by construction — TWIN_FULL − TWIN_NO_AI could only ever have read ₹0. The
+    # byte-identical by construction — SYSTEM − TWIN_NO_AI could only ever have read ₹0. The
     # verdicts are asked for HERE, outside `step`, because the runner must stay pure and replayable:
     # it consumes a decided map, it never calls anything.
-    # CORE_V1 is created once, and on purpose before its registered window opens: the deterministic
-    # entry completes first so the measured period is not dominated by a book sitting in cash beside
-    # a fully-invested fund. The window date is registered in advance and cannot be moved to suit a
-    # result. Any cash still idle when it opens stays visible in the record rather than corrected.
-    if CORE_V1 not in books:
-        from qalpha.live.twin import assert_identical_flows
-
-        seed_flows = books[REAL].flows
-        pf = Portfolio(cfg.cost, cfg.tax, cash=sum((f.amount for f in seed_flows), Decimal("0")))
-        books[CORE_V1] = TwinBook(name=CORE_V1, portfolio=pf, flows=list(seed_flows))
-        assert_identical_flows(list(books.values()))
-        save_books(books)
-        print(
-            f"[twin] CORE_V1 created with the identical flow set (₹{pf.cash:,.2f}). "
-            f"Its measured window opens {CORE_EVALUATION_START}; see "
-            "reports/PREREGISTRATION_CORE_V1.md"
-        )
 
     verdicts = _ai_verdicts(books, market, cfg)
     market = replace(market, ai_verdicts=verdict_calls(verdicts))
@@ -608,28 +553,39 @@ def cmd_daily(cfg: Config) -> int:
     already = [n for n in DECIDING if n in books and books[n].stepped_through == market.as_of]
     if already:
         print(f"[twin] already stepped {market.as_of} for {', '.join(already)} — not re-deciding")
+    from qalpha.live.tradebook import replay_tradebook
+
+    autonomous = is_autonomous(market.as_of)
+    if not autonomous:
+        print(
+            f"[twin] SYSTEM mirrors REAL until {EVALUATION_START} — it holds what you hold and "
+            "makes no choices of its own. Registered before the window opened; see "
+            "reports/PREREGISTRATION_SYSTEM.md."
+        )
     for name in DECIDING:
         book = books.get(name)
         if book is None or book.stepped_through == market.as_of:
+            continue
+        if not autonomous:
+            # Mirror: SYSTEM's holdings ARE the user's until the day it starts choosing, so the two
+            # books open the experiment from one state and every later gap is a decision.
+            books[name].portfolio = replay_tradebook(_tradebook()[0], cfg).portfolio
+            apply_off_market(books[name].portfolio, load_off_market())
+            book.stepped_through = market.as_of
             continue
         decisions += step(book, ALL_POLICIES[name], market, cfg)
         book.stepped_through = market.as_of
     save_books(books)
 
-    marks, gaps, gate = _marks_and_gate(books, market, cfg)
+    marks, gaps = _marks_and_gaps(books, market, cfg)
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     atomic.write_text(
         REPORT,
         f"# The twin — {as_of}\n\n_Generated {datetime.now(UTC):%Y-%m-%d %H:%M UTC}. "
         "Fake money; the real account is the state source and is never traded._\n\n"
         + comparison_markdown(marks, gaps)
-        + "\n\n---\n\n"
-        + gate.render()
         + "\n",
     )
-    # The same grading the report just rendered, for the page to read. Snapshot, not record: the
-    # append-only history below is the evidence, and this is overwritten every run like the marks.
-    GATE_JSON.write_text(json.dumps(gate.to_dict(), indent=2) + "\n", encoding="utf-8")
     # Persist the marks the report was built from, so the dashboard charts plot exactly these
     # numbers rather than recomputing and quietly disagreeing with the table above them.
     atomic.write_text(
@@ -651,11 +607,11 @@ def cmd_daily(cfg: Config) -> int:
     # this is the only thing that accumulates. It is written LAST and fail-soft — a history write
     # that raised would stop the cron, and a stopped cron loses far more days than one bad row.
     try:
-        rows = append_history(marks, gaps, as_of=as_of, gate_verdict=gate.verdict)
+        rows = append_history(marks, gaps, as_of=as_of)
         print(f"✓ history: {rows} day(s) on file → {TWIN_HISTORY}")
     except Exception as exc:
         print(f"[twin] WARNING: history not appended ({exc})", file=sys.stderr)
-    print(f"✓ {len(decisions)} decision(s) · gate: {gate.verdict} · → {REPORT}")
+    print(f"✓ {len(decisions)} decision(s) → {REPORT}")
     return 0
 
 
@@ -668,10 +624,8 @@ def cmd_status(cfg: Config) -> int:
     if market is None:
         print("[twin] no market data.")
         return 0
-    marks, gaps, gate = _marks_and_gate(books, market, cfg, persist=False)
+    marks, gaps = _marks_and_gaps(books, market, cfg, persist=False)
     print(comparison_markdown(marks, gaps))
-    print()
-    print(gate.render())
     return 0
 
 

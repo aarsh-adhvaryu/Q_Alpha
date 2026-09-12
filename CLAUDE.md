@@ -23,8 +23,10 @@ Do not re-litigate that decision. Do not soften a red because money is committed
 given and which still stands: *plan at the index's ~11–12%, treat the backtest's excess as unproven
 upside, size the first year as tuition.*
 
-**Nothing authorizes a GO.** `AUTHORIZING_PAIR` is `None` and every criterion reads ⚪ CANNOT ASSESS.
-That is deliberate, not a countdown. Never describe this system as validated for real money.
+**Nothing authorizes a GO, and there is no longer a gate to open.** It was deleted on 2026-09-12:
+six criteria graded a verdict that needed two hundred years of data to arrive, and six criteria
+reading ⚪ CANNOT ASSESS for ever is a surface that teaches its reader to stop looking. Nothing
+here is validated. Never describe this system as validated for real money.
 
 ### The user
 
@@ -62,6 +64,9 @@ not.** Not arithmetic errors — the arithmetic is almost always right. The *lab
 | "The build is closed" | four defects were found that same day |
 | an evidence step recorded `done` after 216s | **zero coverage rows, zero events** — "nothing to cover" returning 0 |
 | a refused model call, counted as a clean read | **unread**. `("", {})` parsed as a filing with no bad news in it |
+| coverage saying 128 documents read | **no events, no receipts** — an `elif` discarded them when another batch failed |
+| a 30-day veto window, dropping 10 names of 10 | **7 events, not 233** — it read *when we filed the paper*, not when the event happened |
+| `mypy src scripts`, green | **vacuous over `qalpha.*`** — `ignore_missing_imports` resolved our own package to `Any` |
 
 **Passing tests have caught almost none of them.** Unit tests verify that a function works. These are
 failures of *integration* (the right data reaching that function), *methodology* (the function
@@ -112,45 +117,38 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**67 live modules · 1,453 tests green + 1 xfail** (counted, not estimated — see the
+**66 live modules · 1,427 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
 everything after it is produced locally.
 
-### Two experiments run, and neither authorizes anything
+### One book, and it starts deciding on 2026-09-14
 
-| | Question | Pair | Window | Status |
-|---|---|---|---|---|
-| **run 2** | can the whole system beat the fund? | `TWIN_FULL` vs `BASELINE_EW` | 2026-09-01 → 2027-09-01 | operational rehearsal |
-| **CORE_V1** | does the *screen* beat the fund? | `CORE_V1` vs `BASELINE_EW` | opened 2026-09-08 | descriptive track |
+| Book | What it is |
+|---|---|
+| `SYSTEM` | the whole thing deciding for itself — screen, evidence, governor, §4.7 exits, costs, tax |
+| `BASELINE_EW` | the Nifty-50 equal-weight index fund, charged 0.41%/yr. **The bar** |
+| `BASELINE` | NIFTYBEES, bought and held. The do-nothing floor, never the bar |
+| `REAL` | the user's tradebook replayed — what he actually did |
 
-`AUTHORIZING_PAIR` is `None`. Both tracks record their own statistic under `tracks` in
-`data/twin/history.jsonl`, each labelled by its own pair; the `gate` block is empty because nothing
-authorizes. Set `AUTHORIZING_PAIR` only when that pair's question, statistic and matched null are all
-frozen **before** its window opens.
+**`SYSTEM` is seeded as a copy of `REAL`.** It holds exactly what he holds, follows the tradebook
+until `EVALUATION_START = 2026-09-14`, and only then begins to choose. Two books from one state
+means every later difference is **a decision**, not a different starting point. Verified on
+registration day: `SYSTEM − REAL = ₹0`. Registered in `reports/PREREGISTRATION_SYSTEM.md`, written
+two days before the window opened.
 
-**Run 2 is a rehearsal** because its treatment changed inside its own window: its first four days ran
-under two different AI rules wearing one version label. Preserved in full, no row edited.
+**It was nine books and a GO gate until 2026-09-12.** Three ablations asked which component earns
+its keep — harder than the question we already cannot answer. `CORE_V1` was a second clock for a
+second unfinishable experiment. And the gate graded six criteria toward a verdict needing two
+hundred years: `AUTHORIZING_PAIR` was `None` and would have stayed `None`. Six criteria reading
+⚪ CANNOT ASSESS for ever is not honesty, it is a surface that teaches its reader to stop looking.
+~1,700 net lines deleted.
 
-**`CORE_V1` is descriptive** because its matched null was withdrawn — see below.
-
-### The matched null was generated and withdrawn
-
-`NULL_P95_LOG_REL_WEALTH` is `None`. A value of 0.071877 was generated on 2026-09-06 from 2,000
-draws and withdrawn hours later: it was matched to *a* specification, not to `CORE_V1`'s. The two
-pre-registrations named different statistics (p95 of |G| vs of G), the gate is one-sided against a
-two-sided bar (true α 2.32%, not 5%), the null diversified into ~50 of 51 index members while
-`CORE_V1` holds a capped basket, and `CORE_V1` can sell while the null never does.
-
-Measured p95(|G|) by basket size: **8 names 0.162 · 15 names 0.106 · the null's ~50 names 0.072.**
-The bar was 1.5–2.3× too low, and too low is the direction that makes noise look like skill.
-
-> **The qualitative finding survives and is the important one.** The backtest's edge over the gating
-> benchmark is **0.42%/yr**; a 15-name basket drifts **5.3%/yr** against that fund for no reason. So
-> a correctly matched bar is ~25× the edge, criterion 3 would fire about **1%** of the time if the
-> edge were entirely real, and detecting it at 95% needs roughly **200 years**. A twelve-month
-> superiority test cannot answer this question. Full detail in `reports/NULL_MATCHED.md`.
+> **A twelve-month result, in either direction, is consistent with chance.** The edge over this
+> benchmark is **0.42%/yr** against **5.3%/yr** of drift. That is not a caveat to add afterwards —
+> it is the finding, and it is why the corpus matters more than this book. Full detail in
+> `reports/NULL_MATCHED.md`.
 
 ### The evidence spine — reads filings and headlines, decides nothing
 
@@ -338,7 +336,7 @@ live/         account (the reconciled account) · session (snapshot + resume) ·
               extraction (the model reports what a filing says) · pretrade (may we buy this?)
               pipeline (rank → skip → anchor → one outcome) · flags (what the user sees)
 scripts/      local_run.py (the click — the only entry point) · twin.py · evidence.py (the spine)
-              paper.py · advisor.py · exp_null.py · backtest_* · exp_*
+              paper.py · advisor.py · ocr_scans.py · backtest_* · exp_*
 config.py     every tunable parameter in one place
 ```
 
@@ -388,7 +386,7 @@ uv run python scripts/evidence.py compare-readers      # which model should read
 uv run python scripts/news.py daily                    # the headlines (archive → map → read)
 uv run python scripts/news.py daily --dry-run          # archive only; read nothing
 uv run python scripts/run_phase0.py                    # the validated backtest
-uv run python scripts/exp_null.py --draws 2000         # the matched null
+uv run python scripts/ocr_scans.py --dry-run           # scanned filings with no text layer
 uv run python scripts/local_run.py --app               # the app: buttons, live progress, tokens
 uv run python scripts/local_run.py --app --autorun     # what the desktop click runs
 uv run python scripts/local_run.py --no-pipeline       # decide only, on research already on disk
@@ -475,26 +473,178 @@ task."**
    exists, no result computed on `nifty100_watchlist.csv` means anything, because today's members
    applied to the past is worth more than the effect being measured. Source: NSE's Next-50
    reconstitution circulars. This is bounded data entry, not research.
-2. **Replay the policy the money runs, not the ranking.** `exp_screen_oos.py` tests monthly
-   rankings. The live policy is buy-and-hold with a ₹50,000 monthly allowance, the §4.7 exits, the
-   sector cap, costs and tax. Those are different strategies and only one of them is being run.
+2. **DONE, and the answer is no** (`PO-1`, 2026-09-12,
+   `reports/PREREGISTRATION_POLICY_REPLAY.md`). The live policy — driven through
+   `runner.step`, the same function `SYSTEM` calls every evening — was replayed over fourteen
+   years on the **point-in-time Nifty-50**, a universe that contains the 36 names that left the
+   index. ₹50,000 a month, identical flows to every line, costs and tax charged:
+
+   | | Terminal | CAGR | Tax |
+   |---|---:|---:|---:|
+   | **Policy, as configured** | **₹12,333,754** | +2.49% | ₹2,095,762 |
+   | `BASELINE_EW` — the bar | ₹27,549,986 | +8.04% | ₹0 |
+   | NIFTYBEES — the floor | ₹21,799,934 | +6.33% | ₹0 |
+   | *diagnostic:* exits OFF | ₹20,023,958 | +5.72% | ₹25,777 |
+
+   **−55% against the bar.** But `PO-2` then decomposed it, and the answer reverses:
+
+   | | Terminal | vs fund | adds |
+   |---|---:|---:|---|
+   | **Screen top-8, fully invested, never sells** | **₹30,058,634** | **+9.1%** | the raw ranking |
+   | top-30 — *harness check, must converge* | ₹28,007,476 | +1.7% | most of the index |
+   | + the live `exclude_breaking` filter | ₹27,860,168 | +1.1% | refuses names in breakdown |
+   | + fills underweights (the live deploy) | ₹20,023,958 | −27.3% | diversifies into gaps |
+   | + the §4.7 exits (as configured) | ₹12,333,754 | −55.2% | sells the broken |
+
+   **The ranking works. Every layer built on top of it destroys value**, and each is a deliberate
+   design choice: `exclude_breaking` costs ₹2.2M — eight of the nine points — because the
+   deepest-pulled-back names are exactly the ones it refuses, and those are the ones that paid.
+   Filling underweights instead of buying cheapness costs ₹7.9M: a rebalancing rule wearing a
+   cheapness rule's name, drifting the book toward the index it is trying to beat. The exits cost
+   ₹7.7M.
+
+   **The obvious explanation was wrong and was checked before being reported.** Mean cash across the
+   whole replay is **1.0%** — there is no cash drag and `market_weakness` does not scale the deploy,
+   so "deploy faster" would have fixed a problem that does not exist.
+
+   +9.1% over fourteen years is **≈0.6%/yr**, one path, on the Nifty-50 rather than the Nifty-100
+   the money runs on, with parameters not chosen blind. Not significance, not permission — but the
+   first thing measured here that beat the bar, with a named mechanism for why the live system
+   does not.
+
+   **And the timing premise is real too, in one narrow place** (`WC-1`, 2026-09-12,
+   `reports/PREREGISTRATION_WEAKNESS_COHORTS.md`). Each month's ₹50,000 tracked as its own cohort
+   for the rest of the history, against the same money into the fund **on the same day** — grouped
+   by `market_weakness` as it was when the money went in. Point-in-time Nifty-50, 177 cohorts:
+
+   | Market that day | Cohorts | Median multiple | Median vs fund | Beat the fund |
+   |---|---:|---:|---:|---:|
+   | **deep** | 11 | ×5.16 | **+30.3%** | 7/11 (64%) |
+   | **elevated** | 60 | ×3.17 | +2.0% | 30/60 (50%) |
+   | **normal** | 106 | ×3.11 | **−3.1%** | 44/106 (42%) |
+
+   **Monotone on all three columns**, and the static Nifty-100 reproduces the shape at roughly
+   triple the magnitude — which is precisely what survivorship would do to a strategy that buys
+   beaten-down names, so that second table is direction-only and its 9/9 hit rate is the tell.
+
+   **The shape matters more than the headline.** The effect is almost entirely in `deep`, which is
+   **11 of 177 months** from about **seven episodes** (COVID is four of them). `elevated` — a third
+   of all months — pays **+2.0%** on a coin-toss hit rate. So the design's instinct is right and its
+   calibration is not: **deploy harder when it is genuinely deep; tilting on `elevated` is tilting
+   on noise.** Nothing here has been changed to act on that, and nothing should be without its own
+   registration.
+
+   **What still has no measurement: the optimizer and the sector allocator.** PO-2 and WC-1 both buy
+   equal-weighted top-K with no sector cap, so neither touches `alloc/`. “Does the optimizer work”
+   is an open question, not an answered one, and the +9.1% is *not* evidence for it.
+
+   **The policy `SYSTEM` runs was changed on 2026-09-12, two days before its window opened, and
+   half the change was refused by its own test** (`PL-1`, `reports/PREREGISTRATION_LIVE_POLICY.md`).
+   Four edits were proposed from PO-1/PO-2's decomposition. Replayed through `runner.step`:
+
+   | | Change | Verdict |
+   |---|---|---|
+   | A | §4.7 exits **off** | **ships** — ₹13.19M → ₹20.14M, +52.7% |
+   | C | basket 15 → **8** | **ships** — +0.6%, and ends a split-brain (below) |
+   | B | breakdown as a flag, not a filter | **rejected, −23.2%** |
+   | D | buy cheapest, not most underweight | not shipped, −0.5% |
+
+   **B reversed sign against PO-2 and that is the lesson.** PO-2 measured the breakdown filter
+   *costing* 8 points; through the real runner it is worth +23.2%. `universe` is screened **before**
+   the roster is chosen, so `exclude_breaking` is also **the only thing that evicts a collapsing
+   holding** — with the exits off too, a broken name keeps its slot and is topped up all the way
+   down, and "cheapest" means "fallen furthest", so next month aims at it again. PO-2's loop held no
+   roster and could not see it. **Rule 1: a fix reasoned about as a concept, applied at one call
+   site.** The ablation's first row reproduced the old ₹20,023,958 to the rupee, which is the only
+   reason the other rows could be read.
+
+   **The split-brain C fixed:** `runner.step` read `cfg.deploy_policy.max_names_default` (15) while
+   the user's own buy screen read `Mandate.max_names` (4). **The book whose entire purpose is to
+   replicate what he does had never used his basket size**, and PO-1 replayed fourteen years of a
+   policy nobody runs. Every caller now reads the mandate.
+
+   **It still loses to both baselines, and that is the honest headline.** ₹20,138,663 is **−26.9%
+   against `BASELINE_EW`** and **−7.6% against NIFTYBEES**. PL-1 makes a losing policy lose less.
+   PO-2's +9.1% is **not reachable through this code path at any setting of these switches** — the
+   ~36-point gap lives in the sizing machinery neither experiment varied (shortfall-against-target
+   sizing, the sector cap, the roster). That is the next experiment.
+
+   **The weakness lever was measured and it stays disconnected** (`WC-2`/`WC-2b`, 2026-09-12,
+   `reports/PREREGISTRATION_WEAKNESS_RESERVE.md`). WC-1 said deep-drawdown money is better money;
+   this asked whether you can *harvest* that by holding cash back on ordinary months. Over the full
+   fourteen years it looked excellent — **+12.23%** over deploying steadily, monotone in the
+   hold-back fraction, control reproducing PO-2's ₹30,058,634 exactly. Then the robustness grid,
+   registered before it ran: terminal vs its own control at `r = 50%`
+
+   | Period | `deep` ≤ −10% | `deep` ≤ −12% | `deep` ≤ −15% |
+   |---|---:|---:|---:|
+   | full 2012–2026 | +6.20% | **+12.23%** | +10.44% |
+   | first half 2012–2019 | +1.70% | +0.89% | **−1.60%** |
+   | second half 2019–2026 | +1.28% | +1.49% | **−1.09%** |
+
+   **The full period wins everywhere and both halves win barely or lose** — which is not how a real
+   effect behaves. The difference is accumulation: in the full run the reserve has been building
+   since 2012 when COVID arrives, so eight years of withheld instalments land at the bottom at once.
+   Split the period and the effect collapses to **+1.49%**. WC-2's headline is substantially one
+   alignment, and §5 of its own registration had named that risk before the first run.
+
+   **Releasing on `elevated` as well as `deep` also lost** (−0.99%, −1.38%): 71 releases against 11,
+   so the reserve is spent on every mild dip and gone when it matters. `WC-1` had already scored
+   `elevated` as noise.
+
+   > **The two findings are compatible and together they are the useful one: the good entry points
+   > are real, and you cannot reliably save up for them.** The consequence is the boring one this
+   > repository keeps arriving at — deploy steadily — and it agrees with what was already proven:
+   > trading less and staying invested beat the alternatives net of cost and tax.
+
+   **`market_weakness` is therefore still wired to the page, not to the money,** and that is now a
+   measured choice rather than an oversight. It is computed, rendered and
+   printed into a decision's reason, and never multiplied into any amount — no budget scaling, no
+   gate, and it never reaches `deploy_target`. Measured consequence: mean cash across the whole
+   fourteen-year replay is **1.0%**. The screen is named *deploy into weakness* and the docstring
+   calls weakness "a *when to deploy more*" lever. **It is not one.** `WC-1` says the opportunity is
+   real (deep-drawdown money beats the fund by a median +30.3%); acting on it means holding cash
+   back on ordinary months. **`WC-2` measured exactly that and the answer was no** — see above.
 3. **Build the historical filing corpus.** **It is the only route to evidence that does not need
    centuries.** A portfolio over twelve months is *one* observation of a small signal inside large
    noise — that is where the 200-year figure comes from. The same information at the *event* level
    is thousands of observations, and an event study can reach significance in months of work.
 
-   The machinery is built, registered and the reader is chosen (2026-09-11). The corpus itself is
-   **not built yet**. `compare-readers` ran on 150 filings across 22 names: Haiku discarded 59% of
+   **DONE (2026-09-12): 3,898 documents, 4,776 verified events, 15 names.** Read end to end by
+   `claude-sonnet-5` under EX-3, one reader, one label. The machinery was built and the reader
+   chosen on 2026-09-11; `compare-readers` ran on 150 filings across 22 names: Haiku discarded 59% of
    its own quotes as not in the document against Sonnet's 29%, and found 59 events to Sonnet's 109 —
    half the findings at twice the miss rate — so rule 1 of the registration picked
-   **`claude-sonnet-5`**. Projected from that run's measured throughput: **~2,100 documents in about
-   30 minutes at eight workers, ~$38 at list.** Against ~84 evening runs on the local path.
+   **`claude-sonnet-5`**. The projection beside it — ~2,100 documents in ~30 minutes — was wrong in
+   both directions: the corpus is **3,898** documents and the read took **hours, not half an hour**,
+   because a document's cost is its length and the projection was drawn from a round-robin sample
+   that reaches only each name's first, shortest filings. **No per-document token count is recorded
+   anywhere**, so the spend cannot be reconstructed from the repo — only from the API console. That
+   is a gap: the next backfill should write tokens onto the coverage row.
    `uv sync --extra dev --extra ai` — `--extra ai` alone drops ruff and mypy.
 
    **The local reader is not obsolete and the choice was not free.** It reads the nightly 10-day
    window for nothing and sends nothing anywhere; the corpus goes to the cloud because eighty-four
    evenings is not a schedule. Both cannot feed one corpus — see EX-3 above.
-4. **Then, and only then, ask the predictive question.** *Given what was knowable on a date, does a
+4. **The predictive question has a first answer, and it is a null** (`ES-1`, 2026-09-12,
+   `reports/PREREGISTRATION_EVENT_STUDY.md`). After a verified high-materiality veto-shaped filing
+   event, mean abnormal return over 20 trading days is **−0.62%, t = −0.77** clustered by name; the
+   per-name test reads **t = −0.22**. Every horizon includes zero. **`AI-V2`'s drop rule is
+   unsupported** — it is still running, and that is now an explicit choice rather than a default
+   nobody examined.
+
+   Three details the headline hides. The **5-day sign is positive** (+0.68%): if anything the names
+   drift up just after the events the rule drops them for. The **60-day figure is clustering** —
+   −3.61% pooled, **−0.09% per name**, which is the artefact the registration named in advance.
+   And **conditioning adds nothing**: every event day unconditionally gives −0.54% against the
+   subset's −0.62%, a difference of 8 basis points on a standard error many times that.
+
+   **The sample is the finding.** 4,252 events collapse to 463 name-days and the primary test rests
+   on **61**. Fifteen large caps over one year cannot produce more. A real answer needs the
+   point-in-time universe — item 1, still an empty list — because this corpus holds only names that
+   are here today, and survivorship biases it *toward* making them look good after bad news.
+
+5. **Then, and only then, ask the predictive question properly.** *Given what was knowable on a date, does a
    model over events plus price context beat the price-only screen?* Train on early years, test on
    late years nobody looked at, measure after costs. **Nothing in this repo learns that mapping
    today** — the AI reads and reports; deterministic policy decides. That gap is real and it is not

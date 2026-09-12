@@ -61,8 +61,28 @@ class MarketWeakness:
 def market_weakness(index_close: pd.Series, as_of: date) -> MarketWeakness:
     """Classify market weakness from the index's drawdown vs its rolling 1-year high.
 
-    Deeper drawdowns are historically better-than-average entry points for *fresh* capital — so the
-    advisory leans into them (always as tax-free buys, never selling the existing book).
+    **The premise is measured and it holds.** `WC-1` tracked each month's ₹50,000 as its own cohort
+    against the fund bought the same day: money that went in during a `deep` drawdown beat that fund
+    by a median **+30.3%**, money that went in on a `normal` day **lost 3.1%**, monotone across the
+    three levels on a survivorship-free universe.
+
+    **This function classifies. It does not lean.** Its verdict is rendered on the page and written
+    into the reason on every decision, and it is *never multiplied into any amount* — it does not
+    scale the budget, does not gate a buy, and never reaches :func:`deploy_target`. Measured
+    consequence: mean cash across a fourteen-year replay is **1.0%**. So the docstring this replaces
+    was describing behaviour the code has never had, on the surface that names the strategy.
+
+    **Whether it should lean was measured, and the answer is no.** Leaning means holding capital
+    back on ordinary months to have more in deep ones. `WC-2` scored that at **+12.23%** over
+    fourteen years — and `WC-2b` then split the period and moved this function's own −12% threshold,
+    and **the full run wins on every threshold while both halves win barely or lose.** The effect is
+    accumulation, not timing: eight years of withheld instalments happening to land at the bottom in
+    2020. Split the history and it collapses to +1.49%.
+
+    So this function classifies and reports, by decision rather than by omission. **The good entry
+    points are real and you cannot reliably save up for them** — which is the same answer the proven
+    results already gave: trading less and staying invested win.
+    `reports/PREREGISTRATION_WEAKNESS_RESERVE.md` §9 is the record.
     """
     hist = index_close.loc[: pd.Timestamp(as_of)].dropna()
     if hist.empty:
@@ -77,11 +97,21 @@ def market_weakness(index_close: pd.Series, as_of: date) -> MarketWeakness:
             "aggressively into the pullback (tax-free buys).",
         )
     if dd <= -0.05:
+        # NOT "a better-than-usual entry". WC-1 measured `elevated` money at +2.0% against the fund
+        # on a coin-toss hit rate -- indistinguishable from an ordinary day.
         return MarketWeakness(
-            dd, "elevated", "market has pulled back — a better-than-usual entry; lean into it."
+            dd,
+            "elevated",
+            "market has pulled back, but only mildly — measured returns from here are no better "
+            "than an ordinary day; deploy the usual amount.",
         )
+    # "keep dry powder" is what this said until 2026-09-12, and WC-2b measured that advice and
+    # rejected it: holding cash back for the next deep drawdown wins over fourteen years only
+    # because eight years of it happened to land in March 2020, and loses in both halves at a -15%
+    # threshold. Telling the user to hold cash on the one surface that sizes his basket is advice
+    # this repository has evidence against.
     return MarketWeakness(
-        dd, "normal", "near highs — deploy steadily / dollar-cost average; keep dry powder."
+        dd, "normal", "near highs — deploy steadily; saving up for a dip measured worse than this."
     )
 
 
@@ -430,6 +460,7 @@ def advise_deploy_into_weakness(
     broker_prices: Mapping[str, Decimal] | None = None,
     known_actions: Mapping[str, Sequence[CorporateAction]] | None = None,
     exclude_breaking: bool = True,
+    concentrate: bool = True,
     do_not_buy: Collection[str] = (),
     spend_idle_cash: bool = True,
 ) -> WeaknessDeployAdvice:
@@ -437,8 +468,25 @@ def advise_deploy_into_weakness(
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
 
     Composes the price-based weakness/cheapness layers with the validated ``advise_deploy`` (the
-    ₹0-tax greedy buy engine). Names already richly held still count toward the target, so the buys
-    fill the genuine underweights — diversifying the book rather than doubling down.
+    ₹0-tax greedy buy engine).
+
+    ``concentrate`` (PL-1, 2026-09-12) decides **what the month's money is aimed at**, and it is the
+    single most expensive switch in this function. ``True`` — the default and the registered live
+    setting — sizes the target over the **top ``max_names`` by cheapness**, re-chosen every month.
+    ``False`` restores the older rule: give every screened holding a permanent slot and fund
+    whatever sits furthest below its target weight.
+
+    That older rule reads as loyalty and behaves as a lock. Once the book holds ``max_names`` names
+    there are no free slots left, so **no new name can ever enter**, and fresh capital spreads over
+    an ageing roster by drift alone. Replayed through ``runner.step`` over fourteen years it
+    converges on the index it is trying to beat, at a measured **−₹7.9M** — the largest single item
+    in ``PO-1``'s decomposition, and a rebalancing rule wearing a cheapness rule's name.
+
+    ``exclude_breaking`` is the other one. ``True`` **removes** a name in §4.7 breakdown from the
+    buy list; ``False`` — the registered live setting — leaves it on the page, marked, because this
+    repository's iron rule is *flag, don't veto* and this was the one place the screen broke it.
+    Measured at −₹2.2M: an otherwise identical top-8 falls from +9.1% to +1.1% against the fund,
+    since the deepest-pulled-back names both trip the test and carry the return.
 
     ``max_name_fraction`` keeps the deploy diversified at whole-share granularity: a name whose **one
     share** costs more than this fraction of ``amount`` is dropped from the target, so a single pricey
@@ -535,7 +583,22 @@ def advise_deploy_into_weakness(
     # stopped being good.**
     held_still_screened = [t for t in universe if t in portfolio.positions()]
     preselected = max_names is not None and len(universe) > max_names
-    if preselected:
+    if preselected and concentrate:
+        # PL-1 (D), 2026-09-12. THE MONTH'S MONEY GOES TO THE MONTH'S CHEAPEST.
+        #
+        # The `else` branch below gives every screened holding a permanent slot. That reads as
+        # loyalty and behaves as a lock: hold `max_names` names and `slots` goes to zero or below,
+        # so **no new name can ever enter again** and the money spreads across an ageing roster by
+        # drift alone. Replayed over fourteen years that converges on the index it is trying to
+        # beat, at a measured -Rs 7.9M (PO-1's decomposition, the largest single item).
+        #
+        # This does not repeal the stickiness rule (2026-08-20, the user's: "if a company is good,
+        # and getting a good deal, why not add to it?"). A held name that is still cheap is still
+        # in the top-K and still gets bought, every month, for as long as it stays cheap. What
+        # stops is a holding absorbing fresh capital BECAUSE IT DRIFTED BELOW A TARGET WEIGHT,
+        # with cheapness playing no part in the decision.
+        selected = sorted(universe, key=lambda x: -cheap.get(x, 0.0))[:max_names]
+    elif preselected:
         # Every healthy holding stays a candidate, not just the top `max_names` of them (user's
         # idea, 2026-08-20): "it knows the distribution of the portfolio — instead of selling, it
         # balances it in the next buy." `max_names` therefore caps how many *new* names may be

@@ -11,15 +11,15 @@ import pandas as pd
 from qalpha.accounting.tax_lots import TaxLot
 from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
-from qalpha.live.policy import DEPLOY, EXIT, HARVEST, HEDGE_ON, HOLD, POLICIES
+from qalpha.live.policy import DEPLOY, EXIT, HARVEST, HEDGE_ON, HOLD, POLICIES, Policy
 from qalpha.live.runner import Market, step
-from qalpha.live.twin import TWIN_FULL, TWIN_NO_AI, TWIN_NO_EXITS, TWIN_NO_HEDGE, TwinBook
+from qalpha.live.twin import SYSTEM, TwinBook
 
 _AS_OF = date(2026, 8, 28)
 _DATES = pd.bdate_range(end=pd.Timestamp(_AS_OF), periods=400)
 
 
-def _book(name: str = TWIN_FULL, cash: str = "0", lots: tuple = ()) -> TwinBook:
+def _book(name: str = SYSTEM, cash: str = "0", lots: tuple = ()) -> TwinBook:
     cfg = Config()
     pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal(cash))
     for ticker, on, qty, px in lots:
@@ -77,7 +77,7 @@ def _market(index: pd.Series | None = None, **kw: object) -> Market:
 
 def test_a_quiet_day_records_a_hold() -> None:
     """Silence and a dead runner must not look alike — the failure that hid for 38 days."""
-    (d,) = step(_book(), POLICIES[TWIN_FULL], _market())
+    (d,) = step(_book(), POLICIES[SYSTEM], _market())
     assert d.action == HOLD
     assert d.reason
 
@@ -85,7 +85,7 @@ def test_a_quiet_day_records_a_hold() -> None:
 def test_every_decision_carries_a_reason() -> None:
     decisions = step(
         _book(lots=(("CRATER.NS", date(2026, 1, 5), "100", "500"),)),
-        POLICIES[TWIN_FULL],
+        POLICIES[SYSTEM],
         _market(
             prices={"CRATER.NS": Decimal("200")},
             adj_close=_frame(
@@ -117,7 +117,7 @@ def test_a_harvest_decision_states_the_loss_and_the_round_trip() -> None:
         x
         for x in step(
             _book(lots=(("A.NS", date(2026, 1, 5), "100", "500"),)),
-            POLICIES[TWIN_FULL],
+            POLICIES[SYSTEM],
             _market(prices={"A.NS": Decimal("400")}),
         )
         if x.action == HARVEST
@@ -140,23 +140,29 @@ def test_removing_exits_removes_exit_decisions() -> None:
         }
     )
     market = _market(prices={"CRATER.NS": Decimal("40")}, adj_close=adj)
-    full = step(_book(TWIN_FULL, lots=lots), POLICIES[TWIN_FULL], market)
-    none = step(_book(TWIN_NO_EXITS, lots=lots), POLICIES[TWIN_NO_EXITS], market)
+    # Both policies are constructed explicitly. This used to take the "on" case from
+    # POLICIES[SYSTEM], which made a test about a FLAG depend on a ROSTER — so registering
+    # use_exits=False for the live book (PL-1) broke a test that has nothing to do with it.
+    on = Policy("exits-on", use_exits=True)
+    off = Policy("exits-off", use_exits=False)
+    full = step(_book(SYSTEM, lots=lots), on, market)
+    none = step(_book(SYSTEM, lots=lots), off, market)
     assert any(d.action == EXIT for d in full)
     assert not any(d.action == EXIT for d in none)
 
 
 def test_removing_the_hedge_removes_hedge_decisions() -> None:
     market = _market(index=_index_crossing_today())
-    full = step(_book(TWIN_FULL), POLICIES[TWIN_FULL], market)
-    none = step(_book(TWIN_NO_HEDGE), POLICIES[TWIN_NO_HEDGE], market)
+    full = step(_book(SYSTEM), POLICIES[SYSTEM], market)
+    off = Policy("hedge-off", use_hedge=False)
+    none = step(_book(SYSTEM), off, market)
     assert any(d.action == HEDGE_ON for d in full), "a 25% fall must trip the gauge"
     assert not any(d.action == HEDGE_ON for d in none)
 
 
 def test_the_hedge_fires_on_the_edge_not_every_day() -> None:
     """Edge-triggered: an ON that repeats daily is noise, not a decision."""
-    decisions = step(_book(), POLICIES[TWIN_FULL], _market(index=_index_crossing_today()))
+    decisions = step(_book(), POLICIES[SYSTEM], _market(index=_index_crossing_today()))
     assert len([d for d in decisions if d.action == HEDGE_ON]) <= 1
 
 
@@ -165,13 +171,11 @@ def test_the_hedge_fires_on_the_edge_not_every_day() -> None:
 
 def test_idle_cash_below_the_floor_is_not_deployed() -> None:
     """Below the pre-committed floor a deploy is charges wearing a strategy costume."""
-    assert all(d.action != DEPLOY for d in step(_book(cash="1000"), POLICIES[TWIN_FULL], _market()))
+    assert all(d.action != DEPLOY for d in step(_book(cash="1000"), POLICIES[SYSTEM], _market()))
 
 
 def test_cash_with_no_watchlist_says_so_instead_of_silently_holding() -> None:
-    (d,) = [
-        x for x in step(_book(cash="100000"), POLICIES[TWIN_FULL], _market()) if x.action == HOLD
-    ]
+    (d,) = [x for x in step(_book(cash="100000"), POLICIES[SYSTEM], _market()) if x.action == HOLD]
     assert "no watchlist panel" in d.reason
     assert "100,000" in d.reason
 
@@ -182,16 +186,37 @@ def test_deploy_respects_the_concentration_cap() -> None:
     That is the "43×1-share, over-diversified" defect the slider was added to fix — and on the first
     live twin run it produced 75 single-share buys per book, four books, 300 decisions in a day.
     A basket nobody would place is not a strategy being tested.
+
+    **Rewritten 2026-09-12 to assert the property rather than a source line.** It used to read
+    ``inspect.getsource(runner._deploy)`` and grep it for ``max_names=cfg.deploy_policy...``, which
+    is the anti-pattern this repo names in rule 2: it pinned one spelling of the fix in place, so
+    routing the limit through the mandate — without changing the behaviour by one share — broke it,
+    while the thing it claims to protect (the basket stays small) was never actually checked.
     """
-    import inspect
+    from qalpha.data.prices import PriceData
+    from qalpha.live.mandate import load_mandate
 
-    from qalpha.config import Config
-    from qalpha.live import runner
+    mandate = load_mandate()
+    assert mandate.max_names <= 20, "a basket over 20 also breaks Kite's import cap"
 
-    src = inspect.getsource(runner._deploy)
-    assert "max_names=cfg.deploy_policy.max_names_default" in src
-    assert Config().deploy_policy.max_names_default <= 20, (
-        "a basket over 20 also breaks Kite's import cap"
+    # A watchlist WIDER than the cap, or the assertion below passes for the wrong reason. Prices
+    # fan out so the names differ on cheapness and the screen has a real ranking to truncate.
+    wide = {f"N{i:02d}.NS": list(np.linspace(100.0, 100.0 - i, len(_DATES))) for i in range(25)}
+    frame = pd.DataFrame(wide, index=_DATES)
+    market = Market(
+        as_of=_AS_OF,
+        prices={t: Decimal("100") for t in wide},
+        index_close=_calm_index(),
+        adj_close=frame,
+        watchlist=sorted(wide),
+        sector_of={t: f"S{i % 6}" for i, t in enumerate(sorted(wide))},
+        wl_prices=PriceData(frame, frame.copy(), frame.copy() * 0 + 1e6),
+    )
+    decisions = step(_book(SYSTEM, cash="500000"), POLICIES[SYSTEM], market)
+    names = {d.ticker for d in decisions if d.action == DEPLOY and d.ticker}
+    assert names, "this test means nothing if the deploy produced no orders"
+    assert len(names) <= mandate.max_names, (
+        f"the screen proposed {len(names)} names against a {mandate.max_names}-name mandate"
     )
 
 
@@ -214,7 +239,7 @@ def test_step_actually_executes_what_it_decides() -> None:
         wl_prices=_price_data(),
     )
     before = book.portfolio.cash
-    decisions = step(book, POLICIES[TWIN_FULL], market)
+    decisions = step(book, POLICIES[SYSTEM], market)
     if any(d.action == DEPLOY for d in decisions):
         assert book.portfolio.cash < before, "cash must leave the book when it deploys"
         assert list(book.portfolio.positions()), "a deploy must leave lots behind"
@@ -259,16 +284,19 @@ def test_the_ai_verdict_actually_changes_what_twin_full_buys() -> None:
     """The test whose absence let the AI ablation run starved for the whole of run 2's design.
 
     ``Market.ai_verdicts`` was wired into ``_deploy`` in PR-8 and then never populated by the twin
-    cron, so ``policy.use_ai and market.ai_verdicts`` was False every day and TWIN_FULL and
-    TWIN_NO_AI were byte-identical **by construction** — the ablation could only ever have reported
+    cron, so ``policy.use_ai and market.ai_verdicts`` was False every day and SYSTEM and
+    a book with the AI off were byte-identical **by construction** — the ablation could only ever have reported
     ₹0, and would have reported it in twelve months as though it were a finding. Assert the
     behaviour, not the call: a DROP must show up as a name the book does not own.
     """
     market = _two_name_market()
-    with_ai = _bought(_book(cash="500000"), POLICIES[TWIN_FULL], replace_verdicts(market, "drop"))
-    without = _bought(_book(cash="500000"), POLICIES[TWIN_NO_AI], replace_verdicts(market, "drop"))
-    assert "A.NS" not in with_ai, "TWIN_FULL must not hold a name the AI dropped"
-    assert "A.NS" in without, "TWIN_NO_AI must ignore the verdict entirely — that is the ablation"
+    with_ai = _bought(_book(cash="500000"), POLICIES[SYSTEM], replace_verdicts(market, "drop"))
+    off = Policy("ai-off", use_ai=False)
+    without = _bought(_book(cash="500000"), off, replace_verdicts(market, "drop"))
+    assert "A.NS" not in with_ai, "SYSTEM must not hold a name the AI dropped"
+    assert "A.NS" in without, (
+        "a book with the AI off must ignore the verdict entirely — that is the ablation"
+    )
     assert with_ai != without, "if the two books cannot differ, the AI question cannot be answered"
 
 
@@ -276,11 +304,11 @@ def test_no_verdicts_degrades_twin_full_to_exactly_twin_no_ai() -> None:
     """An AI outage must cost the run its treatment, never its basket.
 
     Fail-soft is the contract: no key, no response, an unparseable line → an empty map → every name
-    kept. TWIN_FULL then equals TWIN_NO_AI, which is a missing treatment, not a broken book.
+    kept. SYSTEM then equals a book with the AI off, which is a missing treatment, not a broken book.
     """
     market = _two_name_market()
-    full = _bought(_book(cash="500000"), POLICIES[TWIN_FULL], market)
-    none = _bought(_book(cash="500000"), POLICIES[TWIN_NO_AI], market)
+    full = _bought(_book(cash="500000"), POLICIES[SYSTEM], market)
+    none = _bought(_book(cash="500000"), Policy("ai-off", use_ai=False), market)
     assert full == none and full, "with no verdicts the two books must buy the same real basket"
 
 

@@ -5,8 +5,8 @@ The critical one is the shape this codebase keeps producing and this time I prod
 ``src/qalpha/live/twin.py``. CLAUDE.md's rule 1 says, in as many words, *when you fix a defect grep
 for every other caller of the thing you fixed.* Twice before it had been broken. Now three times.
 
-Once ``CORE_V1`` existed the history writer would have taken the **core** comparison — first in the
-pairs list — and written its numbers under the label ``["TWIN_FULL", "BASELINE_EW"]`` beside run 2's
+Once ``SYSTEM`` existed the history writer would have taken the **core** comparison — first in the
+pairs list — and written its numbers under the label ``["SYSTEM", "BASELINE_EW"]`` beside run 2's
 verdict, into the append-only record, starting with the first post-merge cron.
 """
 
@@ -30,8 +30,7 @@ from qalpha.live.evidence import (
 )
 from qalpha.live.twin import (
     BASELINE_EW,
-    CORE_V1,
-    TWIN_FULL,
+    SYSTEM,
     BookMark,
     TwinBook,
     append_history,
@@ -57,8 +56,7 @@ def _mark(name: str, value: str) -> BookMark:
 
 def _marks() -> dict[str, BookMark]:
     return {
-        TWIN_FULL: _mark(TWIN_FULL, "296000"),
-        CORE_V1: _mark(CORE_V1, "310000"),
+        SYSTEM: _mark(SYSTEM, "296000"),
         BASELINE_EW: _mark(BASELINE_EW, "300000"),
     }
 
@@ -66,97 +64,27 @@ def _marks() -> dict[str, BookMark]:
 # --- the critical defect ------------------------------------------------------------------------
 
 
-def test_each_track_is_recorded_under_its_own_pair(tmp_path: Path) -> None:
-    marks = _marks()
-    gaps = compare(marks)
-    append_history(marks, gaps, as_of=AS_OF, gate_verdict="NOT YET", path=tmp_path / "h.jsonl")
-    row = json.loads((tmp_path / "h.jsonl").read_text().splitlines()[0])
+def test_one_track_is_recorded_under_its_own_pair(tmp_path: Path) -> None:
+    """A track's statistic must name the pair it was computed from, not a module constant.
+
+    It used to write ``GATING_PAIR`` regardless of which gap it had actually read, so a row could
+    name one comparison and carry another's numbers. Nine books made that easy to miss; one makes it
+    impossible to hide, and the assertion stays because the defect was never about the count.
+    """
+    marks = {
+        SYSTEM: _mark(SYSTEM, "305000"),
+        BASELINE_EW: _mark(BASELINE_EW, "300000"),
+    }
+    path = tmp_path / "history.jsonl"
+    append_history(marks, compare(marks), as_of=date(2026, 9, 9), path=path)
+    row = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
     tracks = row["tracks"]
-    assert tracks["run2"]["pair"] == [TWIN_FULL, BASELINE_EW]
-    assert tracks["core_v1"]["pair"] == [CORE_V1, BASELINE_EW]
-    # and the numbers are each track's own, not one pair's numbers under the other's label
-    assert tracks["run2"]["rupees"] != tracks["core_v1"]["rupees"]
-
-
-def test_the_gate_row_names_the_pair_it_was_actually_computed_from(tmp_path: Path) -> None:
-    """It used to write the module constant GATING_PAIR regardless of which gap it had read.
-
-    The property, whatever is authorizing: the gate row's pair is the authorizing gap's pair, or
-    ``None`` when nothing authorizes. It is never a constant picked in a different place.
-    """
-    from qalpha.live.twin import AUTHORIZING_PAIR
-
-    marks = _marks()
-    gaps = compare(marks)
-    append_history(marks, gaps, as_of=AS_OF, gate_verdict="NOT YET", path=tmp_path / "h.jsonl")
-    gate = json.loads((tmp_path / "h.jsonl").read_text().splitlines()[0])["gate"]
-    authorizing = next((g for g in gaps if g.authorizes), None)
-    if authorizing is None:
-        assert gate["pair"] is None and gate["authorizes"] is False
-    else:
-        assert gate["pair"] == [authorizing.left, authorizing.right]
-        assert (authorizing.left, authorizing.right) == AUTHORIZING_PAIR
-
-
-def test_the_gate_numbers_match_the_authorising_track_exactly(tmp_path: Path) -> None:
-    """Gate numbers come from the authorizing track and from nowhere else."""
-    marks = _marks()
-    gaps = compare(marks)
-    append_history(marks, gaps, as_of=AS_OF, gate_verdict="NOT YET", path=tmp_path / "h.jsonl")
-    row = json.loads((tmp_path / "h.jsonl").read_text().splitlines()[0])
-    authorizing = next((g for g in gaps if g.authorizes), None)
-    if authorizing is None:
-        assert row["gate"]["rupees"] is None and row["gate"]["months"] is None
-        # ...and every track's statistic is still recorded, so nothing is lost by not authorizing.
-        assert set(row["tracks"]) == {"core_v1", "run2"}
-    else:
-        track = row["tracks"][authorizing.track]
-        assert (row["gate"]["rupees"], row["gate"]["months"]) == (track["rupees"], track["months"])
-
-
-def test_a_rehearsal_never_authorises() -> None:
-    """An experiment declared methodologically invalid must never later produce a GO."""
-    gaps = compare(_marks())
-    run2 = next(g for g in gaps if g.track == "run2" and g.gates)
-    assert run2.gates and not run2.authorizes
-
-
-def test_at_most_one_pair_can_ever_authorise() -> None:
-    """Two authorizing pairs would mean two GO gates, and the first in a list would win by accident."""
-    assert len([g for g in compare(_marks()) if g.authorizes]) <= 1
-
-
-def test_nothing_authorises_today_and_the_core_pair_still_records() -> None:
-    """CORE_V1 was retired from authority on 2026-09-06 and kept as a descriptive track.
-
-    Its null was withdrawn for not matching the experiment. Leaving the pair flagged authorizing
-    would have let any replacement null make a window that started *before* its question was
-    settled retroactively authorizing.
-    """
-    from qalpha.live.twin import AUTHORIZING_PAIR
-
-    gaps = compare(_marks())
-    assert AUTHORIZING_PAIR is None
-    assert not any(g.authorizes for g in gaps)
-    core = next(g for g in gaps if g.track == "core_v1" and g.gates)
-    assert core.gates and not core.authorizes, "still measured, no longer authorizing"
-
-
-def test_without_the_core_book_nothing_authorises(tmp_path: Path) -> None:
-    """Before CORE_V1 exists the gate has no gap and says so, rather than borrowing run 2's."""
-    marks = {k: v for k, v in _marks().items() if k != CORE_V1}
-    append_history(
-        marks, compare(marks), as_of=AS_OF, gate_verdict="NOT YET", path=tmp_path / "h.jsonl"
-    )
-    gate = json.loads((tmp_path / "h.jsonl").read_text().splitlines()[0])["gate"]
-    assert gate["pair"] is None and gate["rupees"] is None and gate["authorizes"] is False
+    assert tracks["system"]["pair"] == [SYSTEM, BASELINE_EW]
 
 
 def test_history_still_loads_after_the_row_shape_changed(tmp_path: Path) -> None:
     marks = _marks()
-    append_history(
-        marks, compare(marks), as_of=AS_OF, gate_verdict="NOT YET", path=tmp_path / "h.jsonl"
-    )
+    append_history(marks, compare(marks), as_of=AS_OF, path=tmp_path / "h.jsonl")
     rows = load_history(tmp_path / "h.jsonl")
     assert len(rows) == 1 and "tracks" in rows[0]
 
@@ -175,15 +103,15 @@ def test_stepped_through_survives_a_save_and_reload(tmp_path: Path) -> None:
             name=n,
             portfolio=Portfolio(cfg.cost, cfg.tax, cash=Decimal("100000")),
             flows=list(flows),
-            stepped_through=date(2026, 9, 5) if n == CORE_V1 else None,
+            stepped_through=date(2026, 9, 5) if n == SYSTEM else None,
         )
-        for n in (CORE_V1, TWIN_FULL)
+        for n in (SYSTEM, BASELINE_EW)
     }
     path = tmp_path / "books.json"
     save_books(books, path)
     back = load_books(cfg, path)
-    assert back[CORE_V1].stepped_through == date(2026, 9, 5)
-    assert back[TWIN_FULL].stepped_through is None
+    assert back[SYSTEM].stepped_through == date(2026, 9, 5)
+    assert back[BASELINE_EW].stepped_through is None
 
 
 def test_a_book_with_no_marker_is_treated_as_unstepped(tmp_path: Path) -> None:
@@ -192,8 +120,8 @@ def test_a_book_with_no_marker_is_treated_as_unstepped(tmp_path: Path) -> None:
     from qalpha.live.track_record import Flow
 
     books = {
-        CORE_V1: TwinBook(
-            name=CORE_V1,
+        SYSTEM: TwinBook(
+            name=SYSTEM,
             portfolio=Portfolio(cfg.cost, cfg.tax, cash=Decimal("1")),
             flows=[Flow(on=date(2026, 9, 1), amount=Decimal("1"))],
         )
@@ -201,9 +129,9 @@ def test_a_book_with_no_marker_is_treated_as_unstepped(tmp_path: Path) -> None:
     path = tmp_path / "b.json"
     save_books(books, path)
     raw = json.loads(path.read_text())
-    del raw["books"][CORE_V1]["stepped_through"]
+    del raw["books"][SYSTEM]["stepped_through"]
     path.write_text(json.dumps(raw))
-    assert load_books(cfg, path)[CORE_V1].stepped_through is None
+    assert load_books(cfg, path)[SYSTEM].stepped_through is None
 
 
 # --- future data ------------------------------------------------------------------------------------

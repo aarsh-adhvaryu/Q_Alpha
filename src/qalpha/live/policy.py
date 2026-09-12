@@ -1,11 +1,15 @@
 """What each twin book does, and why — the autonomy layer (PLAN_REDESIGN.md §1, Phase 3).
 
-Phase 2 built five books receiving identical cash flows. This is what makes four of them *decide*.
+Phase 2 built five books receiving identical cash flows. This is what makes one of them *decide*.
 
-**One policy, four configurations.** ``TWIN_FULL`` runs everything; each ablation removes exactly one
-factor, so every gap in the comparison is attributable to one thing. That is why the flags are
-subtractive (``use_ai=False``) rather than a menu — an ablation must differ from the headline in one
-respect and no other, or the diagnostic it produces means nothing.
+**One policy, one configuration.** It was four — ``SYSTEM`` plus three ablations, each removing a
+single factor so every gap was attributable to one thing. The ablations were deleted on 2026-09-12:
+if separating the whole system from chance needs two hundred years, separating one of its three
+parts needs longer still.
+
+**The flags are no longer diagnostics; they are the policy.** ``use_exits=False`` is not an ablation
+of ``SYSTEM``, it *is* ``SYSTEM``, registered in `reports/PREREGISTRATION_LIVE_POLICY.md` two days
+before the evaluation window opened and frozen from 2026-09-14.
 
 **Every decision carries a reason, enforced by the type.** A book that acts without recording why is
 unauditable, and this repo's entire failure history is surfaces that could not explain themselves.
@@ -22,7 +26,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from qalpha.live.twin import CORE_V1, TWIN_FULL, TWIN_NO_AI, TWIN_NO_EXITS, TWIN_NO_HEDGE
+from qalpha.live.twin import SYSTEM
 
 #: What a book did on a day, in the log and on the panel.
 DEPLOY = "DEPLOY"
@@ -35,13 +39,19 @@ HOLD = "HOLD"
 
 @dataclass(frozen=True)
 class Policy:
-    """One book's configuration. Subtractive by design — see the module docstring.
+    """One book's configuration.
+
+    **``ablated`` was removed on 2026-09-12** along with the three ablation books it existed for.
+    It answered "which single factor does this configuration remove", which assumed every flag-off
+    was a diagnostic. ``SYSTEM`` now ships ``use_exits=False`` as its **registered headline** (PL-1),
+    so the property would have reported the live policy as an ablation of itself — a number labelled
+    as something it is not, on the one surface that names what each book is.
 
     ``use_ai`` — the AI acts on selection, sizing, timing, the hedge and calling an exit, within the
     three guards it can never breach: it cannot invent a name outside the deterministic universe,
     cannot breach the 20% name / 30% sector caps, and cannot fail closed (no key, no response, an
     unparseable reply or a refusal all fall back to the deterministic path, so an AI outage degrades
-    ``TWIN_FULL`` to ``TWIN_NO_AI`` rather than to nothing).
+    ``SYSTEM`` to its deterministic self rather than to nothing).
 
     ``use_hedge`` — the short-futures overlay while the stress gauge is elevated. Twin-only for
     years: no index derivative trades below ~₹15L of notional (§4b-i).
@@ -57,81 +67,22 @@ class Policy:
     use_hedge: bool = True
     use_exits: bool = True
 
-    @property
-    def ablated(self) -> str | None:
-        """Which single factor this configuration removes, or ``None`` for the headline."""
-        for flag, label in (
-            (self.use_ai, "AI"),
-            (self.use_hedge, "hedge"),
-            (self.use_exits, "exits"),
-        ):
-            if not flag:
-                return label
-        return None
 
-
-#: The four autonomous books. Exactly one factor differs between the headline and each ablation.
-POLICIES: dict[str, Policy] = {
-    TWIN_FULL: Policy(TWIN_FULL),
-    TWIN_NO_AI: Policy(TWIN_NO_AI, use_ai=False),
-    TWIN_NO_HEDGE: Policy(TWIN_NO_HEDGE, use_hedge=False),
-    TWIN_NO_EXITS: Policy(TWIN_NO_EXITS, use_exits=False),
-}
-
-
-#: **The frozen core treatment.** Deterministic screen, §4.7 exits, no AI, no hedge overlay.
+#: The one autonomous book — this IS the system, deciding for itself.
 #:
-#: This is not an ablation and must never be added to :data:`POLICIES`. An ablation is defined
-#: relative to ``TWIN_FULL`` and therefore moves whenever ``TWIN_FULL`` moves; a book that answers
-#: "does the screen beat the fund?" over twelve months cannot afford to move at all. The AI, the
-#: evidence adapter and the governor version independently and none of them reaches this book.
+#: **``use_exits=False``, registered in PL-1 on 2026-09-12, two days before the window opens.**
+#: Selling to manage risk loses to the tax, measured twice on different engines: the frozen backtest
+#: put the §4.7 exits **₹74.8 lakh behind buy-and-hold over 13 years, having paid ₹13.3 lakh of tax
+#: to get there**, and ``PO-1``'s fourteen-year replay through this very runner put them at
+#: **−₹7.7M**. Nothing in this repository has ever measured them as worth their cost.
 #:
-#: **Changing any field here ends CORE_V1 and starts CORE_V2 with a new clock.** Nothing else does.
-CORE_POLICY = Policy(CORE_V1, use_ai=False, use_hedge=False, use_exits=True)
+#: The price is real and is not hidden: **the backtested worst fall is −47.5% against the index's
+#: −36.3%**, and removing the exit rule can only deepen a trough, never soften one. Nobody has yet
+#: watched this system fall.
+POLICIES: dict[str, Policy] = {SYSTEM: Policy(SYSTEM, use_exits=False)}
 
-#: Every book that steps daily: the run-2 ablation family plus the independent core track.
-ALL_POLICIES: dict[str, Policy] = {**POLICIES, CORE_V1: CORE_POLICY}
-
-
-def assert_core_is_not_an_ablation(policies: dict[str, Policy] = POLICIES) -> None:
-    """``CORE_V1`` must stay out of the ablation family.
-
-    If it were in :data:`POLICIES` it would be asserted against ``TWIN_FULL`` as a single-factor
-    ablation, which it is not — and, worse, it would acquire the composite's identity, which is the
-    exact coupling it exists to break.
-    """
-    if CORE_V1 in policies:
-        raise ValueError(
-            f"{CORE_V1} is in the ablation family. It is a separate experiment with its own clock "
-            "and its own reset condition; it must not be defined relative to TWIN_FULL."
-        )
-
-
-def assert_single_factor_ablations(policies: dict[str, Policy] = POLICIES) -> None:
-    """Each ablation must differ from the headline in exactly one flag.
-
-    If two differ, its gap is attributable to neither — and a diagnostic that cannot attribute is
-    worse than none, because it invites a story. Asserted rather than trusted to review.
-    """
-    head = policies[TWIN_FULL]
-    assert head.ablated is None, "TWIN_FULL must have every factor on"
-    for name, pol in policies.items():
-        if name == TWIN_FULL:
-            continue
-        differences = sum(
-            1
-            for a, b in (
-                (head.use_ai, pol.use_ai),
-                (head.use_hedge, pol.use_hedge),
-                (head.use_exits, pol.use_exits),
-            )
-            if a != b
-        )
-        if differences != 1:
-            raise ValueError(
-                f"{name} differs from {TWIN_FULL} in {differences} factors, not 1 — its gap would "
-                "be attributable to none of them."
-            )
+#: Every book that steps daily. One entry, kept as a mapping because the runner iterates it.
+ALL_POLICIES: dict[str, Policy] = dict(POLICIES)
 
 
 @dataclass(frozen=True)

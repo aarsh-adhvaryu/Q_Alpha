@@ -17,8 +17,9 @@ from datetime import date
 from decimal import Decimal
 
 from qalpha.accounting.costs import Side
+from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
-from qalpha.live.account import reconcile
+from qalpha.live.account import ReconciledAccount, reconcile
 from qalpha.live.session import snapshot_from
 from qalpha.live.tradebook import TradebookTrade
 
@@ -242,3 +243,39 @@ def test_a_disagreement_is_still_distinct_from_not_looking() -> None:
 
 def test_checked_is_the_default_so_existing_callers_are_unchanged() -> None:
     assert reconcile([], {}, CASH, CFG, AS_OF).broker_checked is True
+
+
+def _unchecked_account(**kw: object) -> ReconciledAccount:
+    cfg = Config()
+    return ReconciledAccount(
+        as_of=date(2026, 9, 12),
+        portfolio=Portfolio(cfg.cost, cfg.tax, cash=Decimal("0")),
+        cash=Decimal("0"),
+        dated=True,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def test_an_unreached_broker_is_not_a_broker_that_disagreed() -> None:
+    """With no session every held name looks 'missing', and that is not what it means.
+
+    `broker_quantities` arrives empty, so every replayed ticker has ``theirs == 0`` and is filed as
+    ``tradebook_only``. The gate then recited all of them as *"held in the ledger but not at the
+    broker"* — the account telling the user his shares are gone when nobody had asked. This is the
+    iron rule (unknown is never substituted) on the surface that decides whether it is safe to act.
+    """
+    unchecked = _unchecked_account(tradebook_only=("INFY.NS", "TCS.NS"), broker_checked=False)
+    assert unchecked.broker_state == "unchecked"
+    assert unchecked.blocking, "an unconfirmed ledger must still block — only the reason changes"
+    reason = " ".join(unchecked.blocking)
+    assert "not reached" in reason
+    assert "INFY" not in reason and "TCS" not in reason, (
+        "names were recited as discrepancies by a run that never compared them"
+    )
+
+
+def test_a_broker_that_was_asked_and_disagreed_still_names_the_names() -> None:
+    """The other half: when the comparison really happened, the gate must still be specific."""
+    checked = _unchecked_account(tradebook_only=("INFY.NS",), broker_checked=True)
+    assert checked.broker_state == "disagrees"
+    assert "INFY" in " ".join(checked.blocking)
