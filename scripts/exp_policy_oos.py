@@ -108,6 +108,7 @@ def replay(
     book.portfolio._sell = _counting_sell  # type: ignore[method-assign]
     pays = _month_starts(index)
 
+    cash_track: list[tuple[float, float]] = []
     contributed = Decimal("0")
     integrity: tuple[dict[str, date], set[str]] | None = None
     exits = 0
@@ -157,6 +158,7 @@ def replay(
             Decimal("0"),
         )
         curve.append((day, value))
+        cash_track.append((float(book.portfolio.cash), float(value)))
         if verbose and stamp in pays and stamp.month == 1:
             print(f"  {day}  policy ₹{value:,.0f}  contributed ₹{contributed:,.0f}")
 
@@ -178,6 +180,7 @@ def replay(
         "exits": exits,
         "buys": buys,
         "positions": {t: int(q) for t, q in book.portfolio.positions().items() if q > 0},
+        "cash_track": cash_track,
     }
 
 

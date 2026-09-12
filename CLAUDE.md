@@ -486,11 +486,31 @@ task."**
    | NIFTYBEES — the floor | ₹21,799,934 | +6.33% | ₹0 |
    | *diagnostic:* exits OFF | ₹20,023,958 | +5.72% | ₹25,777 |
 
-   **−55% against the bar.** Two separate failures: the §4.7 exits cost **₹7.7 million** (5,488
-   exits — the screen buys names that are down and the exit sells names that are down, so they
-   fight and the book churns), and **even with the exits off it still loses** to both baselines.
-   Turning off the worst component does not rescue it. On this universe over this period, **the
-   stock selection is not adding to the passive alternative.**
+   **−55% against the bar.** But `PO-2` then decomposed it, and the answer reverses:
+
+   | | Terminal | vs fund | adds |
+   |---|---:|---:|---|
+   | **Screen top-8, fully invested, never sells** | **₹30,058,634** | **+9.1%** | the raw ranking |
+   | top-30 — *harness check, must converge* | ₹28,007,476 | +1.7% | most of the index |
+   | + the live `exclude_breaking` filter | ₹27,860,168 | +1.1% | refuses names in breakdown |
+   | + fills underweights (the live deploy) | ₹20,023,958 | −27.3% | diversifies into gaps |
+   | + the §4.7 exits (as configured) | ₹12,333,754 | −55.2% | sells the broken |
+
+   **The ranking works. Every layer built on top of it destroys value**, and each is a deliberate
+   design choice: `exclude_breaking` costs ₹2.2M — eight of the nine points — because the
+   deepest-pulled-back names are exactly the ones it refuses, and those are the ones that paid.
+   Filling underweights instead of buying cheapness costs ₹7.9M: a rebalancing rule wearing a
+   cheapness rule's name, drifting the book toward the index it is trying to beat. The exits cost
+   ₹7.7M.
+
+   **The obvious explanation was wrong and was checked before being reported.** Mean cash across the
+   whole replay is **1.0%** — there is no cash drag and `market_weakness` does not scale the deploy,
+   so "deploy faster" would have fixed a problem that does not exist.
+
+   +9.1% over fourteen years is **≈0.6%/yr**, one path, on the Nifty-50 rather than the Nifty-100
+   the money runs on, with parameters not chosen blind. Not significance, not permission — but the
+   first thing measured here that beat the bar, with a named mechanism for why the live system
+   does not.
 3. **Build the historical filing corpus.** **It is the only route to evidence that does not need
    centuries.** A portfolio over twelve months is *one* observation of a small signal inside large
    noise — that is where the 200-year figure comes from. The same information at the *event* level
