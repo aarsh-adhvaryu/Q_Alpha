@@ -788,7 +788,7 @@ def _budget_is_new(cash: Decimal) -> bool:
     return last != str(cash)
 
 
-def cmd_daily(cfg: Config, as_of: date) -> int:
+def cmd_daily(cfg: Config, as_of: date, *, bootstrap: bool = False) -> int:
     print(f"[evidence] shadow run for {as_of} — observes candidates, changes nothing")
     _record_gaps(as_of)
 
@@ -832,6 +832,9 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
         )
 
     coverage: dict[str, AnnouncementCoverage] = {}
+    #: Names never covered before. Named at the end with the command that fixes them — never
+    #: silently skipped, because a name nobody read must not look like a name with nothing to read.
+    deferred: list[str] = []
     windows: dict[str, int] = {}
     events: dict[str, list[ExtractedEvent]] = {}
     unverified: dict[str, int] = {}
@@ -854,6 +857,19 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
             )
             break
         days = _window_days(ticker)
+        if days != LOOKBACK_DAYS and not bootstrap:
+            # A FIRST SIGHTING IS A BACKFILL, AND A BACKFILL IS NOT AN EVENING JOB. Reading a year
+            # of one name's filings at one call at a time is the deliberate `backfill` command --
+            # it has workers, a long budget and a progress bar. Doing it inline made a double-click
+            # sit on a 365-day read, per unseen name, before the login button was usable.
+            #
+            # NOTHING IS ASSUMED IN ITS PLACE. No coverage row is written, so `_seen_before` stays
+            # false and the buy screen keeps printing "Filings NOT read -- that is a gap, not a
+            # clean bill". The alternative -- covering it on the 10-day window -- is the defect
+            # BOOTSTRAP_DAYS exists to prevent: an auditor resignation from day eleven would be
+            # invisible and the name would read CLEAN because nobody looked.
+            deferred.append(ticker)
+            continue
         windows[ticker] = days
         if days != LOOKBACK_DAYS:
             print(
@@ -877,6 +893,29 @@ def cmd_daily(cfg: Config, as_of: date) -> int:
     all_events = [e for found in events.values() for e in found]
     if all_events:
         print(f"[evidence] {len(all_events)} event(s) recorded → {EVENT_LOG}")
+
+    if deferred:
+        # NAMED, WITH THE COMMAND THAT FIXES IT. A deferred name reads UNKNOWN on the buy screen,
+        # which is correct and also indistinguishable from a name whose filings were read and were
+        # clean -- unless the run says which it is, in words, here.
+        print(
+            f"[evidence] {len(deferred)} name(s) have never been covered and were NOT read "
+            f"tonight: {', '.join(t.removesuffix('.NS') for t in deferred)}."
+        )
+        print(
+            "[evidence] each needs a year of filings read once, which is a job with its own "
+            "command and not something an evening should do one call at a time:"
+        )
+        # The flag is `--only`, comma-separated. Printed from the real parser's spelling because a
+        # suggested command that errors is worse than no suggestion at all.
+        names = ",".join(t.removesuffix(".NS") for t in deferred)
+        print(
+            f"[evidence]     uv run python scripts/evidence.py backfill --only {names} --workers 8"
+        )
+        print(
+            "[evidence] until then they read UNKNOWN on the buy screen, which is the honest "
+            "answer. Unread is not clean."
+        )
 
     exchange: dict[str, Assessment] = (
         {t: exchange_assess(t, rows, exchange_prov, as_of=as_of) for t in tickers}
@@ -1244,6 +1283,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="comma-separated tickers to back-fill, instead of the whole basket",
     )
     ap.add_argument(
+        "--bootstrap",
+        action="store_true",
+        help=(
+            "daily only: read a never-seen name's full 365-day window inline instead of deferring "
+            "it to `backfill`. Off by default — an evening should not sit on a year of one name's "
+            "filings at one call at a time before the page is usable."
+        ),
+    )
+    ap.add_argument(
         "--readers",
         default="claude-haiku-4-5,claude-sonnet-5",
         help="comma-separated models to compare (compare-readers only)",
@@ -1271,7 +1319,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             budget_seconds=max(60, int(args.budget_seconds)),
             only=tuple(t.strip() for t in args.only.split(",") if t.strip()),
         )
-    return cmd_daily(Config(), as_of)
+    return cmd_daily(Config(), as_of, bootstrap=bool(args.bootstrap))
 
 
 if __name__ == "__main__":
