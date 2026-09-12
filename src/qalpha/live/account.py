@@ -107,6 +107,19 @@ class ReconciledAccount:
         is a normal event, and refusing to run until a CSV arrives would make the system useless on
         exactly the day something changed. It is a loud caveat, and it blocks anything TAX-exact.
         """
+        if not self.broker_checked:
+            # NOBODY ASKED, AND THAT IS NOT A DISAGREEMENT. With no session `broker_quantities`
+            # arrives empty, so every held name has `theirs == 0` and lands in `tradebook_only` —
+            # and this used to recite all of them as "held in the ledger but not at the broker",
+            # which is the account saying your shares are missing when the truth is that it never
+            # looked. Unknown is never substituted: missing broker data is not a broker denial.
+            #
+            # `render` had already learned this — "Agreement was not found, it was not looked for"
+            # — and the gate had not. Same defect, one call site, the concept fixed in neither.
+            #
+            # The block still stands, because an unconfirmed ledger is a real reason not to act.
+            # What changes is that it says the thing that is actually wrong.
+            return ("the broker was not reached, so the ledger has not been checked against it",)
         out: list[str] = []
         if self.mismatched:
             out.append(f"quantities disagree with the broker: {', '.join(self.mismatched)}")
