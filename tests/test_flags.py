@@ -434,3 +434,24 @@ def test_an_event_recorded_after_the_decision_date_is_not_shown_at_it(tmp_path: 
         ["VBL.NS"], since=date(2026, 8, 1), until=date(2026, 8, 27), path=log
     )
     assert seen_later and not seen_then, "an event is only knowable from the day it was recorded"
+
+
+def test_a_flagged_name_still_says_its_filings_were_not_read() -> None:
+    """THE BRANCH NOTHING COVERED. A name with any flag skipped the unread check entirely.
+
+    The `clean`/`unread` split happens in the branch a name only reaches when it has **nothing**
+    against it. So a name carrying one news item printed that item and said nothing whatever about
+    its filings never having been opened — and the more concerning the name, the more certain it
+    was to conceal the gap.
+
+    Caught by `test_an_unread_name_is_never_listed_as_clear` starting to fail once real news data
+    landed against VBL, which had been exercising the quiet branch by accident until then.
+    """
+    if load_archive(AS_OF)[1] is None:  # pragma: no cover - the archive ships with the repo
+        return
+    panel = flags_markdown(["VBL.NS"], as_of=AS_OF)
+    assert "🟡 news:" in panel, "this test is vacuous unless the name is actually flagged"
+    assert "Filings NOT read" in panel, "a flagged name concealed that nobody read its filings"
+    # …and the caveat sits on the name's own row, not in a footnote a reader may not reach.
+    vbl_row = next(line for line in panel.splitlines() if line.startswith("- **VBL**"))
+    assert "Filings NOT read" in vbl_row

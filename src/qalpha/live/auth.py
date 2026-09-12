@@ -159,8 +159,39 @@ def explain_login_failure(exc: BaseException, *, api_key: str = "") -> str:
     tail = f"...{api_key[-4:]}" if len(api_key) >= 4 else "your key"
     for needle, hint in _LOGIN_HINTS:
         if needle in text:
-            return hint.format(key_tail=tail)
+            return hint.format(key_tail=tail) + _last_worked_note()
     return f"{type(exc).__name__}: {exc}"
+
+
+def _last_worked_note() -> str:
+    """ " When these credentials last completed a login here, if they ever did.
+
+    The hint above lists two causes and cannot choose between them. This date chooses: a saved
+    session means the pair WAS valid on that day, so something changed on the Kite console since —
+    which turns "I do not know what is going on" into "it has not worked since June". No session
+    file means it has never worked here, and the likeliest cause is a first-time copy-paste.
+
+    Reads only the date and the user id. The access token in that file is never printed.
+    """
+    try:
+        if not SESSION_FILE.exists():
+            return (
+                " These credentials have never completed a login on this machine, so this is most "
+                "likely the first copy of the secret rather than a change to it."
+            )
+        saved = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
+        when = str(saved.get("login_date", "")).strip()
+        who = str(saved.get("user_id", "")).strip()
+        if not when:
+            return ""
+        return (
+            f" For what it is worth: this key and secret DID complete a login here on {when}"
+            f"{f' as {who}' if who else ''}, so the pair was valid then and something has changed "
+            "on the Kite console since — a regenerated secret, or an app that lapsed and was "
+            "recreated."
+        )
+    except (OSError, ValueError):
+        return ""
 
 
 def exchange(creds: KiteCredentials, request_token: str) -> KiteSession:
