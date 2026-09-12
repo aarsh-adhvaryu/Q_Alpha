@@ -29,7 +29,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 import pandas as pd
 from paper import _load_benchmark_series, _load_market
 
-from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.live import atomic
 from qalpha.live.ai_brief import NameVerdict
@@ -40,11 +39,10 @@ from qalpha.live.runner import Market, step
 from qalpha.live.tradebook import TradebookTrade
 from qalpha.live.twin import (
     AI_VERDICT_HISTORY,
-    CORE_EVALUATION_START,
-    CORE_V1,
     DECIDING,
+    EVALUATION_START,
     REAL,
-    TWIN_FULL,
+    SYSTEM,
     TWIN_HISTORY,
     BookMark,
     Gap,
@@ -190,7 +188,7 @@ def _ew_fund_series() -> pd.Series | None:
     **The defect this fixes.** Until 2026-08-30 the caller passed ``market.index_close`` — the
     NIFTYBEES series — to *both* ``baseline_mark`` and ``ew_fund_mark``. ``BASELINE_EW`` was
     therefore **cap-weighted NIFTYBEES minus a 0.41% fee**: not the equal-weight fund it is named
-    after, and strictly *easier* to beat than ``BASELINE`` sitting next to it. Since ``TWIN_FULL vs
+    after, and strictly *easier* to beat than ``BASELINE`` sitting next to it. Since ``SYSTEM vs
     BASELINE_EW`` is the **only** comparison that opens the GO gate, the gate was measuring the wrong
     thing in the wrong direction — the entire reason for gating against the fund rather than the
     index (Phase 4: 76% of the screen's gap over NIFTYBEES *is* the equal-weight premium) was
@@ -227,9 +225,9 @@ _VERDICT_SOURCE = f"rule:AI-V2 over verified {EXTRACTION_VERSION} filings (news 
 
 
 def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dict[str, NameVerdict]:
-    """Decide keep/drop for the basket ``TWIN_FULL`` is about to buy — the run's single AI treatment.
+    """Decide keep/drop for the basket ``SYSTEM`` is about to buy — the run's single AI treatment.
 
-    Asked about **TWIN_FULL's** candidates specifically, because that is the only book whose policy
+    Asked about **SYSTEM's** candidates specifically, because that is the only book whose policy
     consults them. The verdict for a ticker is a view on the company, not on a book, so one map
     serves every book; ``runner._deploy`` keeps any name the map does not mention.
 
@@ -237,12 +235,12 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
     evening, each claim carrying a quote checked against archived bytes; this applies the registered
     rule to those rows. It needs no key, costs nothing, and a drop can be re-opened a year from now.
     Fail-soft throughout: any error returns ``{}``, which downstream means keep the whole basket, so
-    TWIN_FULL degrades to exactly TWIN_NO_AI rather than to an empty book.
+    SYSTEM degrades to exactly TWIN_NO_AI rather than to an empty book.
     """
     from qalpha.data.prices import PriceData
     from qalpha.live.deploy import advise_deploy_into_weakness
 
-    book = books.get(TWIN_FULL)
+    book = books.get(SYSTEM)
     if book is None:
         return {}
     # The cash floor is checked FIRST and on its own: it is the cost control, and on most days it is
@@ -278,7 +276,7 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
             for v in sorted(verdicts.values(), key=lambda v: v.ticker)
         )
     except Exception as exc:
-        print(f"[twin] AI verdicts unavailable ({exc}) — TWIN_FULL keeps the whole basket")
+        print(f"[twin] AI verdicts unavailable ({exc}) — SYSTEM keeps the whole basket")
         _log_attempt(market, "error", str(exc))
         return {}
     if not verdicts:
@@ -303,7 +301,7 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
     try:
         # The undeployed cash is logged because dropped names are NOT replaced and survivors are
         # NOT rescaled (the no-resize guard is a real safety property and stays). That means
-        # TWIN_FULL − TWIN_NO_AI measures "the veto PLUS the cash drag it causes", not selection
+        # SYSTEM − TWIN_NO_AI measures "the veto PLUS the cash drag it causes", not selection
         # skill alone. Recording the cash is what lets the two be separated afterwards instead of
         # being confounded forever.
         # RUPEES, not share counts. Until 2026-09-05 this summed ``o`` — the *quantity* — so a
@@ -354,10 +352,10 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
         )
         print(f"✓ ai verdicts: {n} row(s) on file → {AI_VERDICT_HISTORY}")
     except Exception as exc:
-        # Provenance failing is not a reason to act anyway. A DROP that changes TWIN_FULL without a
+        # Provenance failing is not a reason to act anyway. A DROP that changes SYSTEM without a
         # row recording *why* is an unauditable treatment: in twelve months nobody could tell a
         # legitimate governance veto from a hallucination, which is the whole question. Returning {}
-        # keeps every name, degrading TWIN_FULL to exactly TWIN_NO_AI — a lost treatment, not a
+        # keeps every name, degrading SYSTEM to exactly TWIN_NO_AI — a lost treatment, not a
         # corrupted one.
         print(
             f"[twin] verdicts NOT recorded ({exc}) — keeping every name rather than acting "
@@ -447,7 +445,7 @@ def _marks_and_gaps(
     # the same date, so the second write below completes today's row rather than duplicating it.
     if persist:
         try:
-            append_history(marks, [], as_of=market.as_of, gate_verdict=None)
+            append_history(marks, [], as_of=market.as_of)
         except Exception as exc:
             print(f"[twin] WARNING: values not recorded ({exc})", file=sys.stderr)
     # One NAV basis per track. A NAV unitized from run 2's start says nothing about a window that
@@ -456,7 +454,7 @@ def _marks_and_gaps(
     rows = load_history()
     navs = {f"run2:{k}": v for k, v in navs_from_history(rows).items()}
     navs.update(
-        {f"core_v1:{k}": v for k, v in navs_from_history(rows, start=CORE_EVALUATION_START).items()}
+        {f"core_v1:{k}": v for k, v in navs_from_history(rows, start=EVALUATION_START).items()}
     )
     gaps = compare(marks, navs=navs)
     # **RUN 2 NO LONGER AUTHORISES.** Its treatment changed inside its own window — two AI rules
@@ -533,26 +531,9 @@ def cmd_daily(cfg: Config) -> int:
 
     # The AI treatment. Until 2026-08-30 this was never gathered, so `Market.ai_verdicts` was always
     # None, `policy.use_ai and market.ai_verdicts` was always False, and all four twins were
-    # byte-identical by construction — TWIN_FULL − TWIN_NO_AI could only ever have read ₹0. The
+    # byte-identical by construction — SYSTEM − TWIN_NO_AI could only ever have read ₹0. The
     # verdicts are asked for HERE, outside `step`, because the runner must stay pure and replayable:
     # it consumes a decided map, it never calls anything.
-    # CORE_V1 is created once, and on purpose before its registered window opens: the deterministic
-    # entry completes first so the measured period is not dominated by a book sitting in cash beside
-    # a fully-invested fund. The window date is registered in advance and cannot be moved to suit a
-    # result. Any cash still idle when it opens stays visible in the record rather than corrected.
-    if CORE_V1 not in books:
-        from qalpha.live.twin import assert_identical_flows
-
-        seed_flows = books[REAL].flows
-        pf = Portfolio(cfg.cost, cfg.tax, cash=sum((f.amount for f in seed_flows), Decimal("0")))
-        books[CORE_V1] = TwinBook(name=CORE_V1, portfolio=pf, flows=list(seed_flows))
-        assert_identical_flows(list(books.values()))
-        save_books(books)
-        print(
-            f"[twin] CORE_V1 created with the identical flow set (₹{pf.cash:,.2f}). "
-            f"Its measured window opens {CORE_EVALUATION_START}; see "
-            "reports/PREREGISTRATION_CORE_V1.md"
-        )
 
     verdicts = _ai_verdicts(books, market, cfg)
     market = replace(market, ai_verdicts=verdict_calls(verdicts))

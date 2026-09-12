@@ -1,7 +1,7 @@
 """Turn a deterministic basket into the AI's keep/drop calls — the twin's one AI treatment (PR-8).
 
 **Why this module exists.** ``runner.step`` takes ``Market.ai_verdicts`` already decided: verdicts are
-*injected, never fetched*, so a step stays pure and replayable and an AI outage degrades ``TWIN_FULL``
+*injected, never fetched*, so a step stays pure and replayable and an AI outage degrades ``SYSTEM``
 to exactly ``TWIN_NO_AI`` instead of to nothing. Something outside the runner therefore has to do the
 asking, and before this module the twin cron simply never did — ``Market`` was constructed without
 ``ai_verdicts``, so ``policy.use_ai and market.ai_verdicts`` was False on every book, every day, and
@@ -34,7 +34,7 @@ key, no search, and a drop a reader can re-open a year from now.
 on — because a snippet read by an 8B model is secondary evidence, which is exactly the distinction
 PR-8c drew and the reason it exists. Widening that is `AI-V2.1` and needs its own registration.
 
-Registered in ``reports/PREREGISTRATION_AI_V2.md``. It changes ``TWIN_FULL`` only; ``CORE_V1`` does
+Registered in ``reports/PREREGISTRATION_AI_V2.md``. It changes ``SYSTEM`` only; ``CORE_V1`` does
 not consult verdicts and its clock is untouched.
 """
 
@@ -164,7 +164,7 @@ def event_verdicts(
     secondary source, for the same reason.
 
     Absence is keep, as it has always been: a name this returns nothing for survives untouched, so
-    every failure path degrades ``TWIN_FULL`` to exactly ``TWIN_NO_AI`` rather than to an empty book.
+    every failure path degrades ``SYSTEM`` to exactly ``TWIN_NO_AI`` rather than to an empty book.
     """
     from qalpha.live.ai_brief import NameVerdict, source_tier
     from qalpha.live.extraction import EVENT_LOG, EXTRACTION_VERSION

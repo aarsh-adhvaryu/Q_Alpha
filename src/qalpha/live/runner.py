@@ -75,7 +75,7 @@ class Market:
     sector_of: dict[str, str] | None = None
     wl_prices: object | None = None  # PriceData for the watchlist panel
     #: Per-name AI keep/drop, gathered by the caller. Injected rather than fetched so a step stays
-    #: pure and replayable — and so an AI outage degrades TWIN_FULL to TWIN_NO_AI, never to nothing.
+    #: pure and replayable — and so an AI outage degrades SYSTEM to TWIN_NO_AI, never to nothing.
     ai_verdicts: dict[str, str] | None = None
 
 
@@ -188,7 +188,7 @@ def _hedge(book: TwinBook, policy: Policy, market: Market) -> list[Decision]:
     """Short-index overlay while stress is elevated. Removed in TWIN_NO_HEDGE — the ablation.
 
     ⚠️ **This moves no money, and now says so.** The overlay needs a whole Nifty futures contract; a
-    ₹3L book cannot hold one, so ``TWIN_FULL − TWIN_NO_HEDGE`` is ₹0 **by construction**. That is the
+    ₹3L book cannot hold one, so ``SYSTEM − TWIN_NO_HEDGE`` is ₹0 **by construction**. That is the
     same defect that left the AI ablation starved, and it must never be reported as a measured hedge
     effect. Rather than silently emitting HEDGE_ON for a position nobody can take, the decision now
     carries :func:`hedge_availability` — so the ₹0 is *explained*, and the reader is told the book
@@ -212,7 +212,7 @@ def _hedge(book: TwinBook, policy: Policy, market: Market) -> list[Decision]:
     # near 27,574 — a hundredfold error, straight into a lot-size multiplication. On a ₹3L book the
     # runtime reported "hedge available: 8 lot(s) — one lot ₹17,923" when one lot is ₹17.9 *lakh*
     # and the book can hold none. Worse, CLAUDE.md cited that very function as the thing which
-    # *explained* why TWIN_FULL − TWIN_NO_HEDGE is ₹0.
+    # *explained* why SYSTEM − TWIN_NO_HEDGE is ₹0.
     #
     # An unknown index level is not a reason to invent one. Missing input → CANNOT ASSESS.
     if market.index_level is None:
@@ -242,7 +242,7 @@ def _deploy(book: TwinBook, policy: Policy, market: Market, cfg: Config) -> list
     ``use_ai`` is the ablation. The AI acts as a **filter over the deterministic candidate set**, so
     it can drop a name but never invent one, and never sizes anything: survivors keep the quantities
     the deterministic screen computed. Those guards are structural, not prompted. A missing verdict
-    map means the AI said nothing — the name is **kept**, so an outage degrades ``TWIN_FULL`` to
+    map means the AI said nothing — the name is **kept**, so an outage degrades ``SYSTEM`` to
     exactly ``TWIN_NO_AI`` rather than to an empty basket.
     """
     from qalpha.data.prices import PriceData

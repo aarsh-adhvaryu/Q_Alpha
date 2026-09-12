@@ -6,7 +6,7 @@ from qalpha.live.hedge import HEDGE_RATIO, NIFTY_LOT_SIZE, hedge_availability
 
 
 def test_a_three_lakh_book_cannot_hedge_and_the_zero_is_explained() -> None:
-    """The user's actual situation, and why TWIN_FULL - TWIN_NO_HEDGE is 0 by construction.
+    """The user's actual situation, and why SYSTEM - TWIN_NO_HEDGE is 0 by construction.
 
     The overlay needs a WHOLE futures contract. Wiring the returns model in as-is would have
     simulated a fraction of one -- a real number describing an impossible position. The honest

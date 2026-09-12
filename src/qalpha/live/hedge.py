@@ -164,7 +164,7 @@ class HedgeAvailability:
     """Whether this book can hold the smallest real hedge, and what it would take.
 
     **Why this exists.** ``runner._hedge`` emitted ``HEDGE_ON``/``HEDGE_OFF`` and moved no money, so
-    ``TWIN_FULL − TWIN_NO_HEDGE`` was ₹0 **by construction** — the same defect that left the AI
+    ``SYSTEM − TWIN_NO_HEDGE`` was ₹0 **by construction** — the same defect that left the AI
     ablation starved, in a second place. Wiring :func:`apply_futures_hedge` in as-is would have
     replaced it with a different lie: that model uses a *continuous* notional, so it would have
     simulated 0.16 of a futures contract. Fractions of a contract do not exist.

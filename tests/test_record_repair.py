@@ -136,7 +136,7 @@ def _falling_index() -> pd.Series:
 def _book() -> TwinBook:
     cfg = Config()
     pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("300000"))
-    return TwinBook(name="TWIN_FULL", portfolio=pf)
+    return TwinBook(name="SYSTEM", portfolio=pf)
 
 
 def _market(index_level: float | None) -> Market:
@@ -152,7 +152,7 @@ def _market(index_level: float | None) -> Market:
 
 def test_without_an_index_level_availability_cannot_be_assessed() -> None:
     """Missing input produces CANNOT ASSESS, never an invented number."""
-    decisions = step(_book(), POLICIES["TWIN_FULL"], _market(None))
+    decisions = step(_book(), POLICIES["SYSTEM"], _market(None))
     hedges = [d for d in decisions if d.action == HEDGE_ON]
     assert hedges, "the gauge must still trip"
     assert "CANNOT BE ASSESSED" in hedges[0].reason
@@ -173,7 +173,7 @@ def test_the_etf_price_would_have_understated_a_lot_by_a_hundredfold() -> None:
 
 
 def test_a_real_index_level_reports_the_shortfall() -> None:
-    decisions = step(_book(), POLICIES["TWIN_FULL"], _market(27574.0))
+    decisions = step(_book(), POLICIES["SYSTEM"], _market(27574.0))
     hedges = [d for d in decisions if d.action == HEDGE_ON]
     assert hedges and "hedge UNAVAILABLE" in hedges[0].reason
 

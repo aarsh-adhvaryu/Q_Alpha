@@ -35,7 +35,7 @@ ROW = {
             "xirr": None,
             "start": "2026-06-15",
         },
-        "TWIN_FULL": {
+        "SYSTEM": {
             "value": "291075.78",
             "net_invested": "304144.01",
             "xirr": -0.31,
@@ -131,18 +131,18 @@ def test_a_book_carries_the_day_it_began_not_the_day_the_money_did(tmp_path: Pat
     """Every book's `start` reads 2026-06-15 because that is when the flows begin. CORE_V1 did not
     exist until 2026-09-07, and a book cannot outperform over a period it was not alive for."""
     record = twinpanel.latest_record(
-        _history(tmp_path, ROW), inception={"CORE_V1": "2026-09-07", "TWIN_FULL": "2026-08-30"}
+        _history(tmp_path, ROW), inception={"CORE_V1": "2026-09-07", "SYSTEM": "2026-08-30"}
     )
     assert record is not None
     assert {b.name: b.first_marked for b in record.books} == {
         "CORE_V1": "2026-09-07",
-        "TWIN_FULL": "2026-08-30",
+        "SYSTEM": "2026-08-30",
     }
     assert "2026-09-07" in twinpanel.books_panel(record, today=TODAY)
 
 
 def test_the_books_panel_says_the_hedge_ablation_is_zero_by_construction(tmp_path: Path) -> None:
-    """TWIN_FULL minus TWIN_NO_HEDGE is zero whatever the market does, so it is not evidence
+    """SYSTEM minus TWIN_NO_HEDGE is zero whatever the market does, so it is not evidence
     about the hedge — and two identical rows side by side invite exactly that reading."""
     html = twinpanel.books_panel(_record(tmp_path), today=TODAY)
     assert "₹0 by construction" in html
