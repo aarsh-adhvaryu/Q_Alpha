@@ -125,6 +125,27 @@ def basket_verdicts(
     return generate_verdicts(candidates)
 
 
+def occurred_on(row: Mapping[str, object]) -> str:
+    """When this event **happened**, as ``YYYY-MM-DD``. Never when we happened to read it.
+
+    ``as_of`` is the date the run recorded the row — a property of our own schedule, not of the
+    world. On 2026-09-12 that distinction cost the basket: the corpus backfill read a year of
+    filings in one sitting and stamped every one of them with that day, so a 30-day veto window
+    reading ``as_of`` saw **233 events instead of 7** and dropped ten names out of ten. An auditor
+    change from 2025 was vetoing a name this week.
+
+    Order: the event's own date if the model extracted one, else the date the exchange disseminated
+    the filing. Both are facts about the world. Every event on file carries at least the second, so
+    this never has to guess — and if that ever stops being true, an undated event returns ``""`` and
+    falls outside every window rather than silently landing inside today's.
+    """
+    for field in ("event_date", "disseminated_at", "published_at"):
+        value = str(row.get(field, "") or "")
+        if value:
+            return value[:10]
+    return ""
+
+
 def _veto_rows(
     path: Path, *, kind: str, version_field: str, version: str, since: str
 ) -> list[dict[str, object]]:
@@ -133,6 +154,8 @@ def _veto_rows(
     The revision rule is not decoration: nine of the news log's first 99 lines were re-reads that
     superseded a higher materiality, and a reader counting lines saw three times the flags the
     record holds. :func:`qalpha.live.flags._rows` is the one reader that gets this right.
+
+    **Recency is measured from when the event happened** — see :func:`occurred_on`.
     """
     from qalpha.live.flags import _rows
 
@@ -144,7 +167,7 @@ def _veto_rows(
         and row.get(version_field) == version
         and str(row.get("materiality", "")).lower() == "high"
         and str(row.get("event_type", "")) in VETO_TYPES
-        and str(row.get("as_of", "")) >= since
+        and occurred_on(row) >= since
     ]
 
 

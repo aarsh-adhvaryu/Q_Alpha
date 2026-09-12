@@ -63,6 +63,7 @@ def _headline(**over: object) -> dict[str, object]:
         "summary": "excise notice reported",
         "link": "https://news.google.com/x",
         "source": "Business Standard",
+        "published_at": "2026-09-09T08:00:00Z",
         "_key": "item1:VBL.NS:regulatory_action:bbbb",
     }
     row.update(over)
@@ -119,7 +120,12 @@ def test_an_older_extractor_version_never_acts(tmp_path: Path) -> None:
 
 def test_an_event_outside_the_window_does_not_act(tmp_path: Path) -> None:
     stale = (AS_OF - __import__("datetime").timedelta(days=VETO_WINDOW_DAYS + 1)).isoformat()
-    assert _verdicts(tmp_path, filings=[_filing(as_of=stale)]) == {}
+    # Stale in the WORLD. `as_of` is when the run read the row and says nothing about recency —
+    # reading it is what emptied the basket on 2026-09-12.
+    assert _verdicts(tmp_path, filings=[_filing(event_date=stale, disseminated_at=stale)]) == {}
+    assert _verdicts(tmp_path, filings=[_filing(as_of=stale)]) != {}, (
+        "a recent event read long ago is still recent"
+    )
 
 
 def test_a_name_outside_the_basket_is_ignored(tmp_path: Path) -> None:
@@ -218,3 +224,51 @@ def test_the_registration_exists_and_names_the_five_types() -> None:
     for kind in VETO_TYPES:
         assert kind in text
     assert "CORE_V1" in text and "use_ai=False" in text
+
+
+def test_recency_is_when_the_event_happened_not_when_we_read_it(tmp_path: Path) -> None:
+    """The defect the corpus exposed on 2026-09-12, and it emptied the basket.
+
+    ``as_of`` is the date the run recorded a row — a property of our own schedule. The backfill read
+    a year of filings in one sitting and stamped every one of them with that day, so a 30-day window
+    reading ``as_of`` saw 233 veto-shaped events instead of 7 and dropped **ten names out of ten**.
+    An auditor change from 2025 was vetoing a name this week.
+
+    A date labelled as something it is not is the failure this whole repo is organised around. Here
+    it is measured from the wrong end of the pipeline.
+    """
+    from qalpha.live.verdicts import event_verdicts, occurred_on
+
+    old_event_read_today = {
+        **_filing(),
+        "as_of": "2026-09-12",  # when the backfill read it
+        "event_date": "2025-10-01",  # when it actually happened — eleven months ago
+        "disseminated_at": "2025-10-01T00:00:00Z",
+    }
+    assert occurred_on(old_event_read_today) == "2025-10-01"
+
+    path = tmp_path / "events.jsonl"
+    path.write_text(json.dumps(old_event_read_today) + "\n", encoding="utf-8")
+    verdicts = event_verdicts(
+        ["VBL.NS"], as_of=date(2026, 9, 12), events_path=path, news_path=tmp_path / "none.jsonl"
+    )
+    assert verdicts == {}, "an eleven-month-old event must not veto today's basket"
+
+
+def test_an_event_with_no_date_of_its_own_falls_back_to_the_filing_date() -> None:
+    """1,241 of 4,776 events carry no ``event_date``. Every one carries ``disseminated_at``."""
+    from qalpha.live.verdicts import occurred_on
+
+    assert (
+        occurred_on({"event_date": "", "disseminated_at": "2026-09-10T11:00:00Z"}) == "2026-09-10"
+    )
+    assert occurred_on({"disseminated_at": "2026-09-10T11:00:00Z"}) == "2026-09-10"
+
+
+def test_an_undated_event_falls_outside_every_window_rather_than_inside_today() -> None:
+    """Unknown is never substituted. An event with no date anywhere is not 'recent'."""
+    from qalpha.live.verdicts import occurred_on
+
+    assert occurred_on({"as_of": "2026-09-12"}) == "", (
+        "as_of must never stand in for the occurrence date, not even as a last resort"
+    )
