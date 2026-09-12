@@ -77,6 +77,13 @@ def filings_read(tickers: Iterable[str], *, as_of: date, path: Path | None = Non
             continue
         if str(row.get("as_of", "")) < cutoff:
             continue
+        # AND NOT FROM THE FUTURE. Every date filter here checked staleness in one direction
+        # only, so a row written after ``as_of`` counted as evidence about ``as_of``. The
+        # golden-day replay runs at a past date, and once the 2026-09-12 corpus landed it began
+        # reading that day's coverage as though it had existed on 2026-08-27 — look-ahead on
+        # the one surface the user places orders from.
+        if str(row.get("as_of", "")) > as_of.isoformat():
+            continue
         ticker = str(row.get("ticker", "")).removesuffix(".NS")
         if ticker in wanted:
             read.add(ticker)
@@ -95,7 +102,7 @@ def _latest_exchange_file(
 
 
 def recent_concerns(
-    tickers: Iterable[str], *, since: date, path: Path | None = None
+    tickers: Iterable[str], *, since: date, until: date, path: Path | None = None
 ) -> dict[str, list[dict[str, str]]]:
     """High-concern verified events per ticker, newest first, from the current extractor only.
 
@@ -120,6 +127,10 @@ def recent_concerns(
             continue
         if str(row.get("as_of", "")) < since.isoformat():
             continue
+        if str(row.get("as_of", "")) > until.isoformat():
+            continue  # not knowable at the decision date
+        if str(row.get("as_of", "")) > until.isoformat():
+            continue  # an event recorded after the decision date was not knowable at it
         out.setdefault(ticker, []).append(
             {
                 "type": str(row.get("event_type", "")),
@@ -181,6 +192,8 @@ def news_read(tickers: Iterable[str], *, as_of: date, path: Path | None = None) 
             continue
         if str(row.get("as_of", "")) < cutoff:
             continue
+        if str(row.get("as_of", "")) > as_of.isoformat():
+            continue  # see filings_read: staleness was checked in one direction only
         ticker = str(row.get("ticker", "")).removesuffix(".NS")
         if ticker in wanted:
             read.add(ticker)
@@ -188,7 +201,7 @@ def news_read(tickers: Iterable[str], *, as_of: date, path: Path | None = None) 
 
 
 def recent_news(
-    tickers: Iterable[str], *, since: date, path: Path | None = None
+    tickers: Iterable[str], *, since: date, until: date, path: Path | None = None
 ) -> dict[str, list[dict[str, str]]]:
     """High-materiality verified headline items per ticker, newest first, current version only.
 
@@ -249,7 +262,7 @@ def flags_markdown(tickers: Sequence[str], *, as_of: date, lookback_days: int = 
     if not tickers:
         return ""
     rows, prov, age = _latest_exchange_file(as_of)
-    concerns = recent_concerns(tickers, since=as_of - timedelta(days=lookback_days))
+    concerns = recent_concerns(tickers, since=as_of - timedelta(days=lookback_days), until=as_of)
 
     lines: list[str] = ["#### ⚠️ What the exchange and the filings say", ""]
     if prov is None:
@@ -261,7 +274,7 @@ def flags_markdown(tickers: Sequence[str], *, as_of: date, lookback_days: int = 
         return "\n".join(lines)
 
     read = filings_read(tickers, as_of=as_of)
-    headlines = recent_news(tickers, since=as_of - timedelta(days=news.LOOKBACK_DAYS))
+    headlines = recent_news(tickers, since=as_of - timedelta(days=news.LOOKBACK_DAYS), until=as_of)
     heard = news_read(tickers, as_of=as_of)
     flagged: list[str] = []
     clean: list[str] = []

@@ -426,7 +426,9 @@ def gather(
         from qalpha.live.flags import recent_concerns
 
         read = _read(scope, as_of=as_of)
-        found = recent_concerns(scope, since=as_of - timedelta(days=CONCERN_LOOKBACK_DAYS))
+        found = recent_concerns(
+            scope, since=as_of - timedelta(days=CONCERN_LOOKBACK_DAYS), until=as_of
+        )
     except Exception as exc:
         notes.append(
             f"the filings log could not be read ({type(exc).__name__}: {exc}) — every name reads "
@@ -442,7 +444,7 @@ def gather(
         from qalpha.live.news import LOOKBACK_DAYS, read_items
 
         heard = _news_read(scope, as_of=as_of)
-        headlines = recent_news(scope, since=as_of - timedelta(days=LOOKBACK_DAYS))
+        headlines = recent_news(scope, since=as_of - timedelta(days=LOOKBACK_DAYS), until=as_of)
         wanted = {t.removesuffix(".NS") for t in scope}
         for item in read_items(as_of):
             for ticker in item.tickers:
