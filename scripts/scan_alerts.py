@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -245,7 +246,7 @@ def _digest_body(
     )
 
 
-def _send(alerts: list[object]) -> None:
+def _send(alerts: Sequence[object]) -> None:
     for a in alerts:
         kind = getattr(a, "kind", "?")
         text = getattr(a, "text", "")

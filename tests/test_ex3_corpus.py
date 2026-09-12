@@ -1,0 +1,500 @@
+"""EX-3: one corpus, one reader, and a backfill that goes fast without going different.
+
+Three properties carry this change, and each one is here because the alternative is a defect this
+repo has already shipped once:
+
+* **Concurrency changes the clock and nothing else.** A faster read that returns different events is
+  not a faster read, it is a second instrument. Asserted by running the same documents at one worker
+  and at eight and demanding identical output — events, discards, transcript and every token
+  counter.
+* **A reading has a reader.** A version label that names only the instructions lets a corpus be half
+  one model's work and half another's, and nothing downstream can tell. Asserted by feeding the
+  gates a complete, current, verified row from the wrong reader and requiring it to count for
+  nothing.
+* **Nothing to do is not something done.** ``cmd_daily`` returns 0 when it covers no names, which is
+  how two runs on 2026-09-10 were recorded ``done`` having written no coverage at all. The backfill
+  refuses instead.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from datetime import UTC, date, datetime
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, "scripts")
+
+from qalpha.live.announcements import Announcement, SourceDocument
+from qalpha.live.evidence import Provenance
+from qalpha.live.extraction import (
+    EXTRACTION_VERSION,
+    chunks_for,
+    corpus_reader,
+    extract,
+    reader_matches,
+)
+
+LONG_TEXT = (
+    "The Board of Directors has approved the acquisition of a 51% stake in Acme Bottling "
+    "Private Limited for a consideration of INR 4,200 million, subject to regulatory approvals. "
+)
+
+
+def _doc(symbol: str, text: str, sha: str) -> SourceDocument:
+    ann = Announcement(
+        symbol=symbol,
+        seq_id="1",
+        subject="General Updates",
+        summary="",
+        disseminated_at=datetime(2026, 8, 25, 16, 21, tzinfo=UTC),
+        attachment_url=f"https://nsearchives.nseindia.com/corporate/{symbol}_x.pdf",
+    )
+    prov = Provenance(
+        source_url=ann.attachment_url,
+        retrieved_at_utc=datetime(2026, 9, 5, tzinfo=UTC),
+        http_status=200,
+        sha256=sha,
+        byte_length=len(text),
+        document_date=date(2026, 8, 25),
+    )
+    return SourceDocument(announcement=ann, text=text, provenance=prov)
+
+
+def _corpus() -> list[SourceDocument]:
+    """Enough documents, and one long enough to chunk, that batching actually has work to do."""
+    return [
+        _doc("VBL", LONG_TEXT * 60, "a" * 64),
+        _doc("VBL", LONG_TEXT * 200, "b" * 64),
+        _doc("VBL", LONG_TEXT * 5, "c" * 64),
+        _doc("VBL", LONG_TEXT * 120, "d" * 64),
+    ]
+
+
+def _quote(doc: SourceDocument) -> str:
+    return " ".join(doc.text.split())[40:180]
+
+
+# --- concurrency is a speed change, not a behaviour change -------------------------------------
+
+
+def _reply_for(documents: list[SourceDocument]):
+    """A generator that answers with a real quote from whichever document it was shown."""
+    quotes = {" ".join(d.text.split())[:300]: _quote(d) for d in documents}
+
+    def generate(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        for head, quote in quotes.items():
+            if head[:120] in " ".join(prompt.split()):
+                return (
+                    "EVENT: ticker=VBL; type=acquisition; date=2026-08-25; materiality=high; "
+                    f'passage="{quote}"; summary=a real quote; uncertainty=-',
+                    {"input": 100, "output": 20},
+                )
+        return "", {"input": 100, "output": 1}
+
+    return generate
+
+
+def test_eight_workers_and_one_worker_produce_identical_output() -> None:
+    """The property that makes ``workers`` safe to turn up at all.
+
+    If this ever fails, the backfill is not a faster version of the nightly read — it is a different
+    reading wearing the same version label, which is exactly what EX-3 exists to prevent.
+    """
+    docs = _corpus()
+    serial = extract(docs, generate=_reply_for(docs), model=corpus_reader(), workers=1)
+    parallel = extract(docs, generate=_reply_for(docs), model=corpus_reader(), workers=8)
+
+    assert [e.render() for e in serial[0]] == [e.render() for e in parallel[0]]
+    assert serial[1] == parallel[1]  # discarded
+    assert serial[2] == parallel[2]  # the raw transcript, in batch order
+    assert serial[3] == parallel[3]  # every token and batch counter
+    assert serial[3]["calls"] > 1, "the fixture must actually produce several batches"
+
+
+def test_a_truncated_batch_retries_the_same_way_concurrently() -> None:
+    """The retry re-queues split work. Its results must still sort back into batch order."""
+    docs = _corpus()
+
+    def generate(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        # Always claim the reply was cut off, so every multi-document batch splits.
+        return "", {"input": 10, "output": 3000, "truncated": 1}
+
+    serial = extract(docs, generate=generate, model=corpus_reader(), workers=1)
+    parallel = extract(docs, generate=generate, model=corpus_reader(), workers=8)
+    assert serial[2] == parallel[2]
+    assert serial[3] == parallel[3]
+    assert serial[3]["retried_batches"] > 0, "the fixture must exercise the retry path"
+    assert serial[3]["failed_batches"] > 0, "a reply still cut off is not a reading"
+
+
+# --- a refusal is not a filing with nothing in it ----------------------------------------------
+
+
+def test_a_refused_batch_is_counted_as_unread_not_as_clean() -> None:
+    """``("", {})`` used to mean "called fine, found nothing". Silence is not a clean bill."""
+    docs = _corpus()[:1]
+
+    def refuses(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        return "", {"input": 100, "output": 0, "refused": 1}
+
+    events, discarded, raw, usage, _unread = extract(docs, generate=refuses, model=corpus_reader())
+    assert events == [] and discarded == 0
+    assert usage["refused_batches"] >= 1
+    # The caller decides coverage on `failed_batches`, so a refusal has to reach that counter or
+    # `extraction_ran` stays True and the name reads as fully read.
+    assert usage["failed_batches"] >= usage["refused_batches"]
+    assert "REFUSED" in raw
+    assert usage["input"] == 100, "tokens spent on a refusal were still spent"
+
+
+# --- a reading has a reader ----------------------------------------------------------------------
+
+
+def test_the_reader_gate_is_exact_and_absence_never_passes() -> None:
+    assert reader_matches(corpus_reader())
+    assert not reader_matches("some-other-model")
+    assert not reader_matches(None), (
+        "a row written before the field existed is unknown, not a match"
+    )
+    assert not reader_matches("")
+
+
+def test_the_corpus_reader_can_be_named_so_a_comparison_run_labels_itself(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("QALPHA_CORPUS_READER", "claude-sonnet-5")
+    assert corpus_reader() == "claude-sonnet-5"
+    assert reader_matches("claude-sonnet-5")
+    assert not reader_matches("claude-haiku-4-5"), "the default must not still satisfy the override"
+
+
+def _coverage_row(tmp_path: Path, **over: object) -> Path:
+    row: dict[str, object] = {
+        "as_of": "2026-09-11",
+        "ticker": "VBL.NS",
+        "complete": True,
+        "extraction_version": EXTRACTION_VERSION,
+        "reader": corpus_reader(),
+    }
+    row.update(over)
+    p = tmp_path / "coverage.jsonl"
+    p.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    return p
+
+
+def test_a_complete_row_from_another_reader_does_not_make_a_name_read(tmp_path: Path) -> None:
+    """The buy screen's "clear" must mean *this* corpus read it, not that somebody did."""
+    from qalpha.live.flags import filings_read
+
+    as_of = date(2026, 9, 11)
+    ours = _coverage_row(tmp_path, reader=corpus_reader())
+    assert filings_read(["VBL.NS"], as_of=as_of, path=ours) == {"VBL"}
+
+    theirs = _coverage_row(tmp_path, reader="qwen3-8b-32k")
+    assert filings_read(["VBL.NS"], as_of=as_of, path=theirs) == set()
+
+    legacy = _coverage_row(tmp_path)
+    json_row = json.loads(legacy.read_text(encoding="utf-8"))
+    del json_row["reader"]
+    legacy.write_text(json.dumps(json_row) + "\n", encoding="utf-8")
+    assert filings_read(["VBL.NS"], as_of=as_of, path=legacy) == set(), (
+        "a row from before the field existed says nothing about who read it"
+    )
+
+
+def test_an_event_from_another_reader_cannot_flag_a_candidate() -> None:
+    """Selection stays deterministic, but a WATCH still has to come from the corpus's own reader."""
+    from qalpha.live.evidence import PASS, Assessment, Provenance
+    from qalpha.live.extraction import ExtractedEvent
+    from qalpha.live.pretrade import AnnouncementCoverage, assess_candidate
+
+    prov = Provenance(
+        source_url="https://nsearchives.nseindia.com/x.csv",
+        retrieved_at_utc=datetime(2026, 9, 11, tzinfo=UTC),
+        http_status=200,
+        sha256="f" * 64,
+        byte_length=10,
+        document_date=date(2026, 9, 11),
+    )
+
+    def event(model: str) -> ExtractedEvent:
+        return ExtractedEvent(
+            ticker="VBL",
+            event_type="regulatory_action",
+            event_date=date(2026, 9, 10),
+            materiality="high",
+            passage="a passage long enough to be checked against the document",
+            summary="a regulator has written to the company",
+            uncertainty="-",
+            doc_sha256="b" * 64,
+            doc_url="https://nsearchives.nseindia.com/corporate/VBL.pdf",
+            disseminated_at=datetime(2026, 9, 10, tzinfo=UTC),
+            model=model,
+            extraction_version=EXTRACTION_VERSION,
+            verified=True,
+        )
+
+    exchange = Assessment("VBL", PASS, provenance=prov, detail="clean")
+    full = AnnouncementCoverage(index_fetched=True, extraction_ran=True)
+
+    ours = assess_candidate(
+        "VBL", exchange=exchange, events=[event(corpus_reader())], coverage=full
+    )
+    theirs = assess_candidate(
+        "VBL", exchange=exchange, events=[event("qwen3-8b-32k")], coverage=full
+    )
+
+    assert ours.flagged_events, "the corpus reader's own high event must still flag"
+    assert not theirs.flagged_events, (
+        "another reader's event is a record, not this corpus's finding"
+    )
+
+
+# --- the backfill is a different job, and says so when it did nothing ---------------------------
+
+
+def test_the_backfill_lifts_the_caps_the_nightly_run_needs() -> None:
+    """If these ever converge, the nightly run got slower or the backfill stopped being one."""
+    import evidence
+
+    assert evidence.MAX_EXTRACT_BACKFILL > evidence.MAX_EXTRACT_PER_RUN * 10
+    assert evidence.BACKFILL_WORKERS > 1
+    assert evidence.BACKFILL_BUDGET_SECONDS > 900
+
+
+def test_a_backfill_that_covered_nothing_is_not_a_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 2026-09-10 defect, at the one place it can be caught.
+
+    Two runs were recorded ``done`` after 216s and 147s having written no coverage row for any name,
+    because "no candidates and no holdings" returns 0. On a book with holdings that sentence means
+    the book or the panel could not be read — which is a failure, and has to exit like one.
+    """
+    import evidence
+
+    from qalpha.config import Config
+
+    monkeypatch.setattr(evidence, "_fetch_reg_ind", lambda as_of: ({}, None))
+    monkeypatch.setattr(
+        evidence,
+        "_screen_basket",
+        lambda cfg, as_of: evidence.ScreenBasket(
+            [], [], __import__("decimal").Decimal("0"), {}, {}
+        ),
+    )
+    code = evidence.cmd_backfill(Config(), date(2026, 9, 11), workers=2, budget_seconds=60)
+    assert code != 0, "covering nothing must not look like covering everything"
+
+
+def test_the_recorded_reader_is_the_one_that_ran_not_the_one_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The defect this change nearly shipped, caught before it was committed.
+
+    ``_record_coverage`` and ``_mark_extracted`` first stamped ``corpus_reader()`` — the model we
+    *intend* the corpus to use. On the user's machine the local 8B does the nightly reading, so
+    every local row would have been stamped ``claude-haiku-4-5`` and then matched the gate it exists
+    to fail. A label asserting work that a different model did is the exact class of defect
+    ``CLAUDE.md`` opens with, written by the mechanism built to prevent it.
+    """
+    import evidence
+
+    from qalpha.live.pretrade import AnnouncementCoverage
+
+    monkeypatch.setattr(evidence, "COVERAGE_LOG", tmp_path / "coverage.jsonl")
+    monkeypatch.setattr(evidence, "EXTRACTED_LOG", tmp_path / "extracted.jsonl")
+    covered = AnnouncementCoverage(
+        filings_in_window=2, documents_read=2, extraction_ran=True, index_fetched=True
+    )
+
+    evidence._record_coverage(date(2026, 9, 11), "VBL.NS", covered, 10, "qwen3-8b-32k")
+    evidence._mark_extracted(["abc"], events_recorded=0, reader="qwen3-8b-32k")
+
+    row = json.loads((tmp_path / "coverage.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert row["reader"] == "qwen3-8b-32k", "the row must name what actually read"
+    assert row["complete"], "it is a real, complete reading — by a different reader"
+    assert not evidence._seen_before("VBL.NS"), "and so it must not satisfy the corpus"
+    assert evidence._already_extracted() == set(), "nor count that document as corpus-read"
+
+
+# --- one bad batch must not void a whole name ---------------------------------------------------
+
+
+def test_a_failed_batch_loses_only_its_own_documents() -> None:
+    """The defect that cost a real ₹1,400 on 2026-09-11, pinned.
+
+    VEDL filed 228 documents. Four batches of roughly six hundred failed — one refusal, three
+    replies cut off at the token cap — and because coverage was ``failed_batches == 0`` for the
+    whole name, **all 228 counted as unread** after every one of them had been paid for. A name
+    that size makes some failure near-certain, so it could never have completed, at full price
+    each attempt.
+
+    ``unread`` carries the sha256 of each document in a failed batch and nothing else, so the
+    caller can count what was genuinely read. This is a tightening, not a loosening: a document in
+    a failed batch is still unread and still says so.
+    """
+    # Distinguishable text per document, so "fail the batches carrying THIS one" is meaningful.
+    docs = [
+        _doc("VBL", f"Filing {tag}. " + LONG_TEXT * 40, tag * 64) for tag in ("a", "b", "c", "d")
+    ]
+    doomed = docs[1].provenance.sha256
+
+    def flaky(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        if "Filing b." in prompt:
+            raise RuntimeError("upstream said no")
+        return "", {"input": 10, "output": 1}
+
+    result = extract(docs, generate=flaky, model=corpus_reader(), workers=4)
+
+    assert result.usage["failed_batches"] > 0, "the fixture must actually fail something"
+    assert doomed in result.unread, "a document in a failed batch is unread"
+    # GRANULARITY IS PER BATCH, not per document, and that is the honest guarantee: one reply
+    # covers every document in its call, so a failure takes all of them. What it must NOT take is
+    # documents the model answered for in other calls. Under the old rule the whole NAME was lost.
+    assert len(result.unread) < len(docs), "documents answered in other batches must survive"
+    assert docs[-1].provenance.sha256 not in result.unread
+
+
+def test_a_refusal_marks_only_that_batch_unread() -> None:
+    docs = _corpus()[:1]
+
+    def refuses(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        return "", {"input": 100, "output": 0, "refused": 1}
+
+    result = extract(docs, generate=refuses, model=corpus_reader())
+    assert result.unread == {docs[0].provenance.sha256}
+
+
+def test_progress_is_reported_and_changes_nothing() -> None:
+    """A long paid run must show progress — and showing it must not alter the reading."""
+    docs = _corpus()
+    seen: list[tuple[int, int, int]] = []
+
+    quiet = extract(docs, generate=_reply_for(docs), model=corpus_reader(), workers=1)
+    loud = extract(
+        docs,
+        generate=_reply_for(docs),
+        model=corpus_reader(),
+        workers=1,
+        progress=lambda done, total, events: seen.append((done, total, events)),
+    )
+
+    assert seen, "progress must actually be called"
+    assert [d for d, _t, _e in seen] == list(range(1, len(seen) + 1)), "done counts up by one"
+    assert seen[-1][0] == seen[-1][1], "the last tick reports every batch finished"
+    assert quiet.usage == loud.usage
+    assert [e.render() for e in quiet.events] == [e.render() for e in loud.events]
+
+
+def test_a_partly_failed_name_still_keeps_what_it_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Coverage may never claim a reading whose evidence is not on file.
+
+    Written as ``elif``, the failed-batch warning swallowed persistence: on 2026-09-11 VEDL read 128
+    of 228 documents during an API credit outage, found their events, and discarded every one —
+    while the coverage row went on saying 128 read, and no receipt meant paying to read them again.
+    A count asserting evidence that does not exist is the defect this whole module is built around.
+
+    This tests the CALLER, because the caller is where the bug was. ``extract`` was correct.
+    """
+    import evidence
+
+    monkeypatch.setattr(evidence, "EVENT_LOG", tmp_path / "events.jsonl")
+    monkeypatch.setattr(evidence, "EXTRACTED_LOG", tmp_path / "extracted.jsonl")
+
+    docs = [
+        _doc("VBL", f"Filing {tag}. " + LONG_TEXT * 40, tag * 64) for tag in ("a", "b", "c", "d")
+    ]
+    quote = " ".join(docs[0].text.split())[40:180]
+
+    def half_broken(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        if "Filing d." in prompt:
+            raise RuntimeError("credits exhausted")
+        return (
+            "EVENT: ticker=VBL; type=litigation; date=2026-08-25; materiality=high; "
+            f'passage="{quote}"; summary=a real quote; uncertainty=-',
+            {"input": 10, "output": 5},
+        )
+
+    result = extract(docs, generate=half_broken, model=corpus_reader(), workers=1)
+    assert result.usage["failed_batches"] > 0, "the fixture must fail at least one batch"
+    assert result.events, "and must still find events in the batches that worked"
+
+    read_docs = [d for d in docs if d.provenance.sha256 not in result.unread]
+    assert evidence._persist_events(result.events, date(2026, 9, 11)), "events must land"
+    evidence._mark_extracted(
+        [d.provenance.sha256 for d in read_docs],
+        events_recorded=len(result.events),
+        reader=corpus_reader(),
+    )
+
+    # Every document counted as read must carry a receipt proving its findings reached the log.
+    assert evidence._already_extracted() == {d.provenance.sha256 for d in read_docs}
+    assert (tmp_path / "events.jsonl").read_text(encoding="utf-8").strip(), "events on disk"
+
+
+# --- a long name must survive being interrupted ---------------------------------------------------
+
+
+def test_documents_are_released_as_they_finish_not_at_the_end() -> None:
+    """Resumability. Receipts used to be written once, after the whole name.
+
+    VEDL is 228 filings and about an hour of reading. Killed at minute 55 — an API credit outage on
+    2026-09-11, then a Ctrl-C an hour later — every one of them was lost and paid for again. The
+    checkpoint releases each document the moment its last chunk lands, so an interrupted name keeps
+    what it read.
+    """
+    docs = [
+        _doc("VBL", f"Filing {tag}. " + LONG_TEXT * 120, tag * 64) for tag in ("a", "b", "c", "d")
+    ]
+    releases: list[frozenset[str]] = []
+
+    def generate(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        return "", {"input": 10, "output": 1}
+
+    result = extract(
+        docs,
+        generate=generate,
+        model=corpus_reader(),
+        workers=1,
+        checkpoint=lambda _events, finished: releases.append(finished),
+    )
+
+    assert len(releases) > 1, (
+        "a multi-batch name must checkpoint more than once, or it is not resumable"
+    )
+    assert set().union(*releases) == {d.provenance.sha256 for d in docs}
+    assert sum(len(r) for r in releases) == len(docs), "a document is released exactly once"
+    assert not result.unread
+
+
+def test_a_document_is_never_released_before_all_of_its_chunks_land() -> None:
+    """Half a filing read is not a filing read — and a receipt over one is a permanent cache hit."""
+    big = _doc("VBL", LONG_TEXT * 400, "a" * 64)  # long enough to span several chunks
+    assert len(chunks_for(big)) > 2, "the fixture must actually chunk"
+    seen: list[frozenset[str]] = []
+
+    calls = {"n": 0}
+
+    def fail_the_last(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return "", {"input": 10, "output": 1}
+        raise RuntimeError("died partway through the document")
+
+    result = extract(
+        [big],
+        generate=fail_the_last,
+        model=corpus_reader(),
+        workers=1,
+        checkpoint=lambda _e, finished: seen.append(finished),
+    )
+    assert big.provenance.sha256 in result.unread
+    assert not any(big.provenance.sha256 in r for r in seen), (
+        "a document with a failed chunk must never be released"
+    )

@@ -13,8 +13,13 @@ from pathlib import Path
 
 from qalpha.live import flags, news
 from qalpha.live.evidence import load_archive
-from qalpha.live.extraction import EXTRACTION_VERSION
-from qalpha.live.flags import MAX_FILE_AGE_DAYS, flags_markdown, recent_concerns
+from qalpha.live.extraction import EXTRACTION_VERSION, corpus_reader
+from qalpha.live.flags import (
+    MAX_FILE_AGE_DAYS,
+    filings_read,
+    flags_markdown,
+    recent_concerns,
+)
 
 AS_OF = date(2026, 8, 27)
 
@@ -31,6 +36,7 @@ def _event(**over: object) -> str:
         "doc_url": "https://nsearchives.nseindia.com/corporate/VBL.pdf",
         "verified": True,
         "extraction_version": EXTRACTION_VERSION,
+        "model": corpus_reader(),
     }
     row.update(over)
     return json.dumps(row)
@@ -46,14 +52,19 @@ def _log(tmp_path: Path, *rows: str) -> Path:
 
 
 def test_a_high_concern_verified_event_is_shown(tmp_path: Path) -> None:
-    out = recent_concerns(["VBL.NS"], since=date(2026, 8, 1), path=_log(tmp_path, _event()))
+    out = recent_concerns(
+        ["VBL.NS"], since=date(2026, 8, 1), until=date(2026, 12, 31), path=_log(tmp_path, _event())
+    )
     assert len(out["VBL"]) == 1 and out["VBL"][0]["type"] == "regulatory_action"
 
 
 def test_an_unverified_event_is_never_shown(tmp_path: Path) -> None:
     """A quote that was not in the document evidences nothing, however alarming it reads."""
     log = _log(tmp_path, _event(verified=False))
-    assert recent_concerns(["VBL.NS"], since=date(2026, 8, 1), path=log) == {}
+    assert (
+        recent_concerns(["VBL.NS"], since=date(2026, 8, 1), until=date(2026, 12, 31), path=log)
+        == {}
+    )
 
 
 def test_an_old_extraction_version_is_never_shown(tmp_path: Path) -> None:
@@ -62,25 +73,50 @@ def test_an_old_extraction_version_is_never_shown(tmp_path: Path) -> None:
     Those rows stay on file as a record of what was believed. They must not act.
     """
     log = _log(tmp_path, _event(extraction_version="EX-1"))
-    assert recent_concerns(["VBL.NS"], since=date(2026, 8, 1), path=log) == {}
+    assert (
+        recent_concerns(["VBL.NS"], since=date(2026, 8, 1), until=date(2026, 12, 31), path=log)
+        == {}
+    )
 
 
 def test_medium_and_low_concern_are_not_shown(tmp_path: Path) -> None:
     log = _log(tmp_path, _event(materiality="medium"), _event(materiality="low"))
-    assert recent_concerns(["VBL.NS"], since=date(2026, 8, 1), path=log) == {}
+    assert (
+        recent_concerns(["VBL.NS"], since=date(2026, 8, 1), until=date(2026, 12, 31), path=log)
+        == {}
+    )
 
 
 def test_an_event_older_than_the_window_is_not_shown(tmp_path: Path) -> None:
     log = _log(tmp_path, _event(as_of="2026-01-01"))
-    assert recent_concerns(["VBL.NS"], since=date(2026, 8, 1), path=log) == {}
+    assert (
+        recent_concerns(["VBL.NS"], since=date(2026, 8, 1), until=date(2026, 12, 31), path=log)
+        == {}
+    )
 
 
 def test_a_name_not_in_the_basket_is_not_shown(tmp_path: Path) -> None:
-    assert recent_concerns(["TCS.NS"], since=date(2026, 8, 1), path=_log(tmp_path, _event())) == {}
+    assert (
+        recent_concerns(
+            ["TCS.NS"],
+            since=date(2026, 8, 1),
+            until=date(2026, 12, 31),
+            path=_log(tmp_path, _event()),
+        )
+        == {}
+    )
 
 
 def test_a_missing_log_is_empty_not_an_error(tmp_path: Path) -> None:
-    assert recent_concerns(["VBL.NS"], since=date(2026, 8, 1), path=tmp_path / "none.jsonl") == {}
+    assert (
+        recent_concerns(
+            ["VBL.NS"],
+            since=date(2026, 8, 1),
+            until=date(2026, 12, 31),
+            path=tmp_path / "none.jsonl",
+        )
+        == {}
+    )
 
 
 # --- the panel, against the real archived exchange file ---------------------------------------------
@@ -126,6 +162,7 @@ def _coverage(tmp_path: Path, **over: object) -> Path:
         "ticker": "VBL.NS",
         "complete": True,
         "extraction_version": EXTRACTION_VERSION,
+        "reader": corpus_reader(),
     }
     row.update(over)
     p = tmp_path / "coverage.jsonl"
@@ -223,14 +260,18 @@ def _news_logs(tmp_path, rows, coverage=True):
 
 def test_a_high_negative_item_is_returned_with_its_link_and_source(tmp_path) -> None:
     events, _cov = _news_logs(tmp_path, [_news_row()])
-    found = flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), path=events)
+    found = flags.recent_news(
+        ["VBL.NS"], since=date(2026, 9, 4), until=date(2026, 12, 31), path=events
+    )
     assert found["VBL"][0]["source"] == "Business Standard"
     assert found["VBL"][0]["link"].startswith("https://news.google.com")
 
 
 def test_a_positive_item_is_returned_for_counting_but_is_not_a_concern(tmp_path) -> None:
     events, _cov = _news_logs(tmp_path, [_news_row(stance="positive")])
-    found = flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), path=events)
+    found = flags.recent_news(
+        ["VBL.NS"], since=date(2026, 9, 4), until=date(2026, 12, 31), path=events
+    )
     negative, positive = flags.news_counts(found["VBL"])
     assert (negative, positive) == (0, 1)
 
@@ -239,23 +280,34 @@ def test_counts_are_two_integers_and_not_a_score(tmp_path) -> None:
     events, _cov = _news_logs(
         tmp_path, [_news_row(), _news_row(stance="positive"), _news_row(stance="neutral")]
     )
-    found = flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), path=events)
+    found = flags.recent_news(
+        ["VBL.NS"], since=date(2026, 9, 4), until=date(2026, 12, 31), path=events
+    )
     assert flags.news_counts(found["VBL"]) == (1, 1)
 
 
 def test_an_older_news_version_never_shows(tmp_path) -> None:
     events, _cov = _news_logs(tmp_path, [_news_row(news_version="NEWS-0")])
-    assert flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), path=events) == {}
+    assert (
+        flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), until=date(2026, 12, 31), path=events)
+        == {}
+    )
 
 
 def test_an_unverified_item_never_shows(tmp_path) -> None:
     events, _cov = _news_logs(tmp_path, [_news_row(verified=False)])
-    assert flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), path=events) == {}
+    assert (
+        flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), until=date(2026, 12, 31), path=events)
+        == {}
+    )
 
 
 def test_a_medium_item_is_not_shown_beside_a_basket(tmp_path) -> None:
     events, _cov = _news_logs(tmp_path, [_news_row(materiality="medium")])
-    assert flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), path=events) == {}
+    assert (
+        flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), until=date(2026, 12, 31), path=events)
+        == {}
+    )
 
 
 def test_names_whose_headlines_were_never_read_are_not_counted_as_read(tmp_path) -> None:
@@ -314,7 +366,10 @@ def test_a_re_read_that_lowered_the_materiality_wins(tmp_path) -> None:
         _news_row(_key=key, revision=0, materiality="high"),
         _news_row(_key=key, revision=1, materiality="medium"),
     )
-    assert flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), path=path) == {}
+    assert (
+        flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), until=date(2026, 12, 31), path=path)
+        == {}
+    )
 
 
 def test_the_superseded_copy_is_not_deleted_only_outranked(tmp_path) -> None:
@@ -325,7 +380,9 @@ def test_the_superseded_copy_is_not_deleted_only_outranked(tmp_path) -> None:
         _news_row(_key=key, revision=0, materiality="medium"),
         _news_row(_key=key, revision=1, materiality="high"),
     )
-    found = flags.recent_news(["VBL.NS"], since=date(2026, 9, 4), path=path)
+    found = flags.recent_news(
+        ["VBL.NS"], since=date(2026, 9, 4), until=date(2026, 12, 31), path=path
+    )
     assert len(found["VBL"]) == 1, "one event, not two"
     assert path.read_text(encoding="utf-8").count("\n") == 2, "both revisions stay on file"
 
@@ -349,3 +406,31 @@ def test_a_coverage_row_superseded_by_an_incomplete_one_is_not_read(tmp_path) ->
         encoding="utf-8",
     )
     assert flags.filings_read(["VBL.NS"], as_of=date(2026, 9, 10), path=path) == set()
+
+
+def test_coverage_from_after_the_decision_date_is_not_evidence_about_it(tmp_path: Path) -> None:
+    """Look-ahead on the surface the user places orders from.
+
+    Every date filter in this module checked staleness in one direction only — too old was skipped,
+    from the future was not. So a coverage row written on 2026-09-12 counted as proof the filings
+    had been read on 2026-08-27. The golden-day replay runs at a past date, and the moment the
+    corpus landed it began reading that name as covered by work done a fortnight later.
+
+    ``CLAUDE.md``: **No look-ahead ever.**
+    """
+    future = _coverage(tmp_path, as_of="2026-09-12", ticker="VBL.NS")
+    assert filings_read(["VBL.NS"], as_of=date(2026, 9, 12), path=future) == {"VBL"}
+    assert filings_read(["VBL.NS"], as_of=date(2026, 8, 27), path=future) == set(), (
+        "a row from sixteen days in the future cannot say what was known on the day"
+    )
+
+
+def test_an_event_recorded_after_the_decision_date_is_not_shown_at_it(tmp_path: Path) -> None:
+    log = _log(tmp_path, _event(as_of="2026-09-12"))
+    seen_later = recent_concerns(
+        ["VBL.NS"], since=date(2026, 8, 1), until=date(2026, 9, 12), path=log
+    )
+    seen_then = recent_concerns(
+        ["VBL.NS"], since=date(2026, 8, 1), until=date(2026, 8, 27), path=log
+    )
+    assert seen_later and not seen_then, "an event is only knowable from the day it was recorded"

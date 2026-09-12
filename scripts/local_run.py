@@ -57,6 +57,7 @@ from qalpha.live.panels import BENCHMARK_PANEL, SCREEN_PANEL
 from qalpha.live.progress import LOG
 from qalpha.live.report import render
 from qalpha.live.session import load_snapshot, snapshot_from
+from qalpha.live.track_record import TrackRecord
 from qalpha.live.tradebook import EXPORT_DIR, TradebookTrade, read_exports
 
 PAGE = Path("data/session/qalpha.html")
@@ -225,7 +226,7 @@ def _track(
     trades: list[TradebookTrade],
     account: ReconciledAccount,
     prices: dict[str, Decimal],
-) -> object | None:
+) -> TrackRecord | None:
     """Your account beside the same money in the index. ``None`` when it cannot be measured.
 
     **Shares only.** The value handed over excludes cash, because the idle balance here is next

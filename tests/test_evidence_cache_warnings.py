@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT_SCRIPTS))
 
 import evidence  # noqa: E402
 
-from qalpha.live.extraction import EXTRACTION_VERSION  # noqa: E402
+from qalpha.live.extraction import EXTRACTION_VERSION, corpus_reader  # noqa: E402
 
 SHA = "a" * 64
 
@@ -46,7 +46,7 @@ def _row(**kw: object) -> dict[str, object]:
         "doc_sha256": SHA,
         "doc_url": "https://example/doc.pdf",
         "disseminated_at": datetime(2026, 9, 1, tzinfo=UTC).isoformat(),
-        "model": "claude-haiku-4-5",
+        "model": corpus_reader(),  # spelled from the constant: a literal here broke when it changed
         "extraction_version": EXTRACTION_VERSION,
         "verified": True,
     }

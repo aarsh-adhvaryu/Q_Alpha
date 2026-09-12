@@ -29,7 +29,7 @@ from qalpha.live.evidence import (
 from qalpha.live.evidence import (
     assess as exchange_assess,
 )
-from qalpha.live.extraction import EXTRACTION_VERSION, ExtractedEvent
+from qalpha.live.extraction import EXTRACTION_VERSION, ExtractedEvent, corpus_reader
 from qalpha.live.pretrade import (
     ANNOUNCEMENTS,
     NOT_COVERED_DIMENSIONS,
@@ -76,7 +76,7 @@ def _event(materiality: str = "high", verified: bool = True) -> ExtractedEvent:
         doc_sha256="b" * 64,
         doc_url="https://nsearchives.nseindia.com/corporate/X.pdf",
         disseminated_at=datetime(2026, 8, 25, tzinfo=UTC),
-        model="m",
+        model=corpus_reader(),
         extraction_version=EXTRACTION_VERSION,
         verified=verified,
     )
@@ -272,7 +272,7 @@ def test_an_event_from_a_superseded_extractor_never_flags() -> None:
         doc_sha256="c" * 64,
         doc_url="u",
         disseminated_at=datetime(2026, 8, 25, tzinfo=UTC),
-        model="m",
+        model=corpus_reader(),  # the right reader, so only the VERSION can reject this
         extraction_version="EX-1",
         verified=True,
     )

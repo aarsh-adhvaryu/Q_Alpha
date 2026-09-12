@@ -217,7 +217,7 @@ def report(periods: list[Period], *, k: int, label: str) -> None:
         print("  → the interval EXCLUDES zero on this sample.")
     else:
         print("  → the interval INCLUDES zero: this sample cannot distinguish the screen from 1/N.")
-    by = {}
+    by: dict[str, list[float]] = {}
     for p in periods:
         by.setdefault(p.weakness, []).append(p.spread)
     if len(by) > 1:

@@ -24,7 +24,7 @@ from pathlib import Path
 from qalpha.live import news
 from qalpha.live.evidence import BLOCK, PASS, UNKNOWN, WATCH, Provenance, load_archive
 from qalpha.live.evidence import assess as exchange_assess
-from qalpha.live.extraction import EXTRACTION_VERSION
+from qalpha.live.extraction import EXTRACTION_VERSION, reader_matches
 
 EVENT_LOG = Path("data/evidence/events.jsonl")
 COVERAGE_LOG = Path("data/evidence/coverage.jsonl")
@@ -40,9 +40,9 @@ MAX_COVERAGE_AGE_DAYS = 4
 #: the panel says so instead of quietly using it.
 MAX_FILE_AGE_DAYS = 4
 
-#: Events at or above this concern level are shown. Defined in the EX-2 prompt as *how much this
-#: should worry someone who already owns the shares* — not how newsworthy it is. EX-1 rated routine
-#: results `high` and is ignored here by version.
+#: Events at or above this concern level are shown. Defined in the EX-2/EX-3 prompt as *how much
+#: this should worry someone who already owns the shares* — not how newsworthy it is. EX-1 rated
+#: routine results `high` and is ignored here by version.
 SHOWN_CONCERN = {"high"}
 
 
@@ -52,13 +52,16 @@ def filings_read(tickers: Iterable[str], *, as_of: date, path: Path | None = Non
     ### Why this exists, and why its absence was the worst defect in this file
 
     The panel used to call a name "clear" whenever the exchange passed and no current-version event
-    mentioned it. With zero EX-2 events on file — which is the state after every version bump — that
+    mentioned it. With zero current-version events on file — the state after every version bump — that
     made **every** name clear, including names whose filings had never been opened. The module
     docstring in this very file says an absent warning and no warning are different facts and only
     one of them is reassuring. The code said otherwise.
 
     A name counts as read only when the day's coverage row says ``complete``, was produced by the
-    current extraction version, and is no older than :data:`MAX_COVERAGE_AGE_DAYS`.
+    current extraction version **and by the corpus reader**, and is no older than
+    :data:`MAX_COVERAGE_AGE_DAYS`. The reader is checked because under EX-3 a version label means
+    "these instructions, this model" — a complete row from a different reader is a real reading of
+    that name, but it is not a reading of the corpus this screen is built on.
     """
     wanted = {t.removesuffix(".NS") for t in tickers}
     cutoff = (as_of - timedelta(days=MAX_COVERAGE_AGE_DAYS)).isoformat()
@@ -70,7 +73,16 @@ def filings_read(tickers: Iterable[str], *, as_of: date, path: Path | None = Non
             continue
         if row.get("extraction_version") != EXTRACTION_VERSION:
             continue
+        if not reader_matches(row.get("reader")):
+            continue
         if str(row.get("as_of", "")) < cutoff:
+            continue
+        # AND NOT FROM THE FUTURE. Every date filter here checked staleness in one direction
+        # only, so a row written after ``as_of`` counted as evidence about ``as_of``. The
+        # golden-day replay runs at a past date, and once the 2026-09-12 corpus landed it began
+        # reading that day's coverage as though it had existed on 2026-08-27 — look-ahead on
+        # the one surface the user places orders from.
+        if str(row.get("as_of", "")) > as_of.isoformat():
             continue
         ticker = str(row.get("ticker", "")).removesuffix(".NS")
         if ticker in wanted:
@@ -90,13 +102,14 @@ def _latest_exchange_file(
 
 
 def recent_concerns(
-    tickers: Iterable[str], *, since: date, path: Path | None = None
+    tickers: Iterable[str], *, since: date, until: date, path: Path | None = None
 ) -> dict[str, list[dict[str, str]]]:
     """High-concern verified events per ticker, newest first, from the current extractor only.
 
-    Three filters, each of which has already been a defect somewhere in this repo: the quote must
+    Four filters, each of which has already been a defect somewhere in this repo: the quote must
     have been **verified** against the stored document, the row must come from the **current**
-    extraction version, and the event must be recent enough to still matter.
+    extraction version and the **corpus reader**, and the event must be recent enough to still
+    matter.
     """
     wanted = {t.removesuffix(".NS") for t in tickers}
     out: dict[str, list[dict[str, str]]] = {}
@@ -105,6 +118,8 @@ def recent_concerns(
             continue
         if row.get("extraction_version") != EXTRACTION_VERSION:
             continue
+        if not reader_matches(row.get("model")):
+            continue
         if str(row.get("materiality", "")).lower() not in SHOWN_CONCERN:
             continue
         ticker = str(row.get("ticker", "")).removesuffix(".NS")
@@ -112,6 +127,10 @@ def recent_concerns(
             continue
         if str(row.get("as_of", "")) < since.isoformat():
             continue
+        if str(row.get("as_of", "")) > until.isoformat():
+            continue  # not knowable at the decision date
+        if str(row.get("as_of", "")) > until.isoformat():
+            continue  # an event recorded after the decision date was not knowable at it
         out.setdefault(ticker, []).append(
             {
                 "type": str(row.get("event_type", "")),
@@ -173,6 +192,8 @@ def news_read(tickers: Iterable[str], *, as_of: date, path: Path | None = None) 
             continue
         if str(row.get("as_of", "")) < cutoff:
             continue
+        if str(row.get("as_of", "")) > as_of.isoformat():
+            continue  # see filings_read: staleness was checked in one direction only
         ticker = str(row.get("ticker", "")).removesuffix(".NS")
         if ticker in wanted:
             read.add(ticker)
@@ -180,7 +201,7 @@ def news_read(tickers: Iterable[str], *, as_of: date, path: Path | None = None) 
 
 
 def recent_news(
-    tickers: Iterable[str], *, since: date, path: Path | None = None
+    tickers: Iterable[str], *, since: date, until: date, path: Path | None = None
 ) -> dict[str, list[dict[str, str]]]:
     """High-materiality verified headline items per ticker, newest first, current version only.
 
@@ -241,7 +262,7 @@ def flags_markdown(tickers: Sequence[str], *, as_of: date, lookback_days: int = 
     if not tickers:
         return ""
     rows, prov, age = _latest_exchange_file(as_of)
-    concerns = recent_concerns(tickers, since=as_of - timedelta(days=lookback_days))
+    concerns = recent_concerns(tickers, since=as_of - timedelta(days=lookback_days), until=as_of)
 
     lines: list[str] = ["#### ⚠️ What the exchange and the filings say", ""]
     if prov is None:
@@ -253,7 +274,7 @@ def flags_markdown(tickers: Sequence[str], *, as_of: date, lookback_days: int = 
         return "\n".join(lines)
 
     read = filings_read(tickers, as_of=as_of)
-    headlines = recent_news(tickers, since=as_of - timedelta(days=news.LOOKBACK_DAYS))
+    headlines = recent_news(tickers, since=as_of - timedelta(days=news.LOOKBACK_DAYS), until=as_of)
     heard = news_read(tickers, as_of=as_of)
     flagged: list[str] = []
     clean: list[str] = []

@@ -29,6 +29,9 @@ from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+from collections.abc import Callable
+from typing import cast
+
 import numpy as np
 import pandas as pd
 from backtest_sip import Result, _month_starts, run_index, run_screen
@@ -74,7 +77,7 @@ def _load() -> tuple[PriceData, dict[str, str], pd.DataFrame, list[str], pd.Seri
     return prices, sector_of, pit, biased, _load_benchmark_series()
 
 
-def _pit_universe(pit: pd.DataFrame, available: set[str]):
+def _pit_universe(pit: pd.DataFrame, available: set[str]) -> Callable[[date], list[str]]:
     """``universe_on(d)`` → the names actually IN the index on ``d``, dead ones included.
 
     Survivorship is the largest single distortion available here: holding today's constituents fixed
@@ -98,7 +101,9 @@ def _pit_universe(pit: pd.DataFrame, available: set[str]):
     return universe_on
 
 
-def _random_universe_pit(universe_on, k: int, rng: np.random.Generator):
+def _random_universe_pit(
+    universe_on: Callable[[date], list[str]], k: int, rng: np.random.Generator
+) -> Callable[[date], list[str]]:
     """Offer the screen only ``k`` names drawn at random **from that day's real universe**.
 
     This is the null. Identical sizing, cadence, costs, taxes and whole-share granularity; identical
@@ -144,7 +149,11 @@ def main(argv: list[str] | None = None) -> int:
     # equal-weight premium — and that premium is purchasable for ~0.41%/yr.
     base = run_index(bench, schedule, lump=LUMP, sip=SIP, label="NIFTYBEES (do nothing)")
     ew_level = equal_weight_pit(
-        prices, Universe.from_csv(PIT_MEMBERSHIP), prices.adj_close.index, Decimal("100")
+        prices,
+        Universe.from_csv(PIT_MEMBERSHIP),
+        # The panel is built with a DatetimeIndex; pandas-stubs types `.index` as the base.
+        cast(pd.DatetimeIndex, prices.adj_close.index),
+        Decimal("100"),
     )
     ew = run_index(ew_level, schedule, lump=LUMP, sip=SIP, label="Equal-weight index (no fee)")
     years = Decimal(str((end - schedule[0]).days / 365.25))
