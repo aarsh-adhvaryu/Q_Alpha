@@ -20,7 +20,7 @@ from qalpha.config import Config
 from qalpha.live.twin import (
     ALL_BOOKS,
     REAL,
-    TWIN_FULL,
+    SYSTEM,
     OffMarketCredit,
     apply_off_market,
     assert_identical_flows,
@@ -84,7 +84,7 @@ def test_an_allotment_on_a_day_that_already_has_trades_is_netted() -> None:
 def test_every_book_is_funded_for_the_allotment() -> None:
     """The twins must get the same rupees, to deploy their own way."""
     books = seed_books(_trades(), Config())
-    before = books[TWIN_FULL].net_invested
+    before = books[SYSTEM].net_invested
     deltas = sync_flows(books, _trades(), [_ipo()])
     assert len(deltas) == 1 and deltas[0].amount == Decimal("3450")
     for name in ALL_BOOKS:

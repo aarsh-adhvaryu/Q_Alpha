@@ -211,7 +211,7 @@ def books_panel(record: TwinRecord | None, *, today: date) -> str:
         "days, from your tradebook, and differs in exactly one decision — that is the only reason a "
         "gap between two of them means anything. <b>REAL</b> is your own account replayed. "
         "<b>First marked</b> is when a book began, not when the money did: a book cannot outperform "
-        "over a period it did not exist for, and <b>TWIN_FULL &minus; TWIN_NO_HEDGE</b> is ₹0 by "
+        "over a period it did not exist for, and <b>SYSTEM &minus; TWIN_NO_HEDGE</b> is ₹0 by "
         "construction, so it is not evidence about the hedge.</p>"
     )
 
@@ -305,10 +305,8 @@ def tracks_panel(record: TwinRecord | None, *, null_path: Path | None = None) ->
 def capability_panel() -> str:
     from qalpha.live.extraction import EXTRACTION_VERSION
     from qalpha.live.localmodel import MODEL_VAR
-    from qalpha.live.twin import AUTHORIZING_PAIR
     from qalpha.live.verdicts import AI_PROMPT_VERSION
 
-    authorises = "nothing authorizes a GO today" if AUTHORIZING_PAIR is None else "authorising"
     rows = [
         (
             "The screen",
@@ -331,13 +329,13 @@ def capability_panel() -> str:
         (
             f"The AI arm ({AI_PROMPT_VERSION})",
             "may drop a name from a fake-money book",
-            f"a rule over verified filing events — no model is asked; {authorises}",
-            "a measured gap between TWIN_FULL and TWIN_NO_AI over a registered window",
+            "a rule over verified filing events — no model is asked",
+            "evidence that acting on those events beats not acting — the event study, unrun",
         ),
         (
             "The hedge",
             "signal only",
-            "moves no money; TWIN_FULL − TWIN_NO_HEDGE is ₹0 by construction",
+            "moves no money; SYSTEM − TWIN_NO_HEDGE is ₹0 by construction",
             "an instrument this book is large enough to trade",
         ),
         (

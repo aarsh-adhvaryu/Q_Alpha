@@ -24,10 +24,8 @@ from qalpha.live.twin import (
     ALL_BOOKS,
     BASELINE,
     BASELINE_EW,
-    GATING_PAIR,
     REAL,
-    TWIN_FULL,
-    TWIN_NO_AI,
+    SYSTEM,
     BookMark,
     assert_identical_flows,
     baseline_mark,
@@ -71,7 +69,7 @@ def test_every_book_receives_the_same_rupees_on_the_same_days() -> None:
 def test_drifted_flows_are_refused_loudly() -> None:
     """A predecessor run was lost to exactly this — silently, because nothing checked."""
     books = seed_books(_trades(), Config())
-    books[TWIN_NO_AI].flows.append(Flow(on=date(2026, 9, 1), amount=Decimal("50000")))
+    books[SYSTEM].flows.append(Flow(on=date(2026, 9, 1), amount=Decimal("50000")))
     with pytest.raises(ValueError, match="same rupees on the same days"):
         assert_identical_flows(list(books.values()))
 
@@ -79,9 +77,9 @@ def test_drifted_flows_are_refused_loudly() -> None:
 def test_the_flows_come_from_the_tradebook_and_nowhere_else() -> None:
     """There is no SIP schedule (§4c): a calendar injection the real account never got is the flaw."""
     books = seed_books(_trades(), Config())
-    assert [f.on for f in books[TWIN_FULL].flows] == [date(2026, 6, 15), date(2026, 8, 28)]
+    assert [f.on for f in books[SYSTEM].flows] == [date(2026, 6, 15), date(2026, 8, 28)]
     # 2026-08-28 nets the two same-day buys into one flow, as a day's net effect should.
-    assert books[TWIN_FULL].flows[1].amount == Decimal("15") * Decimal("1140") + Decimal(
+    assert books[SYSTEM].flows[1].amount == Decimal("15") * Decimal("1140") + Decimal(
         "10"
     ) * Decimal("2340")
 
@@ -94,7 +92,7 @@ def test_an_undeployed_twin_is_charged_for_holding_cash() -> None:
     bought and broke even — unlike the REAL account, whose idle balance is next month's instalment
     and must never count (the +444% defect)."""
     books = seed_books(_trades(), Config())
-    twin = books[TWIN_FULL]
+    twin = books[SYSTEM]
     assert twin.value({}) == twin.net_invested  # all cash, nothing deployed
     assert mark(twin, {}, date(2026, 8, 29)).gain == Decimal("0")
 
@@ -116,22 +114,27 @@ def _marks(**values: float) -> dict[str, BookMark]:
     return out
 
 
-def test_exactly_one_comparison_gates() -> None:
-    """Five comparisons at 95% throw a false positive about one run in four."""
-    gaps = compare(
-        _marks(TWIN_FULL=5000, BASELINE_EW=3000, BASELINE=1000, TWIN_NO_AI=4000, REAL=2000)
-    )
-    gating = [g for g in gaps if g.gates]
-    assert len(gating) == 1
-    assert (gating[0].left, gating[0].right) == GATING_PAIR
-    assert all(not g.gates for g in gaps if (g.left, g.right) != GATING_PAIR)
+def test_the_comparison_is_the_system_against_the_purchasable_fund() -> None:
+    """Three comparisons, and the one that matters leads.
+
+    It used to be eight, one of them flagged as gating. The gate is gone — the verdict it graded
+    needed two hundred years of data — and with it the ablations, whose question was harder still.
+    What is left is the system against a fund anyone can buy, the do-nothing floor, and what the
+    user actually did. None of them authorises anything and the render says so.
+    """
+    gaps = compare(_marks(SYSTEM=5000, BASELINE_EW=3000, BASELINE=1000, REAL=2000))
+    assert [(g.left, g.right) for g in gaps] == [
+        (SYSTEM, BASELINE_EW),
+        (SYSTEM, BASELINE),
+        (SYSTEM, REAL),
+    ]
 
 
 def test_a_gap_is_unreadable_before_twelve_months() -> None:
     """The bar that voided forward run 1: too short is not a small result, it is no result."""
-    marks = _marks(TWIN_FULL=50000, BASELINE=0)
-    marks[TWIN_FULL] = BookMark(
-        TWIN_FULL, date(2026, 9, 1), date(2026, 6, 15), Decimal("100000"), Decimal("150000"), None
+    marks = _marks(SYSTEM=50000, BASELINE=0)
+    marks[SYSTEM] = BookMark(
+        SYSTEM, date(2026, 9, 1), date(2026, 6, 15), Decimal("100000"), Decimal("150000"), None
     )
     gap = compare(marks, null_p95=0.01)[0]
     assert not gap.readable
@@ -140,9 +143,9 @@ def test_a_gap_is_unreadable_before_twelve_months() -> None:
 
 def test_a_gap_inside_the_null_band_is_not_a_result() -> None:
     gap = compare(
-        _marks(TWIN_FULL=1200, BASELINE=1000),
+        _marks(SYSTEM=1200, BASELINE=1000),
         null_p95=0.05,
-        navs={TWIN_FULL: 1.012, BASELINE: 1.010},
+        navs={SYSTEM: 1.012, BASELINE: 1.010},
     )[0]
     assert not gap.readable
     assert "null band" in gap.render()
@@ -150,9 +153,9 @@ def test_a_gap_inside_the_null_band_is_not_a_result() -> None:
 
 def test_a_gap_is_readable_only_when_old_enough_and_big_enough() -> None:
     gap = compare(
-        _marks(TWIN_FULL=90000, BASELINE=1000),
+        _marks(SYSTEM=90000, BASELINE=1000),
         null_p95=0.05,
-        navs={TWIN_FULL: 1.90, BASELINE: 1.01},
+        navs={SYSTEM: 1.90, BASELINE: 1.01},
     )[0]
     assert gap.readable
     assert "clearing" in gap.render()
@@ -160,7 +163,7 @@ def test_a_gap_is_readable_only_when_old_enough_and_big_enough() -> None:
 
 def test_without_a_null_nothing_is_readable() -> None:
     """The matched null has not been run. No bar means no verdict — never a bar of zero."""
-    gap = compare(_marks(TWIN_FULL=90000, BASELINE=1000), navs={TWIN_FULL: 1.9, BASELINE: 1.0})[0]
+    gap = compare(_marks(SYSTEM=90000, BASELINE=1000), navs={SYSTEM: 1.9, BASELINE: 1.0})[0]
     assert gap.null_p95 is None
     assert not gap.readable
     assert "has not been run" in gap.render()
@@ -191,11 +194,13 @@ def test_the_baseline_refuses_rather_than_inventing_a_number() -> None:
 
 
 def test_the_panel_separates_the_gate_from_the_diagnostics() -> None:
-    marks = _marks(TWIN_FULL=5000, BASELINE_EW=3000, BASELINE=1000, TWIN_NO_AI=4000, REAL=2000)
+    marks = _marks(SYSTEM=5000, BASELINE_EW=3000, BASELINE=1000, REAL=2000)
     md = comparison_markdown(marks, compare(marks, null_p95=0.001))
-    assert "The gate" in md
-    assert "never gating" in md
-    assert md.index("The gate") < md.index("Diagnostics")  # the gate leads
+    assert "Nothing here authorises anything" in md
+    assert "GO gate was removed" in md
+    # Read the gap lines, not the books table above them: REAL heads that table.
+    gap_lines = [ln for ln in md.splitlines() if ln.startswith("- ")]
+    assert BASELINE_EW in gap_lines[0], "the fund anyone can buy leads the comparison"
 
 
 def test_the_gating_statistic_survives_a_contribution() -> None:
@@ -229,7 +234,7 @@ def test_the_gating_statistic_survives_a_contribution() -> None:
     assert with_flow.iloc[-1] == pytest.approx(with_flow.iloc[0]), "a deposit is not a return"
 
 
-def test_the_gate_reads_the_registered_window_not_the_first_flow_ever() -> None:
+def test_the_window_is_the_registered_one_not_the_first_flow_ever() -> None:
     """``months`` counted from the earliest flow on file — which predates the experiment.
 
     The tradebook reaches back to 2026-06-15 (two IPO-era trades). A window opening 2026-09-01 would
@@ -310,7 +315,7 @@ def test_the_null_is_a_null_and_not_a_bug() -> None:
     assert abs(r["mean_log_rel_wealth"]) < 0.01
 
 
-def test_the_gate_is_the_purchasable_alternative_not_the_index() -> None:
+def test_the_bar_is_the_purchasable_alternative_not_the_index() -> None:
     """Phase 4 moved this bar, and the move is the point.
 
     76% of the screen's gap over NIFTYBEES is the equal-weight premium — and that premium is
@@ -318,12 +323,10 @@ def test_the_gate_is_the_purchasable_alternative_not_the_index() -> None:
     credit for something it did not create; a system that cannot beat the best cheap passive
     alternative should not run. See reports/PHASE4_BACKTEST.md.
     """
-    assert GATING_PAIR == (TWIN_FULL, BASELINE_EW)
-    gaps = compare(_marks(TWIN_FULL=5000, BASELINE_EW=3000, BASELINE=1000))
-    (gate,) = [g for g in gaps if g.gates]
-    assert gate.right == BASELINE_EW
+    gaps = compare(_marks(SYSTEM=5000, BASELINE_EW=3000, BASELINE=1000))
+    assert gaps[0].right == BASELINE_EW, "the fund anyone can buy leads the comparison"
     # NIFTYBEES is still reported — as a floor, never as the bar.
-    assert any(g.right == BASELINE and not g.gates for g in gaps)
+    assert any(g.right == BASELINE for g in gaps)
 
 
 def test_the_ew_fund_baseline_charges_its_fee() -> None:
@@ -349,7 +352,7 @@ def test_new_trades_are_credited_to_every_book() -> None:
     from qalpha.live.twin import sync_flows
 
     books = seed_books(_trades(), Config())
-    before = books[TWIN_FULL].net_invested
+    before = books[SYSTEM].net_invested
     later = [*_trades(), _T(date(2026, 9, 15), "TCS.NS", Side.BUY, Decimal("5"), Decimal("2400"))]
 
     deltas = sync_flows(books, later)
@@ -374,7 +377,7 @@ def test_an_amended_day_is_credited_as_a_delta_not_missed() -> None:
     assert len(deltas) == 1, "same number of flow-days, but the amount changed"
     assert deltas[0].on == date(2026, 8, 28)
     assert deltas[0].amount == Decimal("1800")
-    assert len(books[TWIN_FULL].flows) == 2  # still two days, one of them larger
+    assert len(books[SYSTEM].flows) == 2  # still two days, one of them larger
 
 
 def test_no_new_trades_credits_nothing() -> None:
@@ -415,13 +418,13 @@ def test_an_empty_tradebook_read_must_not_be_treated_as_an_empty_account() -> No
 def test_holdings_frame_survives_a_book_with_nothing_in_it() -> None:
     """An empty frame has no columns, so sorting by name raises KeyError.
 
-    This took the live dashboard down: `_twin_panel` charts REAL and TWIN_FULL side by side, and a
+    This took the live dashboard down: `_twin_panel` charts REAL and SYSTEM side by side, and a
     book holding nothing — or whose names the deployed panel could not price — crashed the page
     rather than drawing an empty chart.
     """
     from qalpha.live.twin import holdings_frame
 
-    empty = seed_books(_trades(), Config())[TWIN_FULL]
+    empty = seed_books(_trades(), Config())[SYSTEM]
     frame = holdings_frame(empty, {})  # no prices at all
     assert frame.empty
     assert list(frame.columns) == ["Ticker", "Value", "Share %"], "shape must survive"
@@ -432,7 +435,7 @@ def test_holdings_frame_skips_names_it_cannot_price() -> None:
     from qalpha.live.twin import holdings_frame
 
     books = seed_books(_trades(), Config())
-    book = books[TWIN_FULL]
+    book = books[SYSTEM]
     book.portfolio.buy(date(2026, 8, 28), "INFY.NS", Decimal("10"), Decimal("1140"))
     book.portfolio.buy(date(2026, 8, 28), "TCS.NS", Decimal("5"), Decimal("2340"))
     frame = holdings_frame(book, {"INFY.NS": Decimal("1140")})  # TCS unpriced
@@ -451,7 +454,7 @@ def test_a_book_younger_than_the_fund_gets_no_gap_column() -> None:
 
     Found 2026-09-09 by asking why CORE_V1 was "working". It was not. Its first mark in
     ``history.jsonl`` is 2026-09-07 and every lot it holds is dated that day — it was constituted
-    last Monday, while TWIN_FULL had been accumulating since 08-29 and fell ₹10,627 in between. It
+    last Monday, while SYSTEM had been accumulating since 08-29 and fell ₹10,627 in between. It
     entered the record **already ₹10,293 ahead**, and in the one day both books had been alive they
     diverged by ₹475. The dashboard was rendering that as "The screen ▲ +₹6,109 vs the fund".
 
@@ -464,13 +467,13 @@ def test_a_book_younger_than_the_fund_gets_no_gap_column() -> None:
     if not born:
         pytest.skip("no twin history on this host")
     assert "BASELINE_EW" in born
-    # The real record: the fund predates CORE_V1, which is the whole point.
-    if "CORE_V1" in born:
-        assert born["CORE_V1"] >= born["BASELINE_EW"]
-    # And inception must never be read off the shared `start` field, which is identical for all.
-    assert len(set(born.values())) > 1 or len(born) == 1, (
-        "if every book shares an inception the guard is inert — check it is reading first-mark, "
-        "not the seeding date every book carries"
+    # INCEPTION IS THE FIRST MARK, NEVER THE SHARED `start`. Asserting that the books differ from
+    # each other only works while they do — a fresh seed gives every book the same birthday and the
+    # guard silently goes inert. What must always hold is that no inception equals the cash-flow
+    # start every book carries, because that is the field the defect read.
+    flow_start = "2026-06-15"
+    assert all(str(day) != flow_start for day in born.values()), (
+        "an inception equal to the shared cash-flow start means first-mark is not being read"
     )
 
 

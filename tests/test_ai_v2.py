@@ -133,7 +133,7 @@ def test_an_empty_basket_asks_nothing(tmp_path: Path) -> None:
 
 
 def test_missing_logs_keep_everything(tmp_path: Path) -> None:
-    """Absence is keep. Every failure path degrades TWIN_FULL to exactly TWIN_NO_AI."""
+    """Absence is keep. Every failure path degrades SYSTEM to exactly TWIN_NO_AI."""
     out = event_verdicts(
         BASKET, as_of=AS_OF, events_path=tmp_path / "none.jsonl", news_path=tmp_path / "none2.jsonl"
     )
