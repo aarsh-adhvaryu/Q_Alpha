@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=AMBUJACEM",
+ "retrieved_at_utc": "2026-09-12T07:42:43Z",
+ "http_status": 200,
+ "bytes": 1293577,
+ "sha256": "ecc0709bbf0fb5ce4c8a71e9cdc0bcd78649d5784a8d85db9558fb2c8115e758",
+ "document_date": "2026-09-12",
+ "symbol": "AMBUJACEM",
+ "kind": "announcement_index"
+}

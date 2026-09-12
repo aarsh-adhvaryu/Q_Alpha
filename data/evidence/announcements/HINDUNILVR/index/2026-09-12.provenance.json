@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=HINDUNILVR",
+ "retrieved_at_utc": "2026-09-12T07:11:18Z",
+ "http_status": 200,
+ "bytes": 1307544,
+ "sha256": "1aac9865277630748db3eeb515e364449f23718e646d705d1bb2356fd9b86002",
+ "document_date": "2026-09-12",
+ "symbol": "HINDUNILVR",
+ "kind": "announcement_index"
+}

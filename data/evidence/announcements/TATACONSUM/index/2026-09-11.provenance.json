@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=TATACONSUM",
+ "retrieved_at_utc": "2026-09-11T10:14:00Z",
+ "http_status": 200,
+ "bytes": 1177092,
+ "sha256": "82d7e86505bdfe7b9b09b7c266f727232e71eaa362f3b2d3ba11fae0f9659fd0",
+ "document_date": "2026-09-11",
+ "symbol": "TATACONSUM",
+ "kind": "announcement_index"
+}
