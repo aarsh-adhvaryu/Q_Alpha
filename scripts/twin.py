@@ -1,7 +1,7 @@
-"""The twin — seed the books, step them daily, grade the gate. The cron entry point.
+"""The twin — seed the books, step them daily, record the gaps. The cron entry point.
 
     uv run python scripts/twin.py seed     # ONE TIME: the reset event. Refuses to overwrite.
-    uv run python scripts/twin.py daily    # the cron: step → mark → gate → write
+    uv run python scripts/twin.py daily    # the cron: step → mark → write
     uv run python scripts/twin.py status   # print the comparison without writing
 
 **Fake money only.** The twin books decide for themselves; the real Zerodha account is the *state
@@ -35,7 +35,6 @@ from qalpha.live import atomic
 from qalpha.live.ai_brief import NameVerdict
 from qalpha.live.console import use_utf8
 from qalpha.live.extraction import EXTRACTION_VERSION
-from qalpha.live.go_gate import Evidence, GateReport, build_gate
 from qalpha.live.policy import ALL_POLICIES, Decision, decisions_markdown
 from qalpha.live.runner import Market, step
 from qalpha.live.tradebook import TradebookTrade
@@ -44,7 +43,6 @@ from qalpha.live.twin import (
     CORE_EVALUATION_START,
     CORE_V1,
     DECIDING,
-    NULL_P95_LOG_REL_WEALTH,
     REAL,
     TWIN_FULL,
     TWIN_HISTORY,
@@ -72,7 +70,6 @@ from qalpha.live.twin import (
     seed_books,
     sync_flows,
 )
-from qalpha.live.twinpanel import GATE_JSON
 from qalpha.live.verdicts import AI_PROMPT_VERSION, event_verdicts, verdict_calls
 
 REPORT = Path("reports/twin_dashboard.md")
@@ -408,10 +405,17 @@ def cmd_seed(cfg: Config) -> int:
     return 0
 
 
-def _marks_and_gate(
+def _marks_and_gaps(
     books: dict[str, TwinBook], market: Market, cfg: Config, *, persist: bool = True
-) -> tuple[dict[str, BookMark], list[Gap], GateReport]:
-    """Mark every book, add both baselines, and grade the gate on what is actually known.
+) -> tuple[dict[str, BookMark], list[Gap]]:
+    """Mark every book and add both baselines.
+
+    **The GO gate was removed on 2026-09-12.** It asked whether the system beats the fund by
+    more than chance, and that question cannot be answered on this data: the edge is 0.42%/yr
+    against 5.3%/yr of drift, so detecting it at 95% needs roughly two hundred years. Six
+    criteria and a matched null were machinery around a measurement that was never going to
+    arrive. The gaps are still recorded — they are a description of what happened, which is
+    honest — and nothing here authorises anything, which was already true.
 
     ``persist=False`` makes this **genuinely read-only**. ``twin.py status`` is documented as a
     read-only view and called this with the default, so merely *looking* at the twin appended a
@@ -454,68 +458,21 @@ def _marks_and_gate(
     navs.update(
         {f"core_v1:{k}": v for k, v in navs_from_history(rows, start=CORE_EVALUATION_START).items()}
     )
-    gaps = compare(marks, null_p95=NULL_P95_LOG_REL_WEALTH, navs=navs)
+    gaps = compare(marks, navs=navs)
     # **RUN 2 NO LONGER AUTHORISES.** Its treatment changed inside its own window — two AI rules
     # under one version label — so it was reclassified an operational rehearsal. An experiment
     # declared methodologically invalid must never later produce a GO, so it keeps its statistic
     # (recorded under `tracks`) and loses its authority. The GO gate reads the authorising track
     # only, which is CORE_V1. Until that book exists the gate has no gap and says CANNOT ASSESS,
     # which is the honest answer rather than a borrowed one.
-    rehearsal = next((g for g in gaps if g.gates and g.track == "run2"), None)
-    authorizing = next((g for g in gaps if g.authorizes), None)
-    if rehearsal is not None:
-        print(
-            f"[twin] rehearsal (non-authorising): {rehearsal.left} vs {rehearsal.right} — G = "
-            + ("n/a" if rehearsal.log_rel_wealth is None else f"{rehearsal.log_rel_wealth:+.5f}")
-        )
-    if authorizing is None:
-        print("[twin] GO gate: no authorising track yet — CORE_V1 not created, gap CANNOT ASSESS")
-    else:
-        window_note = "not yet open" if authorizing.months < 1 else f"{authorizing.months} month(s)"
-        print(
-            f"[twin] GO gate reads {authorizing.left} vs {authorizing.right} — {window_note} "
-            f"since {CORE_EVALUATION_START}, G = "
-            + (
-                "n/a"
-                if authorizing.log_rel_wealth is None
-                else f"{authorizing.log_rel_wealth:+.5f}"
-            )
-        )
-    gate_gap = authorizing.rupees if authorizing else None
-    gate_g = authorizing.log_rel_wealth if authorizing else None
-    months = authorizing.months if authorizing else None
-    # Criterion 2 measures the fall THIS BOOK LIVED THROUGH — from the first cash flow, not a
-    # trailing year. A -14.8% drop that happened before the money went in tests nothing, and the
-    # first run of this file reported exactly that as a green.
-    # The registered window, not the first flow ever recorded — criterion 2 must test the fall this
-    # *experiment* lived through, and the tradebook reaches back before the experiment began.
-    # The AUTHORISING window. Criterion 2 must test the fall the gating experiment lived through,
-    # and that experiment is now CORE_V1, whose clock opens later than run 2's.
-    gate_start = CORE_EVALUATION_START
-    start = max(gate_start, flows[0].on) if flows else gate_start
-    window = market.index_close.loc[pd.Timestamp(start) : pd.Timestamp(market.as_of)]
-    worst = float((window / window.cummax() - 1).min()) if len(window) > 1 else None
-    gate = build_gate(
-        Evidence(
-            months_of_flows=months,
-            worst_drawdown_in_window=worst,
-            gap_vs_ew_baseline=gate_gap,
-            log_rel_wealth=gate_g,
-            null_p95=NULL_P95_LOG_REL_WEALTH,
-            # These four were hard-coded: two invented REDs and two invented GREENs. The greens are
-            # the dangerous pair — `tradebook_reconciles=True` and `unguarded_price_gaps=0` asserted
-            # a clean reconciliation and a clean feed that nothing had checked, which is this repo's
-            # signature defect (a number labelled as something it is not) sitting inside the gate
-            # itself. `None` reads ⚪ CANNOT ASSESS, which blocks a GO exactly as a red does while
-            # saying honestly that nobody looked.
-            reconciled_complex_sale=None,
-            reconciled_corporate_action=None,
-            tradebook_reconciles=None,
-            unguarded_price_gaps=None,
-        ),
-        market.as_of,
-    )
-    return marks, gaps, gate
+    # The two tracks still report their own statistic, because a gap is a description of what
+    # happened and descriptions are worth keeping. What has gone is the pretence that either one
+    # could authorise anything.
+    for gap in gaps:
+        if gap.track:
+            value = "n/a" if gap.log_rel_wealth is None else f"{gap.log_rel_wealth:+.5f}"
+            print(f"[twin] {gap.track}: {gap.left} vs {gap.right} — G = {value}")
+    return marks, gaps
 
 
 #: Exit code for "refused to write, nothing changed". Distinct from 1 so a caller can tell a
@@ -524,7 +481,7 @@ ABORTED = 2
 
 
 def cmd_daily(cfg: Config) -> int:
-    """Step every autonomous book, mark them all, grade the gate, write the report."""
+    """Step every autonomous book, mark them all, write the report."""
     books = load_books(cfg)
     if not books:
         print("[twin] not seeded — run `twin.py seed` first. Nothing marked.", file=sys.stderr)
@@ -616,20 +573,15 @@ def cmd_daily(cfg: Config) -> int:
         book.stepped_through = market.as_of
     save_books(books)
 
-    marks, gaps, gate = _marks_and_gate(books, market, cfg)
+    marks, gaps = _marks_and_gaps(books, market, cfg)
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     atomic.write_text(
         REPORT,
         f"# The twin — {as_of}\n\n_Generated {datetime.now(UTC):%Y-%m-%d %H:%M UTC}. "
         "Fake money; the real account is the state source and is never traded._\n\n"
         + comparison_markdown(marks, gaps)
-        + "\n\n---\n\n"
-        + gate.render()
         + "\n",
     )
-    # The same grading the report just rendered, for the page to read. Snapshot, not record: the
-    # append-only history below is the evidence, and this is overwritten every run like the marks.
-    GATE_JSON.write_text(json.dumps(gate.to_dict(), indent=2) + "\n", encoding="utf-8")
     # Persist the marks the report was built from, so the dashboard charts plot exactly these
     # numbers rather than recomputing and quietly disagreeing with the table above them.
     atomic.write_text(
@@ -651,11 +603,11 @@ def cmd_daily(cfg: Config) -> int:
     # this is the only thing that accumulates. It is written LAST and fail-soft — a history write
     # that raised would stop the cron, and a stopped cron loses far more days than one bad row.
     try:
-        rows = append_history(marks, gaps, as_of=as_of, gate_verdict=gate.verdict)
+        rows = append_history(marks, gaps, as_of=as_of)
         print(f"✓ history: {rows} day(s) on file → {TWIN_HISTORY}")
     except Exception as exc:
         print(f"[twin] WARNING: history not appended ({exc})", file=sys.stderr)
-    print(f"✓ {len(decisions)} decision(s) · gate: {gate.verdict} · → {REPORT}")
+    print(f"✓ {len(decisions)} decision(s) → {REPORT}")
     return 0
 
 
@@ -668,10 +620,8 @@ def cmd_status(cfg: Config) -> int:
     if market is None:
         print("[twin] no market data.")
         return 0
-    marks, gaps, gate = _marks_and_gate(books, market, cfg, persist=False)
+    marks, gaps = _marks_and_gaps(books, market, cfg, persist=False)
     print(comparison_markdown(marks, gaps))
-    print()
-    print(gate.render())
     return 0
 
 
