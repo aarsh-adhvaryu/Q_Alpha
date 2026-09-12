@@ -473,9 +473,24 @@ task."**
    exists, no result computed on `nifty100_watchlist.csv` means anything, because today's members
    applied to the past is worth more than the effect being measured. Source: NSE's Next-50
    reconstitution circulars. This is bounded data entry, not research.
-2. **Replay the policy the money runs, not the ranking.** `exp_screen_oos.py` tests monthly
-   rankings. The live policy is buy-and-hold with a ₹50,000 monthly allowance, the §4.7 exits, the
-   sector cap, costs and tax. Those are different strategies and only one of them is being run.
+2. **DONE, and the answer is no** (`PO-1`, 2026-09-12,
+   `reports/PREREGISTRATION_POLICY_REPLAY.md`). The live policy — driven through
+   `runner.step`, the same function `SYSTEM` calls every evening — was replayed over fourteen
+   years on the **point-in-time Nifty-50**, a universe that contains the 36 names that left the
+   index. ₹50,000 a month, identical flows to every line, costs and tax charged:
+
+   | | Terminal | CAGR | Tax |
+   |---|---:|---:|---:|
+   | **Policy, as configured** | **₹12,333,754** | +2.49% | ₹2,095,762 |
+   | `BASELINE_EW` — the bar | ₹27,549,986 | +8.04% | ₹0 |
+   | NIFTYBEES — the floor | ₹21,799,934 | +6.33% | ₹0 |
+   | *diagnostic:* exits OFF | ₹20,023,958 | +5.72% | ₹25,777 |
+
+   **−55% against the bar.** Two separate failures: the §4.7 exits cost **₹7.7 million** (5,488
+   exits — the screen buys names that are down and the exit sells names that are down, so they
+   fight and the book churns), and **even with the exits off it still loses** to both baselines.
+   Turning off the worst component does not rescue it. On this universe over this period, **the
+   stock selection is not adding to the passive alternative.**
 3. **Build the historical filing corpus.** **It is the only route to evidence that does not need
    centuries.** A portfolio over twelve months is *one* observation of a small signal inside large
    noise — that is where the 200-year figure comes from. The same information at the *event* level
