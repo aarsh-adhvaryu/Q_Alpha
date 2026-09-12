@@ -683,13 +683,23 @@ def cmd_daily() -> int:
     # top-up is never lost; it deploys on the next session. The audit entries are held back and
     # written only once the deposit is persisted (see `_log_applied`) — logging them here, ahead of
     # the deploy/gate/mark pipeline below, is what left phantom entries whenever a run died midway.
-    pending_applied: list[tuple[Decimal, str]] = []
+    # AppliedInjection, not a bare tuple: `_log_applied` reads `.entry_id`, `.amount` and
+    # `.reason`, and `clear_applied` keys the queue on the id. Handing it tuples raised
+    # AttributeError on the first queued deposit — a live crash in the money path, invisible until
+    # mypy could see this file (2026-09-11).
+    pending_applied: list[AppliedInjection] = []
     for item in load_pending():
         amt = Decimal(str(item.get("amount", "0")))
         if amt > 0:
             _inject_trio(amt, wallets, contributed, baseline)
-            pending_applied.append((amt, str(item.get("reason", "(from dashboard)"))))
-    pending_total = sum((a for a, _ in pending_applied), Decimal("0"))
+            pending_applied.append(
+                AppliedInjection(
+                    entry_id=str(item.get("entry_id", "")),
+                    amount=amt,
+                    reason=str(item.get("reason", "(from dashboard)")),
+                )
+            )
+    pending_total = sum((a.amount for a in pending_applied), Decimal("0"))
     if pending_total > 0:
         clear_pending()
         print(f"[system] applied ₹{pending_total:,.0f} of queued Add-money to all three books.")

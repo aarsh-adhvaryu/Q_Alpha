@@ -26,6 +26,7 @@ slices prices at ``as_of``. Costs and taxes come from the same validated engine.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -137,7 +138,7 @@ def _mark(
 def run_screen(
     prices: PriceData,
     sector_of: dict[str, str],
-    universe_on,  # callable(date) -> list[str]
+    universe_on: Callable[[date], list[str]],
     index_close: pd.Series,
     schedule: list[date],
     *,
@@ -200,7 +201,9 @@ def run_screen(
                     if h.level == "breaking" and h.ticker in px
                 }
             elif maintain == "annual" and d.month == 1 and live:
-                value = sum(px[t] * pf.positions()[t] for t in live if t in px)
+                # start= matters: with no start this is int 0 when no name has a price, and
+                # `fair` then becomes a float that Decimal refuses to subtract.
+                value = sum((px[t] * pf.positions()[t] for t in live if t in px), Decimal("0"))
                 fair = value / len(live) if live else Decimal("0")
                 for t in live:
                     if t not in px:

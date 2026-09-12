@@ -605,7 +605,12 @@ def _default_generate(api_key: str, *, max_tokens: int = _MAX_OUTPUT_TOKENS) -> 
         )
         if resp.stop_reason == "refusal":  # safety decline → treat as empty (fail-soft skips it)
             return "", {}
-        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        # `getattr` for the text as well as the type. The block union carries eleven shapes that
+        # have no `.text`, and the type guard alone does not narrow it for a strict checker — which
+        # only became visible when the SDK was installed and mypy could finally see those types.
+        text = "".join(
+            str(getattr(b, "text", "")) for b in resp.content if getattr(b, "type", None) == "text"
+        )
         usage = {
             "input": int(getattr(resp.usage, "input_tokens", 0) or 0),
             "output": int(getattr(resp.usage, "output_tokens", 0) or 0),

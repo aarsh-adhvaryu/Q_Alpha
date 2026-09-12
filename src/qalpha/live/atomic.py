@@ -52,3 +52,25 @@ def write_text(path: Path | str, text: str) -> Path:
         Path(tmp).unlink(missing_ok=True)
         raise
     return out
+
+
+def write_bytes(path: Path | str, payload: bytes) -> Path:
+    """Replace ``path`` with ``payload``, atomically. Returns the path written.
+
+    The byte-shaped twin of :func:`write_text`, and it exists for the same reason: a gzip or a
+    parquet truncated halfway is not a smaller file, it is an unreadable one, and a later run that
+    finds it has no way to tell it apart from a corrupt download.
+    """
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(out.parent), suffix=".tmp", prefix=out.name + ".")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, out)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+    return out

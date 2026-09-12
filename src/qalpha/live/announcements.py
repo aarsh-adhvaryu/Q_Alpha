@@ -269,9 +269,22 @@ def load_document(
     if payload is None:
         return read_text(ann, directory=directory), prov
     text = extract_text(payload)
-    if text and not text_path(ann, directory=directory).exists():
-        write_text(text, ann, directory=directory)
-    return text, prov
+    if text:
+        if not text_path(ann, directory=directory).exists():
+            write_text(text, ann, directory=directory)
+        return text, prov
+    # THE PDF HAS NO TEXT LAYER. Fall back to whatever was archived beside it — for a scanned
+    # filing that is the transcription `scripts/ocr_scans.py` wrote, and its provenance says
+    # `text_source: ocr:<model>` so a later reader knows the quote was checked against a
+    # transcription rather than against NSE's bytes.
+    #
+    # The order matters and is deliberate: the document's OWN text layer always wins. A
+    # transcription is only ever consulted when there is nothing else, so this can never quietly
+    # substitute a model's reading for bytes that exist.
+    #
+    # Without this the fallback was unreachable whenever the PDF was on disk, and ten transcribed
+    # filings were written, ignored, and left five names permanently incomplete anyway.
+    return read_text(ann, directory=directory), prov
 
 
 @dataclass(frozen=True)

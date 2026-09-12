@@ -31,10 +31,11 @@ from run_phase0 import (
 )
 
 from qalpha.backtest.baselines import equal_weight_pit
-from qalpha.backtest.engine import run_backtest
+from qalpha.backtest.engine import BacktestResult, run_backtest
 from qalpha.backtest.metrics import compute_metrics, max_drawdown
 from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
+from qalpha.data.prices import PriceData
 from qalpha.data.universe import Universe
 
 CSV = "data/universes/nifty50_membership.csv"
@@ -42,7 +43,15 @@ START, END = "2012-01-01", "2024-12-31"
 CAPITAL = Config().capital.starting_capital
 
 
-def _run(prices, sector_of, universe, cfg, start, end, freq):  # type: ignore[no-untyped-def]
+def _run(
+    prices: PriceData,
+    sector_of: dict[str, str],
+    universe: Universe,
+    cfg: Config,
+    start: str,
+    end: str,
+    freq: str,
+) -> BacktestResult:
     return run_backtest(
         prices,
         sector_of,

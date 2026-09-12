@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Adani+Energy+Solutions%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-11T06:37:22Z",
+ "http_status": 200,
+ "bytes": 70435,
+ "sha256": "327dcee27f5a49c8f94389a01f03777fec9df0df75a5a2939fbb193a43464a22",
+ "document_date": "2026-09-11",
+ "feed": "gnews-adaniensol",
+ "kind": "name",
+ "ticker": "ADANIENSOL.NS"
+}
