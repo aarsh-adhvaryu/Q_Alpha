@@ -569,14 +569,42 @@ task."**
    ~36-point gap lives in the sizing machinery neither experiment varied (shortfall-against-target
    sizing, the sector cap, the roster). That is the next experiment.
 
-   **`market_weakness` is wired to the page, not to the money.** It is computed, rendered and
+   **The weakness lever was measured and it stays disconnected** (`WC-2`/`WC-2b`, 2026-09-12,
+   `reports/PREREGISTRATION_WEAKNESS_RESERVE.md`). WC-1 said deep-drawdown money is better money;
+   this asked whether you can *harvest* that by holding cash back on ordinary months. Over the full
+   fourteen years it looked excellent — **+12.23%** over deploying steadily, monotone in the
+   hold-back fraction, control reproducing PO-2's ₹30,058,634 exactly. Then the robustness grid,
+   registered before it ran: terminal vs its own control at `r = 50%`
+
+   | Period | `deep` ≤ −10% | `deep` ≤ −12% | `deep` ≤ −15% |
+   |---|---:|---:|---:|
+   | full 2012–2026 | +6.20% | **+12.23%** | +10.44% |
+   | first half 2012–2019 | +1.70% | +0.89% | **−1.60%** |
+   | second half 2019–2026 | +1.28% | +1.49% | **−1.09%** |
+
+   **The full period wins everywhere and both halves win barely or lose** — which is not how a real
+   effect behaves. The difference is accumulation: in the full run the reserve has been building
+   since 2012 when COVID arrives, so eight years of withheld instalments land at the bottom at once.
+   Split the period and the effect collapses to **+1.49%**. WC-2's headline is substantially one
+   alignment, and §5 of its own registration had named that risk before the first run.
+
+   **Releasing on `elevated` as well as `deep` also lost** (−0.99%, −1.38%): 71 releases against 11,
+   so the reserve is spent on every mild dip and gone when it matters. `WC-1` had already scored
+   `elevated` as noise.
+
+   > **The two findings are compatible and together they are the useful one: the good entry points
+   > are real, and you cannot reliably save up for them.** The consequence is the boring one this
+   > repository keeps arriving at — deploy steadily — and it agrees with what was already proven:
+   > trading less and staying invested beat the alternatives net of cost and tax.
+
+   **`market_weakness` is therefore still wired to the page, not to the money,** and that is now a
+   measured choice rather than an oversight. It is computed, rendered and
    printed into a decision's reason, and never multiplied into any amount — no budget scaling, no
    gate, and it never reaches `deploy_target`. Measured consequence: mean cash across the whole
    fourteen-year replay is **1.0%**. The screen is named *deploy into weakness* and the docstring
    calls weakness "a *when to deploy more*" lever. **It is not one.** `WC-1` says the opportunity is
    real (deep-drawdown money beats the fund by a median +30.3%); acting on it means holding cash
-   back on ordinary months, which **no experiment here has measured** — WC-1 was fully invested
-   throughout. That is `WC-2`, unbuilt and unregistered.
+   back on ordinary months. **`WC-2` measured exactly that and the answer was no** — see above.
 3. **Build the historical filing corpus.** **It is the only route to evidence that does not need
    centuries.** A portfolio over twelve months is *one* observation of a small signal inside large
    noise — that is where the 200-year figure comes from. The same information at the *event* level

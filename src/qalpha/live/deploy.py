@@ -61,8 +61,28 @@ class MarketWeakness:
 def market_weakness(index_close: pd.Series, as_of: date) -> MarketWeakness:
     """Classify market weakness from the index's drawdown vs its rolling 1-year high.
 
-    Deeper drawdowns are historically better-than-average entry points for *fresh* capital — so the
-    advisory leans into them (always as tax-free buys, never selling the existing book).
+    **The premise is measured and it holds.** `WC-1` tracked each month's ₹50,000 as its own cohort
+    against the fund bought the same day: money that went in during a `deep` drawdown beat that fund
+    by a median **+30.3%**, money that went in on a `normal` day **lost 3.1%**, monotone across the
+    three levels on a survivorship-free universe.
+
+    **This function classifies. It does not lean.** Its verdict is rendered on the page and written
+    into the reason on every decision, and it is *never multiplied into any amount* — it does not
+    scale the budget, does not gate a buy, and never reaches :func:`deploy_target`. Measured
+    consequence: mean cash across a fourteen-year replay is **1.0%**. So the docstring this replaces
+    was describing behaviour the code has never had, on the surface that names the strategy.
+
+    **Whether it should lean was measured, and the answer is no.** Leaning means holding capital
+    back on ordinary months to have more in deep ones. `WC-2` scored that at **+12.23%** over
+    fourteen years — and `WC-2b` then split the period and moved this function's own −12% threshold,
+    and **the full run wins on every threshold while both halves win barely or lose.** The effect is
+    accumulation, not timing: eight years of withheld instalments happening to land at the bottom in
+    2020. Split the history and it collapses to +1.49%.
+
+    So this function classifies and reports, by decision rather than by omission. **The good entry
+    points are real and you cannot reliably save up for them** — which is the same answer the proven
+    results already gave: trading less and staying invested win.
+    `reports/PREREGISTRATION_WEAKNESS_RESERVE.md` §9 is the record.
     """
     hist = index_close.loc[: pd.Timestamp(as_of)].dropna()
     if hist.empty:
@@ -77,11 +97,21 @@ def market_weakness(index_close: pd.Series, as_of: date) -> MarketWeakness:
             "aggressively into the pullback (tax-free buys).",
         )
     if dd <= -0.05:
+        # NOT "a better-than-usual entry". WC-1 measured `elevated` money at +2.0% against the fund
+        # on a coin-toss hit rate -- indistinguishable from an ordinary day.
         return MarketWeakness(
-            dd, "elevated", "market has pulled back — a better-than-usual entry; lean into it."
+            dd,
+            "elevated",
+            "market has pulled back, but only mildly — measured returns from here are no better "
+            "than an ordinary day; deploy the usual amount.",
         )
+    # "keep dry powder" is what this said until 2026-09-12, and WC-2b measured that advice and
+    # rejected it: holding cash back for the next deep drawdown wins over fourteen years only
+    # because eight years of it happened to land in March 2020, and loses in both halves at a -15%
+    # threshold. Telling the user to hold cash on the one surface that sizes his basket is advice
+    # this repository has evidence against.
     return MarketWeakness(
-        dd, "normal", "near highs — deploy steadily / dollar-cost average; keep dry powder."
+        dd, "normal", "near highs — deploy steadily; saving up for a dip measured worse than this."
     )
 
 
