@@ -117,7 +117,7 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**66 live modules · 1,423 tests green + 1 xfail** (counted, not estimated — see the
+**66 live modules · 1,427 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -537,6 +537,46 @@ task."**
    **What still has no measurement: the optimizer and the sector allocator.** PO-2 and WC-1 both buy
    equal-weighted top-K with no sector cap, so neither touches `alloc/`. “Does the optimizer work”
    is an open question, not an answered one, and the +9.1% is *not* evidence for it.
+
+   **The policy `SYSTEM` runs was changed on 2026-09-12, two days before its window opened, and
+   half the change was refused by its own test** (`PL-1`, `reports/PREREGISTRATION_LIVE_POLICY.md`).
+   Four edits were proposed from PO-1/PO-2's decomposition. Replayed through `runner.step`:
+
+   | | Change | Verdict |
+   |---|---|---|
+   | A | §4.7 exits **off** | **ships** — ₹13.19M → ₹20.14M, +52.7% |
+   | C | basket 15 → **8** | **ships** — +0.6%, and ends a split-brain (below) |
+   | B | breakdown as a flag, not a filter | **rejected, −23.2%** |
+   | D | buy cheapest, not most underweight | not shipped, −0.5% |
+
+   **B reversed sign against PO-2 and that is the lesson.** PO-2 measured the breakdown filter
+   *costing* 8 points; through the real runner it is worth +23.2%. `universe` is screened **before**
+   the roster is chosen, so `exclude_breaking` is also **the only thing that evicts a collapsing
+   holding** — with the exits off too, a broken name keeps its slot and is topped up all the way
+   down, and "cheapest" means "fallen furthest", so next month aims at it again. PO-2's loop held no
+   roster and could not see it. **Rule 1: a fix reasoned about as a concept, applied at one call
+   site.** The ablation's first row reproduced the old ₹20,023,958 to the rupee, which is the only
+   reason the other rows could be read.
+
+   **The split-brain C fixed:** `runner.step` read `cfg.deploy_policy.max_names_default` (15) while
+   the user's own buy screen read `Mandate.max_names` (4). **The book whose entire purpose is to
+   replicate what he does had never used his basket size**, and PO-1 replayed fourteen years of a
+   policy nobody runs. Every caller now reads the mandate.
+
+   **It still loses to both baselines, and that is the honest headline.** ₹20,138,663 is **−26.9%
+   against `BASELINE_EW`** and **−7.6% against NIFTYBEES**. PL-1 makes a losing policy lose less.
+   PO-2's +9.1% is **not reachable through this code path at any setting of these switches** — the
+   ~36-point gap lives in the sizing machinery neither experiment varied (shortfall-against-target
+   sizing, the sector cap, the roster). That is the next experiment.
+
+   **`market_weakness` is wired to the page, not to the money.** It is computed, rendered and
+   printed into a decision's reason, and never multiplied into any amount — no budget scaling, no
+   gate, and it never reaches `deploy_target`. Measured consequence: mean cash across the whole
+   fourteen-year replay is **1.0%**. The screen is named *deploy into weakness* and the docstring
+   calls weakness "a *when to deploy more*" lever. **It is not one.** `WC-1` says the opportunity is
+   real (deep-drawdown money beats the fund by a median +30.3%); acting on it means holding cash
+   back on ordinary months, which **no experiment here has measured** — WC-1 was fully invested
+   throughout. That is `WC-2`, unbuilt and unregistered.
 3. **Build the historical filing corpus.** **It is the only route to evidence that does not need
    centuries.** A portfolio over twelve months is *one* observation of a small signal inside large
    noise — that is where the 200-year figure comes from. The same information at the *event* level

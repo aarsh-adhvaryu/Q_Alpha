@@ -21,8 +21,37 @@ def test_there_is_a_policy_for_every_autonomous_book() -> None:
     assert set(POLICIES) == set(AUTONOMOUS)
 
 
-def test_the_headline_runs_everything() -> None:
-    assert POLICIES[SYSTEM].ablated is None
+def test_the_live_policy_is_the_one_that_was_registered() -> None:
+    """PL-1, `reports/PREREGISTRATION_LIVE_POLICY.md`, registered 2026-09-12.
+
+    This test exists to make a silent change loud. The policy was frozen two days before
+    `EVALUATION_START`; if someone flips a flag during the window, the run is a rehearsal rather
+    than an experiment — which is exactly how run 2 was demoted. Changing this assertion is
+    therefore a deliberate act that has to be argued for in the registration's section 8, not a
+    line edited to make a suite go green.
+    """
+    live = POLICIES[SYSTEM]
+    assert live.use_exits is False, "PL-1 (A): the §4.7 exits lose to the tax, measured twice"
+    assert live.use_ai is True
+    assert live.use_hedge is True
+
+
+def test_the_mandate_is_the_one_that_was_registered() -> None:
+    """The other half of PL-1 — B, C and D live in the mandate, not in the policy.
+
+    **Two of the three were refused by the measurement**, and they are pinned here at the values
+    that survived, because the refusal is the valuable part rather than an embarrassment to tidy
+    away. See `reports/PREREGISTRATION_LIVE_POLICY.md` §8.
+    """
+    from qalpha.live.mandate import Mandate
+
+    m = Mandate()
+    assert m.max_names == 8, "PL-1 (C): PO-2 is monotone in concentration — 8 beat 15 beat 30"
+    # Turning the breakdown filter off scored +8 points in PO-2's hand-written loop and -23.2%
+    # through the real runner, because the filter is also the only thing that evicts a collapsing
+    # holding once `use_exits` is off. Two honest measurements of what looked like one switch.
+    assert m.exclude_breaking is True, "PL-1 (B) was REJECTED: -23.2% through runner.step"
+    assert m.concentrate is False, "PL-1 (D) was neutral: -0.5%, so it did not ship"
 
 
 def test_a_decision_without_a_reason_is_refused() -> None:

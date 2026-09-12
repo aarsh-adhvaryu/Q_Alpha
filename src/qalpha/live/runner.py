@@ -247,7 +247,9 @@ def _deploy(book: TwinBook, policy: Policy, market: Market, cfg: Config) -> list
     """
     from qalpha.data.prices import PriceData
     from qalpha.live.deploy import advise_deploy_into_weakness
+    from qalpha.live.mandate import load_mandate
 
+    _mandate = load_mandate()
     cash = book.portfolio.cash
     floor = cfg.deploy_policy.idle_cash_floor
     if cash < floor:
@@ -270,7 +272,13 @@ def _deploy(book: TwinBook, policy: Policy, market: Market, cfg: Config) -> list
         market.wl_prices,
         market.index_close,
         market.as_of,
-        max_names=cfg.deploy_policy.max_names_default,
+        # PL-1: one place holds the limits. This used to read the frozen config's 15 while the
+        # user's own buy screen read the mandate's 4 — so the book whose entire purpose is to
+        # replicate what he does had never used his basket size, and PO-1 replayed fourteen years
+        # of a policy nobody runs.
+        max_names=_mandate.max_names,
+        exclude_breaking=_mandate.exclude_breaking,
+        concentrate=_mandate.concentrate,
         spend_idle_cash=False,
     )
     orders = list(advice.deploy.buy_orders)
