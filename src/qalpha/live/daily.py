@@ -31,9 +31,13 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from qalpha.live.progress import LOG, Progress
 from qalpha.live.session import LEDGER_PATH, completed, record_task
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 @dataclass(frozen=True)
@@ -143,19 +147,131 @@ def _step_prices() -> None:
             )
             continue
         tickers = [str(t) for t in _universe_tickers(universe)]
-        LOG.say(f"{panel.name}: {len(tickers)} names…", "detail")
-        frame = download_prices(tickers, "2012-01-01", None)
+        live = _still_listed(universe, tickers)
+        start, existing = _fetch_window(panel)
+        skipped = len(tickers) - len(live)
+        note = f" (+{skipped} whose index spell has ended)" if skipped else ""
+        LOG.say(f"{panel.name}: {len(live)} names from {start}{note}…", "detail")
+        fresh = download_prices(live, start, None)
+        frame = _merge_panel(existing, fresh, panel)
         save_parquet(frame, str(panel))
         LOG.say(f"{panel.name} → {PriceData.from_long(frame).dates[-1].date()}", "detail")
 
     # The benchmark, inline rather than through `paper._refresh_benchmark`: this is three lines,
     # and a module under src/ reaching into scripts/ only works when scripts/ happens to be on
     # sys.path — which is true when launched by local_run and false everywhere else, tests included.
-    LOG.say(f"{BENCHMARK_PANEL.name}: the Nifty TRI proxy…", "detail")
-    save_parquet(download_prices([BENCHMARK_TICKER], "2012-01-01", None), str(BENCHMARK_PANEL))
+    b_start, b_existing = _fetch_window(BENCHMARK_PANEL)
+    LOG.say(f"{BENCHMARK_PANEL.name}: the Nifty TRI proxy from {b_start}…", "detail")
+    save_parquet(
+        _merge_panel(
+            b_existing, download_prices([BENCHMARK_TICKER], b_start, None), BENCHMARK_PANEL
+        ),
+        str(BENCHMARK_PANEL),
+    )
 
     if failures:
         raise RuntimeError("; ".join(failures))
+
+
+#: The panels start here. Only used when a panel does not exist yet.
+_FULL_START = "2012-01-01"
+#: Trading days re-fetched on every incremental refresh. They are not redundant: they are how a
+#: retroactive adjustment is DETECTED. See :func:`_merge_panel`.
+_OVERLAP_DAYS = 15
+
+
+def _still_listed(universe: Path, tickers: list[str]) -> list[str]:
+    """Names worth asking yfinance about — those whose index spell has not ended.
+
+    The point-in-time membership file carries an ``end_date``, and a name whose spell closed in 2017
+    has a history that is **finished**: it cannot gain a new bar. Asking for it anyway is what
+    printed seven "possibly delisted" failures on every double-click — CAIRN, STER, HDFC, IDFC and
+    the rest are supposed to be gone, that is why they are in a point-in-time universe.
+
+    **This drops nothing from the panel.** Their bars are already stored and are merged forward
+    untouched; only the pointless network call is skipped. A universe with no ``end_date`` column
+    (the watchlist) returns every name, because there nothing says a name has stopped trading.
+    """
+    import csv
+
+    try:
+        with universe.open(encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+    except OSError:
+        return tickers
+    if not rows or "end_date" not in rows[0]:
+        return tickers
+    open_spell = {str(r["ticker"]).strip() for r in rows if not str(r.get("end_date", "")).strip()}
+    kept = [t for t in tickers if t in open_spell]
+    # Never return nothing: a malformed file must not silently turn the refresh off.
+    return kept or tickers
+
+
+def _fetch_window(panel: Path) -> tuple[str, pd.DataFrame | None]:
+    """``(start_date, stored_panel)``. Fetch from the last stored bar, not from 2012.
+
+    A daily run was re-downloading **fourteen years of history for every name, every time** — the
+    thing the user actually complained about, and the reason a double-click sat there before the
+    login button could be pressed.
+    """
+    import pandas as pd
+
+    if not panel.exists():
+        return _FULL_START, None
+    try:
+        stored = pd.read_parquet(panel)
+        last = pd.Timestamp(stored["date"].max())
+    except (OSError, ValueError, KeyError):
+        return _FULL_START, None  # unreadable panel: rebuild it rather than patch it
+    return (last - pd.Timedelta(days=_OVERLAP_DAYS)).date().isoformat(), stored
+
+
+def _merge_panel(stored: pd.DataFrame | None, fresh: pd.DataFrame, panel: Path) -> pd.DataFrame:
+    """Stored history plus the new bars — unless an adjustment has rewritten the past.
+
+    **This is the part an incremental refresh gets wrong.** ``adj_close`` is retroactive: when a
+    name splits, every prior bar's adjusted close changes. Merging a few new days onto unrewritten
+    history would leave a permanent step in the series exactly where the old rows meet the new — and
+    `cheapness_scores` reads a step as a discount from the 1-year high, which is the defect that put
+    two price artifacts at the top of a real ₹1,00,000 recommendation (PR-2).
+
+    So the overlap is not redundancy, it is the **detector**: any ticker whose re-fetched bars
+    disagree with the stored ones has been re-adjusted, and that ticker is re-downloaded in full.
+    Nothing is patched over. Unknown is never substituted, and neither is *stale*.
+    """
+    import pandas as pd
+
+    from qalpha.data.ingest import download_prices
+
+    if stored is None or stored.empty:
+        return fresh
+    if fresh.empty:
+        return stored
+
+    key = ["date", "ticker"]
+    overlap = stored.merge(fresh, on=key, how="inner", suffixes=("_old", "_new"))
+    rewritten: set[str] = set()
+    if not overlap.empty:
+        drift = (overlap["adj_close_old"] - overlap["adj_close_new"]).abs()
+        tol = overlap["adj_close_old"].abs() * 1e-6
+        rewritten = set(overlap.loc[drift > tol, "ticker"].unique())
+
+    if rewritten:
+        # A split, bonus or other retroactive adjustment. The whole series for those names is
+        # re-pulled; this is rare and it is the case where being slow is correct.
+        LOG.say(
+            f"{panel.name}: {len(rewritten)} name(s) re-adjusted upstream "
+            f"({', '.join(sorted(rewritten)[:4])}…) — re-reading their full history",
+            "detail",
+        )
+        full = download_prices(sorted(rewritten), _FULL_START, None)
+        stored = stored[~stored["ticker"].isin(rewritten)]
+        fresh = pd.concat([fresh[~fresh["ticker"].isin(rewritten)], full], ignore_index=True)
+
+    merged = pd.concat([stored, fresh], ignore_index=True)
+    # The fresh row wins wherever both cover a day: `keep="last"` and fresh is concatenated second.
+    merged = merged.drop_duplicates(subset=key, keep="last")
+    return merged.sort_values(key).reset_index(drop=True)
 
 
 def _universe_tickers(path: Path) -> list[str]:
