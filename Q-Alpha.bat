@@ -73,7 +73,11 @@ REM --- 3. The toolchain, once. A bare `uv run` resolves against the base depend
 REM ---    UNINSTALLS the 23 dev packages on every double-click, then a later `uv sync
 REM ---    --extra dev` puts them back: minutes of churn inside the window the browser is
 REM ---    waiting on. --frozen uses the lockfile as it stands and needs no network.
-"%UV%" sync --frozen --extra dev
+REM ---    `--extra ai` is not optional here even though the SDK is an optional extra: the evening's
+REM ---    filings step reads through the Anthropic API when a key is present, and syncing WITHOUT
+REM ---    it uninstalls anthropic + httpx + pydantic on every double-click -- 14 packages torn out
+REM ---    and put back, in the window the browser is waiting on, to end up where it started.
+"%UV%" sync --frozen --extra dev --extra ai
 if errorlevel 1 (
   echo   [X] uv could not prepare the environment ^(see the error above^).
   echo       Nothing was run. If you are offline, try again on a connection.
