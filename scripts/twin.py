@@ -255,6 +255,9 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
     if market is None or not market.watchlist or not isinstance(market.wl_prices, PriceData):
         _log_attempt(market, "not_asked_no_watchlist")
         return {}
+    from qalpha.live.mandate import load_mandate
+
+    _mandate = load_mandate()
     try:
         advice = advise_deploy_into_weakness(
             book.portfolio,
@@ -264,7 +267,10 @@ def _ai_verdicts(books: dict[str, TwinBook], market: Market, cfg: Config) -> dic
             market.wl_prices,
             market.index_close,
             market.as_of,
-            max_names=cfg.deploy_policy.max_names_default,
+            # PL-1: the mandate is the one place the limits live. See live/mandate.py.
+            max_names=_mandate.max_names,
+            exclude_breaking=_mandate.exclude_breaking,
+            concentrate=_mandate.concentrate,
             spend_idle_cash=False,
         )
         basket = {o.ticker: int(o.quantity) for o in advice.deploy.buy_orders}

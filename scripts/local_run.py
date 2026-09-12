@@ -204,6 +204,8 @@ def _proposal(
             max_names=mandate.max_names,
             max_sector_weight=mandate.max_sector_weight,
             max_name_fraction=mandate.max_name_fraction,
+            exclude_breaking=mandate.exclude_breaking,
+            concentrate=mandate.concentrate,
             spend_idle_cash=False,  # the budget IS the allowance; never the whole balance
         )
         if as_of != date.today():

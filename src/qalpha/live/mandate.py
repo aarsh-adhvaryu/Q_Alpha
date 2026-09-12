@@ -55,8 +55,48 @@ class Mandate:
     monthly_budget: Decimal = Decimal("50000")
     #: Below this, idle cash is not worth deploying and the page stops nudging.
     idle_cash_floor: Decimal = Decimal("5000")
-    #: Names in a monthly basket. OPERATING.md: "slider 8 for the opening ₹1,00,000, 3–4 monthly".
-    max_names: int = 4
+    #: Names in a monthly basket. **8, registered in PL-1 on 2026-09-12.**
+    #:
+    #: It was 4 here and **15** in `cfg.deploy_policy.max_names_default`, and the two were read by
+    #: different callers: the user's own buy screen took this one, while `runner.step` — the
+    #: function `SYSTEM` runs — took the frozen config's. So the book whose entire purpose is to
+    #: replicate what he does **had never used his basket size**, and `PO-1` replayed fourteen years
+    #: at 15 names of a policy that ships at 4. Every caller now reads this field.
+    #:
+    #: 8 is PO-2's measured number, monotone in concentration over the point-in-time Nifty-50:
+    #: top-8 +9.1% vs the fund, top-15 +6.3%, top-30 +1.7%.
+    max_names: int = 8
+    #: Fresh money buys **the cheapest** rather than the most underweight. **Off — measured, and
+    #: the measurement said it does not matter** (PL-1, D).
+    #:
+    #: The roster rule it would replace has a failure mode nobody had reasoned about: once the book
+    #: holds `max_names` names there are **no free slots**, so no new name can ever enter and fresh
+    #: money spreads over an ageing roster by drift alone. That reasoning still looks right. But
+    #: replayed through `runner.step` over fourteen years it is worth **−0.5%** — noise. It ships
+    #: off because a change that buys nothing measurable is risk without evidence, and it stays
+    #: implemented and tested because the argument for it may yet matter at a different basket size.
+    concentrate: bool = False
+    #: Whether §4.7 breakdown **removes** a name from the buy list, or merely marks it.
+    #:
+    #: **True. PL-1 proposed turning this off and the measurement refused it** — the one change of
+    #: the four that was tested and rejected rather than confirmed.
+    #:
+    #: The argument for off was good: the iron rule here is *flag, don't veto*, this was the one
+    #: place the live screen broke it, and `PO-2` measured the filter costing 8 points (+9.1% →
+    #: +1.1%) on an otherwise identical top-8. Replayed through `runner.step` it cost **−23.2%**
+    #: — the opposite sign, and the whole of PL-1's damage.
+    #:
+    #: **Because the filter is not only a buy-list filter.** `universe` is screened *before* the
+    #: roster is chosen, so removing a breaking name is also the only thing that **evicts a
+    #: collapsing holding** (`test_a_holding_that_breaks_down_loses_its_slot`). With `use_exits`
+    #: off nothing sells — so with this off as well, a name that breaks down keeps its slot and is
+    #: topped up all the way down, and "cheapest" means "fallen furthest", which points the next
+    #: month's money at it again. PO-2's loop could not see this: it had no roster to get stuck in
+    #: and re-picked from scratch every month.
+    #:
+    #: **Two honest measurements of the same switch disagreed because they were not measuring the
+    #: same switch.** Rule 1: a fix reasoned about as a concept, applied at one call site.
+    exclude_breaking: bool = True
     #: No single name may exceed this share of equity.
     max_name_fraction: float = 0.20
     #: No sector may exceed this share. **Measured on the book, not on one basket** — twelve
@@ -87,6 +127,8 @@ class Mandate:
             "max_names": self.max_names,
             "max_name_fraction": self.max_name_fraction,
             "max_sector_weight": self.max_sector_weight,
+            "concentrate": self.concentrate,
+            "exclude_breaking": self.exclude_breaking,
         }
 
 
@@ -118,6 +160,14 @@ def load_mandate(path: Path = MANDATE_PATH) -> Mandate:
             print(
                 f"[mandate] max_names={raw['max_names']!r} is not an integer — keeping the default"
             )
+    for key in ("concentrate", "exclude_breaking"):
+        if key in raw:
+            if isinstance(raw[key], bool):
+                fields[key] = raw[key]
+            else:
+                # Not coerced. `bool("false")` is True, which would silently turn a switch ON that
+                # the file was written to turn OFF — the direction that changes real baskets.
+                print(f"[mandate] {key}={raw[key]!r} is not true/false — keeping the default")
     for key in ("max_name_fraction", "max_sector_weight"):
         if key in raw:
             try:

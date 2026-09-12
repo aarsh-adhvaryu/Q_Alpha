@@ -280,6 +280,9 @@ def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
     if portfolio is None or cash <= 0:
         return ScreenBasket([], held, cash, sector_of, marks)
 
+    from qalpha.live.mandate import load_mandate
+
+    _mandate = load_mandate()
     try:
         advice = advise_deploy_into_weakness(
             portfolio,
@@ -289,7 +292,10 @@ def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
             panel,
             _load_benchmark_series(),
             min(as_of, pd.Timestamp(panel.adj_close.index.max()).date()),
-            max_names=cfg.deploy_policy.max_names_default,
+            # PL-1: the mandate is the one place the limits live. See live/mandate.py.
+            max_names=_mandate.max_names,
+            exclude_breaking=_mandate.exclude_breaking,
+            concentrate=_mandate.concentrate,
             spend_idle_cash=False,
         )
     except Exception as exc:

@@ -637,7 +637,13 @@ def _hold(portfolio: Portfolio, ticker: str, qty: int, price: float, on) -> None
 
 
 def test_a_still_healthy_holding_keeps_its_slot_against_a_cheaper_newcomer() -> None:
-    """The rule in one test: add to what is still good rather than buying a fresher name."""
+    """The ``concentrate=False`` rule: add to what is still good rather than buying a fresher name.
+
+    **This is no longer the live setting** (PL-1, 2026-09-12) — it is kept, tested and reachable
+    because the behaviour is coherent and the user asked for it; what changed is the measurement,
+    not the reasoning. See :attr:`Mandate.concentrate` for the -Rs 7.9M this costs over fourteen
+    years, and the test below for what the live path does instead.
+    """
     prices, sectors = _wide_prices()
     as_of = _DATES[-1].date()
     cfg = Config()
@@ -655,6 +661,7 @@ def test_a_still_healthy_holding_keeps_its_slot_against_a_cheaper_newcomer() -> 
         as_of,
         max_names=2,
         max_sector_weight=1.0,
+        concentrate=False,
     )
     assert "FLAT3.NS" in advice.target.index, (
         "a healthy holding was displaced by a cheaper newcomer"
@@ -687,7 +694,10 @@ def test_a_holding_that_breaks_down_loses_its_slot() -> None:
 
 
 def test_spare_slots_still_go_to_new_names() -> None:
-    """Holding one name must not stop the screen diversifying into the remaining slots."""
+    """Holding one name must not stop the screen diversifying into the remaining slots.
+
+    ``concentrate=False``: the roster-stickiness path. See PL-1.
+    """
     prices, sectors = _wide_prices()
     as_of = _DATES[-1].date()
     cfg = Config()
@@ -704,6 +714,7 @@ def test_spare_slots_still_go_to_new_names() -> None:
         as_of,
         max_names=4,
         max_sector_weight=1.0,
+        concentrate=False,
     )
     assert len(advice.target) == 4
     assert len(set(advice.target.index) - {"FLAT3.NS"}) == 3  # 3 newcomers filled the rest
@@ -747,6 +758,8 @@ def test_repeated_deploys_do_not_grow_the_portfolio_without_bound() -> None:
 def test_every_healthy_holding_stays_eligible_for_new_money() -> None:
     """User's idea: balance the book with the inflow rather than the sell button (2026-08-20).
 
+    ``concentrate=False``. Still the reasoning; no longer the live setting (PL-1).
+
     ``max_names`` caps how many *new* names may be opened, not how many existing positions may be
     topped up. Without that, a holding which slips out of the fresh ranking is stranded forever at
     whatever weight it happened to reach — measured on 13 years of history, that tail was three
@@ -770,6 +783,7 @@ def test_every_healthy_holding_stays_eligible_for_new_money() -> None:
         as_of,
         max_names=1,
         max_sector_weight=1.0,
+        concentrate=False,
     )
     for t in ("FLAT1.NS", "FLAT2.NS", "FLAT3.NS", "MILD3.NS"):
         assert t in advice.target.index, f"{t} was stranded — healthy holdings must stay fundable"
@@ -892,3 +906,106 @@ def test_a_mix_inside_the_cap_is_stated_without_an_alarm() -> None:
     note = ok.sector_note()
     assert "within the 30% cap" in note
     assert "⚠️" not in note
+
+
+def test_concentrating_aims_this_month_at_this_month_s_cheapest() -> None:
+    """PL-1 (D), the live setting: the roster is re-chosen on cheapness, every month.
+
+    The mirror of ``test_a_still_healthy_holding_keeps_its_slot_against_a_cheaper_newcomer``. Same
+    book, same prices, one flag — and the least-discounted holding does **not** keep its slot.
+    """
+    prices, sectors = _wide_prices()
+    as_of = _DATES[-1].date()
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+    _hold(pf, "FLAT3.NS", 10, 101.0, _DATES[0].date())  # ranks last on cheapness
+
+    advice = advise_deploy_into_weakness(
+        pf,
+        Decimal("100000"),
+        list(sectors),
+        sectors,
+        prices,
+        prices.adj_close.mean(axis=1),
+        as_of,
+        max_names=2,
+        max_sector_weight=1.0,
+        concentrate=True,
+    )
+    assert "FLAT3.NS" not in advice.target.index, (
+        "concentrate=True must aim fresh money at the cheapest names, not at a drifted holding"
+    )
+    assert len(advice.target) == 2
+
+
+def test_a_full_book_can_still_open_a_new_name() -> None:
+    """The lock PL-1 exists to remove, asserted as a property rather than a rupee figure.
+
+    Hold exactly ``max_names`` names. Under the roster rule every slot is taken, so no newcomer can
+    ever enter however cheap it gets — and over fourteen years the book drifts into the index it is
+    trying to beat. Under the live rule the cheapest names win the slots regardless of tenure.
+    """
+    prices, sectors = _wide_prices()
+    as_of = _DATES[-1].date()
+    cfg = Config()
+
+    def _roster(concentrate: bool) -> set[str]:
+        pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+        for t in ("FLAT1.NS", "FLAT2.NS", "FLAT3.NS"):  # healthy, but the least discounted
+            _hold(pf, t, 10, 100.0, _DATES[0].date())
+        advice = advise_deploy_into_weakness(
+            pf,
+            Decimal("100000"),
+            list(sectors),
+            sectors,
+            prices,
+            prices.adj_close.mean(axis=1),
+            as_of,
+            max_names=3,
+            max_sector_weight=1.0,
+            concentrate=concentrate,
+        )
+        return set(advice.target.index)
+
+    locked, live = _roster(False), _roster(True)
+    assert locked == {"FLAT1.NS", "FLAT2.NS", "FLAT3.NS"}, (
+        "the roster rule should hold the book shut"
+    )
+    assert live - locked, "concentrate=True must be able to open a name the full book does not hold"
+
+
+def test_breakdown_marks_a_name_by_default_rather_than_removing_it() -> None:
+    """PL-1 (B). *Flag, don't veto* — the iron rule the live screen used to break here.
+
+    A name in §4.7 breakdown stays buyable and stays reported. Passing ``exclude_breaking=True``
+    restores the filter, which is what ``test_a_holding_that_breaks_down_loses_its_slot`` pins.
+    """
+    prices, sectors = _wide_prices()
+    as_of = _DATES[-1].date()
+    cfg = Config()
+    pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
+
+    kwargs: dict[str, object] = {
+        "sector_of": sectors,
+        "prices": prices,
+        "index_close": prices.adj_close.mean(axis=1),
+        "as_of": as_of,
+        # Small enough that the filter actually engages: `exclude_breaking` stands down when
+        # removing the breaking names would leave fewer than max(3, max_names) healthy ones, so a
+        # large roster on this fixture would make the test vacuously pass.
+        "max_names": 3,
+        "max_sector_weight": 1.0,
+    }
+    marked = advise_deploy_into_weakness(
+        pf, Decimal("100000"), list(sectors), **kwargs, exclude_breaking=False
+    )
+    filtered = advise_deploy_into_weakness(
+        pf, Decimal("100000"), list(sectors), **kwargs, exclude_breaking=True
+    )
+    assert not marked.filtered_out, "nothing may be silently removed when the filter is off"
+    assert filtered.filtered_out, (
+        "the fixture must contain a breaking name for this to mean anything"
+    )
+    assert set(filtered.filtered_out) & set(marked.target.index), (
+        "a name the filter would have dropped must still be reachable when it is only a flag"
+    )

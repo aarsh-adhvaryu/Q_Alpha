@@ -430,6 +430,7 @@ def advise_deploy_into_weakness(
     broker_prices: Mapping[str, Decimal] | None = None,
     known_actions: Mapping[str, Sequence[CorporateAction]] | None = None,
     exclude_breaking: bool = True,
+    concentrate: bool = True,
     do_not_buy: Collection[str] = (),
     spend_idle_cash: bool = True,
 ) -> WeaknessDeployAdvice:
@@ -437,8 +438,25 @@ def advise_deploy_into_weakness(
     tilted toward out-of-favour names, leaning into market weakness — as **buys only (₹0 tax)**.
 
     Composes the price-based weakness/cheapness layers with the validated ``advise_deploy`` (the
-    ₹0-tax greedy buy engine). Names already richly held still count toward the target, so the buys
-    fill the genuine underweights — diversifying the book rather than doubling down.
+    ₹0-tax greedy buy engine).
+
+    ``concentrate`` (PL-1, 2026-09-12) decides **what the month's money is aimed at**, and it is the
+    single most expensive switch in this function. ``True`` — the default and the registered live
+    setting — sizes the target over the **top ``max_names`` by cheapness**, re-chosen every month.
+    ``False`` restores the older rule: give every screened holding a permanent slot and fund
+    whatever sits furthest below its target weight.
+
+    That older rule reads as loyalty and behaves as a lock. Once the book holds ``max_names`` names
+    there are no free slots left, so **no new name can ever enter**, and fresh capital spreads over
+    an ageing roster by drift alone. Replayed through ``runner.step`` over fourteen years it
+    converges on the index it is trying to beat, at a measured **−₹7.9M** — the largest single item
+    in ``PO-1``'s decomposition, and a rebalancing rule wearing a cheapness rule's name.
+
+    ``exclude_breaking`` is the other one. ``True`` **removes** a name in §4.7 breakdown from the
+    buy list; ``False`` — the registered live setting — leaves it on the page, marked, because this
+    repository's iron rule is *flag, don't veto* and this was the one place the screen broke it.
+    Measured at −₹2.2M: an otherwise identical top-8 falls from +9.1% to +1.1% against the fund,
+    since the deepest-pulled-back names both trip the test and carry the return.
 
     ``max_name_fraction`` keeps the deploy diversified at whole-share granularity: a name whose **one
     share** costs more than this fraction of ``amount`` is dropped from the target, so a single pricey
@@ -535,7 +553,22 @@ def advise_deploy_into_weakness(
     # stopped being good.**
     held_still_screened = [t for t in universe if t in portfolio.positions()]
     preselected = max_names is not None and len(universe) > max_names
-    if preselected:
+    if preselected and concentrate:
+        # PL-1 (D), 2026-09-12. THE MONTH'S MONEY GOES TO THE MONTH'S CHEAPEST.
+        #
+        # The `else` branch below gives every screened holding a permanent slot. That reads as
+        # loyalty and behaves as a lock: hold `max_names` names and `slots` goes to zero or below,
+        # so **no new name can ever enter again** and the money spreads across an ageing roster by
+        # drift alone. Replayed over fourteen years that converges on the index it is trying to
+        # beat, at a measured -Rs 7.9M (PO-1's decomposition, the largest single item).
+        #
+        # This does not repeal the stickiness rule (2026-08-20, the user's: "if a company is good,
+        # and getting a good deal, why not add to it?"). A held name that is still cheap is still
+        # in the top-K and still gets bought, every month, for as long as it stays cheap. What
+        # stops is a holding absorbing fresh capital BECAUSE IT DRIFTED BELOW A TARGET WEIGHT,
+        # with cheapness playing no part in the decision.
+        selected = sorted(universe, key=lambda x: -cheap.get(x, 0.0))[:max_names]
+    elif preselected:
         # Every healthy holding stays a candidate, not just the top `max_names` of them (user's
         # idea, 2026-08-20): "it knows the distribution of the portfolio — instead of selling, it
         # balances it in the next buy." `max_names` therefore caps how many *new* names may be

@@ -140,8 +140,12 @@ def test_removing_exits_removes_exit_decisions() -> None:
         }
     )
     market = _market(prices={"CRATER.NS": Decimal("40")}, adj_close=adj)
-    full = step(_book(SYSTEM, lots=lots), POLICIES[SYSTEM], market)
+    # Both policies are constructed explicitly. This used to take the "on" case from
+    # POLICIES[SYSTEM], which made a test about a FLAG depend on a ROSTER — so registering
+    # use_exits=False for the live book (PL-1) broke a test that has nothing to do with it.
+    on = Policy("exits-on", use_exits=True)
     off = Policy("exits-off", use_exits=False)
+    full = step(_book(SYSTEM, lots=lots), on, market)
     none = step(_book(SYSTEM, lots=lots), off, market)
     assert any(d.action == EXIT for d in full)
     assert not any(d.action == EXIT for d in none)
@@ -182,16 +186,37 @@ def test_deploy_respects_the_concentration_cap() -> None:
     That is the "43×1-share, over-diversified" defect the slider was added to fix — and on the first
     live twin run it produced 75 single-share buys per book, four books, 300 decisions in a day.
     A basket nobody would place is not a strategy being tested.
+
+    **Rewritten 2026-09-12 to assert the property rather than a source line.** It used to read
+    ``inspect.getsource(runner._deploy)`` and grep it for ``max_names=cfg.deploy_policy...``, which
+    is the anti-pattern this repo names in rule 2: it pinned one spelling of the fix in place, so
+    routing the limit through the mandate — without changing the behaviour by one share — broke it,
+    while the thing it claims to protect (the basket stays small) was never actually checked.
     """
-    import inspect
+    from qalpha.data.prices import PriceData
+    from qalpha.live.mandate import load_mandate
 
-    from qalpha.config import Config
-    from qalpha.live import runner
+    mandate = load_mandate()
+    assert mandate.max_names <= 20, "a basket over 20 also breaks Kite's import cap"
 
-    src = inspect.getsource(runner._deploy)
-    assert "max_names=cfg.deploy_policy.max_names_default" in src
-    assert Config().deploy_policy.max_names_default <= 20, (
-        "a basket over 20 also breaks Kite's import cap"
+    # A watchlist WIDER than the cap, or the assertion below passes for the wrong reason. Prices
+    # fan out so the names differ on cheapness and the screen has a real ranking to truncate.
+    wide = {f"N{i:02d}.NS": list(np.linspace(100.0, 100.0 - i, len(_DATES))) for i in range(25)}
+    frame = pd.DataFrame(wide, index=_DATES)
+    market = Market(
+        as_of=_AS_OF,
+        prices={t: Decimal("100") for t in wide},
+        index_close=_calm_index(),
+        adj_close=frame,
+        watchlist=sorted(wide),
+        sector_of={t: f"S{i % 6}" for i, t in enumerate(sorted(wide))},
+        wl_prices=PriceData(frame, frame.copy(), frame.copy() * 0 + 1e6),
+    )
+    decisions = step(_book(SYSTEM, cash="500000"), POLICIES[SYSTEM], market)
+    names = {d.ticker for d in decisions if d.action == DEPLOY and d.ticker}
+    assert names, "this test means nothing if the deploy produced no orders"
+    assert len(names) <= mandate.max_names, (
+        f"the screen proposed {len(names)} names against a {mandate.max_names}-name mandate"
     )
 
 
