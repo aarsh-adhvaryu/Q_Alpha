@@ -58,6 +58,7 @@ from qalpha.live.twin import (
     comparison_markdown,
     ew_fund_mark,
     flows_with_off_market,
+    is_autonomous,
     load_books,
     load_history,
     load_off_market,
@@ -546,9 +547,25 @@ def cmd_daily(cfg: Config) -> int:
     already = [n for n in DECIDING if n in books and books[n].stepped_through == market.as_of]
     if already:
         print(f"[twin] already stepped {market.as_of} for {', '.join(already)} — not re-deciding")
+    from qalpha.live.tradebook import replay_tradebook
+
+    autonomous = is_autonomous(market.as_of)
+    if not autonomous:
+        print(
+            f"[twin] SYSTEM mirrors REAL until {EVALUATION_START} — it holds what you hold and "
+            "makes no choices of its own. Registered before the window opened; see "
+            "reports/PREREGISTRATION_SYSTEM.md."
+        )
     for name in DECIDING:
         book = books.get(name)
         if book is None or book.stepped_through == market.as_of:
+            continue
+        if not autonomous:
+            # Mirror: SYSTEM's holdings ARE the user's until the day it starts choosing, so the two
+            # books open the experiment from one state and every later gap is a decision.
+            books[name].portfolio = replay_tradebook(_tradebook()[0], cfg).portfolio
+            apply_off_market(books[name].portfolio, load_off_market())
+            book.stepped_through = market.as_of
             continue
         decisions += step(book, ALL_POLICIES[name], market, cfg)
         book.stepped_through = market.as_of

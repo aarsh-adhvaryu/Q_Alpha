@@ -23,8 +23,10 @@ Do not re-litigate that decision. Do not soften a red because money is committed
 given and which still stands: *plan at the index's ~11–12%, treat the backtest's excess as unproven
 upside, size the first year as tuition.*
 
-**Nothing authorizes a GO.** `AUTHORIZING_PAIR` is `None` and every criterion reads ⚪ CANNOT ASSESS.
-That is deliberate, not a countdown. Never describe this system as validated for real money.
+**Nothing authorizes a GO, and there is no longer a gate to open.** It was deleted on 2026-09-12:
+six criteria graded a verdict that needed two hundred years of data to arrive, and six criteria
+reading ⚪ CANNOT ASSESS for ever is a surface that teaches its reader to stop looking. Nothing
+here is validated. Never describe this system as validated for real money.
 
 ### The user
 
@@ -62,6 +64,9 @@ not.** Not arithmetic errors — the arithmetic is almost always right. The *lab
 | "The build is closed" | four defects were found that same day |
 | an evidence step recorded `done` after 216s | **zero coverage rows, zero events** — "nothing to cover" returning 0 |
 | a refused model call, counted as a clean read | **unread**. `("", {})` parsed as a filing with no bad news in it |
+| coverage saying 128 documents read | **no events, no receipts** — an `elif` discarded them when another batch failed |
+| a 30-day veto window, dropping 10 names of 10 | **7 events, not 233** — it read *when we filed the paper*, not when the event happened |
+| `mypy src scripts`, green | **vacuous over `qalpha.*`** — `ignore_missing_imports` resolved our own package to `Any` |
 
 **Passing tests have caught almost none of them.** Unit tests verify that a function works. These are
 failures of *integration* (the right data reaching that function), *methodology* (the function
@@ -112,45 +117,38 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ## What is true today (2026-09-08)
 
-**67 live modules · 1,453 tests green + 1 xfail** (counted, not estimated — see the
+**66 live modules · 1,423 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
 everything after it is produced locally.
 
-### Two experiments run, and neither authorizes anything
+### One book, and it starts deciding on 2026-09-14
 
-| | Question | Pair | Window | Status |
-|---|---|---|---|---|
-| **run 2** | can the whole system beat the fund? | `TWIN_FULL` vs `BASELINE_EW` | 2026-09-01 → 2027-09-01 | operational rehearsal |
-| **CORE_V1** | does the *screen* beat the fund? | `CORE_V1` vs `BASELINE_EW` | opened 2026-09-08 | descriptive track |
+| Book | What it is |
+|---|---|
+| `SYSTEM` | the whole thing deciding for itself — screen, evidence, governor, §4.7 exits, costs, tax |
+| `BASELINE_EW` | the Nifty-50 equal-weight index fund, charged 0.41%/yr. **The bar** |
+| `BASELINE` | NIFTYBEES, bought and held. The do-nothing floor, never the bar |
+| `REAL` | the user's tradebook replayed — what he actually did |
 
-`AUTHORIZING_PAIR` is `None`. Both tracks record their own statistic under `tracks` in
-`data/twin/history.jsonl`, each labelled by its own pair; the `gate` block is empty because nothing
-authorizes. Set `AUTHORIZING_PAIR` only when that pair's question, statistic and matched null are all
-frozen **before** its window opens.
+**`SYSTEM` is seeded as a copy of `REAL`.** It holds exactly what he holds, follows the tradebook
+until `EVALUATION_START = 2026-09-14`, and only then begins to choose. Two books from one state
+means every later difference is **a decision**, not a different starting point. Verified on
+registration day: `SYSTEM − REAL = ₹0`. Registered in `reports/PREREGISTRATION_SYSTEM.md`, written
+two days before the window opened.
 
-**Run 2 is a rehearsal** because its treatment changed inside its own window: its first four days ran
-under two different AI rules wearing one version label. Preserved in full, no row edited.
+**It was nine books and a GO gate until 2026-09-12.** Three ablations asked which component earns
+its keep — harder than the question we already cannot answer. `CORE_V1` was a second clock for a
+second unfinishable experiment. And the gate graded six criteria toward a verdict needing two
+hundred years: `AUTHORIZING_PAIR` was `None` and would have stayed `None`. Six criteria reading
+⚪ CANNOT ASSESS for ever is not honesty, it is a surface that teaches its reader to stop looking.
+~1,700 net lines deleted.
 
-**`CORE_V1` is descriptive** because its matched null was withdrawn — see below.
-
-### The matched null was generated and withdrawn
-
-`NULL_P95_LOG_REL_WEALTH` is `None`. A value of 0.071877 was generated on 2026-09-06 from 2,000
-draws and withdrawn hours later: it was matched to *a* specification, not to `CORE_V1`'s. The two
-pre-registrations named different statistics (p95 of |G| vs of G), the gate is one-sided against a
-two-sided bar (true α 2.32%, not 5%), the null diversified into ~50 of 51 index members while
-`CORE_V1` holds a capped basket, and `CORE_V1` can sell while the null never does.
-
-Measured p95(|G|) by basket size: **8 names 0.162 · 15 names 0.106 · the null's ~50 names 0.072.**
-The bar was 1.5–2.3× too low, and too low is the direction that makes noise look like skill.
-
-> **The qualitative finding survives and is the important one.** The backtest's edge over the gating
-> benchmark is **0.42%/yr**; a 15-name basket drifts **5.3%/yr** against that fund for no reason. So
-> a correctly matched bar is ~25× the edge, criterion 3 would fire about **1%** of the time if the
-> edge were entirely real, and detecting it at 95% needs roughly **200 years**. A twelve-month
-> superiority test cannot answer this question. Full detail in `reports/NULL_MATCHED.md`.
+> **A twelve-month result, in either direction, is consistent with chance.** The edge over this
+> benchmark is **0.42%/yr** against **5.3%/yr** of drift. That is not a caveat to add afterwards —
+> it is the finding, and it is why the corpus matters more than this book. Full detail in
+> `reports/NULL_MATCHED.md`.
 
 ### The evidence spine — reads filings and headlines, decides nothing
 
@@ -338,7 +336,7 @@ live/         account (the reconciled account) · session (snapshot + resume) ·
               extraction (the model reports what a filing says) · pretrade (may we buy this?)
               pipeline (rank → skip → anchor → one outcome) · flags (what the user sees)
 scripts/      local_run.py (the click — the only entry point) · twin.py · evidence.py (the spine)
-              paper.py · advisor.py · exp_null.py · backtest_* · exp_*
+              paper.py · advisor.py · ocr_scans.py · backtest_* · exp_*
 config.py     every tunable parameter in one place
 ```
 
@@ -388,7 +386,7 @@ uv run python scripts/evidence.py compare-readers      # which model should read
 uv run python scripts/news.py daily                    # the headlines (archive → map → read)
 uv run python scripts/news.py daily --dry-run          # archive only; read nothing
 uv run python scripts/run_phase0.py                    # the validated backtest
-uv run python scripts/exp_null.py --draws 2000         # the matched null
+uv run python scripts/ocr_scans.py --dry-run           # scanned filings with no text layer
 uv run python scripts/local_run.py --app               # the app: buttons, live progress, tokens
 uv run python scripts/local_run.py --app --autorun     # what the desktop click runs
 uv run python scripts/local_run.py --no-pipeline       # decide only, on research already on disk
