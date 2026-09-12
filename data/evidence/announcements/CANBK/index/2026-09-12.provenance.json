@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=CANBK",
+ "retrieved_at_utc": "2026-09-12T07:30:45Z",
+ "http_status": 200,
+ "bytes": 1187202,
+ "sha256": "ffa713277c747739c7243c1f87834f1bf3febbe101837c759cba4b0dc8300ad9",
+ "document_date": "2026-09-12",
+ "symbol": "CANBK",
+ "kind": "announcement_index"
+}

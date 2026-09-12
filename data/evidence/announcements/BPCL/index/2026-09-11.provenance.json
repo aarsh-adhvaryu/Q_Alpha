@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=BPCL",
+ "retrieved_at_utc": "2026-09-11T16:09:41Z",
+ "http_status": 200,
+ "bytes": 970443,
+ "sha256": "1c82e4ae05d5c88e29cf212fc47ed10e3012841cb4cd884e5c2927563a120e84",
+ "document_date": "2026-09-11",
+ "symbol": "BPCL",
+ "kind": "announcement_index"
+}

@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=SHREECEM",
+ "retrieved_at_utc": "2026-09-11T15:58:28Z",
+ "http_status": 200,
+ "bytes": 824244,
+ "sha256": "046cda0212315314cd62b05d72f711ce13bef3bc6c497e3d91fd5435dcba67f6",
+ "document_date": "2026-09-11",
+ "symbol": "SHREECEM",
+ "kind": "announcement_index"
+}
