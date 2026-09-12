@@ -492,7 +492,25 @@ task."**
    **The local reader is not obsolete and the choice was not free.** It reads the nightly 10-day
    window for nothing and sends nothing anywhere; the corpus goes to the cloud because eighty-four
    evenings is not a schedule. Both cannot feed one corpus — see EX-3 above.
-4. **Then, and only then, ask the predictive question.** *Given what was knowable on a date, does a
+4. **The predictive question has a first answer, and it is a null** (`ES-1`, 2026-09-12,
+   `reports/PREREGISTRATION_EVENT_STUDY.md`). After a verified high-materiality veto-shaped filing
+   event, mean abnormal return over 20 trading days is **−0.62%, t = −0.77** clustered by name; the
+   per-name test reads **t = −0.22**. Every horizon includes zero. **`AI-V2`'s drop rule is
+   unsupported** — it is still running, and that is now an explicit choice rather than a default
+   nobody examined.
+
+   Three details the headline hides. The **5-day sign is positive** (+0.68%): if anything the names
+   drift up just after the events the rule drops them for. The **60-day figure is clustering** —
+   −3.61% pooled, **−0.09% per name**, which is the artefact the registration named in advance.
+   And **conditioning adds nothing**: every event day unconditionally gives −0.54% against the
+   subset's −0.62%, a difference of 8 basis points on a standard error many times that.
+
+   **The sample is the finding.** 4,252 events collapse to 463 name-days and the primary test rests
+   on **61**. Fifteen large caps over one year cannot produce more. A real answer needs the
+   point-in-time universe — item 1, still an empty list — because this corpus holds only names that
+   are here today, and survivorship biases it *toward* making them look good after bad news.
+
+5. **Then, and only then, ask the predictive question properly.** *Given what was knowable on a date, does a
    model over events plus price context beat the price-only screen?* Train on early years, test on
    late years nobody looked at, measure after costs. **Nothing in this repo learns that mapping
    today** — the AI reads and reports; deterministic policy decides. That gap is real and it is not
