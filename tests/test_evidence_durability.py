@@ -246,3 +246,50 @@ def test_nothing_can_kill_the_evidence_step_from_outside_any_more() -> None:
         f"{scheduled} is scheduled again. The record is produced on the desktop now; a cron that "
         "quietly resumes writing to the same ledgers would put two systems on one set of books."
     )
+
+
+def test_a_first_sighting_is_deferred_out_of_the_evening() -> None:
+    """A 365-day read is a backfill, and a backfill is not an evening job.
+
+    Three of the user's own holdings were never in the corpus, so every double-click sat on a
+    year of filings per name, one API call at a time, before the login button was usable.
+    """
+    import inspect
+
+    import evidence
+
+    src = inspect.getsource(evidence.cmd_daily)
+    assert "deferred.append(ticker)" in src, "first sightings are read inline again"
+    assert "bootstrap" in inspect.signature(evidence.cmd_daily).parameters
+
+
+def test_a_deferred_name_writes_no_coverage_row() -> None:
+    """The safety property. No row means `_seen_before` stays false and the screen says UNKNOWN.
+
+    Covering it on the 10-day window instead would be the exact defect `BOOTSTRAP_DAYS` exists to
+    prevent: an auditor resignation from day eleven is invisible, and the name reads CLEAN because
+    nobody looked. Deferred must mean unread, never read-badly.
+    """
+    import inspect
+
+    import evidence
+
+    src = inspect.getsource(evidence.cmd_daily)
+    deferral = src[src.index("deferred.append(ticker)") :]
+    body = deferral[: deferral.index("windows[ticker]")]
+    assert "continue" in body, "a deferred name must not fall through into _cover_name"
+    assert "coverage[ticker]" not in body, "a deferred name must not be recorded as covered"
+
+
+def test_the_suggested_backfill_command_is_one_the_parser_accepts() -> None:
+    """A suggested command that errors is worse than no suggestion.
+
+    The first version of this message printed `--names A B C`. The real flag is `--only A,B,C`.
+    """
+    import inspect
+
+    import evidence
+
+    src = inspect.getsource(evidence.cmd_daily)
+    assert "backfill --only" in src
+    assert "--names" not in src
