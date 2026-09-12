@@ -134,3 +134,80 @@ live Nifty-100 watchlist, large-cap, and the same screen runs on it unchanged.
   screen's parameters were not chosen blind to 2012–2026, so this is a replay of a known
   configuration rather than a clean out-of-sample test. And it is one path. None of that rescues
   the result: −55% and −27% are not marginal numbers, and they point the same way in both variants.
+
+---
+
+## 9. PO-2, registered 2026-09-12 before it was run — is it the PICKS or the PACING?
+
+PO-1 says the policy loses by 55%, and that the §4.7 exits own ₹7.7M of it. With the exits off it
+**still** loses. That leaves two candidate explanations and they call for opposite responses:
+
+1. **The picks are bad.** The screen chooses worse names than the index holds. Nothing to fix — the
+   selection layer would not be worth running.
+2. **The pacing is bad.** `market_weakness` holds cash back waiting for a drawdown. Over fourteen
+   years that were mostly a bull market, uninvested cash is a pure drag and would lose to the index
+   **even if every pick were excellent.**
+
+### The test
+
+**PO-2a — pure selection, fully invested, never sells.** Each month the whole ₹50,000 is spent
+immediately on the screen's top-K by `cheapness_scores` — the same ranking the live screen uses —
+equal-weighted, whole shares, Zerodha costs charged. No weakness pacing, no cash held back, no
+exits, no sector cap. Against the same ₹50,000 into `BASELINE_EW` and NIFTYBEES on the same day.
+
+**K ∈ {8, 15, 30}**, fixed now, all three reported. Eight is the live basket size; thirty is
+roughly "most of the index", which is the sanity check — at K=30 the result *must* converge on the
+equal-weight baseline, and if it does not, the harness is wrong rather than the screen.
+
+### What each outcome would mean, fixed in advance
+
+| Finding | What follows |
+|---|---|
+| PO-2a **beats or matches** `BASELINE_EW` | **The picks work and the pacing is what is broken.** The fix is to stop holding cash back — deploy the allowance on arrival. That is a one-line policy change with a large measured effect, and it would be the first thing in this project that demonstrably earns its place. |
+| PO-2a **loses** to `BASELINE_EW` | **The picks do not work.** Cash drag is not the explanation, and the selection layer is subtracting value. The honest response is to say so and stop pretending the screen is the product. |
+| K=30 does **not** converge on `BASELINE_EW` | The harness is wrong. Fix it before reading anything else on this page. |
+
+This is a decomposition of a result already registered and already published, not a second attempt
+at it. **PO-1's headline stands whatever PO-2 shows.**
+
+## 10. PO-2, run 2026-09-12 — **the picks work. Everything built on top of them loses.**
+
+First row of §9's decision table, and the harness check passed: K=30 converged on the fund (+1.7%),
+as thirty names out of a fifty-name index must.
+
+| Variant | Terminal | vs the fund | What it adds to the one above |
+|---|---:|---:|---|
+| **Screen top-8, fully invested, never sells** | **₹30,058,634** | **+9.1%** | the raw ranking, nothing else |
+| top-15 | ₹29,298,736 | +6.3% | less concentration |
+| top-30 — *harness check* | ₹28,007,476 | +1.7% | most of the index; must converge, and does |
+| top-8 **+ the live `exclude_breaking` filter** | ₹27,860,168 | **+1.1%** | refuses to buy a name in §4.7 breakdown |
+| live deploy, exits off (PO-1) | ₹20,023,958 | −27.3% | + fills underweights instead of buying cheapness |
+| live policy as configured (PO-1) | ₹12,333,754 | −55.2% | + the §4.7 exits |
+| `BASELINE_EW` — the bar | ₹27,549,986 | — | |
+
+**The ranking carries signal.** +9.1% terminal, and monotone in concentration — 8 beats 15 beats 30
+beats the fund. That is the shape a real ranking makes and the shape noise rarely does.
+
+**Then three layers take it away, and each one is a deliberate design choice:**
+
+1. **`exclude_breaking` costs ₹2.2M — eight of the nine points.** The live deploy refuses to buy a
+   name in §4.7 breakdown. The deepest-pulled-back names are *exactly* the ones that trip it, so the
+   filter removes the part of the ranking that was carrying the return. It was added on 2026-08-19
+   to avoid buying falling knives; it is buying falling knives that paid.
+2. **Filling underweights instead of buying cheapness costs ₹7.9M.** `advise_deploy_into_weakness`
+   spreads new money across the book's gaps to diversify. That is a rebalancing rule wearing a
+   cheapness rule's name, and it drifts the book toward the index it is trying to beat.
+3. **The §4.7 exits cost ₹7.7M**, as PO-1 already found.
+
+**The pacing hypothesis was wrong and was checked before it was reported.** Mean cash held across
+the whole PO-1 replay is **1.0%** — there is no cash drag, `market_weakness` does not scale the
+deploy amount, and a recommendation to "deploy faster" would have been a fix for a problem that does
+not exist.
+
+### What this does not license
+
++9.1% over fourteen years is **≈0.6%/yr**. It is one path, on the point-in-time Nifty-50 rather than
+the Nifty-100 the money runs on, with parameters that were not chosen blind to this period. It is
+not significance and it is not permission. What it *is*: the first thing measured in this project
+that beat the bar rather than lost to it, with a named mechanism for why the live system does not.
+
