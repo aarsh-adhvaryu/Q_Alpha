@@ -511,17 +511,48 @@ task."**
    the money runs on, with parameters not chosen blind. Not significance, not permission — but the
    first thing measured here that beat the bar, with a named mechanism for why the live system
    does not.
+
+   **And the timing premise is real too, in one narrow place** (`WC-1`, 2026-09-12,
+   `reports/PREREGISTRATION_WEAKNESS_COHORTS.md`). Each month's ₹50,000 tracked as its own cohort
+   for the rest of the history, against the same money into the fund **on the same day** — grouped
+   by `market_weakness` as it was when the money went in. Point-in-time Nifty-50, 177 cohorts:
+
+   | Market that day | Cohorts | Median multiple | Median vs fund | Beat the fund |
+   |---|---:|---:|---:|---:|
+   | **deep** | 11 | ×5.16 | **+30.3%** | 7/11 (64%) |
+   | **elevated** | 60 | ×3.17 | +2.0% | 30/60 (50%) |
+   | **normal** | 106 | ×3.11 | **−3.1%** | 44/106 (42%) |
+
+   **Monotone on all three columns**, and the static Nifty-100 reproduces the shape at roughly
+   triple the magnitude — which is precisely what survivorship would do to a strategy that buys
+   beaten-down names, so that second table is direction-only and its 9/9 hit rate is the tell.
+
+   **The shape matters more than the headline.** The effect is almost entirely in `deep`, which is
+   **11 of 177 months** from about **seven episodes** (COVID is four of them). `elevated` — a third
+   of all months — pays **+2.0%** on a coin-toss hit rate. So the design's instinct is right and its
+   calibration is not: **deploy harder when it is genuinely deep; tilting on `elevated` is tilting
+   on noise.** Nothing here has been changed to act on that, and nothing should be without its own
+   registration.
+
+   **What still has no measurement: the optimizer and the sector allocator.** PO-2 and WC-1 both buy
+   equal-weighted top-K with no sector cap, so neither touches `alloc/`. “Does the optimizer work”
+   is an open question, not an answered one, and the +9.1% is *not* evidence for it.
 3. **Build the historical filing corpus.** **It is the only route to evidence that does not need
    centuries.** A portfolio over twelve months is *one* observation of a small signal inside large
    noise — that is where the 200-year figure comes from. The same information at the *event* level
    is thousands of observations, and an event study can reach significance in months of work.
 
-   The machinery is built, registered and the reader is chosen (2026-09-11). The corpus itself is
-   **not built yet**. `compare-readers` ran on 150 filings across 22 names: Haiku discarded 59% of
+   **DONE (2026-09-12): 3,898 documents, 4,776 verified events, 15 names.** Read end to end by
+   `claude-sonnet-5` under EX-3, one reader, one label. The machinery was built and the reader
+   chosen on 2026-09-11; `compare-readers` ran on 150 filings across 22 names: Haiku discarded 59% of
    its own quotes as not in the document against Sonnet's 29%, and found 59 events to Sonnet's 109 —
    half the findings at twice the miss rate — so rule 1 of the registration picked
-   **`claude-sonnet-5`**. Projected from that run's measured throughput: **~2,100 documents in about
-   30 minutes at eight workers, ~$38 at list.** Against ~84 evening runs on the local path.
+   **`claude-sonnet-5`**. The projection beside it — ~2,100 documents in ~30 minutes — was wrong in
+   both directions: the corpus is **3,898** documents and the read took **hours, not half an hour**,
+   because a document's cost is its length and the projection was drawn from a round-robin sample
+   that reaches only each name's first, shortest filings. **No per-document token count is recorded
+   anywhere**, so the spend cannot be reconstructed from the repo — only from the API console. That
+   is a gap: the next backfill should write tokens onto the coverage row.
    `uv sync --extra dev --extra ai` — `--extra ai` alone drops ruff and mypy.
 
    **The local reader is not obsolete and the choice was not free.** It reads the nightly 10-day
