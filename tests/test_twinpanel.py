@@ -19,7 +19,6 @@ from pathlib import Path
 import pytest
 
 from qalpha.live import twinpanel
-from qalpha.live.go_gate import Evidence, build_gate
 from qalpha.live.track_record import TrackRecord
 
 TODAY = date(2026, 9, 10)
@@ -36,7 +35,7 @@ ROW = {
             "xirr": None,
             "start": "2026-06-15",
         },
-        "TWIN_FULL": {
+        "SYSTEM": {
             "value": "291075.78",
             "net_invested": "304144.01",
             "xirr": -0.31,
@@ -132,18 +131,18 @@ def test_a_book_carries_the_day_it_began_not_the_day_the_money_did(tmp_path: Pat
     """Every book's `start` reads 2026-06-15 because that is when the flows begin. CORE_V1 did not
     exist until 2026-09-07, and a book cannot outperform over a period it was not alive for."""
     record = twinpanel.latest_record(
-        _history(tmp_path, ROW), inception={"CORE_V1": "2026-09-07", "TWIN_FULL": "2026-08-30"}
+        _history(tmp_path, ROW), inception={"CORE_V1": "2026-09-07", "SYSTEM": "2026-08-30"}
     )
     assert record is not None
     assert {b.name: b.first_marked for b in record.books} == {
         "CORE_V1": "2026-09-07",
-        "TWIN_FULL": "2026-08-30",
+        "SYSTEM": "2026-08-30",
     }
     assert "2026-09-07" in twinpanel.books_panel(record, today=TODAY)
 
 
 def test_the_books_panel_says_the_hedge_ablation_is_zero_by_construction(tmp_path: Path) -> None:
-    """TWIN_FULL minus TWIN_NO_HEDGE is zero whatever the market does, so it is not evidence
+    """SYSTEM minus TWIN_NO_HEDGE is zero whatever the market does, so it is not evidence
     about the hedge — and two identical rows side by side invite exactly that reading."""
     html = twinpanel.books_panel(_record(tmp_path), today=TODAY)
     assert "₹0 by construction" in html
@@ -155,66 +154,10 @@ def test_a_stale_mark_says_how_old_it_is(tmp_path: Path) -> None:
     assert "3 days ago" in html
 
 
-# --- the gate -------------------------------------------------------------------------------------
-def test_the_gate_renders_what_the_twin_graded(tmp_path: Path) -> None:
-    """From the twin's own snapshot, so the page cannot grade a second time and disagree."""
-    path = tmp_path / "gate.json"
-    path.write_text(json.dumps(build_gate(Evidence(), TODAY).to_dict()), encoding="utf-8")
-    html = twinpanel.gate_panel(path)
-    assert html.count("⚪") >= 6, "one per criterion, none of them assessable today"
-    assert "Track length" in html and "Data integrity" in html
-    assert "NOT YET" in html and "6 of 6 criteria are not green" in html
-    assert "not</b> validated for real money" in html
-    assert "blocks a GO exactly as a red does" in html
-
-
-def test_an_absent_gate_is_not_a_pass(tmp_path: Path) -> None:
-    html = twinpanel.gate_panel(tmp_path / "never-written.json")
-    assert "Not graded is not passed" in html
-    assert "GO" not in html.replace("The GO gate", "")
-
-
-def test_the_gate_snapshot_round_trips_every_criterion() -> None:
-    """The dict the page reads must carry everything the markdown says, including the remedy."""
-    data = build_gate(Evidence(), TODAY).to_dict()
-    assert data["verdict"] == "NOT YET"
-    criteria = data["criteria"]
-    assert isinstance(criteria, list) and len(criteria) == 6
-    assert all(set(c) == {"name", "verdict", "reading", "settles_it"} for c in criteria)
-    assert all(c["verdict"] == "CANNOT_ASSESS" for c in criteria)
-
-
-# --- the capability register ----------------------------------------------------------------------
-def test_the_register_reads_its_versions_from_the_code_not_from_prose() -> None:
-    """A hand-written trust table drifts from the thing it describes the moment either moves."""
-    from qalpha.live.extraction import EXTRACTION_VERSION
-
-    html = twinpanel.capability_panel()
-    assert EXTRACTION_VERSION in html
-    assert "nothing authorizes a GO today" in html, "derived from AUTHORIZING_PAIR being None"
-    assert "no matched bar exists" in html
-
-
-def test_the_register_names_the_user_as_the_executor() -> None:
-    html = twinpanel.capability_panel()
-    assert "you, in Kite" in html
-    assert "no code path here can place one" in html
-
-
-def test_the_register_does_not_promise_the_reader_a_veto() -> None:
-    """The model classifies. Classification is not evidence, and a verified quote proves only that
-    the document contains that sentence."""
-    html = twinpanel.capability_panel()
-    assert "flags, never a veto" in html
-    assert "it will not earn a veto" in html
-
-
 def test_nothing_on_these_panels_reads_as_validated(tmp_path: Path) -> None:
     """The whole surface, checked at once: a table of rupee figures beside a basket is exactly how a
     system that has proven nothing comes to look proven."""
-    gate = tmp_path / "gate.json"
-    gate.write_text(json.dumps(build_gate(Evidence(), TODAY).to_dict()), encoding="utf-8")
-    html = twinpanel.panels(today=TODAY, history=_history(tmp_path, ROW), gate=gate)
+    html = twinpanel.panels(today=TODAY, history=_history(tmp_path, ROW))
     assert "in-sample only" in html
     assert "Fake money." in html
     # The only claim of validation anywhere on it must be a denial of one.
@@ -302,8 +245,6 @@ def test_the_panels_read_their_files_when_called_not_when_imported(tmp_path, mon
     PR whose tests could not drive `main()`.
     """
     monkeypatch.setattr(twinpanel, "TWIN_HISTORY", tmp_path / "nothing.jsonl")
-    monkeypatch.setattr(twinpanel, "GATE_JSON", tmp_path / "nothing.json")
     monkeypatch.setattr(twinpanel, "NULL_MATCHED", tmp_path / "nothing.json")
     html = twinpanel.panels(today=TODAY)
     assert "Nothing has been marked" in html
-    assert "Not graded is not passed" in html

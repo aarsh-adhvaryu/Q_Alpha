@@ -2,7 +2,7 @@
 
 ### What this fixes
 
-``CORE_V1`` entered the record on 2026-09-07 **already ₹10,293 ahead of TWIN_FULL**, and the whole
+``CORE_V1`` entered the record on 2026-09-07 **already ₹10,293 ahead of SYSTEM**, and the whole
 gap was that it did not exist during the fall between 08-29 and 09-07. In the one day both books had
 been alive they diverged by ₹475. A book cannot out- or under-perform over a period it was not in.
 

@@ -262,11 +262,10 @@ def test_a_confirmed_account_still_reads_as_confirmed_on_the_page() -> None:
 # tests/test_twinpanel.py establishes that the panels render correctly. That is not enough, and this
 # repo has the scar: a correct panel that never reaches the surface is indistinguishable from one
 # that was never written. These drive `render` and read the page back.
-def test_the_page_carries_the_record_and_the_gate(tmp_path, monkeypatch) -> None:
+def test_the_page_carries_the_record(tmp_path, monkeypatch) -> None:
     import json
 
     from qalpha.live import twinpanel
-    from qalpha.live.go_gate import Evidence, build_gate
 
     history = tmp_path / "history.jsonl"
     history.write_text(
@@ -291,15 +290,11 @@ def test_the_page_carries_the_record_and_the_gate(tmp_path, monkeypatch) -> None
         + "\n",
         encoding="utf-8",
     )
-    gate = tmp_path / "gate.json"
-    gate.write_text(json.dumps(build_gate(Evidence(), AS_OF).to_dict()), encoding="utf-8")
     monkeypatch.setattr(twinpanel, "TWIN_HISTORY", history)
-    monkeypatch.setattr(twinpanel, "GATE_JSON", gate)
 
     page = _page()
     assert "The model books" in page
     assert "Against the fund" in page
-    assert "The GO gate" in page and "6 of 6 criteria are not green" in page
     assert "What is trusted, and what is not" in page
     assert "you, in Kite" in page
 
@@ -310,8 +305,6 @@ def test_the_page_says_what_is_missing_rather_than_going_quiet(tmp_path, monkeyp
     from qalpha.live import twinpanel
 
     monkeypatch.setattr(twinpanel, "TWIN_HISTORY", tmp_path / "none.jsonl")
-    monkeypatch.setattr(twinpanel, "GATE_JSON", tmp_path / "none.json")
     page = _page()
     assert "Nothing has been marked" in page
-    assert "Not graded is not passed" in page
     assert "No track record yet" in page

@@ -90,6 +90,15 @@ plugins = []
 module = ["tests.*"]
 disallow_untyped_defs = false
 
+# OUR OWN PACKAGE IS NEVER "missing". `ignore_missing_imports` above is for yfinance and sklearn,
+# which ship no stubs — but it applies to every unresolvable import, so a `qalpha.*` module that
+# does not exist resolved to `Any` and the check passed. That hid two defects on 2026-09-12: an
+# unchecked keyword argument that crashed the twin step on every run, and then a deleted module
+# still being imported by scripts/twin.py, which mypy called clean and Python could not load.
+[[tool.mypy.overrides]]
+module = ["qalpha.*"]
+ignore_missing_imports = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

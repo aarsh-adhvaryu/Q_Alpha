@@ -1,4 +1,10 @@
-"""The record, on the page: the model books, the two tracks, the gate, and what is trusted.
+"""The record, on the page: the model books, the two tracks, and what is trusted.
+
+**The GO gate was removed on 2026-09-12.** It graded six criteria toward a verdict that could
+never arrive: the edge is 0.42%/yr against 5.3%/yr of drift, so separating it from chance needs
+roughly two hundred years. Six criteria reading CANNOT ASSESS for ever is not honesty, it is a
+surface that teaches its reader to stop looking. The gaps remain and are labelled descriptive,
+which is what they always were.
 
 ### Why any of this is on the buy screen
 
@@ -29,7 +35,6 @@ import json
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from html import escape
 from pathlib import Path
 
 from qalpha.live import ui
@@ -206,7 +211,7 @@ def books_panel(record: TwinRecord | None, *, today: date) -> str:
         "days, from your tradebook, and differs in exactly one decision — that is the only reason a "
         "gap between two of them means anything. <b>REAL</b> is your own account replayed. "
         "<b>First marked</b> is when a book began, not when the money did: a book cannot outperform "
-        "over a period it did not exist for, and <b>TWIN_FULL &minus; TWIN_NO_HEDGE</b> is ₹0 by "
+        "over a period it did not exist for, and <b>SYSTEM &minus; TWIN_NO_HEDGE</b> is ₹0 by "
         "construction, so it is not evidence about the hedge.</p>"
     )
 
@@ -297,67 +302,11 @@ def tracks_panel(record: TwinRecord | None, *, null_path: Path | None = None) ->
     )
 
 
-def gate_panel(path: Path | None = None) -> str:
-    """The six criteria, as the twin last graded them. ⚪ blocks a GO exactly as 🔴 does."""
-    try:
-        data = json.loads((path or GATE_JSON).read_text(encoding="utf-8"))
-        criteria = list(data["criteria"])
-    except (OSError, ValueError, KeyError, TypeError):
-        return (
-            ui.section("The GO gate")
-            + '<div class="qa-empty">No gate on file — the twin has not graded it since this '
-            "version. Not graded is not passed.</div>"
-        )
-    verdict = str(data.get("verdict", "NOT YET"))
-    blocking = sum(1 for c in criteria if str(c.get("verdict")) != "GREEN")
-    rows = [
-        ui.Row(
-            cells=[
-                ui.Cell(_VERDICT_ICON.get(str(c.get("verdict")), "⚪")),
-                ui.Cell(str(c.get("name", "")), strong=True),
-                ui.Cell(
-                    str(c.get("reading", "")),
-                    tone=_VERDICT_TONE.get(str(c.get("verdict")), "neutral"),
-                ),
-                ui.Cell(str(c.get("settles_it", "")) or "—"),
-            ]
-        )
-        for c in criteria
-    ]
-    head = ui.section("The GO gate", note=f"graded {data.get('as_of', 'an unrecorded day')}")
-    body = ui.table(
-        [
-            ui.Column(""),
-            ui.Column("Criterion"),
-            ui.Column("Reading"),
-            ui.Column("What would settle it"),
-        ],
-        rows,
-    )
-    note = (
-        f'<div class="qa-note qa-bad"><p><b>{escape(verdict)} — {blocking} of '
-        f"{len(criteria)} criteria are not green.</b> The system is <b>not</b> validated for real "
-        "money. ⚪ means nobody has checked, which blocks a GO exactly as a red does; it is not a "
-        "countdown, and one of the six cannot be answered in a lifetime at this effect size "
-        "(reports/NULL_MATCHED.md).</p></div>"
-        if verdict != "GO"
-        else ""
-    )
-    return head + note + body
-
-
-#: What each part of this system has earned, and what would earn it more (PLAN_SYSTEM.md §6).
-#:
-#: **Trust is per-component, never global.** Built from the constants themselves so it cannot drift
-#: away from the code the way a hand-written table would.
 def capability_panel() -> str:
     from qalpha.live.extraction import EXTRACTION_VERSION
     from qalpha.live.localmodel import MODEL_VAR
-    from qalpha.live.twin import AUTHORIZING_PAIR, NULL_P95_LOG_REL_WEALTH
     from qalpha.live.verdicts import AI_PROMPT_VERSION
 
-    authorises = "nothing authorizes a GO today" if AUTHORIZING_PAIR is None else "authorising"
-    bar = "no matched bar exists" if NULL_P95_LOG_REL_WEALTH is None else "a bar is registered"
     rows = [
         (
             "The screen",
@@ -380,20 +329,14 @@ def capability_panel() -> str:
         (
             f"The AI arm ({AI_PROMPT_VERSION})",
             "may drop a name from a fake-money book",
-            f"a rule over verified filing events — no model is asked; {authorises}",
-            "a measured gap between TWIN_FULL and TWIN_NO_AI over a registered window",
+            "a rule over verified filing events — no model is asked",
+            "evidence that acting on those events beats not acting — the event study, unrun",
         ),
         (
             "The hedge",
             "signal only",
-            "moves no money; TWIN_FULL − TWIN_NO_HEDGE is ₹0 by construction",
+            "moves no money; SYSTEM − TWIN_NO_HEDGE is ₹0 by construction",
             "an instrument this book is large enough to trade",
-        ),
-        (
-            "The gate",
-            "says whether any of it is proven",
-            f"six criteria, {bar}",
-            "see the panel above",
         ),
         (
             "The executor",
@@ -500,7 +443,6 @@ def panels(
     today: date,
     account: TrackRecord | None = None,
     history: Path | None = None,
-    gate: Path | None = None,
 ) -> str:
     """Everything this module renders, in reading order. Each piece degrades to a sentence."""
     record = latest_record(history)
@@ -508,6 +450,5 @@ def panels(
         account_panel(account)
         + books_panel(record, today=today)
         + tracks_panel(record)
-        + gate_panel(gate)
         + capability_panel()
     )

@@ -8,8 +8,7 @@ every filing in the window, extract events from those filings, record them appen
 pre-trade report.
 
 **What it does not do.** It does not touch a book, size an order, alter a basket, or feed the twin.
-`CORE_V1`'s clock is untouched by design — its treatment resets only on a screen change and nothing
-here is one. The report is written so a human can read whether this layer *would* have said
+The system book's clock is untouched by design — nothing here decides anything. The report is written so a human can read whether this layer *would* have said
 something useful, for as long as it takes to trust it.
 
 **Why shadow first.** With filings listed but unread every candidate reads `UNKNOWN`, which is
@@ -240,14 +239,14 @@ def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
     from qalpha.backtest.portfolio import Portfolio
     from qalpha.data.ingest import load_parquet
     from qalpha.live.deploy import advise_deploy_into_weakness
-    from qalpha.live.twin import CORE_V1, TWIN_FULL, load_books
+    from qalpha.live.twin import SYSTEM, load_books
 
     held: list[str] = []
     portfolio: Portfolio | None = None
     cash = Decimal("0")
     try:
         books = load_books(cfg)
-        book = books.get(CORE_V1) or books.get(TWIN_FULL)
+        book = books.get(SYSTEM)
         if book is not None:
             portfolio = book.portfolio
             cash = book.portfolio.cash
@@ -281,6 +280,9 @@ def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
     if portfolio is None or cash <= 0:
         return ScreenBasket([], held, cash, sector_of, marks)
 
+    from qalpha.live.mandate import load_mandate
+
+    _mandate = load_mandate()
     try:
         advice = advise_deploy_into_weakness(
             portfolio,
@@ -290,7 +292,10 @@ def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
             panel,
             _load_benchmark_series(),
             min(as_of, pd.Timestamp(panel.adj_close.index.max()).date()),
-            max_names=cfg.deploy_policy.max_names_default,
+            # PL-1: the mandate is the one place the limits live. See live/mandate.py.
+            max_names=_mandate.max_names,
+            exclude_breaking=_mandate.exclude_breaking,
+            concentrate=_mandate.concentrate,
             spend_idle_cash=False,
         )
     except Exception as exc:

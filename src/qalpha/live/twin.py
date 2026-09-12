@@ -11,19 +11,19 @@ have gone green without saying anything about the money at risk. That book is ar
 twin is the *autonomous system*. Nothing autonomous ever touches Zerodha.
 
 - ``REAL``      — the user's own orders, replayed from his tradebook.
-- ``TWIN_FULL`` — the headline: everything on, the AI acting rather than advising.
+- ``SYSTEM`` — the headline: everything on, the AI acting rather than advising.
 - ``TWIN_NO_AI`` / ``TWIN_NO_EXITS`` — one factor removed each, so every gap is attributable to
   exactly one thing.
 - ``TWIN_NO_HEDGE`` — ⚠️ **not a live ablation.** ``runner._hedge`` emits ``HEDGE_ON``/``HEDGE_OFF``
   decisions and moves no money: the overlay needs a futures position the real account cannot hold
   below ~₹19L (PLAN_REDESIGN §4b-i), so it is deliberately signal-only. The consequence is that
-  ``TWIN_FULL − TWIN_NO_HEDGE`` is **₹0 by construction** and can never be evidence about the hedge.
+  ``SYSTEM − TWIN_NO_HEDGE`` is **₹0 by construction** and can never be evidence about the hedge.
   It is kept as a *signal log* — when the gauge fired, and for how long — and must never be reported
   as a measured hedge effect. Same shape as the defect that left the AI ablation starved, and named
   here so nobody reads its zero as a finding in 2027.
 - ``BASELINE``  — the same rupees into NIFTYBEES. Does any of it beat doing nothing?
 
-**Only ``TWIN_FULL − BASELINE`` gates** (GO criterion 3). The ablations are descriptive: four
+**Only ``SYSTEM − BASELINE`` gates** (GO criterion 3). The ablations are descriptive: four
 comparisons at 95% throw a false positive about one run in five, so if an ablation could open the
 gate, the gate would eventually open on noise. That is the bar forward run 1 was voided for.
 
@@ -55,61 +55,34 @@ from qalpha.config import Config
 from qalpha.live.nav import unitized_nav
 from qalpha.live.track_record import Flow, benchmark_leg, flows_from_trades, xirr
 
-#: The five books. ``REAL`` is observed, not simulated; ``BASELINE`` is arithmetic; the three
-#: ``TWIN_*`` books decide for themselves (Phase 3).
+#: The four books, and the whole comparison.
+#:
+#: **It was nine** until 2026-09-12: a headline, three single-factor ablations, a separate core
+#: track, two baselines, the real account, and a gate over the top. The ablations asked which
+#: component earns its keep — a harder question than the one that cannot be answered — and the gate
+#: graded a verdict that needed two hundred years to arrive. What is left is the only comparison
+#: that was ever going to mean anything: **the system, against what you could buy instead, beside
+#: what you actually did.**
 REAL = "REAL"
-TWIN_FULL = "TWIN_FULL"
-TWIN_NO_AI = "TWIN_NO_AI"
-TWIN_NO_HEDGE = "TWIN_NO_HEDGE"
-TWIN_NO_EXITS = "TWIN_NO_EXITS"
+#: The system deciding for itself: the screen, the evidence layer, the governor, the §4.7 exits,
+#: costs and tax, all acting on fake money. It is seeded from ``REAL`` and follows the tradebook
+#: until the day it is switched to autonomous; after that the two diverge and the gap is the point.
+SYSTEM = "SYSTEM"
+#: The cap-weighted index, bought and held. The do-nothing comparison.
 BASELINE = "BASELINE"
-#: The equal-weight index fund — the baseline that actually decides whether this system is worth
-#: running. Phase 4 found that **76% of the screen's gap over NIFTYBEES is the equal-weight premium**,
-#: and that premium is purchasable (Nifty-50 EW index funds exist; DSP 0.41% direct). Beating the
+#: The equal-weight index fund — the baseline that actually decides whether this is worth running.
+#: Phase 4 found that **76% of the screen's gap over NIFTYBEES is the equal-weight premium**, and
+#: that premium is purchasable (Nifty-50 EW index funds exist; DSP 0.41% direct). Beating the
 #: cap-weighted index is therefore not the achievement it looks like: the honest question is whether
 #: the system beats a fund anyone can buy in five minutes. See reports/PHASE4_BACKTEST.md.
 BASELINE_EW = "BASELINE_EW"
 
-#: The deterministic core, and the only book whose treatment is frozen against *everything else*.
-#:
-#: **Why it is not simply ``TWIN_NO_AI``.** Every ``TWIN_*`` book is defined as the composite minus
-#: one flag, so its behaviour moves whenever the composite's does — wire the governor into
-#: ``TWIN_FULL`` and ``TWIN_NO_AI`` changes too. A book like that cannot hold a twelve-month clock,
-#: because each improvement to the system restarts it. That is the mechanism by which this project
-#: kept getting further from evidence the closer it got.
-#:
-#: ``CORE_V1`` inherits from nothing. It answers one question — *does the deterministic screen beat
-#: the fund anyone can buy?* — and **only a change to the screen or its ranking resets it.** The AI,
-#: the evidence adapter and the governor version independently and never touch it.
-CORE_V1 = "CORE_V1"
-
-#: Books that make their own decisions — the ones Phase 3 gives policies to.
-AUTONOMOUS = (TWIN_FULL, TWIN_NO_AI, TWIN_NO_HEDGE, TWIN_NO_EXITS)
-#: Every book that steps itself each day: the run-2 ablation family plus the core track.
-DECIDING = (*AUTONOMOUS, CORE_V1)
+#: Books that make their own decisions. One, now.
+AUTONOMOUS = (SYSTEM,)
+#: Every book that steps itself each day.
+DECIDING = (SYSTEM,)
 #: Every book in the comparison, in report order.
-ALL_BOOKS = (REAL, *AUTONOMOUS, CORE_V1, BASELINE_EW, BASELINE)
-
-#: The core track's gating pair. Separate clock, separate reset condition — see :data:`CORE_V1`.
-CORE_GATING_PAIR = (CORE_V1, BASELINE_EW)
-
-#: ⛔ **Nothing authorizes a GO today, and that is deliberate.**
-#:
-#: ``CORE_V1`` held this until 2026-09-06, when its null was withdrawn for not matching the
-#: experiment it was meant to bar. A withdrawn null being ``None`` only stops the gate *passing*;
-#: the pair was still flagged authorizing, so installing any replacement null later would have made
-#: a window that **started before its question and statistic were settled** retroactively
-#: authorizing. That is how an operational rehearsal turns into evidence nobody registered.
-#:
-#: ``CORE_V1`` therefore runs as a **descriptive operational track**: it steps, marks and records,
-#: and it grants nothing. Set this to a pair only when that pair's question, statistic and matched
-#: null are all frozen *before* its window opens.
-AUTHORIZING_PAIR: tuple[str, str] | None = None
-
-#: The only comparison that opens the GO gate — and it gates against the **harder** baseline.
-#: Gating against NIFTYBEES would let the system claim credit for the equal-weight premium it did
-#: not create; a system that cannot beat the best cheap passive alternative should not run.
-GATING_PAIR = (TWIN_FULL, BASELINE_EW)
+ALL_BOOKS = (REAL, SYSTEM, BASELINE_EW, BASELINE)
 
 #: Annual expense ratio of the cheapest Nifty-50 equal-weight index fund available (DSP, direct).
 #: Charged against the EW baseline so it is a purchasable alternative, not an unattainable index.
@@ -207,10 +180,16 @@ def seed_books(
 ) -> dict[str, TwinBook]:
     """Build every book from one tradebook, each funded with the identical dated flows.
 
-    ``REAL``'s holdings are the user's actual trades (replayed elsewhere); the others start as pure
-    cash and spend it according to their own policy. Seeding them here — from the same source, in
-    one place — is what makes :func:`assert_identical_flows` trivially true by construction rather
-    than a hope.
+    ``REAL``'s holdings are the user's actual trades, replayed. The baselines start as pure cash and
+    buy their index with it. Seeding them here — from the same source, in one place — is what makes
+    :func:`assert_identical_flows` trivially true by construction rather than a hope.
+
+    **SYSTEM is seeded as a copy of REAL, not as cash**, and that is the whole shape of the
+    experiment. It holds precisely what the user holds on the day it is created, follows the
+    tradebook until :data:`EVALUATION_START`, and only then begins to choose. Two books from one
+    state means every later difference between them is a decision — not a different starting point,
+    and not the luck of when the money went in, which is what nine books funded by a cash-flow tap
+    could never separate.
     """
     flows = flows_from_trades(trades)
     books: dict[str, TwinBook] = {}
@@ -295,7 +274,7 @@ MIN_MONTHS_FOR_A_VERDICT = 12
 # **The replacement.** Every book receives *identical cash flows* (``assert_identical_flows``), so the
 # ratio of terminal values isolates exactly what the strategy did differently — the flows cancel:
 #
-#     G = ln( V_TWIN_FULL / V_BASELINE_EW )
+#     G = ln( V_SYSTEM / V_BASELINE_EW )
 #
 # Log relative wealth, not a difference of two XIRRs: no root-finding, no convergence failures on a
 # lumpy SIP, and it is additive across sub-periods, so a 12-month G is the sum of its months. It is
@@ -357,13 +336,21 @@ NULL_P95_LOG_REL_WEALTH: float | None = None
 #: known-bad row inside the registered evidence. Both existing rows are therefore **pre-window**, kept
 #: as the state-at-registration record, and the window opens on the first day the corrected code runs.
 #: The cost is one day; the alternative is twelve months of evidence whose first entry is wrong.
-EVALUATION_START = date(2026, 9, 1)
-
-#: When the **core-alpha** clock starts. Deliberately later than ``EVALUATION_START`` and deliberately
-#: forward-dated: 2026-09-01 to 2026-09-04 have already been observed, and starting a new experiment
-#: on days whose outcome is known is selection on the outcome. Registered in
-#: ``reports/PREREGISTRATION_CORE_V1.md`` before the first mark.
-CORE_EVALUATION_START = date(2026, 9, 8)
+#:
+#: **The day SYSTEM starts deciding for itself**, and therefore the day the measured window opens.
+#: Before it, SYSTEM holds exactly what the user holds — the tradebook replayed — so the two books
+#: begin from one state and every later difference is a decision rather than a different starting
+#: point. On and after it, SYSTEM chooses and the gap against ``BASELINE_EW`` is the experiment.
+#:
+#: **Registered 2026-09-12, forward-dated to the 14th, before any of those days were observed.**
+#: That direction matters and is the reason for the two-day gap: starting an experiment on days
+#: whose outcome is already known is selection on the outcome, and this project has twice adopted a
+#: result as the expected value after seeing it.
+#:
+#: It replaces a window that opened 2026-09-01 for books that no longer exist. Nine books collapsed
+#: to one on 2026-09-12 and the state was reseeded from the first trade; a clock measuring a
+#: composite that has been dissolved cannot be carried over to the thing that replaced it.
+EVALUATION_START = date(2026, 9, 14)
 
 
 def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
@@ -371,7 +358,7 @@ def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
 
     **Day-aware, and it has to be.** Calendar-month subtraction alone reports a window that opened on
     the 8th as one month old on the 1st, after 23 days. Run 2 opens on the 1st so it never noticed;
-    ``CORE_EVALUATION_START`` is 2026-09-08 and would have inherited a month it had not served. A
+    ``EVALUATION_START`` is 2026-09-08 and would have inherited a month it had not served. A
     partial month rounds **down** — under-counting delays a gate, over-counting opens one early, and
     only one of those errors can authorise capital.
     """
@@ -383,6 +370,16 @@ def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
     return max(0, months)
 
 
+def is_autonomous(as_of: date, *, start: date = EVALUATION_START) -> bool:
+    """May ``SYSTEM`` decide for itself on this day?
+
+    Before the registered start it mirrors the user: same holdings, no choices of its own. The date
+    is a constant rather than a flag so that "when did it start deciding" has exactly one answer,
+    on file, and cannot be nudged by a run that went badly.
+    """
+    return as_of >= start
+
+
 @dataclass(frozen=True)
 class Gap:
     """One book measured against another, and whether it is allowed to mean anything yet."""
@@ -390,19 +387,9 @@ class Gap:
     left: str
     right: str
     rupees: Decimal
-    gates: bool  # this pair opens its own track's gate; the rest describe
     months: int
-    #: Which experiment this comparison belongs to. ``run2`` is the composite rehearsal registered in
-    #: PREREGISTRATION_TWIN_RUN2.md; ``core_v1`` is the deterministic screen's own clock. They have
-    #: different start dates and different reset conditions, so a gap from one is never evidence
-    #: about the other.
-    track: str = "run2"
-    #: **May this comparison open the GO gate?** Distinct from :attr:`gates`, which only says the
-    #: pair is its own track's registered statistic. Run 2's treatment changed inside its window —
-    #: two AI rules under one version label — so it was reclassified an operational rehearsal, and
-    #: an experiment declared methodologically invalid must never later authorise capital. It keeps
-    #: its statistic and loses its authority.
-    authorizes: bool = False
+    #: Which experiment this comparison belongs to. One now: ``system``.
+    track: str = ""
     left_value: Decimal = Decimal("0")
     right_value: Decimal = Decimal("0")
     #: Unitized NAVs from ``EVALUATION_START`` — the gating statistic's actual inputs.
@@ -493,18 +480,18 @@ def compare(
     """Every comparison the design asks for, with exactly one of them marked as gating.
 
     Order matters for the report: the gating pair leads, the ablations follow as diagnostics, and
-    ``TWIN_FULL − REAL`` — does autonomy beat the user's own judgement — comes last because it is
+    ``SYSTEM − REAL`` — does autonomy beat the user's own judgement — comes last because it is
     information about *him*, never a pass/fail on the system.
     """
     pairs = [
-        (CORE_V1, BASELINE_EW, "core_v1"),  # the core-alpha gate — its own clock
-        (TWIN_FULL, BASELINE_EW, "run2"),  # run 2's gate — the purchasable alternative
-        (TWIN_FULL, BASELINE, "run2"),  # reported: the do-nothing floor, never the bar
-        (TWIN_FULL, TWIN_NO_AI, "run2"),
-        (TWIN_FULL, TWIN_NO_HEDGE, "run2"),
-        (TWIN_FULL, TWIN_NO_EXITS, "run2"),
-        (CORE_V1, TWIN_FULL, "core_v1"),  # what the composite adds to the screen, descriptive
-        (TWIN_FULL, REAL, "run2"),
+        # The one that matters: the system against the fund anyone can buy in five minutes.
+        (SYSTEM, BASELINE_EW, "system"),
+        # The do-nothing floor. Reported, never the bar — 76% of the screen's gap over NIFTYBEES is
+        # the equal-weight premium, which is purchasable and which the system did not create.
+        (SYSTEM, BASELINE, "system"),
+        # Does deciding beat what the user actually did? Information about HIM, never a pass or a
+        # fail on the system, and it comes last for that reason.
+        (SYSTEM, REAL, "system"),
     ]
     out: list[Gap] = []
     for left, right, track in pairs:
@@ -516,14 +503,9 @@ def compare(
                 left=left,
                 right=right,
                 rupees=lm.gain - rm.gain,
-                gates=(left, right) in {GATING_PAIR, CORE_GATING_PAIR},
                 track=track,
-                authorizes=(AUTHORIZING_PAIR is not None and (left, right) == AUTHORIZING_PAIR),
                 # Each track counts from its OWN registered start, never from the other's.
-                months=evaluation_months(
-                    lm.as_of,
-                    start=CORE_EVALUATION_START if track == "core_v1" else EVALUATION_START,
-                ),
+                months=evaluation_months(lm.as_of, start=EVALUATION_START),
                 left_value=lm.value,
                 right_value=rm.value,
                 left_nav=(navs or {}).get(f"{track}:{left}", (navs or {}).get(left)),
@@ -543,24 +525,18 @@ def comparison_markdown(marks: dict[str, BookMark], gaps: Sequence[Gap]) -> str:
             continue
         rate = "—" if m.rate is None else f"{m.rate * 100:+.1f}%/yr"
         lines.append(
-            f"| {'**' + name + '**' if name == TWIN_FULL else name} | ₹{m.net_invested:,.0f} | "
+            f"| {'**' + name + '**' if name == SYSTEM else name} | ₹{m.net_invested:,.0f} | "
             f"₹{m.value:,.0f} | ₹{m.gain:+,.0f} | {rate} |"
         )
-    gating = [g for g in gaps if g.gates]
-    others = [g for g in gaps if not g.gates]
-    if gating:
+    if gaps:
         lines += [
             "",
-            "**The gate** (GO criterion 3 — the only comparison that authorises anything):",
+            "**Descriptive. Nothing here authorises anything** — the GO gate was removed on "
+            "2026-09-12 because the verdict it graded needed roughly two hundred years of data to "
+            "arrive. These say what happened between two books, which is all a gap was ever "
+            "entitled to say:",
         ]
-        lines += [f"- {g.render()}" for g in gating]
-    if others:
-        lines += [
-            "",
-            "**Diagnostics — descriptive, never gating.** Four comparisons at 95% confidence throw "
-            "a false positive about one run in five, so these attribute; they do not authorise:",
-        ]
-        lines += [f"- {g.render()}" for g in others]
+        lines += [f"- {g.render()}" for g in gaps]
     return "\n".join(lines)
 
 
@@ -610,7 +586,7 @@ TWIN_STATE = Path("data/twin/books.json")
 #: exactly one day and every run destroys the last. ``books.json`` is likewise a snapshot: current
 #: lots, current flows, no path. So before this file, the twin retained *no history of any book*.
 #: Twelve months of forward evidence would have arrived as a terminal value and nothing else, and
-#: every path-dependent question — the worst drawdown, the volatility of the gap, whether TWIN_FULL
+#: every path-dependent question — the worst drawdown, the volatility of the gap, whether SYSTEM
 #: and TWIN_NO_AI ever diverged and when — would have been permanently unanswerable. Not wrong:
 #: *unaskable*. Every other defect on the August 2026 audit list operates on data that still exists
 #: and can be recomputed. This one was deleting the evidence daily.
@@ -718,7 +694,6 @@ def append_history(
     gaps: Sequence[Gap],
     *,
     as_of: date,
-    gate_verdict: str | None = None,
     path: Path = TWIN_HISTORY,
 ) -> int:
     """Record one day of every book, so a path exists to look back at. Returns total rows on file.
@@ -733,7 +708,7 @@ def append_history(
         # ``pair`` is read off the gap itself. It used to be the module constant GATING_PAIR while
         # the numbers came from ``next(g for g in gaps if g.gates)`` — and once CORE_V1 existed that
         # picked the *core* comparison, so the row would have carried core numbers under a
-        # TWIN_FULL label beside a run-2 verdict. A label must name the thing that was computed.
+        # SYSTEM label beside a run-2 verdict. A label must name the thing that was computed.
         if g is None:
             return {
                 "pair": None,
@@ -749,11 +724,9 @@ def append_history(
             "log_rel_wealth": g.log_rel_wealth,
             "months": g.months,
             "null_p95": g.null_p95,
-            "authorizes": g.authorizes,
         }
 
-    by_track = {g.track: g for g in gaps if g.gates}
-    authorizing = next((g for g in gaps if g.authorizes), None)
+    by_track = {g.track: g for g in gaps if g.track}
     row: dict[str, object] = {
         "as_of": as_of.isoformat(),
         "books": {
@@ -767,9 +740,6 @@ def append_history(
         },
         # Every track's own statistic, each labelled with the pair it was actually computed from.
         "tracks": {name: _stat(g) for name, g in sorted(by_track.items())},
-        # The GO gate. Its numbers come from the AUTHORISING track and nothing else; run 2 is a
-        # rehearsal and contributes a statistic here only through ``tracks`` above.
-        "gate": {"verdict": gate_verdict, **_stat(authorizing)},
     }
     return _append_jsonl(path, [row], key="as_of")
 
@@ -1219,10 +1189,10 @@ def inceptions(path: Path = TWIN_HISTORY) -> dict[str, str]:
 
     Every book's ``start`` field reads 2026-06-15, because that is when the cash flows begin. It is
     not when the book existed. ``CORE_V1``'s first mark is **2026-09-07**, and every lot it holds is
-    dated that day: it was constituted last Monday, at that Monday's prices, while ``TWIN_FULL`` had
+    dated that day: it was constituted last Monday, at that Monday's prices, while ``SYSTEM`` had
     been accumulating since 2026-08-29 and had fallen ₹10,627 over the stretch in between.
 
-    So CORE_V1 appeared in the record **already ₹10,293 ahead of TWIN_FULL**, and in the one day
+    So CORE_V1 appeared in the record **already ₹10,293 ahead of SYSTEM**, and in the one day
     both books have been alive they have diverged by ₹475. The dashboard was rendering that ₹10,768
     as "The screen ▲ +₹6,109 vs the fund" — an inception artefact presented as performance, which is
     the defect family this whole repo is organised around. A book cannot outperform over a period it

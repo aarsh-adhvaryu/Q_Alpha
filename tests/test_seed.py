@@ -1,6 +1,6 @@
 """The common starting line — every book seeded from one copy of the reconciled account.
 
-``CORE_V1`` entered the record **already ₹10,293 ahead of TWIN_FULL**, and the entire gap was that
+``CORE_V1`` entered the record **already ₹10,293 ahead of SYSTEM**, and the entire gap was that
 it did not exist during the fall between 2026-08-29 and 09-07. In the one day both had been alive
 they diverged by ₹475. A book cannot out- or under-perform over a period it was not in.
 

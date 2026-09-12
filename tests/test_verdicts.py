@@ -39,8 +39,8 @@ def test_a_book_below_the_cash_floor_is_never_asked_about() -> None:
 
     from qalpha.backtest.portfolio import Portfolio
     from qalpha.config import Config
-    from qalpha.live.twin import TWIN_FULL, TwinBook
+    from qalpha.live.twin import SYSTEM, TwinBook
 
     cfg = Config()
-    book = TwinBook(TWIN_FULL, Portfolio(cfg.cost, cfg.tax, cash=Decimal("400")))
-    assert _ai_verdicts({TWIN_FULL: book}, None, cfg) == {}
+    book = TwinBook(SYSTEM, Portfolio(cfg.cost, cfg.tax, cash=Decimal("400")))
+    assert _ai_verdicts({SYSTEM: book}, None, cfg) == {}
