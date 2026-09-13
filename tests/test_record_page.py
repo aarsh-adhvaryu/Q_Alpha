@@ -108,11 +108,25 @@ def test_a_sparse_series_is_labelled_as_sparse(repo: Path) -> None:
     assert record.MIN_FOR_A_LINE >= 3
 
 
-def test_the_banner_says_whether_system_is_deciding_yet(repo: Path) -> None:
-    before = record.dashboard_html(date(2026, 9, 13))
-    after = record.dashboard_html(date(2026, 9, 15))
-    assert "starts deciding" in before
-    assert "deciding for itself" in after
+def test_the_banner_says_whether_system_is_deciding_yet(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qalpha.live import twin
+
+    start = date(2026, 9, 14)
+    monkeypatch.setattr(record, "EVALUATION_START", start)
+    monkeypatch.setattr(record, "is_autonomous", lambda d: twin.is_autonomous(d, start=start))
+    assert "starts deciding" in record.dashboard_html(date(2026, 9, 13))
+    assert "deciding for itself" in record.dashboard_html(date(2026, 9, 15))
+
+
+def test_with_no_registered_start_the_banner_counts_down_to_nothing(repo: Path) -> None:
+    """No start date is registered. The page must say so, not print a countdown to ``None``."""
+    banner = record._banner(record.dashboard_data(date(2026, 9, 15)))
+    assert "SYSTEM is not deciding" in banner
+    assert "starts deciding" not in banner and "deciding for itself" not in banner
+    assert "None" not in banner
+    assert "SYSTEM is not deciding" in record.dashboard_html(date(2026, 9, 15))
 
 
 def test_inlined_data_cannot_close_its_own_script_tag(repo: Path, tmp_path: Path) -> None:
