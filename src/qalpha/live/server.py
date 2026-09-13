@@ -218,6 +218,7 @@ def _controls() -> str:
 &nbsp;<form method="post" action="/refresh"><button class="qa-btn"{dis}>⭯ Refresh market data</button></form>
 &nbsp;<form method="post" action="/evidence"><button class="qa-btn"{dis}>📄 Read new filings</button></form>
 &nbsp;<form method="post" action="/login"><button class="qa-btn"{dis}>🔑 Log in to Zerodha</button></form>
+&nbsp;<a class="qa-btn" href="/record">📈 The record</a>
 </p>
 <p><b>Run the evening</b> does the whole thing: prices, the model book, the filings, the twin, the
 brief, then the account and the basket. It picks up where it stopped — a step finished against
@@ -397,6 +398,18 @@ class Handler(BaseHTTPRequestHandler):
         route = urlparse(self.path).path
         if route == "/status.json":
             self._send(json.dumps(LOG.snapshot()).encode(), "application/json")
+            return
+        if route == "/record":
+            from qalpha.live.record import dashboard_html
+
+            self._send(dashboard_html().encode("utf-8"))
+            return
+        if route == "/record.json":
+            # The same blob the page draws from. Served separately so the record can be read by
+            # something other than a browser without scraping HTML for it.
+            from qalpha.live.record import dashboard_data
+
+            self._send(json.dumps(dashboard_data()).encode(), "application/json")
             return
         if route != "/":
             self.send_error(404)
