@@ -303,6 +303,18 @@ def flags_markdown(tickers: Sequence[str], *, as_of: date, lookback_days: int = 
         for item in bad_news[:2]:
             where = f" · [{item['source'] or 'item'}]({item['link']})" if item["link"] else ""
             bits.append(f"🟡 news: {item['summary']}{where}")
+        if bare not in read:
+            # THE GAP TRAVELS WITH THE NAME. A flagged name used to skip the unread check entirely:
+            # the `clean`/`unread` split happens in the branch above, which only a name with NOTHING
+            # against it ever reaches. So a name with one news item printed that item and said
+            # nothing at all about its filings never having been opened — and the more concerning
+            # the name, the more certain it was to hide the gap.
+            #
+            # This is the defect `filings_read` was written for, one branch over: an absent warning
+            # and no warning are different facts, and only one of them is reassuring.
+            bits.append(
+                "⚪ **Filings NOT read** — a gap, not a clean bill; this list may be incomplete"
+            )
         flagged.append(f"- **{ticker.removesuffix('.NS')}** — " + "; ".join(bits))
 
     if flagged:

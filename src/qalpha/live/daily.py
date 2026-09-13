@@ -374,18 +374,10 @@ def research_steps() -> list[Step]:
             "Stepping the autonomous books and grading them against the fund",
             _step_twin,
         ),
-        Step(
-            "brief",
-            "Writing the market brief",
-            _step_brief,
-            # **The objection was never the model; it was the retrieval.** A local model asked for
-            # today's news would produce fluent recalled training data with today's date on it,
-            # which is this repo's worst failure mode wearing the feature's clothes. The `news`
-            # step above now archives real headlines, so a local model has something to read and
-            # every claim in the brief cites an item on disk. Either route works; with neither, it
-            # does not run and the page says the brief is missing.
-            needs_any=("QALPHA_LOCAL_MODEL", "ANTHROPIC_API_KEY"),
-        ),
+        # THE MARKET BRIEF IS NO LONGER RUN (2026-09-13). No decision code reads it -- it was a news
+        # summary for the page, ~55,000 input tokens an evening, and on its first day it returned
+        # an apology instead of a brief. The user asked for it gone. `_step_brief` and the
+        # `ai_brief` module stay, because `verdicts.py` imports types from that module.
     ]
 
 

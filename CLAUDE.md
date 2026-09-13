@@ -37,6 +37,75 @@ read it before proposing any change.
 
 ---
 
+## ⏭ Start here — state at the end of 2026-09-13
+
+**The next session opens with the user's new plans. Read this, then ask him — do not start building.**
+
+### The decision on the table, not yet taken
+
+**The user wants SYSTEM to be an AI investor, not a rulebook.** In his words: the AI is the brain
+and the engine; prices, filings, news, the tax engine and the calculator are its tools. In its
+simulated world it is in charge — it starts from his tradebook, need not keep matching his
+portfolio, and its losses are its own. Long-term holding (5-year horizon, dividends, recovery after
+crashes), not trading. He places no real orders from it.
+
+**What SYSTEM actually is today:** a deterministic rulebook — buy the names furthest below their
+1-year high, harvest losses and redeploy, top up monthly. The LLM only *reads* filings and news. It
+chooses nothing. That gap is the whole next piece of work.
+
+**He agreed that delaying the start until the AI investor exists is the better outcome** — a year
+spent measuring the rulebook answers a question he is not asking. **`EVALUATION_START` is still
+`2026-09-14` in `live/twin.py` and was NOT moved.** If it is not moved before that date, SYSTEM
+starts deciding on the rulebook. Confirm with him first; it is his call.
+
+### Built and verified today (branch `faster-evenings`, PR #143 — open, CI green, NOT merged)
+
+GitHub's merge API returned a server-side GraphQL error; he will merge later. The desktop icon runs
+the local checkout either way.
+
+- **Freed cash idled a day.** `runner.step` sized the deploy before any sell executed, so a harvest
+  left the book ~57% cash overnight. Sells now execute before the deploy decides. Measured on the
+  real book at 2026-09-14: cash ₹0 → ₹234 (0.1%), ₹168,913 redeployed the same day.
+- **`/record`** — interactive dashboard (`live/record.py`, `live/record_assets.py`): the four books,
+  63-day equity curve, holdings by P&L, sector donut, positions, filings read. Vanilla JS over
+  inlined JSON, no CDN, verified in headless Chrome. Sparse series drawn as points; a one-day −39%
+  mark on 2026-08-28 that reverses next session is flagged as suspect, not drawn as a crash.
+- **The market brief is no longer run** — nothing read it, ~55k tokens a night, and its first real
+  output was an apology. Removed from `daily.py` and the page; the `ai_brief` module stays because
+  `verdicts.py` imports types from it.
+- A weekend is no longer reported as a stale price panel; a flagged name now also says its filings
+  were not read; an unreached broker is no longer reported as a broker that disagreed.
+- Earlier today, merged in #141/#142: incremental price refresh (21.8s, split-adjustment detector),
+  first-sighting filings deferred out of the evening, launcher no longer uninstalls the AI SDK.
+
+### Facts to not re-derive
+
+- **Kite is not needed for SYSTEM.** Holdings come from the tradebook; the market is built from the
+  panels. Kite supplies only *his real account's* cash, for his own buy screen.
+- **The run happens in the evening** on the day's closes. No 9–3 process, no training.
+- **Harvesting sells 6 of 8 holdings on SYSTEM's first day** (~₹13,200 of losses, ~₹1,136 charges),
+  then rebuys. He has said the AI should hold; whether harvesting stays is an open question for the
+  AI-investor design.
+- **Limit orders ("buy at ₹900") are blocked on data:** the panels hold close/adj_close/volume only,
+  no intraday high/low, so a fill cannot be verified. Needs a separate OHLC panel fetched from
+  `live/`, never by editing frozen `data/`.
+- **Fills should move to the next session's close.** Today a trade executes at a close the book has
+  already seen, which is optimistic.
+- **Four held names have never had filings read:** INFY, MUTHOOTFIN, TATAPOWER, WIPRO (INFY is
+  217/225, incomplete). `evidence.py backfill --only INFY,MUTHOOTFIN,TATAPOWER,WIPRO --workers 8` —
+  roughly $30–40. **Do not launch it without his say-so**; a "parse check" earlier spent ~$16.
+- **`TATAMOTORS.NS`** is on the watchlist and no longer served by yfinance after the 2025 demerger
+  (95 of 96 priced). A universe question, undecided.
+- **A second AI session's "paper manager" patch does not exist in this repo** — no
+  `paper_check.py`, `ai_portfolio.py` or patch files on disk. Do not treat its claims as done.
+
+### How he wants to be answered
+
+**Short.** He said so directly: no long essays, on the dashboard or in replies. Plain answers first,
+detail only when asked. He is not a trader and does not want trading explained.
+
+---
+
 ## The failure mode of this codebase
 
 **Every serious defect found here has been the same defect: a number labelled as something it is
@@ -115,9 +184,9 @@ answering the right question), and *operation* (the scheduled process actually r
 
 ---
 
-## What is true today (2026-09-08)
+## What is true today (2026-09-13)
 
-**66 live modules · 1,427 tests green + 1 xfail** (counted, not estimated — see the
+**68 live modules · 1,461 tests green + 1 xfail** (counted, not estimated — see the
 table above for what happens when a progress line is counted by eye). **There is no cron.** `paper.yml` was deleted on
 2026-09-10 and its five steps moved to `live/daily.py`, which runs them on the user's desktop when
 he presses the button. The record from 2026-09-01 to that date was produced by the cron and stands;
@@ -436,7 +505,7 @@ writes, or if any live module spells a panel path as a literal again.
 | `KITE_API_KEY` · `KITE_API_SECRET` | holdings, cash, prices; the secret only at login |
 | `QALPHA_LOCAL_MODEL` | reads filings **on this machine**. Must be a tag the server actually lists; a name with nothing listening — or a name the server does not have — does NOT fall back to the cloud, by design, so it turns reading off rather than on. Recipe: `ollama create qwen3-8b-32k -f docs/ollama/Modelfile.qwen3-8b-32k` |
 | `QALPHA_LOCAL_MODEL_CONTEXT` | what that model was **built** with (32768 for the above). It states the window, it cannot set it: the OpenAI-compatible route has nowhere to send `num_ctx`, which is why the Modelfile is committed |
-| `ANTHROPIC_API_KEY` | filings in the cloud, and the web-searched brief (`BRIEF-1`). **No nightly step requires it:** with a local model the brief is written here from the headlines the evening archived (`BRIEF-2-local`), citing an item id per claim. The EX-3 corpus backfill *does* require it, and `uv sync --extra ai` — the SDK is an optional extra |
+| `ANTHROPIC_API_KEY` | filings and headlines read in the cloud. **No nightly step requires it** — a local model reads them instead. The market brief it once also wrote is no longer run (2026-09-13). The EX-3 corpus backfill *does* require it, and `uv sync --extra ai` — the SDK is an optional extra |
 | `QALPHA_CORPUS_READER` | **optional.** Names the model EX-3 rows must come from, overriding `claude-haiku-4-5`. It names the corpus, so a run under it cannot be mistaken for a run under the default |
 | `GIST_TOKEN` | **optional.** A private-gist tradebook store, for whoever keeps one. Unset, the twin reads `data/tradebooks/` — the same folder the page reads and the one OPERATING.md names |
 
@@ -684,7 +753,7 @@ got.
 
 ## Reading order for a new session
 
-**[OPERATING.md](OPERATING.md)** (what the user actually does) → this file →
+**The ⏭ Start here section above** → **[OPERATING.md](OPERATING.md)** (what the user actually does) → the rest of this file →
 **[reports/NULL_MATCHED.md](reports/NULL_MATCHED.md)** (why the gate cannot open) →
 **[PLAN_SYSTEM.md](PLAN_SYSTEM.md)** (target architecture) → `README.md` → `Q_alpha.md` (the spec).
 

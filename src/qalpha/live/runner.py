@@ -8,7 +8,9 @@ configuration. This is what makes them *act*, once per day, and record why.
 1. **Harvest** first, because its opportunity is a *date* (31 March) and a later exit could consume
    the very lots that carried the reachable loss.
 2. **Exits** next, so cash freed by an exit is available to the deploy step in the same pass rather
-   than idling a day.
+   than idling a day. **The sells are executed between the exits and the deploy** (2026-09-13) —
+   this line described the intent for months while the ordering defeated it, because ``_deploy``
+   sizes from ``book.portfolio.cash`` and every sell was still an unexecuted decision when it ran.
 3. **Hedge** before deploying, since the hedge decision reads the book's exposure and must not be
    computed against a position the same step is about to change.
 4. **Deploy** last, spending whatever cash the earlier steps left.
@@ -93,9 +95,19 @@ def step(
     out: list[Decision] = []
     out += _harvest(book, policy, market, cfg)
     out += _exits(book, policy, market)
+    # SELLS EXECUTE BEFORE THE DEPLOY DECIDES, not merely before the buys are applied.
+    #
+    # `_execute` has always run sells first and its docstring has always claimed that this made the
+    # freed cash "spendable the same day rather than idling until tomorrow". It did not. `_deploy`
+    # reads `book.portfolio.cash` to size the basket, and it ran while every sell was still an
+    # unexecuted decision — so it sized against the PRE-SALE balance and the proceeds sat idle.
+    #
+    # On SYSTEM's first autonomous day that is not cosmetic: six of its eight holdings harvest a
+    # loss, and the book would have gone three-quarters to cash for a day before buying back.
+    _execute(book, out, market, buys=False)
     out += _hedge(book, policy, market)
     out += _deploy(book, policy, market, cfg)
-    _execute(book, out, market)
+    _execute(book, out, market, sells=False)
     if not out:
         out.append(
             Decision(
@@ -108,12 +120,23 @@ def step(
     return out
 
 
-def _execute(book: TwinBook, decisions: list[Decision], market: Market) -> None:
+def _execute(
+    book: TwinBook,
+    decisions: list[Decision],
+    market: Market,
+    *,
+    sells: bool = True,
+    buys: bool = True,
+) -> None:
     """Apply the day's decisions to the book, through the validated FIFO/cost/tax engine.
 
-    Sells before buys, so cash freed by a harvest or an exit is spendable the same day rather than
-    idling until tomorrow. ``HEDGE_ON``/``HEDGE_OFF`` move no shares — the overlay is a futures
-    position outside the equity book — so they are recorded and not executed here.
+    Called twice by :func:`step`: once for the sells, **before the deploy is sized**, and once for
+    the buys afterwards. That is what actually makes freed cash spendable the same day — running
+    sells first *within one call* never did, because the deploy had already read the balance.
+
+    ``HEDGE_ON``/``HEDGE_OFF`` move no shares — the overlay is a futures position outside the
+    equity book — so they are recorded and not executed here. Passing a decision list twice is
+    safe: the second call skips what the first applied, by action.
     """
     for d in decisions:
         if d.ticker is None or d.quantity is None or d.quantity <= 0:
@@ -122,11 +145,15 @@ def _execute(book: TwinBook, decisions: list[Decision], market: Market) -> None:
         if price is None or price <= 0:
             continue
         if d.action in (HARVEST, EXIT):
+            if not sells:
+                continue
             held = book.portfolio.ledger.quantity_held(d.ticker)
             qty = min(d.quantity, held)
             if qty > 0:
                 book.portfolio.sell(market.as_of, d.ticker, qty, price)
     for d in decisions:
+        if not buys:
+            continue
         if d.action != DEPLOY or d.ticker is None or d.quantity is None or d.quantity <= 0:
             continue
         price = market.prices.get(d.ticker)
