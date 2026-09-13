@@ -66,3 +66,39 @@ def test_a_trading_day_with_no_close_is_a_failure(monkeypatch: pytest.MonkeyPatc
         _Book(), _Market(date(2026, 9, 11)), now=_evening(date(2026, 9, 15))
     )
     assert failure is not None and "Refresh prices" in failure
+
+
+def test_the_saved_books_record_what_real_actually_holds(tmp_path, monkeypatch) -> None:
+    """books.json said the user's own book held ₹3,04,144 in cash and nothing else.
+
+    REAL was replayed from the tradebook *after* the books were saved, so the marks were right and
+    the file was wrong — and anything reading the file (a reconciliation, a page, a later session)
+    would have seen an account with no holdings.
+    """
+    from decimal import Decimal
+
+    import twin as twin_script
+
+    from qalpha.accounting.costs import Side
+    from qalpha.config import Config
+    from qalpha.live.tradebook import TradebookTrade
+    from qalpha.live.twin import REAL, load_books, save_books, seed_books
+
+    trades = [
+        TradebookTrade(
+            trade_date=date(2026, 6, 15),
+            ticker="INFY.NS",
+            side=Side.BUY,
+            quantity=Decimal("5"),
+            price=Decimal("1136"),
+        )
+    ]
+    cfg = Config()
+    books = seed_books(trades, cfg)
+    monkeypatch.setattr(twin_script, "load_off_market", lambda: [])
+    twin_script.replay_real(books[REAL], trades, cfg)
+    save_books(books, tmp_path / "books.json")
+
+    reloaded = load_books(cfg, tmp_path / "books.json")[REAL]
+    assert reloaded.portfolio.positions() == {"INFY.NS": Decimal("5")}
+    assert reloaded.portfolio.cash < Decimal("5680"), "the cash was spent on the shares"
