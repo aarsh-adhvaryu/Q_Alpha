@@ -1,4 +1,4 @@
-"""Reconstruct a point-in-time NIFTY 50 membership table (Q_alpha.md §5.4 survivorship fix).
+"""Reconstruct a point-in-time NIFTY 50 membership table (§5.4 survivorship fix).
 
 The static survivor watchlist in ``run_phase0.py`` is the classic survivorship bias: dead/dropped
 names are simply absent. This script builds a genuine point-in-time membership — including names

@@ -1,4 +1,4 @@
-"""Backtest portfolio accountant (Q_alpha.md §2.6, §4.6).
+"""Backtest portfolio accountant (§2.6, §4.6).
 
 Holds cash + a FIFO lot ledger and executes rebalances by translating target *weights* into integer
 share trades, charging realistic Zerodha costs and Indian capital-gains tax on every sell. Money is
@@ -67,7 +67,7 @@ class Portfolio:
     tax_cfg: TaxConfig
     cash: Decimal = Decimal("0")
     ledger: FIFOLedger = field(default_factory=FIFOLedger)
-    # Optional size-aware slippage (Q_alpha.md §13). When None, trades use the flat
+    # Optional size-aware slippage (§13). When None, trades use the flat
     # ``cost_cfg.default_slippage_pct``; the backtest engine sets a ``SquareRootSlippage`` snapshot
     # (causal as-of ADV + daily vol) per rebalance date when run with ``dynamic_slippage=True``.
     slippage_model: SlippageModel | None = None
@@ -152,7 +152,7 @@ class Portfolio:
 
         ``min_trade_fraction`` imposes a no-trade band: a name already held is left untouched if the
         rebalance would move its weight by less than this fraction of total portfolio value. This
-        suppresses dust trades that realize tax for negligible benefit (Q_alpha.md §4.6 spirit).
+        suppresses dust trades that realize tax for negligible benefit (§4.6 spirit).
         """
         total_value = self.market_value(prices)
         held = self.positions()
@@ -201,7 +201,7 @@ class Portfolio:
     def liquidate(
         self, on_date: date, tickers: Iterable[str], prices: Mapping[str, Decimal]
     ) -> list[TradeRecord]:
-        """Fully sell the named holdings to cash — the defensive stop-loss exit (Q_alpha.md §3.6).
+        """Fully sell the named holdings to cash — the defensive stop-loss exit (§3.6).
 
         Unconditional by design: a stop bypasses the §4.6 net-benefit gate (§4.6 "cost never
         overrides a stop — you exit regardless"). Proceeds sit as cash until the next core

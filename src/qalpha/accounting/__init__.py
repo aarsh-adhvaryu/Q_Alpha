@@ -1,6 +1,6 @@
 """Accounting engine: FIFO tax lots, Zerodha transaction costs, capital-gains tax.
 
-This package is deliberately standalone (Q_alpha.md improvement #2) so the future live decision
+This package is deliberately standalone (improvement #2) so the future live decision
 engine (Phase 4, §4.6) imports the exact same tested code that the Phase 0 backtest runs on.
 """
 

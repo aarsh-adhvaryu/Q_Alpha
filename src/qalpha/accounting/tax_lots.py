@@ -1,4 +1,4 @@
-"""FIFO tax-lot ledger (Q_alpha.md §2.7).
+"""FIFO tax-lot ledger (§2.7).
 
 Indian demat accounts use strict First-In-First-Out for tax purposes, so the system cannot keep
 a single ``entry_date`` per holding — it must track individual lots and consume the oldest first
@@ -26,7 +26,7 @@ def _paise(value: Decimal) -> Decimal:
 
 @dataclass
 class TaxLot:
-    """A single purchase lot. Mirrors ``portfolio.tax_lots`` (Q_alpha.md §2.7)."""
+    """A single purchase lot. Mirrors ``portfolio.tax_lots`` (§2.7)."""
 
     ticker: str
     acquisition_date: date
@@ -104,7 +104,7 @@ class TaxLot:
 
 @dataclass(frozen=True)
 class LotConsumption:
-    """Record of consuming part (or all) of a lot on a sell (Q_alpha.md `lot_consumptions`)."""
+    """Record of consuming part (or all) of a lot on a sell (`lot_consumptions`)."""
 
     lot_id: str
     ticker: str
@@ -120,7 +120,7 @@ class LotConsumption:
 
     @property
     def is_long_term(self) -> bool:
-        """LTCG if held >= 365 days (Q_alpha.md §4.6). Boundary handled by the tax engine."""
+        """LTCG if held >= 365 days (§4.6). Boundary handled by the tax engine."""
         return self.holding_days >= 365
 
 
@@ -157,7 +157,7 @@ class FIFOLedger:
 
         Returns the per-lot consumption records (oldest first). Raises
         :class:`InsufficientSharesError` if the ledger does not hold enough — the caller must
-        reconcile against the broker before forcing a sell (Q_alpha.md §4.9).
+        reconcile against the broker before forcing a sell (§4.9).
         """
         if quantity <= 0:
             raise ValueError("sell quantity must be positive")

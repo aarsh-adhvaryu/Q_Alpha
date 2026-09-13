@@ -1,4 +1,4 @@
-"""Criterion-4 reconciliation: our FIFO engine vs the real Zerodha Tax P&L (Q_alpha.md §14 crit 4).
+"""Criterion-4 reconciliation: our FIFO engine vs the real Zerodha Tax P&L (§14 crit 4).
 
 Replays the Console **tradebook** through the validated FIFO engine and compares the realized gains
 against the official Console **Tax P&L** export, to the paise:
