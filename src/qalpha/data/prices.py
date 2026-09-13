@@ -1,4 +1,4 @@
-"""Price panel abstraction (Q_alpha.md §5.5).
+"""Price panel abstraction (§5.5).
 
 `PriceData` is the single object every downstream layer (factors, covariance, backtest, baselines)
 reads from. It deliberately does **not** know about yfinance, Parquet, or the network — it is a

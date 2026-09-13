@@ -1,4 +1,4 @@
-"""Corporate actions — splits, bonuses, dividends on the FIFO book (Q_alpha.md §14 criterion 5).
+"""Corporate actions — splits, bonuses, dividends on the FIFO book (§14 criterion 5).
 
 A real demat holding is reshaped by corporate actions between trades, and each has a *distinct* Indian
 tax treatment that the FIFO ledger must get right:

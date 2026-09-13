@@ -25,18 +25,12 @@ only when he asks. When he asks about the maths: formula → example → why.
 
 ## Where it stands
 
-The repo is being cut down from three earlier projects (an optimizer, advice on the real account,
-a rulebook "twin") to only what this system uses. Order of work:
+**[README.md](README.md) is the project** — what it is, how it runs, what was learned, the maths, and
+the build plan. Read it first. Keep it true: edit the line that changed; never append a log.
 
-1. **Withdraw the rulebook start** — done: `EVALUATION_START = None`; `SYSTEM` mirrors the tradebook.
-2. **Delete what the system does not use** — code, scripts, data, tests, old plans and reports.
-   `research/` stays as it is.
-3. **`README.md` becomes the one document** defining the project: how it runs, what passed and
-   failed, the maths, the build plan.
-4. **Build AI-PM-1**: the manager (`claude-sonnet-5`), its memory (a logbook it writes, a scorecard
-   code keeps), next-session fills, one operational journal, then register and start.
-
-Until step 3 lands, older modules and documents still describe the rulebook. Do not extend them.
+Order of work: (1) rulebook start withdrawn ✓ · (2) repo cut to what the system uses ✓ ·
+(3) README as the one document ✓ · (4) **build AI-PM-1** — the manager, its memory, next-session
+fills, the operational journal — then register and start it.
 
 ---
 
@@ -48,8 +42,8 @@ Until step 3 lands, older modules and documents still describe the rulebook. Do 
 - **Unknown is never substituted.** Missing price ≠ previous price. Unread filing ≠ no bad news.
   Missing or unparseable model reply ≠ HOLD. Absent row ≠ zero. Say "unknown" and carry it through.
 - **A number on any surface is labelled as the thing that was computed.** Every serious defect in
-  this repo's history was a correct number under the wrong label (the table is in `README.md`).
-- **Register before running.** A treatment's model, prompt, inputs, limits and start date are
+  this repo's history was a correct number under the wrong label (the table is in README §8).
+- **Register before running.** A version's model, prompt, inputs, limits and start date are
   written in `reports/PREREGISTRATION_*.md` before it runs. Its record is never relabelled; a
   change is a new version.
 - **Test the caller, not only the function.** Exercise the real entry point with a book that has
@@ -104,6 +98,7 @@ uv run mypy src scripts
 uv run pytest
 uv run python scripts/local_run.py --app --autorun   # what the desktop click (Q-Alpha.bat) runs
 uv run python scripts/evidence.py daily              # filings for held names and candidates
+uv run python scripts/evidence.py backfill --only INFY --workers 8   # a year of one name, once
 uv run python scripts/news.py daily                  # headlines
 uv run python scripts/twin.py daily                  # the books
 ```

@@ -1,4 +1,4 @@
-"""Pre-trade evidence from NSE's own regulatory-indicator file (PLAN_SYSTEM §L1, Phase B).
+"""Pre-trade evidence from NSE's own regulatory-indicator file.
 
 **Why this module exists.** Every input to the buy decision was a price. ``advise_deploy_into_weakness``
 reads an adjusted-close panel, an index series and a sector label, and nothing else — so a name that
