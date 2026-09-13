@@ -273,15 +273,55 @@ def test_a_failed_reply_is_kept_but_does_not_answer_the_retry(world: dict[str, A
     assert len(list(world["store"].receipts.glob("*.failed-*"))) == 1
 
 
-def test_an_unread_holding_stops_the_review_before_the_model_is_asked(
+def test_a_holding_nobody_opened_stops_the_review_before_the_model_is_asked(
     world: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """No coverage row at all is a hole where the evidence should be, not a gap in it."""
     empty = tmp_path / "no-coverage.jsonl"
     empty.write_text("", encoding="utf-8")
     monkeypatch.setattr(evidence_log, "COVERAGE_LOG", empty)
-    with pytest.raises(manager.IncompleteReviewError, match="have not been read"):
+    with pytest.raises(manager.IncompleteReviewError, match="nobody has read the filings"):
         _review(world, _brain(world, _hold_all))
     assert world["calls"] == []
+
+
+def test_a_filing_that_could_not_be_read_is_named_rather_than_freezing_the_name(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A scanned newspaper page nobody can transcribe must not remove a company from consideration.
+
+    The review runs, and the packet says what could not be read and what the exchange called it, so
+    the investor decides with the gap in front of it instead of the name silently disappearing.
+    """
+    gap = [
+        {"on": "2026-09-10", "subject": "Copy of Newspaper Publication", "url": "http://x/ad.pdf"}
+    ]
+    monkeypatch.setattr(
+        evidence_log,
+        "unread_documents",
+        lambda ticker, **kw: gap if ticker.removesuffix(".NS") == "AAA" else [],
+    )
+    monkeypatch.setattr(
+        manager,
+        "evidence_coverage",
+        lambda names, as_of: {
+            t.removesuffix(".NS"): evidence_log.Coverage(
+                ticker=t.removesuffix(".NS"),
+                opened=True,
+                read=9,
+                filed=10 if t == "AAA.NS" else 9,
+                unread=tuple(gap) if t == "AAA.NS" else (),
+                as_of=DECIDE.isoformat(),
+            )
+            for t in names
+        },
+    )
+    _review(world, _brain(world, lambda p: [*_hold_all(p), _decision("EEE.NS", "BUY", 10)]))
+    packet = _packet_of(world["calls"][0])
+    assert packet["coverage"]["AAA.NS"]["could_not_read"] == gap
+    assert packet["coverage"]["AAA.NS"]["documents_read"] == 9
+    assert "could NOT be read" in world["calls"][0], "the prompt must say what that means"
+    assert world["book"].manager["pending"], "a buy is still allowed while a gap is named"
 
 
 def test_no_key_is_an_incomplete_review(

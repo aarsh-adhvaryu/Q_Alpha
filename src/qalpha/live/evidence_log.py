@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from qalpha.live.news import NEWS_EVENTS, NEWS_VERSION
 
 EVENT_LOG = Path("data/evidence/events.jsonl")
 COVERAGE_LOG = Path("data/evidence/coverage.jsonl")
+EXTRACTED_LOG = Path("data/evidence/extracted.jsonl")
+ANNOUNCEMENTS = Path("data/evidence/announcements")
 NEWS_EVENT_LOG = NEWS_EVENTS
 
 #: A coverage row older than this cannot speak for today.
@@ -133,3 +136,127 @@ def events(
         )  # stable: newest within
         found[ticker] = items[:per_ticker]
     return found
+
+
+@dataclass(frozen=True)
+class Coverage:
+    """What was read about one name, and — as plainly — what was not.
+
+    ``read`` is the number of documents in the window this corpus actually extracted from.
+    ``filed`` is how many the exchange listed. When they differ the difference is **named**, in
+    :attr:`unread`, by the exchange's own subject line — because "nobody could read this newspaper
+    advertisement" and "nobody looked at this company" are different facts, and only one of them
+    should stop an investor. A scanned page the model cannot transcribe is a permanent gap; a name
+    with no coverage row at all is an unopened name.
+    """
+
+    ticker: str
+    #: A coverage row exists for this name, at the current version, from the corpus reader.
+    opened: bool
+    read: int
+    filed: int
+    #: ``{date, subject, url}`` per document in the window that has no extraction row.
+    unread: tuple[dict[str, str], ...] = ()
+    as_of: str = ""
+
+    @property
+    def complete(self) -> bool:
+        return self.opened and not self.unread and self.read >= self.filed
+
+
+def _extracted_hashes(path: Path | None = None) -> set[str]:
+    return {
+        str(row.get("sha256"))
+        for row in rows(path or EXTRACTED_LOG)
+        if row.get("extraction_version") == EXTRACTION_VERSION and reader_matches(row.get("reader"))
+    }
+
+
+def unread_documents(
+    ticker: str, *, window_days: int, as_of: date, archive: Path | None = None
+) -> list[dict[str, str]]:
+    """Documents the exchange listed in the window that this corpus has no reading of.
+
+    Read from the archived index and provenance sidecars — the exchange's own subject line, so an
+    unreadable filing can still be *described* to whoever is deciding.
+    """
+    import json as _json
+
+    base = (archive or ANNOUNCEMENTS) / ticker.removesuffix(".NS")
+    index_dir = base / "index"
+    if not index_dir.exists():
+        return []
+    files = sorted(p for p in index_dir.glob("*.json") if not p.name.endswith(".provenance.json"))
+    if not files:
+        return []
+    from qalpha.live.announcements import parse_index, since
+
+    try:
+        listed = parse_index(
+            files[-1].read_text(encoding="utf-8"), symbol=ticker.removesuffix(".NS")
+        )
+    except (OSError, ValueError):
+        return []
+    known = _extracted_hashes()
+    out: list[dict[str, str]] = []
+    for ann in since(listed, as_of - timedelta(days=window_days)):
+        if not ann.has_document or ann.disseminated_at.date() > as_of:
+            continue
+        prov = base / f"{ann.seq_id}.provenance.json"
+        if not prov.exists():
+            continue
+        try:
+            sha = str(_json.loads(prov.read_text(encoding="utf-8")).get("sha256", ""))
+        except (OSError, ValueError):
+            continue
+        if sha and sha not in known:
+            out.append(
+                {
+                    "on": ann.disseminated_at.date().isoformat(),
+                    "subject": ann.subject or "(no subject given)",
+                    "url": ann.attachment_url,
+                }
+            )
+    return out
+
+
+def coverage(
+    tickers: Iterable[str], *, as_of: date, path: Path | None = None
+) -> dict[str, Coverage]:
+    """Per name: was it opened, how much was read, and exactly which documents were not."""
+    oldest = (as_of - timedelta(days=MAX_COVERAGE_AGE_DAYS)).isoformat()
+    latest: dict[str, dict[str, object]] = {}
+    for row in rows(path or COVERAGE_LOG):
+        day = str(row.get("as_of", ""))
+        if not (oldest <= day <= as_of.isoformat()):
+            continue
+        if row.get("extraction_version") != EXTRACTION_VERSION or not reader_matches(
+            row.get("reader")
+        ):
+            continue
+        latest[_bare(row.get("ticker"))] = row
+    out: dict[str, Coverage] = {}
+    for ticker in tickers:
+        bare = _bare(ticker)
+        latest_row = latest.get(bare)
+        if latest_row is None:
+            out[bare] = Coverage(ticker=bare, opened=False, read=0, filed=0)
+            continue
+        read = int(str(latest_row.get("documents_read", 0) or 0))
+        filed = int(str(latest_row.get("filings_in_window", 0) or 0))
+        gaps = (
+            unread_documents(
+                bare, window_days=int(str(latest_row.get("window_days", 10) or 10)), as_of=as_of
+            )
+            if read < filed
+            else []
+        )
+        out[bare] = Coverage(
+            ticker=bare,
+            opened=True,
+            read=read,
+            filed=filed,
+            unread=tuple(gaps),
+            as_of=str(latest_row.get("as_of", "")),
+        )
+    return out
