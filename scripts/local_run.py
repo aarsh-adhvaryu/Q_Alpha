@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -167,6 +167,31 @@ def _prices(tickers: list[str], costs: dict[str, Decimal]) -> tuple[dict[str, De
     return out, notes
 
 
+def _panel_age_note(as_of: date) -> str:
+    """Why the screen ran on an older date -- the market being shut, or the panel lagging.
+
+    Only one of those is actionable. "Refresh the panel" on a weekend is an instruction that cannot
+    succeed, and an instruction that cannot succeed is how a user learns to skip the warnings that
+    can. This does not know NSE's holiday calendar, so it claims only what a weekday tells it:
+    when every day since the last bar is a Saturday or Sunday, the panel is current by definition.
+    A gap containing a weekday might be a public holiday or might be a stale panel, and it says so
+    rather than guessing which.
+    """
+    gap = (date.today() - as_of).days
+    between = [as_of + timedelta(days=n) for n in range(1, gap + 1)]
+    if between and all(d.weekday() >= 5 for d in between):
+        closed = "the weekend" if len(between) <= 2 else f"{len(between)} non-trading days"
+        return (
+            f"The screen ran on {as_of} ({as_of:%A}), the last trading day -- {closed} since. "
+            "The panel is current; there is no newer price to fetch."
+        )
+    return (
+        f"The screen ran on {as_of}, the newest day in the price panel -- not today, and the days "
+        "in between are not all weekend. Either the market was shut for a holiday or the panel is "
+        "behind; refresh it to be sure."
+    )
+
+
 def _proposal(
     account: ReconciledAccount, budget: Decimal, cfg: Config, mandate: Mandate
 ) -> tuple[list[tuple[str, int, Decimal]], list[str]]:
@@ -209,10 +234,11 @@ def _proposal(
             spend_idle_cash=False,  # the budget IS the allowance; never the whole balance
         )
         if as_of != date.today():
-            notes.append(
-                f"The screen ran on {as_of}, the newest day in the price panel — not today. "
-                "Refresh the panel for a current basket."
-            )
+            # CLOSED IS NOT STALE. On a Saturday the newest bar is Friday's and the panel is
+            # perfectly current -- telling the user to refresh it sends him to press a button that
+            # cannot change anything, and teaches him the warnings are noise. `evidence.py` already
+            # knows ("no file for 2026-09-12 (non-trading day)"); this surface did not.
+            notes.append(_panel_age_note(as_of))
         orders = [(o.ticker, int(o.quantity), o.price) for o in advice.deploy.buy_orders]
         if not orders:
             notes.append("The screen ran and proposed nothing that fits the allowance cleanly.")
