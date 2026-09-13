@@ -202,14 +202,14 @@ def _marks_and_gaps(
     *,
     persist: bool = True,
 ) -> tuple[dict[str, BookMark], list[Gap]]:
-    """Mark every book and both baselines. ``persist=False`` is genuinely read-only."""
-    marks = {n: mark(b, market.prices, market.as_of) for n, b in books.items() if n != REAL}
-    real = replay_tradebook(trades, cfg).portfolio
-    # An allotment is not a trade: give REAL the lot with its allotment date, which is what
-    # §2(42A) counts the holding period from.
-    apply_off_market(real, load_off_market())
-    books[REAL].portfolio = real
-    marks[REAL] = mark(books[REAL], market.prices, market.as_of)
+    """Mark every book and both baselines. ``persist=False`` is genuinely read-only.
+
+    ``REAL`` must already hold the replayed tradebook — see :func:`replay_real`. It used to be
+    replayed *here*, after the books were saved, so ``books.json`` recorded the user's own book as
+    the cash it was seeded with and no holdings at all. The marks were right and the file was wrong,
+    which is the shape of every labelling defect in this repository.
+    """
+    marks = {n: mark(b, market.prices, market.as_of) for n, b in books.items()}
 
     flows = books[REAL].flows
     ew_series = _ew_fund_series()
@@ -226,6 +226,16 @@ def _marks_and_gaps(
         append_history(marks, [], as_of=market.as_of)
     gaps = compare(marks, navs=navs_from_history(load_history()))
     return marks, gaps
+
+
+def replay_real(book: TwinBook, trades: list[TradebookTrade], cfg: Config) -> None:
+    """Put the user's actual holdings into ``REAL`` — the tradebook replayed, plus what it cannot show.
+
+    An allotment is not a trade, so the replay cannot know about it; it is added as a dated lot,
+    because §2(42A) counts the holding period from the allotment date.
+    """
+    book.portfolio = replay_tradebook(trades, cfg).portfolio
+    apply_off_market(book.portfolio, load_off_market())
 
 
 def cmd_daily(cfg: Config) -> int:
@@ -278,14 +288,16 @@ def cmd_daily(cfg: Config) -> int:
         if book.stepped_through == market.as_of:
             continue
         # Mirror: until a start is registered, SYSTEM holds exactly what the user holds.
-        book.portfolio = replay_tradebook(trades, cfg).portfolio
-        apply_off_market(book.portfolio, credits)
+        replay_real(book, trades, cfg)
         book.stepped_through = market.as_of
     if not autonomous:
         print(
             "[twin] SYSTEM mirrors REAL — no start date is registered, so it makes no choices of "
             "its own."
         )
+    # BEFORE the save, so the file records what REAL actually holds rather than the cash it was
+    # seeded with.
+    replay_real(books[REAL], trades, cfg)
     save_books(books)
 
     marks, gaps = _marks_and_gaps(books, trades, market, cfg)
@@ -400,6 +412,7 @@ def cmd_status(cfg: Config) -> int:
         print("[twin] no market data.")
         return 0
     trades, _notes = _tradebook()
+    replay_real(books[REAL], trades, cfg)
     marks, gaps = _marks_and_gaps(books, trades, market, cfg, persist=False)
     print(comparison_markdown(marks, gaps))
     return 0

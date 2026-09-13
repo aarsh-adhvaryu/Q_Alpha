@@ -31,6 +31,9 @@ data/tradebook-*.csv
 # into a PUBLIC repository. Found in review 2026-09-09; no export had been committed.
 data/tradebooks/
 data/taxpnl-*
+# Ledger, holdings and tax P&L statements: client id, PAN, every position. The same near-miss as
+# the tradebooks folder above — one broad `git add -A` would publish the lot.
+data/account/
 data/*.jpeg
 data/*.jpg
 # Generated reconciliation report echoes the real client-id — keep it local (it's regenerable).
