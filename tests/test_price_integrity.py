@@ -1,4 +1,4 @@
-"""Price-continuity guard (PLAN_TRUST_REPAIR.md PR-2 — fixes T1.1).
+"""Price-continuity guard.
 
 The defect being closed: ``adj_close`` corrects splits and dividends and nothing else, so a demerger
 leaves a permanent step-down that a 1-year-high rule reads as a discount. On the real watchlist that

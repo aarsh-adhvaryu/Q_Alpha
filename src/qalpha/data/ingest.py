@@ -1,4 +1,4 @@
-"""Historical price ingestion: yfinance -> Parquet -> :class:`PriceData` (Q_alpha.md §5.3/§5.5).
+"""Historical price ingestion: yfinance -> Parquet -> :class:`PriceData` (§5.3/§5.5).
 
 yfinance is acceptable for *backtesting/training* per the spec (§5.1: "a few missed dividends are
 absorbed as noise"); it is never trusted for live decisions. Adjusted close (dividends+splits) is

@@ -1,4 +1,4 @@
-"""Capital-gains engine tests (Q_alpha.md §2.7, §4.6): STCG/LTCG split, ₹1.25L FY exemption."""
+"""Capital-gains engine tests (§2.7, §4.6): STCG/LTCG split, ₹1.25L FY exemption."""
 
 from datetime import date
 from decimal import Decimal

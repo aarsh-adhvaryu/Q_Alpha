@@ -1,11 +1,11 @@
-"""Zerodha delivery-equity transaction-cost model (Q_alpha.md §4.6).
+"""Zerodha delivery-equity transaction-cost model (§4.6).
 
 One function, `compute_costs`, returns an itemised `CostBreakdown` for a single buy or sell.
 Broker swapped from HDFC to Zerodha (plan improvement #1); the headline difference is ₹0
 brokerage on delivery, which the percentages below encode via `CostConfig`.
 
 STT is included in the *total transaction cost* but is excluded from the capital-gains
-computation by the tax engine (Q_alpha.md §2.7, §4.6) — the two concerns live in different
+computation by the tax engine (§2.7, §4.6) — the two concerns live in different
 modules precisely so that boundary is never blurred.
 """
 
@@ -68,7 +68,7 @@ class CostBreakdown:
     def deductible_for_gains(self) -> Decimal:
         """Transfer expenses deductible when computing capital gains.
 
-        Per Income-Tax rules (Q_alpha.md §2.7/§4.6) STT is NOT deductible; brokerage and the
+        Per Income-Tax rules (§2.7/§4.6) STT is NOT deductible; brokerage and the
         other statutory charges incurred wholly in connection with the transfer are. Slippage is
         an execution artefact, not an invoiced expense, so it is excluded here.
         """

@@ -1,4 +1,4 @@
-"""Size-aware market-impact slippage (Q_alpha.md §13, the Almgren square-root law).
+"""Size-aware market-impact slippage (§13, the Almgren square-root law).
 
 Flat per-trade slippage is blind to order size — acceptable for a handful of deep large-caps, but it
 under-charges the cost of pushing a big position through a thinner mid-cap (the gating risk for any

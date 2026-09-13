@@ -1,6 +1,6 @@
 # Point-in-time universe (survivorship-bias fix)
 
-Q_alpha.md §5.4: the backtest must, at each historical date, see exactly the stocks that were
+Survivorship: any history must, at each historical date, see exactly the stocks that were
 investable **on that date** — including names that later delisted, went bankrupt, or were dropped
 from the index. Using today's survivors overstates returns.
 
@@ -9,7 +9,7 @@ from the index. Using today's survivors overstates returns.
 `nifty50_membership.csv` — a genuine point-in-time NIFTY 50 membership for **2012-01-01 → 2024-12-31**,
 built by `scripts/build_nifty_universe.py`. 81 distinct names, 83 membership intervals (Vedanta and
 Grasim each have two stints), columns `ticker,start_date,end_date,sector`. Consumed by
-`Universe.from_csv` (ticker/start/end) and `run_phase0.py --universe-csv` (also lifts the sector map).
+`Universe.from_csv` (ticker/start/end).
 
 It **includes the dead/dropped names** that survivorship bias would erase — Reliance Power, Reliance
 Infrastructure, JP Associates, DLF, Yes Bank, Zee, Idea/Vodafone Idea, Vedanta, Indiabulls Housing,

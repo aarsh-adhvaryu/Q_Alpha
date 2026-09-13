@@ -1,4 +1,4 @@
-"""Zerodha tradebook → dated FIFO Portfolio (Q_alpha.md §14 crit 4).
+"""Zerodha tradebook → dated FIFO Portfolio (§14 crit 4).
 
 A fixture CSV in the Console export shape drives parse + replay; the key checks are that dated lots
 make the holding period (LTCG vs STCG) exact and that an unmatched sell warns instead of crashing.
@@ -123,7 +123,7 @@ def test_setoff_reconciliation_through_replay() -> None:
 # --- the drop folder, which is now the only spelling of "the tradebook" ---------------------------
 #
 # `local_run` read `data/tradebooks/` while `scripts/twin.py` read a private gist and
-# `data/tradebook-YHK037-EQ.csv`, a file that does not exist. So OPERATING.md's instruction — drop
+# `data/tradebook-YHK037-EQ.csv`, a file that does not exist. So README.md's instruction — drop
 # the Console export in `data/tradebooks/` — dated the page's lots and could never stop the twin
 # aborting, which it did on every run of 2026-09-10 with a message about a credential this desktop
 # does not use. One reader, one folder.

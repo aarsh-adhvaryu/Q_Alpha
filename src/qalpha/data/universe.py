@@ -1,4 +1,4 @@
-"""Point-in-time investable universe (Q_alpha.md §5.4 — survivorship-bias protection).
+"""Point-in-time investable universe (§5.4 — survivorship-bias protection).
 
 The screener at any historical rebalance date must see exactly the stocks that were investable on
 *that* date — including names that later delisted or were dropped from the index. Using today's

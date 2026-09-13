@@ -1,4 +1,4 @@
-"""Zerodha tradebook → dated FIFO ``Portfolio`` (the criterion-4 path; Q_alpha.md §14 crit 4).
+"""Zerodha tradebook → dated FIFO ``Portfolio`` (the criterion-4 path; §14 crit 4).
 
 ``kite.holdings()`` gives only a blended average price with **no purchase dates**, so it can't drive
 FIFO capital-gains tax (STCG vs LTCG, the ₹1.25L exemption, the 365-day line). The **tradebook** —
@@ -38,7 +38,7 @@ _REQUIRED = ("symbol", "trade_date", "trade_type", "quantity", "price")
 #: Where every reader looks for Console exports. **One folder, one spelling.**
 #:
 #: The page read this directory while ``scripts/twin.py`` read a private gist and a filename that no
-#: longer exists, so following OPERATING.md ("drop the export in ``data/tradebooks/``") dated the
+#: longer exists, so following README.md ("drop the export in ``data/tradebooks/``") dated the
 #: page's lots and left the twin aborting every evening — with a message about a credential the
 #: desktop does not use. Two spellings of "the tradebook" is the same class of defect as two
 #: spellings of "the prices" was: the fix the user is told to apply cannot reach the thing that is

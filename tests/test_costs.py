@@ -1,4 +1,4 @@
-"""Zerodha cost-model tests (Q_alpha.md §4.6), checked against hand-computed values."""
+"""Zerodha cost-model tests (§4.6), checked against hand-computed values."""
 
 from decimal import Decimal
 
