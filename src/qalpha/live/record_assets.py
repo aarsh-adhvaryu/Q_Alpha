@@ -1,7 +1,6 @@
 """Styles and drawing code for the dashboard page, kept apart from the data that feeds it.
 
-Split from :mod:`qalpha.live.record` for the reason the rest of the live layer separates
-:mod:`qalpha.live.ui` from everything else: **the drawing must never be able to decide what a
+Split from :mod:`qalpha.live.record` because **the drawing must never be able to decide what a
 number means.** This module receives a JSON blob and renders it. It performs no lookups, reads no
 files, and has no opinion about which book is the bar.
 
@@ -189,12 +188,6 @@ const PALETTE=["#2f5fd0","#127a4b","#b3261e","#8a6d00","#6d4aa8","#0f7d8c","#a85
     b.onclick=()=>{ s.hidden=!s.hidden; b.setAttribute("aria-pressed",String(!s.hidden)); draw(); };
     legend.appendChild(b);
   });
-
-  lineChart(document.getElementById("equity-chart"),[{
-    name:"Model book", color:css("--accent"), hidden:false,
-    points:D.equity.map(p=>({x:p.date,y:p.equity,suspect:!!p.suspect,
-      extra:pct(p.return_pct)+" on contributions"}))
-  }],{height:230});
 
   barChart(document.getElementById("holdings-chart"),
     D.holdings.filter(h=>h.value!=null).sort((a,b)=>b.value-a.value).map(h=>({

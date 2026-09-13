@@ -19,8 +19,7 @@ REM  a script that had to be re-run whenever either changed. All of that was
 REM  scaffolding around living in the wrong filesystem, and moving to D:\ took
 REM  it with it. %~dp0 is this file's own folder, which is the repo.
 REM
-REM  NOTHING HERE TRADES. It reads, it decides, it shows you a page. Every order
-REM  is placed by you, in Kite.
+REM  NOTHING HERE TRADES. It reads, it marks paper books, it shows you a page.
 REM ============================================================================
 
 cd /d "%~dp0"
@@ -108,7 +107,7 @@ if not "%RUN_RC%"=="0" (
   goto :fail
 )
 echo.
-echo   Stopped. Nothing was traded; you place every order in Kite.
+echo   Stopped. Nothing was traded.
 ping -n 4 127.0.0.1 >nul
 exit /b 0
 

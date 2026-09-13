@@ -1,19 +1,15 @@
 [project]
 name = "qalpha"
 version = "0.1.0"
-description = "Q-Alpha — quantitative wealth engine for Indian equities (Phase 0: strategy validation)"
+description = "Q-Alpha — an AI investor running a paper book of Indian equities"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
-    "scipy>=1.13",
-    "scikit-learn>=1.5",
     "pyarrow>=16.0",
     "yfinance>=0.2.40",
-    "structlog>=24.1",
-    "openpyxl>=3.1",
-    "kiteconnect>=5.0",
+    "openpyxl>=3.1",  # pandas' reader for the Zerodha Tax P&L workbook
     "python-dotenv>=1.0",
     # Primary documents are PDFs. Pure-Python, no system libraries, works offline — an evidence
     # spine that needs a native toolchain would not survive the CI runner it has to live on.
@@ -30,24 +26,10 @@ dev = [
     "pandas-stubs>=2.2",
     "types-pyyaml",
 ]
-# Optional, quarantined LLM layer for the daily AI market brief (context-only narrative + the
-# auto-pilot's Book-B nudge). NOT a core dep — the engine/factors/backtest/CI never import it; install
-# with `uv sync --extra ai`. Keeps the product deterministic where it must be (rule (a) intact).
+# The model client. Optional so the accounting and the page install without it; the evening's
+# filing reader and the investor need it. `uv sync --extra dev --extra ai`.
 ai = [
     "anthropic>=0.40",
-]
-# The research track (research/) — ideas that have NOT passed a pre-registered test — lives in THIS
-# repo since 2026-08-28, walled off by tests/test_repo_boundary.py rather than by being a separate
-# repository. Its heavy deps are optional and its suite is off `testpaths`, so the product run never
-# depends on them and never inherits their skips. See research/README.md.
-research = [
-    "hmmlearn>=0.3",  # Gaussian HMM for regime/risk_state.py (a published negative, kept as evidence)
-]
-# Quantum track (Q_alpha.md §15) — AUM-gated (₹50L+) and twice a published negative. Heavy.
-quantum = [
-    "qiskit>=1.0",
-    "qiskit-algorithms>=0.3",
-    "qiskit-optimization>=0.6",
 ]
 
 [build-system]
@@ -80,7 +62,7 @@ mypy_path = "src"
 strict = true
 warn_unreachable = true
 disallow_untyped_defs = true
-ignore_missing_imports = true   # yfinance/sklearn ship no stubs
+ignore_missing_imports = true   # yfinance ships no stubs
 # pandas-stubs/numpy frequently infer Any for elementwise ops; chasing those with casts adds noise
 # without catching real bugs. We keep full strictness on OUR signatures but relax this one sub-flag.
 warn_return_any = false
@@ -90,7 +72,7 @@ plugins = []
 module = ["tests.*"]
 disallow_untyped_defs = false
 
-# OUR OWN PACKAGE IS NEVER "missing". `ignore_missing_imports` above is for yfinance and sklearn,
+# OUR OWN PACKAGE IS NEVER "missing". `ignore_missing_imports` above is for yfinance,
 # which ship no stubs — but it applies to every unresolvable import, so a `qalpha.*` module that
 # does not exist resolved to `Any` and the check passed. That hid two defects on 2026-09-12: an
 # unchecked keyword argument that crashed the twin step on every run, and then a deleted module

@@ -10,8 +10,8 @@ from datetime import date
 from decimal import Decimal
 
 from qalpha.accounting.corporate_actions import CorporateAction, CorporateActionType
+from qalpha.accounting.portfolio import Portfolio
 from qalpha.accounting.tax_lots import TaxLot
-from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
 
 
@@ -112,17 +112,3 @@ def test_bonus_shares_are_short_term_from_allotment() -> None:
     gains = pf.gains.compute_sell(consumptions, Decimal("600"), Decimal("0"))
     stcg = next(g for g in gains if g.gain_type == "STCG")
     assert stcg.gain == Decimal("6000.00")  # 10 bonus shares × ₹600, ₹0 cost → all gain
-
-
-def test_detector_parses_splits_and_dividends_since_cutoff() -> None:
-    import pandas as pd
-
-    from qalpha.live.corporate_actions_feed import corporate_actions_from_series
-
-    splits = pd.Series({pd.Timestamp("2019-01-01"): 2.0, pd.Timestamp("2023-05-01"): 5.0})
-    dividends = pd.Series({pd.Timestamp("2022-01-01"): 8.0, pd.Timestamp("2023-07-01"): 12.5})
-    found = corporate_actions_from_series("X.NS", splits, dividends, date(2023, 1, 1))
-    # only on/after the cutoff, sorted by ex-date
-    assert [a.action_type.value for a in found] == ["SPLIT", "DIVIDEND"]
-    assert found[0].ratio == Decimal("5.0") and found[0].ex_date == date(2023, 5, 1)
-    assert found[1].amount_per_share == Decimal("12.5")

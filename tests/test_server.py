@@ -1,4 +1,4 @@
-"""The local app — buttons, live progress, the Kite link, and where the tokens go.
+"""The local app — the page, the run button, and live progress.
 
 A static page cannot run anything: `file://` blocks it, correctly. This is the smallest thing that
 can — Python's own http.server on loopback — and these pin the properties that make it safe to point
@@ -54,8 +54,9 @@ def test_the_page_serves_and_says_it_cannot_trade(app: int) -> None:
     """The claim has to be on the surface, because this is the page with the buttons on it."""
     status, body, _ = _get(app, "/")
     assert status == 200
-    assert "nothing here places an order" in body
-    assert "Run the evening" in body and "Log in to Zerodha" in body
+    assert "Nothing on this page places an order" in body
+    assert "Run the evening" in body
+    assert "Zerodha" not in body, "no broker login exists any more; the page must not offer one"
 
 
 def test_the_account_page_is_never_cached_or_framed(app: int) -> None:
@@ -79,23 +80,12 @@ def test_an_unknown_route_is_a_404_not_a_page(app: int) -> None:
 
 
 def test_no_token_value_can_reach_the_page(app: int, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The credentials panel exists to say which are MISSING. Printing one would put a broker secret
-    into a browser cache, a screenshot and any screen-share — the panel shows names and presence."""
-    monkeypatch.setenv("KITE_API_KEY", "sk-do-not-render-me")
+    """A secret on the page ends up in a browser cache, a screenshot and any screen-share."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret-value")
     _, body, _ = _get(app, "/")
-    assert "sk-do-not-render-me" not in body
     assert "sk-ant-secret-value" not in body
-    assert "KITE_API_KEY" in body and "set" in body
 
 
-def test_a_missing_token_is_reported_as_missing(app: int, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GIST_TOKEN", raising=False)
-    _, body, _ = _get(app, "/")
-    assert "GIST_TOKEN" in body and "missing" in body
-
-
-# --- the job runner -----------------------------------------------------------------------------
 def test_one_job_at_a_time_and_the_second_is_refused_not_queued() -> None:
     """Two runs would interleave their narration into nonsense and race on the same ledgers. A
     queued second run is worse than a refused one: it looks like the first simply took a while."""
@@ -181,61 +171,41 @@ def test_the_page_says_who_will_read_the_filings(app: int, monkeypatch: pytest.M
     assert "unread is not clean" in body.lower()
 
 
-def test_the_page_offers_the_local_route_when_there_is_none_configured(
-    app: int, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The env is CLEARED here rather than assumed empty.
-
-    This passed in WSL and failed on Windows, where the developer's own `.env` names a local model
-    and Ollama is actually running — so the page correctly stopped offering setup instructions and
-    the test read that as a regression. A test that only passes on machines configured like the
-    author's is testing the machine.
-    """
-    monkeypatch.delenv("QALPHA_LOCAL_MODEL", raising=False)
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    _status, body, _ = _get(app, "/")
-    assert "ollama pull" in body.lower()
-    assert "QALPHA_LOCAL_MODEL" in body
-
-
 def test_the_page_never_prints_a_credential_value(
     app: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Names and presence only — the rule the token panel exists to keep."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-do-not-render-me")
     _status, body, _ = _get(app, "/")
-    assert "ANTHROPIC_API_KEY" in body
     assert "sk-ant-do-not-render-me" not in body
 
 
-def test_the_local_model_variables_are_listed_as_credentials(app: int) -> None:
-    _status, body, _ = _get(app, "/")
-    assert "QALPHA_LOCAL_MODEL_URL" in body
+# --- the buttons -----------------------------------------------------------------------------------
+def test_every_button_is_a_distinct_job() -> None:
+    assert set(server._ACTIONS) == {"/run", "/refresh", "/redraw"}
+    assert len({work for _name, work in server._ACTIONS.values()}) == 3
 
 
-# --- the two run buttons --------------------------------------------------------------------------
-def test_both_run_routes_exist_and_are_distinct() -> None:
-    assert "/run" in server._ACTIONS
-    assert "/decide" in server._ACTIONS
-    assert server._ACTIONS["/run"][1] is not server._ACTIONS["/decide"][1]
-
-
-def test_decide_only_asks_the_runner_to_skip_the_research(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The button's whole meaning is the flag it passes. Assert the flag, not the label."""
+@pytest.mark.parametrize(
+    ("job", "argv"),
+    [
+        ("_job_run", ["--no-open"]),
+        ("_job_refresh", ["--no-open", "--prices-only"]),
+        ("_job_redraw", ["--no-open", "--no-pipeline"]),
+    ],
+)
+def test_each_button_passes_the_flag_that_is_its_meaning(
+    monkeypatch: pytest.MonkeyPatch, job: str, argv: list[str]
+) -> None:
+    """Assert the flag, not the label. The full evening must NOT skip the research."""
     import sys
     import types
 
     seen: list[list[str]] = []
     stub = types.ModuleType("local_run")
-    stub.main = lambda argv: seen.append(list(argv)) or 0  # type: ignore[attr-defined]
+    stub.main = lambda a: seen.append(list(a)) or 0  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "local_run", stub)
-
-    server._job_decide()
-    assert seen == [["--no-open", "--no-pipeline"]]
-
-    seen.clear()
-    server._job_run()
-    assert seen == [["--no-open"]], "the full evening must NOT skip the research"
+    getattr(server, job)()
+    assert seen == [argv]
 
 
 def test_the_trail_panel_reports_an_empty_history_rather_than_nothing(app: int) -> None:
@@ -248,61 +218,6 @@ def test_the_trail_panel_reports_an_empty_history_rather_than_nothing(app: int) 
 # The bug was not that opening failed — inside WSL there is no desktop handler and it always would.
 # It was that the app claimed to have opened Kite anyway, so the user sat waiting for a redirect
 # that was never coming, next to a terminal error naming a program they had never heard of.
-def test_the_login_job_says_so_when_no_browser_opens(monkeypatch: pytest.MonkeyPatch) -> None:
-    from qalpha.live import browser, server
-    from qalpha.live.progress import LOG
-
-    monkeypatch.setattr(browser, "open_url", lambda url: False)
-    monkeypatch.setattr(
-        server, "load_credentials", lambda: None, raising=False
-    )  # not reached before the open
-
-    class _Creds:
-        api_key = "testkey"
-
-    monkeypatch.setattr("qalpha.live.credentials.load_credentials", lambda: _Creds())
-    monkeypatch.setattr(
-        "qalpha.live.auth.login_url", lambda k: f"https://kite.test/?v=3&api_key={k}"
-    )
-    monkeypatch.setattr(
-        "qalpha.live.auth.capture_request_token",
-        lambda: (_ for _ in ()).throw(RuntimeError("stop")),
-    )
-
-    LOG.begin()
-    with pytest.raises(RuntimeError, match="stop"):
-        server._job_login()
-    text = " ".join(str(line.get("text", "")) for line in LOG.snapshot()["lines"])  # type: ignore[union-attr]
-    assert "Could not open a browser" in text
-    assert "paste the address" in text.lower()
-    assert "api_key=testkey" in text, "the link itself must be in the feed to copy"
-
-
-def test_the_login_job_stays_quiet_when_the_browser_does_open(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A warning printed on the happy path teaches people to ignore warnings."""
-    from qalpha.live import browser, server
-    from qalpha.live.progress import LOG
-
-    class _Creds:
-        api_key = "testkey"
-
-    monkeypatch.setattr(browser, "open_url", lambda url: True)
-    monkeypatch.setattr("qalpha.live.credentials.load_credentials", lambda: _Creds())
-    monkeypatch.setattr("qalpha.live.auth.login_url", lambda k: "https://kite.test/")
-    monkeypatch.setattr(
-        "qalpha.live.auth.capture_request_token",
-        lambda: (_ for _ in ()).throw(RuntimeError("stop")),
-    )
-
-    LOG.begin()
-    with pytest.raises(RuntimeError, match="stop"):
-        server._job_login()
-    text = " ".join(str(line.get("text", "")) for line in LOG.snapshot()["lines"])  # type: ignore[union-attr]
-    assert "Could not open a browser" not in text
-
-
 def test_serve_prints_the_url_when_it_cannot_open_one(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -322,31 +237,6 @@ def test_serve_prints_the_url_when_it_cannot_open_one(
         server.serve(9999, open_browser=True)
 
 
-def test_the_credentials_table_reads_the_env_file_not_just_the_shell(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
-    """A table that reports "missing" for a variable that is set sends you to fix what is right.
-
-    The app is launched from a shortcut, so its shell exports nothing. Everything it knows about
-    credentials comes from `.env`, and the table has to load it rather than assume someone did.
-    """
-    from qalpha.live import credentials, server
-
-    (tmp_path / ".env").write_text("KITE_API_KEY=abc123\n", encoding="utf-8")
-    monkeypatch.setattr(credentials, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(credentials, "_ENV_LOADED", False)
-    monkeypatch.delenv("KITE_API_KEY", raising=False)
-
-    states = {row.cells[0].text: row.cells[1].text for row in server._token_rows()}
-    assert states["KITE_API_KEY"] == "set"
-
-
-# --- the click, and what it starts ----------------------------------------------------------------
-#
-# `--app` returns from `main()` before the pipeline runs, so serving alone left the desktop click
-# showing whatever the last run had written. `autorun` is the difference between a server and the
-# thing OPERATING.md describes; it is asserted here rather than trusted to the launcher, because the
-# launcher can only pass the flag — this decides whether the flag does anything.
 class _StubServer:
     def __init__(self, addr: object, handler: object) -> None:
         self.addr = addr
@@ -397,15 +287,6 @@ def test_without_autorun_the_app_waits_to_be_asked(monkeypatch: pytest.MonkeyPat
 def test_the_empty_state_names_a_button_that_exists(monkeypatch: pytest.MonkeyPatch, tmp_path):
     """It said "Press Run the analysis". There is no such button, and the one there is says a
     different thing — an instruction that cannot be followed reads as a broken page."""
-    monkeypatch.setattr(server, "PAGE_PATH", tmp_path / "never-written.html")
-    body = server._last_report()
+    monkeypatch.setattr(server, "LAST_RUN", tmp_path / "never-written.json")
+    body = server._last_run()
     assert "Run the evening" in body and "Run the analysis" not in body
-
-
-def test_the_login_panel_names_the_file_the_session_is_written_to(app: int) -> None:
-    """It said `.env`, which is not where `auth.persist_session` puts it — the same class of defect
-    as the button label above: a true-sounding sentence pointing at the wrong thing."""
-    from qalpha.live.auth import SESSION_FILE
-
-    _status, body, _ = _get(app, "/")
-    assert SESSION_FILE.name in body
