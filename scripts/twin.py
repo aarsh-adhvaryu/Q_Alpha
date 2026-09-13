@@ -104,22 +104,35 @@ def _benchmark_series() -> pd.Series:
 
 
 def _market(as_of: date) -> Market | None:
-    """The evening's world. ``None`` when a panel is missing — never a silent default."""
+    """The evening's world, dated by **the session its prices come from**.
+
+    ``as_of`` is the day being asked about; the market's own date is the last session on or before it
+    that the panel actually holds. Run this on a Sunday and the world is Friday's, and says Friday —
+    a market carrying Friday's closes under Sunday's date is a number wearing the wrong label, and
+    everything downstream (the fill session, the history row, "is today's close final") reads it.
+    """
     if not (WATCHLIST_PANEL.exists() and WATCHLIST_UNIVERSE.exists() and BENCHMARK_PANEL.exists()):
         print(f"[twin] missing {WATCHLIST_PANEL}, {WATCHLIST_UNIVERSE} or {BENCHMARK_PANEL}")
         return None
     wl_prices = load_parquet(str(WATCHLIST_PANEL))
     wl = pd.read_csv(WATCHLIST_UNIVERSE)
     watchlist = [t for t in wl["ticker"] if t in wl_prices.adj_close.columns]
-    gaps = unexplained_gaps(wl_prices.adj_close, watchlist, as_of)
     adj = wl_prices.adj_close
+    sessions = [d.date() for d in pd.DatetimeIndex(adj.index) if d.date() <= as_of]
+    if not sessions:
+        print(f"[twin] the price panel holds no session on or before {as_of}")
+        return None
+    session = max(sessions)
+    if session != as_of:
+        print(f"[twin] no session on {as_of} — the world is {session}'s close")
+    gaps = unexplained_gaps(adj, watchlist, session)
     marks = {
-        t: Decimal(str(float(adj[t].loc[: pd.Timestamp(as_of)].dropna().iloc[-1])))
+        t: Decimal(str(float(adj[t].loc[: pd.Timestamp(session)].dropna().iloc[-1])))
         for t in adj.columns
-        if not adj[t].loc[: pd.Timestamp(as_of)].dropna().empty
+        if not adj[t].loc[: pd.Timestamp(session)].dropna().empty
     }
     return Market(
-        as_of=as_of,
+        as_of=session,
         prices=marks,
         index_close=_benchmark_series(),
         adj_close=adj,
@@ -347,9 +360,18 @@ def cmd_shadow(cfg: Config) -> int:
         print(f"[shadow] INCOMPLETE: {exc}", file=sys.stderr)
         return ABORTED
     print(decisions_markdown(decisions))
+    pending = copy.manager.get("pending") or {}
+    orders = pending.get("orders", [])
     print(
-        f"[shadow] receipt and notes in {store.root} · pending orders: {copy.manager.get('pending')}"
+        f"[shadow] {len(decisions)} decision(s); "
+        + (
+            "would queue "
+            + ", ".join(f"{o['action']} {o['quantity']} {o['ticker']}" for o in orders)
+            if orders
+            else "nothing to queue"
+        )
     )
+    print(f"[shadow] receipt, notes and scorecard in {store.root} — no book was changed.")
     return 0
 
 

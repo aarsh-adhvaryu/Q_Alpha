@@ -487,3 +487,11 @@ def test_a_decision_date_is_never_the_fill_date(world: dict[str, Any]) -> None:
     }
     assert all(f["on"] not in decided for f in fills)
     assert all(date.fromisoformat(f["on"]) - DECIDE > timedelta(0) for f in fills)
+
+
+def test_a_queued_order_carries_only_the_sectors_its_fill_needs(world: dict[str, Any]) -> None:
+    """The whole watchlist's sector map was being written into the book beside three orders."""
+    _review(world, _brain(world, lambda p: [*_hold_all(p), _decision("EEE.NS", "BUY", 10)]))
+    kept = set(world["book"].manager["pending"]["sectors"])
+    assert kept == {*HELD, "EEE.NS"}, "only the order's names and what is held"
+    assert "DDD.NS" not in kept
