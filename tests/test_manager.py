@@ -495,3 +495,47 @@ def test_a_queued_order_carries_only_the_sectors_its_fill_needs(world: dict[str,
     kept = set(world["book"].manager["pending"]["sectors"])
     assert kept == {*HELD, "EEE.NS"}, "only the order's names and what is held"
     assert "DDD.NS" not in kept
+
+
+# ---- the caps, and the difference between buying and drifting -------------------------------------
+
+
+def test_drift_above_the_cap_is_shown_not_forced(world: dict[str, Any]) -> None:
+    """A holding that appreciated past 20% must not become a compulsory, tax-paying sale.
+
+    Selling to manage risk has been measured here as losing to the tax. The buy limit stays 20%; the
+    investor is only told when a position has drifted past the band, and decides for itself.
+    """
+    book = world["book"]
+    # Make AAA about a quarter of the book by price alone: no buy, no decision, just the market.
+    world["panel"].close_raw.loc[pd.Timestamp(DECIDE), "AAA.NS"] *= 3
+    world["panel"].adj_close.loc[pd.Timestamp(DECIDE), "AAA.NS"] *= 3
+    world["market"] = _market(world["panel"], DECIDE)
+    _review(world, _brain(world, _hold_all))
+
+    packet = _packet_of(world["calls"][0])
+    weights = {h["ticker"]: h["weight_pct"] for h in packet["portfolio"]["holdings"]}
+    assert weights["AAA.NS"] > 22, "the fixture must actually breach the band"
+    assert packet["limits"]["a_purchase_may_take_a_name_to_pct"] == 20
+    assert packet["limits"]["drift_tolerated_to_name_pct"] == 22
+    assert "AAA.NS" in packet["limits"]["over_the_drift_band"]
+    assert book.manager["pending"] is None, "no sale was forced"
+
+
+def test_a_position_inside_the_band_is_not_flagged(world: dict[str, Any]) -> None:
+    _review(world, _brain(world, _hold_all))
+    packet = _packet_of(world["calls"][0])
+    assert packet["limits"]["over_the_drift_band"] == []
+
+
+def test_a_buy_is_still_capped_at_twenty_percent(world: dict[str, Any]) -> None:
+    """The band tolerates drift; it does not let the investor BUY past the cap."""
+    _review(world, _brain(world, lambda p: [*_hold_all(p), _decision("EEE.NS", "BUY", 100_000)]))
+    order = world["book"].manager["pending"]["orders"][0]
+    book = world["book"]
+    nav = book.portfolio.cash + sum(
+        (q * world["market"].prices[t] for t, q in book.portfolio.positions().items()),
+        Decimal("0"),
+    )
+    bought = Decimal(order["quantity"]) * world["market"].prices["EEE.NS"]
+    assert bought <= nav * manager.NAME_CAP, "a purchase may not exceed the 20% cap"

@@ -64,9 +64,14 @@ books      credit flows → fill yesterday's orders → the investor reviews →
 page       data/session/qalpha.html, served by live/server.py
 ```
 
-Each step is recorded in `data/session/ledger.jsonl` against a digest of its inputs (date, names,
-price panel bytes, extraction version). Finished work is not redone; changed inputs make it pending;
-a failure is recorded and the evening continues.
+Each step is recorded in `data/session/ledger.jsonl` — one journal, holding both the steps and the
+evening's own summary — against a digest of its inputs (date, names, price panel bytes, extraction
+version). Finished work is not redone; changed inputs make it pending; a failure is recorded and the
+evening continues.
+
+**The run knows what day it is.** The world is dated by the session its prices come from. On a
+Saturday, or on Ganesh Chaturthi, the page says the exchange was closed and no review is asked for.
+A *trading* day with no closing prices is a failure — something did not download — and says so.
 
 ---
 
@@ -98,9 +103,11 @@ A gap between books is **descriptive**. One book over months is mostly timing an
   its own memory (below). **Not yet:** financial statements or valuations.
 - **Decides:** HOLD / BUY / SELL with a quantity, a reason, a thesis, what would prove it wrong, and
   the evidence it relied on.
-- **Code enforces**, and may cut or cancel an order with a stated reason: long-only; enough paper
-  cash including costs; at most 8 names; 20% per name; 30% per sector; every holding reviewed;
-  every cited evidence id real and about that company.
+- **Code enforces on purchases**, and may cut or cancel an order with a stated reason: long-only;
+  enough paper cash including costs; at most 8 names; a buy may take a name to 20% and a sector to
+  30%; every holding reviewed; every cited evidence id real and about that company.
+- **Drift is not a breach.** A holding that appreciates past 20% is tolerated to 22% (a sector to
+  32%). Beyond that the investor is told and decides — a forced trim pays tax to undo a gain.
 - **Fills** at the **next** trading session's close, never at a price the decision had already seen.
 - **Incomplete is never HOLD.** No reply, a truncated reply, a missing holding or unread filings mean
   the review did not happen, and the page says so.

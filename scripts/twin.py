@@ -27,6 +27,7 @@ from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
 from qalpha.data.universe import Universe
 from qalpha.live import atomic, manager
+from qalpha.live import calendar as nse
 from qalpha.live.benchmarks import equal_weight_pit
 from qalpha.live.console import use_utf8
 from qalpha.live.decisions import Decision, decisions_markdown
@@ -124,7 +125,7 @@ def _market(as_of: date) -> Market | None:
         return None
     session = max(sessions)
     if session != as_of:
-        print(f"[twin] no session on {as_of} — the world is {session}'s close")
+        print(f"[twin] {nse.describe(as_of, traded=False)}; the world is {session}'s close")
     gaps = unexplained_gaps(adj, watchlist, session)
     marks = {
         t: Decimal(str(float(adj[t].loc[: pd.Timestamp(session)].dropna().iloc[-1])))
@@ -322,11 +323,25 @@ def step_system(
     Fills first, so a review sees the book its earlier orders produced. A fill that is still waiting
     for its session is not a failure; a review that cannot happen is.
     """
+    today = now.astimezone(IST).date()
+    if market.as_of != today:
+        # A closed exchange is not a failed evening. A weekday with no closing prices and no known
+        # closure IS one: something did not download, and calling that "a quiet day" is the
+        # substitution this repository keeps finding.
+        why = nse.closure_reason(today)
+        if why is None:
+            return (
+                f"{nse.describe(today, traded=False)} — the latest close is {market.as_of}. "
+                "Refresh prices; nothing was reviewed."
+            )
+        print(f"[investor] {nse.describe(today, traded=False)} — nothing to review.")
     for fill in manager.fill_pending(book, market, now=now, store=store):
         print(
             f"[investor] {fill['action']} {fill['filled']}/{fill['requested']} {fill['ticker']} "
             f"@ ₹{fill['price']} — {fill['status']}"
         )
+    if market.as_of != today:
+        return None  # the exchange was shut; the fills above are all this evening had to do
     try:
         decisions = manager.review(book, market, now=now, make_brain=make_brain, store=store)
     except manager.IncompleteReviewError as exc:

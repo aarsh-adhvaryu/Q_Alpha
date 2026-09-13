@@ -51,8 +51,17 @@ VERSION = "AI-PM-1"
 MODEL = "claude-sonnet-5"
 
 MAX_NAMES = 8
+#: What a **purchase** may take a name or a sector to. A buy is cut to fit; this is never breached
+#: by a decision of the investor's.
 NAME_CAP = Decimal("0.20")
 SECTOR_CAP = Decimal("0.30")
+#: How far a position may then **drift** on price alone before the investor is asked to look at it.
+#: A cap that forces a sale the moment the market moves a holding to 20.9% is a rule that pays tax
+#: to undo a gain: this repository has measured that selling to manage risk loses to the tax, and a
+#: trim of a name that has merely appreciated is exactly that trade. Buying stays capped at 20%;
+#: drift to 22% needs no action; above it the investor is asked to consider trimming, and may still
+#: decide holding is better once cost and tax are counted.
+DRIFT_BAND = Decimal("0.02")
 EVENTS_PER_NAME = 6
 NOTES_PER_NAME = 3
 PORTFOLIO_NOTES = 3
@@ -354,6 +363,19 @@ def build_packet(
     positions = book.portfolio.positions()
     holdings_value = sum((positions[t] * closes[t] for t in held), Decimal("0"))
     nav = book.portfolio.cash + holdings_value
+    over_band: list[str] = []
+    if nav:
+        over_band = [t for t in held if positions[t] * closes[t] > nav * (NAME_CAP + DRIFT_BAND)]
+        by_sector: dict[str, Decimal] = {}
+        for t in held:
+            by_sector[sectors.get(t, "unknown")] = (
+                by_sector.get(sectors.get(t, "unknown"), Decimal("0")) + positions[t] * closes[t]
+            )
+        over_band += [
+            f"sector {name}"
+            for name, value in sorted(by_sector.items())
+            if value > nav * (SECTOR_CAP + DRIFT_BAND)
+        ]
     adj = market.adj_close
     ledger = book.portfolio.ledger
 
@@ -450,8 +472,11 @@ def build_packet(
         "scorecard": update_scorecard(market, store),
         "limits": {
             "max_names_after_buying": MAX_NAMES,
-            "max_weight_per_name_pct": _pct(float(NAME_CAP)),
-            "max_weight_per_sector_pct": _pct(float(SECTOR_CAP)),
+            "a_purchase_may_take_a_name_to_pct": _pct(float(NAME_CAP)),
+            "a_purchase_may_take_a_sector_to_pct": _pct(float(SECTOR_CAP)),
+            "drift_tolerated_to_name_pct": _pct(float(NAME_CAP + DRIFT_BAND)),
+            "drift_tolerated_to_sector_pct": _pct(float(SECTOR_CAP + DRIFT_BAND)),
+            "over_the_drift_band": sorted(over_band),
             "long_only": True,
         },
         "costs": {
@@ -476,8 +501,11 @@ Rules:
   You are told its subject and date. Absence of an event is not evidence that nothing happened.
 - A fall in price is not by itself a sign of value. Evidence can be incomplete even when coverage says read.
 - Orders fill at the NEXT session's close, not at the prices shown.
-- Code will enforce: at most 8 names after buying, 20% per name, 30% per sector (of total value including
-  cash), and available cash including costs. It may reduce or cancel an order.
+- Code will enforce, on BUYS only: at most 8 names after buying, 20% per name, 30% per sector (of total
+  value including cash), and available cash including costs. It may reduce or cancel an order.
+- A position that has DRIFTED above 20% on price alone is not a breach. Up to 22% needs no action.
+  Above 22% ("over_the_drift_band") consider trimming — and weigh it against the cost and the capital
+  gains tax a sale realises. Holding an appreciated position is a legitimate answer.
 
 Return ONLY a JSON object, no prose around it:
 {
