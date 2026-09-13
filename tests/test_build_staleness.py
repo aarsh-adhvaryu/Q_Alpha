@@ -119,39 +119,11 @@ def test_a_stale_app_shows_a_banner_not_only_a_chip(monkeypatch: pytest.MonkeyPa
     from qalpha.live import server
 
     monkeypatch.setattr(server.build_info, "current", lambda root=None: _build(minutes_after=5))
-    banner = server._stale_banner()
-    assert "running old code" in banner
-    assert "qa-bad" in banner
+    assert "running old code" in server._top()
 
 
 def test_a_current_app_shows_no_banner_at_all(monkeypatch: pytest.MonkeyPatch) -> None:
     from qalpha.live import server
 
     monkeypatch.setattr(server.build_info, "current", lambda root=None: _build(minutes_after=-5))
-    assert server._stale_banner() == ""
-
-
-def test_the_app_shell_styles_the_classes_the_report_body_uses() -> None:
-    """The report's body is inlined into the app and its own <style> is dropped with its <head>.
-
-    Every class it writes must be defined in the shell too, or the same markup renders correctly as
-    a file and unstyled inside the app — two visual languages from one module that exists so there
-    is only ever one.
-    """
-    import inspect
-    import re
-
-    from qalpha.live import report, server
-
-    shell = server._shell("", refresh=False).decode()
-    # Every class name the report's own source writes into a class="..." attribute.
-    emitted: set[str] = set()
-    for match in re.findall(r'class="(qa-[^"]+)"', inspect.getsource(report)):
-        emitted.update(match.split())
-    assert emitted, "found no classes in report.py — this test has stopped testing anything"
-
-    unstyled = sorted(name for name in emitted if f".{name}" not in shell)
-    assert not unstyled, (
-        f"the report writes {unstyled} and the app's shell styles none of them, so the same "
-        "markup renders correctly as a file and unstyled inside the app"
-    )
+    assert "running old code" not in server._top()

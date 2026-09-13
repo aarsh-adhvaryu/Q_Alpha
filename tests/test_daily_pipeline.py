@@ -195,10 +195,9 @@ def test_the_skip_reason_names_the_variable(
 
 
 def test_the_real_plan_reads_filings_before_the_twin_steps() -> None:
-    """The autonomous books must step ON the evidence, not ahead of it."""
+    """The books must step ON the evidence, not ahead of it — and nothing else runs in the evening."""
     names = [s.name for s in daily.steps()]
-    assert names.index("prices") < names.index("mark")
-    assert names.index("evidence") < names.index("twin")
+    assert names == ["prices", "evidence", "news", "twin"]
 
 
 def test_no_step_requires_the_cloud_key_alone() -> None:
@@ -269,35 +268,6 @@ def test_the_twin_entry_point_lets_a_failure_reach_its_caller(
     monkeypatch.setattr(twin, "cmd_daily", _boom)
     with pytest.raises(RuntimeError, match="price panel was empty"):
         twin.main(["daily"])
-
-
-def test_the_brief_entry_point_lets_a_failure_reach_its_caller(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-    import ai_brief
-
-    monkeypatch.setattr(ai_brief.Path, "exists", lambda self: True)
-    monkeypatch.setattr(ai_brief, "load_watchlist_lines", lambda p: ["INFY | 1100"])
-    # PICK THE ROUTE EXPLICITLY. The brief has two, and which one runs depends on what is
-    # configured on the machine — so left alone this asserts something different on the author's
-    # desk than in CI, which is the defect `test_server.py` records for the reader panel. Clearing
-    # the variable is not enough either: `choose_backend` hydrates `.env` itself.
-    from qalpha.live.localmodel import Backend
-
-    monkeypatch.setattr(
-        ai_brief, "choose_backend", lambda: Backend(None, "", "none", "no reader configured")
-    )
-
-    def _boom(watchlist: object) -> object:
-        raise RuntimeError("the API refused")
-
-    monkeypatch.setattr(ai_brief, "generate_brief", _boom)
-    with pytest.raises(RuntimeError, match="API refused"):
-        ai_brief.main(["daily"])
 
 
 def test_a_step_that_swallows_its_failure_would_be_recorded_as_done(tmp_path: Path) -> None:

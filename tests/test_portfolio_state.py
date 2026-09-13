@@ -12,7 +12,7 @@ from decimal import Decimal
 
 import pandas as pd
 
-from qalpha.backtest.portfolio import Portfolio, to_decimal_price
+from qalpha.accounting.portfolio import Portfolio, to_decimal_price
 from qalpha.config import Config
 
 

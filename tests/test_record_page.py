@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -65,11 +66,10 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     monkeypatch.setattr(record, "HISTORY", history)
     monkeypatch.setattr(record, "BOOKS", books)
-    monkeypatch.setattr(record, "EQUITY", tmp_path / "absent.csv")
     monkeypatch.setattr(record, "WATCHLIST", watch)
     monkeypatch.setattr(record, "COVERAGE", tmp_path / "absent.jsonl")
-    monkeypatch.setattr("qalpha.live.panels.BOOK_PANEL", panel)
-    monkeypatch.setattr("qalpha.live.panels.SCREEN_PANEL", tmp_path / "absent.parquet")
+    monkeypatch.setattr("qalpha.live.panels.NIFTY50_PANEL", panel)
+    monkeypatch.setattr("qalpha.live.panels.WATCHLIST_PANEL", tmp_path / "absent.parquet")
     return tmp_path
 
 
@@ -144,34 +144,29 @@ def test_the_page_loads_nothing_from_the_network(repo: Path) -> None:
     assert "https://" not in page
 
 
-def test_a_one_day_collapse_that_reverses_is_flagged_not_trusted(
-    repo: Path, monkeypatch: pytest.MonkeyPatch
+def test_filings_count_as_read_only_when_the_corpus_reader_read_them(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The committed curve holds 2026-08-28 at -39% between two ordinary days. A line through it
-    teaches the eye a crash that did not happen; the record is left as written but flagged."""
-    equity = repo / "equity.csv"
-    equity.write_text(
-        "date,equity,cash,return_pct\n"
-        "2026-08-27,199131.68,7335.38,-0.43\n"
-        "2026-08-28,121519.03,7335.38,-39.24\n"
-        "2026-09-01,198155.48,7335.38,-0.92\n"
-        "2026-09-02,197147.28,7335.38,-1.43\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(record, "EQUITY", equity)
-    data = record.dashboard_data(date(2026, 9, 15))
-    flagged = [p["date"] for p in data["equity"] if p.get("suspect")]
-    assert flagged == ["2026-08-28"]
-    assert "suspect mark" in record.dashboard_html(date(2026, 9, 15))
+    """'Read' must mean *this* corpus read it — not another model, not a row with no reader."""
+    from qalpha.live.extraction import EXTRACTION_VERSION, corpus_reader
 
+    def coverage(reader: str | None) -> list[dict[str, Any]]:
+        row: dict[str, object] = {
+            "as_of": "2026-09-14",
+            "ticker": "A.NS",
+            "complete": True,
+            "extraction_version": EXTRACTION_VERSION,
+            "documents_read": 3,
+            "filings_in_window": 3,
+        }
+        if reader is not None:
+            row["reader"] = reader
+        path = tmp_path / "cov.jsonl"
+        path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+        monkeypatch.setattr(record, "COVERAGE", path)
+        rows: list[dict[str, Any]] = record.dashboard_data(date(2026, 9, 15))["coverage"]
+        return rows
 
-def test_an_ordinary_fall_is_not_flagged(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The flag must not become a way to hide real losses: a fall that does not reverse stands."""
-    equity = repo / "equity.csv"
-    equity.write_text(
-        "date,equity,cash,return_pct\n"
-        "2026-08-27,200000,0,0\n2026-08-28,150000,0,-25\n2026-09-01,149000,0,-25.5\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(record, "EQUITY", equity)
-    assert not [p for p in record.dashboard_data(date(2026, 9, 15))["equity"] if p.get("suspect")]
+    assert coverage(corpus_reader())[0]["read"] is True
+    assert coverage("qwen3-8b-32k")[0]["read"] is False
+    assert coverage(None)[0]["read"] is False, "a row with no reader says nothing about who read it"

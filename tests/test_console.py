@@ -30,11 +30,9 @@ REPO = Path(__file__).resolve().parent.parent
 #: caller of the thing that broke, not at the one that happened to break.
 ENTRY_POINTS = (
     "local_run.py",
-    "paper.py",
     "twin.py",
     "evidence.py",
     "news.py",
-    "ai_brief.py",
 )
 
 
@@ -156,11 +154,9 @@ def test_it_creates_the_directory_rather_than_asking_every_caller_to(tmp_path: P
 @pytest.mark.parametrize(
     "module,name",
     [
-        ("src/qalpha/live/paper.py", "the paper book"),
-        ("scripts/paper.py", "the dashboard"),
-        ("scripts/twin.py", "the twin's report"),
+        ("src/qalpha/live/twin.py", "the paper books"),
+        ("scripts/twin.py", "the marks"),
         ("scripts/local_run.py", "the page"),
-        ("scripts/evidence.py", "the pre-trade report"),
     ],
 )
 def test_every_surface_a_failing_step_could_destroy_is_written_atomically(

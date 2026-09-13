@@ -24,10 +24,9 @@ import pandas as pd
 from qalpha.accounting.capital_gains import RealizedGain
 from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.accounting.costs import Side
+from qalpha.accounting.portfolio import Portfolio, to_decimal_price
 from qalpha.accounting.tax_lots import InsufficientSharesError
-from qalpha.backtest.portfolio import Portfolio, to_decimal_price
 from qalpha.config import Config
-from qalpha.live.holdings import canonical_ticker
 
 # A sentinel cash balance so replaying buys is never affordability-capped (the trades already
 # happened; the tradebook does not encode the cash account). The caller sets real cash afterwards.
@@ -45,6 +44,15 @@ _REQUIRED = ("symbol", "trade_date", "trade_type", "quantity", "price")
 #: spellings of "the prices" was: the fix the user is told to apply cannot reach the thing that is
 #: broken.
 EXPORT_DIR = Path("data/tradebooks")
+
+
+def canonical_ticker(tradingsymbol: str) -> str:
+    """A Zerodha tradingsymbol as our NSE ticker (RELIANCE → RELIANCE.NS).
+
+    A share is held in demat by ISIN, exchange-agnostic, so a name bought on BSE is priced off its
+    NSE listing like every other.
+    """
+    return f"{tradingsymbol}.NS"
 
 
 @dataclass(frozen=True)

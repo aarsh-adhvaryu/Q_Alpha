@@ -1,20 +1,13 @@
-"""Daily evidence collection — shadow mode. Observes candidates; changes nothing.
+"""Filings: fetch, archive, read. It changes no book and makes no decision.
 
-    uv run python scripts/evidence.py daily
+    uv run python scripts/evidence.py daily                             # the evening's read
+    uv run python scripts/evidence.py backfill --only INFY,WIPRO --workers 8   # a year, once
 
-**What it does.** For today's candidate basket plus every held name: fetch and archive the exchange's
-regulatory-indicator file, fetch and archive each name's announcement index, download and archive
-every filing in the window, extract events from those filings, record them append-only, and render a
-pre-trade report.
-
-**What it does not do.** It does not touch a book, size an order, alter a basket, or feed the twin.
-The system book's clock is untouched by design — nothing here decides anything. The report is written so a human can read whether this layer *would* have said
-something useful, for as long as it takes to trust it.
-
-**Why shadow first.** With filings listed but unread every candidate reads `UNKNOWN`, which is
-correct and useless: a gate answering `HUMAN_REQUIRED` eight times a day about names it has not
-opened teaches its reader to click through. Coverage has to become real before the answer means
-anything, and this job is what makes it real.
+For every name in :func:`~qalpha.live.screen.research_scope` — what SYSTEM holds plus the
+candidates the investor will be shown — it archives NSE's regulatory-indicator file and each name's
+announcement index, downloads every filing in the window, extracts events with a verbatim quote
+checked against the archived bytes, and records coverage per name. A name never read before is not
+read in an evening: it needs a year of filings, which is the ``backfill`` command's job.
 """
 
 from __future__ import annotations
@@ -24,38 +17,26 @@ import json
 import os
 import sys
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-import pandas as pd
-
 from qalpha.config import Config
-from qalpha.live import atomic
 from qalpha.live.announcements import (
     Announcement,
     SourceDocument,
     documents_for,
     fetch_and_archive_index,
     fetch_document,
-    load_document,
     since,
 )
 from qalpha.live.console import use_utf8
 from qalpha.live.evidence import (
     STALENESS_TOLERANCE_DAYS,
-    Assessment,
     Provenance,
     load_archive,
     parse_reg_ind,
     reg_ind_url,
     write_archive,
-)
-from qalpha.live.evidence import (
-    assess as exchange_assess,
 )
 from qalpha.live.extraction import (
     DEFAULT_MODEL,
@@ -69,26 +50,15 @@ from qalpha.live.extraction import (
     reader_matches,
 )
 from qalpha.live.localmodel import choose_backend
-from qalpha.live.pipeline import (
-    ANCHOR_TICKER,
-    ProposedOrder,
-    decision_rows,
-    propose,
-)
-from qalpha.live.pretrade import (
-    AnnouncementCoverage,
-    assess_basket,
-    basket_markdown,
-)
+from qalpha.live.pretrade import AnnouncementCoverage
+from qalpha.live.screen import research_scope
 from qalpha.live.twin import _append_jsonl
 
 EVENT_LOG = Path("data/evidence/events.jsonl")
-DECISION_LOG = Path("data/evidence/decisions.jsonl")
 #: Documents already put through the extractor, keyed on their content hash. Without it the same
 #: filing is re-read every day of its window — measured at ~33 model calls a day, roughly ten times
 #: what is needed, because a 10-day window re-presents the same documents ten times.
 EXTRACTED_LOG = Path("data/evidence/extracted.jsonl")
-REPORT = Path("reports/pretrade.md")
 COVERAGE_LOG = Path("data/evidence/coverage.jsonl")
 
 #: How far back to look for filings. Wider than a day so a missed run is caught up rather than
@@ -185,131 +155,6 @@ def _fetch_reg_ind(as_of: date) -> tuple[dict[str, dict[str, str]], Provenance |
         "the exchange dimension reads UNKNOWN, which blocks every PASS"
     )
     return {}, None
-
-
-@dataclass(frozen=True)
-class ScreenBasket:
-    """What the deterministic screen actually proposed, with its ranking and sizing intact."""
-
-    orders: list[ProposedOrder]
-    held: list[str]
-    cash: Decimal
-    sector_of: dict[str, str]
-    prices: dict[str, Decimal]
-
-    @property
-    def tickers(self) -> list[str]:
-        """Names to gather evidence on: the screen's picks in rank order, then what is held."""
-        seen: dict[str, None] = {}
-        for order in self.orders:
-            seen.setdefault(order.ticker, None)
-        for ticker in self.held:
-            seen.setdefault(ticker, None)
-        return list(seen)
-
-
-def _screen_basket(cfg: Config, as_of: date) -> ScreenBasket:
-    """Run the screen **as the policy specifies, against the real book and the real cash.**
-
-    ### The defect this replaces
-
-    The previous version ran the screen against a fabricated ₹1,00,000 on an *empty* portfolio,
-    took the correctly ranked and sized orders it returned, **discarded the rank and the quantity on
-    the very next line**, merged the bare tickers with current holdings, and returned them
-    ``sorted()`` — alphabetically. The decision loop was then handed **one share** of each, in
-    alphabetical order, funded by a *different* budget: the book's actual idle cash.
-
-    So the report read EXECUTE over a ranking the screen never produced, at sizes it never chose,
-    against money it was never shown. Every unit test passed, because they hand correctly ranked and
-    sized candidates straight to ``propose`` and none of them exercises this function. Right
-    function, wrong argument — the exact class the golden-day replay exists to catch, and could not,
-    because nothing tested the caller.
-
-    ### Why a rejected name is not backfilled with the next stock
-
-    Replacing a rejected pick requires re-running the screen without it, which **re-sizes the whole
-    basket**. ``max_names`` is part of the frozen policy: a screen asked for a different number of
-    names is a different screen, and measuring it would stop measuring the thing under test. So a
-    rejected name shrinks the basket and its money goes to the anchor. The anchor is the
-    replacement, and it is an honest one.
-    """
-
-    from paper import _load_benchmark_series
-
-    from qalpha.backtest.portfolio import Portfolio
-    from qalpha.data.ingest import load_parquet
-    from qalpha.live.deploy import advise_deploy_into_weakness
-    from qalpha.live.twin import SYSTEM, load_books
-
-    held: list[str] = []
-    portfolio: Portfolio | None = None
-    cash = Decimal("0")
-    try:
-        books = load_books(cfg)
-        book = books.get(SYSTEM)
-        if book is not None:
-            portfolio = book.portfolio
-            cash = book.portfolio.cash
-            held = sorted(t for t, q in book.portfolio.positions().items() if q > 0)
-    except Exception as exc:
-        print(f"[evidence] could not read the books ({exc}) — no screen basket today")
-
-    try:
-        panel = load_parquet("data/historical/prices_watchlist.parquet")
-        wl = pd.read_csv("data/universes/nifty100_watchlist.csv")
-        sector_of = dict(zip(wl["ticker"], wl["sector"], strict=False))
-        watchlist = [t for t in wl["ticker"] if t in panel.adj_close.columns]
-    except Exception as exc:
-        print(f"[evidence] no watchlist panel ({exc}) — covering held names only")
-        return ScreenBasket([], held, cash, {}, {})
-
-    marks: dict[str, Decimal] = {}
-    for ticker in set(watchlist) | set(held) | {ANCHOR_TICKER}:
-        if ticker in panel.adj_close.columns:
-            series = panel.adj_close[ticker].dropna()
-            if len(series):
-                marks[ticker] = Decimal(str(float(series.iloc[-1])))
-    if ANCHOR_TICKER not in marks:
-        try:
-            bench = _load_benchmark_series().dropna()
-            if len(bench):
-                marks[ANCHOR_TICKER] = Decimal(str(float(bench.iloc[-1])))
-        except Exception:
-            pass
-
-    if portfolio is None or cash <= 0:
-        return ScreenBasket([], held, cash, sector_of, marks)
-
-    from qalpha.live.mandate import load_mandate
-
-    _mandate = load_mandate()
-    try:
-        advice = advise_deploy_into_weakness(
-            portfolio,
-            cash,
-            watchlist,
-            sector_of,
-            panel,
-            _load_benchmark_series(),
-            min(as_of, pd.Timestamp(panel.adj_close.index.max()).date()),
-            # PL-1: the mandate is the one place the limits live. See live/mandate.py.
-            max_names=_mandate.max_names,
-            exclude_breaking=_mandate.exclude_breaking,
-            concentrate=_mandate.concentrate,
-            spend_idle_cash=False,
-        )
-    except Exception as exc:
-        print(f"[evidence] the screen did not run ({exc}) — covering held names only")
-        return ScreenBasket([], held, cash, sector_of, marks)
-
-    # Rank AND quantity preserved. The screen orders by allocated weight, so index 0 is its
-    # strongest preference, and the quantity is the one it sized. Nothing downstream changes either.
-    orders = [
-        ProposedOrder(str(o.ticker), int(o.quantity), Decimal(str(o.price)), rank=i)
-        for i, o in enumerate(advice.deploy.buy_orders)
-        if int(o.quantity) > 0
-    ]
-    return ScreenBasket(orders, held, cash, sector_of, marks)
 
 
 def _already_extracted() -> set[str]:
@@ -737,71 +582,16 @@ def _cover_name(
     return coverage, [*recalled, *events], unverified
 
 
-def _record_gaps(as_of: date) -> None:
-    """Name any **trading session** the twin has no row for.
-
-    Sessions come from the benchmark price series, not from ``weekday() < 5``. A weekday rule
-    false-positives on every exchange holiday, and an alarm that cries wolf on Diwali is one the
-    reader learns to skip — which is exactly how a genuinely dropped cron would then go unnoticed.
-    """
-    from qalpha.live.twin import load_history
-
-    rows = load_history()
-    if not rows:
-        return
-    seen = {str(r.get("as_of")) for r in rows}
-    first = date.fromisoformat(min(seen))
-    try:
-        from paper import _load_benchmark_series
-
-        sessions = [d.date() for d in _load_benchmark_series().index]
-    except Exception as exc:
-        print(f"[evidence] cannot list trading sessions ({exc}) — gap check skipped, not passed")
-        return
-    missing = [d for d in sessions if first <= d < as_of and d.isoformat() not in seen]
-    if not missing:
-        return
-    print(
-        f"[evidence] ⚠️ the twin has NO row for {len(missing)} trading session(s): "
-        + ", ".join(d.isoformat() for d in missing[-10:])
-        + "\n           A missing session is a hole in the record, not a zero. GitHub drops "
-        "scheduled jobs under load."
-    )
-
-
-def _budget_is_new(cash: Decimal) -> bool:
-    """Has the deployable money changed since the last decision we recorded?
-
-    A shadow proposal that never executes sees the same idle cash every day. Logging it daily would
-    inflate the cohort with repeats of one decision — and a count of observations is exactly the
-    thing the cohort exists to be trusted on.
-    """
-    if not DECISION_LOG.exists():
-        return True
-    last = ""
-    for line in DECISION_LOG.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            try:
-                last = str(json.loads(line).get("budget", ""))
-            except json.JSONDecodeError:
-                continue
-    return last != str(cash)
-
-
 def cmd_daily(cfg: Config, as_of: date, *, bootstrap: bool = False) -> int:
-    print(f"[evidence] shadow run for {as_of} — observes candidates, changes nothing")
-    _record_gaps(as_of)
-
-    rows, exchange_prov = _fetch_reg_ind(as_of)
-    basket = _screen_basket(cfg, as_of)
-    tickers = basket.tickers
+    print(f"[evidence] reading filings for {as_of} — records evidence, changes no book")
+    _fetch_reg_ind(as_of)  # archived for the record; read by the page and the investor's packet
+    tickers = research_scope(as_of)
     if not tickers:
-        print("[evidence] no candidates and no holdings — nothing to cover")
-        return 0
+        print("[evidence] no holdings and no candidates — nothing to cover", file=sys.stderr)
+        return 2
     print(
-        f"[evidence] covering {len(tickers)} name(s) — {len(basket.orders)} screened "
-        f"(₹{sum((o.value for o in basket.orders), Decimal('0')):,.0f} of ₹{basket.cash:,.0f} cash), "
-        f"{len(basket.held)} held · filings since {as_of - timedelta(days=LOOKBACK_DAYS)}"
+        f"[evidence] covering {len(tickers)} name(s) · filings since "
+        f"{as_of - timedelta(days=LOOKBACK_DAYS)}"
     )
 
     # WHICH MODEL READS THE FILINGS IS A DECISION, NOT A DEFAULT. `choose_backend` prefers a local
@@ -917,74 +707,8 @@ def cmd_daily(cfg: Config, as_of: date, *, bootstrap: bool = False) -> int:
             "answer. Unread is not clean."
         )
 
-    exchange: dict[str, Assessment] = (
-        {t: exchange_assess(t, rows, exchange_prov, as_of=as_of) for t in tickers}
-        if exchange_prov is not None
-        else {}
-    )
-    report = assess_basket(
-        tickers, exchange=exchange, events=events, coverage=coverage, unverified=unverified
-    )
-
-    proposal = propose(
-        as_of=as_of,
-        candidates=basket.orders,
-        target_names=len(basket.orders),
-        holdings=dict.fromkeys(basket.held, 1),
-        prices=basket.prices,
-        sector_of=basket.sector_of,
-        exchange=exchange,
-        events=events,
-        coverage=coverage,
-        unverified=unverified,
-        budget=basket.cash,
-        anchor_price=basket.prices.get(ANCHOR_TICKER),
-    )
-    print(f"[evidence] shadow decision: {proposal.outcome} — {proposal.reason}")
-
-    # THE SAME CASH IS NOT A NEW OBSERVATION. This runs daily against whatever is idle, so without
-    # this guard the cohort would fill with the same names re-"decided" every day and look like many
-    # observations when it is one. A decision is recorded only when the money behind it changed.
-    if _budget_is_new(basket.cash):
-        try:
-            # Named apart from the reg-ind `rows` above it: one function, two meanings for one
-            # name is how a reader ends up auditing the wrong thing.
-            decisions = [{**r, "budget": str(basket.cash)} for r in decision_rows(proposal)]
-            if decisions:
-                n = _append_jsonl(DECISION_LOG, decisions, key="_key")
-                print(
-                    f"[evidence] {len(decisions)} decision(s) recorded → {DECISION_LOG} "
-                    f"({n} on file)"
-                )
-        except Exception as exc:
-            print(f"[evidence] WARNING: decisions not recorded ({exc})", file=sys.stderr)
-    else:
-        print(
-            f"[evidence] budget unchanged at ₹{basket.cash:,.0f} — not recorded again; "
-            "the same cash re-examined is not a new observation"
-        )
-
-    REPORT.parent.mkdir(parents=True, exist_ok=True)
     complete = sum(1 for c in coverage.values() if c.complete)
-    atomic.write_text(
-        REPORT,
-        f"# Pre-trade evidence — {as_of}\n\n"
-        f"_Generated {datetime.now(UTC):%Y-%m-%d %H:%M UTC}. **Shadow mode: this changes nothing.** "
-        "No book, basket or order is affected, and the CORE_V1 clock is untouched._\n\n"
-        f"Coverage: **{complete} of {len(tickers)}** name(s) fully read"
-        + ("" if exchange_prov is None else f" · exchange file `{exchange_prov.sha256[:16]}…`")
-        + "\n\n"
-        + proposal.render()
-        + "\n\n---\n\n"
-        + basket_markdown(report, as_of=as_of)
-        + "\n\n## Detail\n\n```\n"
-        + "\n\n".join(a.render() for a in report.values())
-        + "\n```\n",
-    )
-    print(f"[evidence] report → {REPORT}  ({complete}/{len(tickers)} fully covered)")
-    for ticker, a in report.items():
-        if a.blocked or a.flagged_events:
-            print(f"[evidence] {ticker}: {a.state}")
+    print(f"[evidence] {complete} of {len(tickers)} name(s) fully covered")
     return 0
 
 
@@ -1016,154 +740,6 @@ def _spend_note(reader: str) -> str:
         f"{tokens}. At {reader}'s list price that is about ${dollars:,.2f} — an ESTIMATE from a "
         "hard-coded price table, not a figure read from your invoice."
     )
-
-
-def _archived_sample(limit: int) -> list[SourceDocument]:
-    """Documents already on disk, spread **round-robin across tickers**. Nothing fetched, none judged.
-
-    A comparison must read the same bytes twice, so it reads the archive rather than the exchange.
-
-    The spread is the point. Taking the first N in folder order gave 36 of 40 documents from one
-    company, because that company happens to have the deepest archive — which would have measured
-    how two readers handle one issuer's house style and been reported as how they handle the corpus.
-    One document per ticker per pass instead, so a forty-document sample spans every name that has
-    an archive.
-    """
-    root = Path("data/evidence/announcements")
-    if not root.exists():
-        return []
-    by_ticker: dict[str, list[str]] = {}
-    for folder in sorted(root.iterdir()):
-        if folder.is_dir():
-            seqs = [
-                p.name.removesuffix(".provenance.json")
-                for p in sorted(folder.glob("*.provenance.json"))
-            ]
-            if seqs:
-                by_ticker[folder.name] = seqs
-    out: list[SourceDocument] = []
-    depth = 0
-    while by_ticker and len(out) < limit:
-        progressed = False
-        for symbol, seqs in list(by_ticker.items()):
-            if depth >= len(seqs):
-                continue
-            progressed = True
-            ann = Announcement(
-                symbol=symbol,
-                seq_id=seqs[depth],
-                subject="",
-                summary="",
-                disseminated_at=datetime.now(UTC),
-                attachment_url="",
-            )
-            text, prov = load_document(ann)
-            if prov is not None and text:
-                out.append(SourceDocument(announcement=ann, text=text, provenance=prov))
-            if len(out) >= limit:
-                break
-        if not progressed:
-            break
-        depth += 1
-    return out
-
-
-def cmd_compare_readers(
-    as_of: date,
-    *,
-    readers: Sequence[str],
-    sample: int,
-    workers: int,
-) -> int:
-    """Read the SAME archived filings with each named model and report what differed.
-
-    **This exists because "use the better model" is not a decision anybody here can make by
-    assertion.** The two candidates differ in price by 2x and in nothing else this repo has
-    measured, and the only honest way to choose is to give both the same documents and look.
-
-    What is reported, and why each one:
-
-    * **wall clock and tokens** — the question was partly "which is faster", and a reader that is
-      twice the price and the same speed is a different trade from one that is half the time.
-    * **events found** — more is not better. A reader that returns twice as many `high` events is
-      either seeing more or repeating EX-1's mistake of calling good news material.
-    * **quotes discarded** — a quote that is not in the document is the one unambiguous error either
-      model can make, and it is checked mechanically against the archived bytes.
-    * **agreement** — where both read the same document, did they find the same kinds of thing? A
-      low number here is the finding, not a failure: it says the choice of reader changes the corpus,
-      which is precisely the claim EX-3's label is built around.
-
-    It writes nothing. No coverage row, no receipt, no event reaches the log — a comparison is not a
-    reading of the corpus, and a run under one of these readers must not look like one.
-    """
-    docs = _archived_sample(sample)
-    if not docs:
-        print("[compare] no archived documents to read.", file=sys.stderr)
-        return 2
-    chars = sum(len(d.text) for d in docs)
-    print(
-        f"[compare] {len(docs)} archived filing(s), {chars:,} characters, "
-        f"{workers} call(s) at a time. Nothing is written."
-    )
-    # HYDRATE .env FIRST. `choose_backend` reaches the key through `configured()`, which loads it;
-    # this command does not go through `choose_backend`, so reading os.environ directly saw only
-    # what the shell happened to export — and told a user with the key in .env that it was unset.
-    # That is the two-surfaces-one-fact failure `credentials.load_env` was written to end.
-    from qalpha.live.credentials import load_env
-
-    load_env()
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        print(
-            "[compare] ANTHROPIC_API_KEY is set in neither the environment nor .env, so no reader "
-            "can be run.",
-            file=sys.stderr,
-        )
-        return 2
-
-    from qalpha.live.extraction import default_generate
-
-    generate = default_generate(key)
-    findings: dict[str, set[tuple[str, str, str]]] = {}
-    for reader in readers:
-        started = datetime.now(UTC)
-        events, discarded, _raw, usage, _unread = extract(
-            docs, generate=generate, model=reader, batch_chars=PROMPT_CHAR_BUDGET, workers=workers
-        )
-        elapsed = (datetime.now(UTC) - started).total_seconds()
-        findings[reader] = {(e.doc_sha256, e.event_type, e.materiality) for e in events}
-        high = sum(1 for e in events if e.materiality == "high")
-        price = _LIST_PRICES.get(reader)
-        money = (
-            f"${usage['input'] / 1e6 * price[0] + usage['output'] / 1e6 * price[1]:,.3f} at list"
-            if price
-            else "no list price on file"
-        )
-        print(
-            f"  {reader:<22} {elapsed:6.1f}s · {usage['calls']:3d} call(s) · "
-            f"{usage['input']:,} in + {usage['output']:,} out · {money}"
-        )
-        print(
-            f"  {'':<22} {len(events)} event(s), {high} of them high · "
-            f"{discarded} quote(s) discarded as not in the document · "
-            f"{usage['failed_batches']} failed batch(es)"
-        )
-    names = list(findings)
-    for i, left in enumerate(names):
-        for right in names[i + 1 :]:
-            a, b = findings[left], findings[right]
-            union = a | b
-            shared = len(a & b)
-            agree = shared / len(union) if union else 1.0
-            print(
-                f"[compare] {left} vs {right}: {shared} finding(s) in common of {len(union)} "
-                f"distinct — {agree:.0%} agreement on (document, type, materiality)."
-            )
-    print(
-        "[compare] Agreement below ~100% is the result, not a bug: it is the size of the "
-        "confound a two-reader corpus would carry. Pick one and record it as the corpus reader."
-    )
-    return 0
 
 
 def cmd_backfill(
@@ -1199,8 +775,9 @@ def cmd_backfill(
     reader = corpus_reader()
     print(f"[backfill] corpus read for {as_of} — extractor {EXTRACTION_VERSION}, reader {reader}")
     _rows, exchange_prov = _fetch_reg_ind(as_of)
-    basket = _screen_basket(cfg, as_of)
-    tickers = [t for t in basket.tickers if not only or t in only or t.removesuffix(".NS") in only]
+    tickers = [
+        t for t in research_scope(as_of) if not only or t in only or t.removesuffix(".NS") in only
+    ]
     if not tickers:
         # NOT a completion. The nightly command returns 0 here, which is how two runs on 2026-09-10
         # were recorded `done` having covered nothing at all.
@@ -1263,7 +840,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # and `uv run` pipes its child: on 2026-09-11 the `mark` step died on a rupee sign.
     use_utf8()
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("cmd", choices=["daily", "backfill", "compare-readers"])
+    ap.add_argument("cmd", choices=["daily", "backfill"])
     ap.add_argument("--as-of", default=None, help="override the date (default: today, UTC)")
     ap.add_argument(
         "--workers",
@@ -1280,7 +857,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument(
         "--only",
         default="",
-        help="comma-separated tickers to back-fill, instead of the whole basket",
+        help="comma-separated tickers to back-fill, instead of the whole research scope",
     )
     ap.add_argument(
         "--bootstrap",
@@ -1291,26 +868,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "filings at one call at a time before the page is usable."
         ),
     )
-    ap.add_argument(
-        "--readers",
-        default="claude-haiku-4-5,claude-sonnet-5",
-        help="comma-separated models to compare (compare-readers only)",
-    )
-    ap.add_argument(
-        "--sample",
-        type=int,
-        default=40,
-        help="archived filings each reader is given (compare-readers only)",
-    )
     args = ap.parse_args(argv)
     as_of = date.fromisoformat(args.as_of) if args.as_of else datetime.now(UTC).date()
-    if args.cmd == "compare-readers":
-        return cmd_compare_readers(
-            as_of,
-            readers=tuple(r.strip() for r in args.readers.split(",") if r.strip()),
-            sample=max(1, int(args.sample)),
-            workers=max(1, int(args.workers)),
-        )
     if args.cmd == "backfill":
         return cmd_backfill(
             Config(),

@@ -479,17 +479,3 @@ def test_a_call_never_carries_more_headlines_than_its_reply_can_hold() -> None:
     batches = batch_items(items)
     assert max(len(b) for b in batches) <= news.MAX_ITEMS_PER_CALL
     assert sum(len(b) for b in batches) == 72
-
-
-def test_the_count_is_labelled_as_reports_rather_than_events() -> None:
-    """Nine flagged items on SHREECEM were nine outlets carrying one Meghalaya High Court order.
-    The count is right; read as nine problems it is not. Clustering them would mean inventing a
-    similarity score, which this layer is not allowed to have — so the surfaces say what they count."""
-    import inspect
-
-    from qalpha.live import desk, flags
-
-    assert "reports, not events" in inspect.getsource(flags.flags_markdown).replace(
-        "\n", " "
-    ).replace("  ", " ") or "reports, not events" in inspect.getsource(flags.flags_markdown)
-    assert "reports rather than events" in inspect.getsource(desk.Desk.news_line)
