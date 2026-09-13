@@ -141,7 +141,19 @@ def test_a_gap_is_unreadable_before_twelve_months() -> None:
     assert "No verdict before" in gap.render()
 
 
-def test_a_gap_inside_the_null_band_is_not_a_result() -> None:
+@pytest.fixture
+def registered_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A registered start, for tests of what a gap may *say* once a window is old enough.
+
+    No start is registered in the live code (withdrawn 2026-09-13), so every gap reads 0 months.
+    These tests are about the gap's reading rules, not about the date — they supply one.
+    """
+    from qalpha.live import twin as twin_module
+
+    monkeypatch.setattr(twin_module, "EVALUATION_START", date(2024, 1, 1))
+
+
+def test_a_gap_inside_the_null_band_is_not_a_result(registered_window: None) -> None:
     gap = compare(
         _marks(SYSTEM=1200, BASELINE=1000),
         null_p95=0.05,
@@ -151,7 +163,7 @@ def test_a_gap_inside_the_null_band_is_not_a_result() -> None:
     assert "null band" in gap.render()
 
 
-def test_a_gap_is_readable_only_when_old_enough_and_big_enough() -> None:
+def test_a_gap_is_readable_only_when_old_enough_and_big_enough(registered_window: None) -> None:
     gap = compare(
         _marks(SYSTEM=90000, BASELINE=1000),
         null_p95=0.05,
@@ -161,7 +173,7 @@ def test_a_gap_is_readable_only_when_old_enough_and_big_enough() -> None:
     assert "clearing" in gap.render()
 
 
-def test_without_a_null_nothing_is_readable() -> None:
+def test_without_a_null_nothing_is_readable(registered_window: None) -> None:
     """The matched null has not been run. No bar means no verdict — never a bar of zero."""
     gap = compare(_marks(SYSTEM=90000, BASELINE=1000), navs={SYSTEM: 1.9, BASELINE: 1.0})[0]
     assert gap.null_p95 is None
@@ -241,14 +253,54 @@ def test_the_window_is_the_registered_one_not_the_first_flow_ever() -> None:
     therefore have reported "12 months" around June 2027 — months early, and partly on evidence from
     before anything was registered.
     """
-    from qalpha.live.twin import EVALUATION_START, evaluation_months
+    from qalpha.live.twin import evaluation_months
 
-    assert date(2026, 9, 14) == EVALUATION_START, (
-        "the registered start is the day SYSTEM begins deciding — see PREREGISTRATION_SYSTEM.md"
+    start = date(2026, 9, 14)
+    assert evaluation_months(date(2026, 9, 13), start=start) == 0, "before the window, nothing"
+    assert evaluation_months(date(2027, 6, 15), start=start) == 9, "a June-2026 flow buys no months"
+    assert evaluation_months(date(2027, 9, 14), start=start) == 12
+
+
+def test_no_registered_start_means_system_never_decides() -> None:
+    """The rulebook start (2026-09-14) was withdrawn before it opened, on 2026-09-13.
+
+    An absent start is not a date in the past. If ``None`` ever compared as "already begun", SYSTEM
+    would start choosing on the rulebook on the first evening after the withdrawal — the exact
+    outcome the withdrawal exists to prevent. Checked on the days around the old start and far out.
+    """
+    from qalpha.live.twin import (
+        EVALUATION_START,
+        evaluation_months,
+        is_autonomous,
+        navs_from_history,
     )
-    assert evaluation_months(date(2026, 9, 13)) == 0, "before the window opens, nothing has elapsed"
-    assert evaluation_months(date(2027, 6, 15)) == 9, "the June-2026 flow must not buy extra months"
-    assert evaluation_months(date(2027, 9, 14)) == 12
+
+    assert EVALUATION_START is None, (
+        "a start is set only by a written registration — see reports/PREREGISTRATION_SYSTEM.md §6"
+    )
+    for day in (date(2026, 9, 14), date(2026, 9, 15), date(2030, 1, 1)):
+        assert is_autonomous(day) is False
+        assert evaluation_months(day) == 0
+    rows = [{"as_of": "2026-09-15", "books": {"SYSTEM": {"value": "100", "net_invested": "100"}}}]
+    assert navs_from_history(rows) == {}, "no window: unmeasured, never a NAV of 1.0"
+
+
+def test_the_daily_caller_asks_the_registered_start() -> None:
+    """The scheduled caller must reach the same ``is_autonomous`` — not a copy with its own date.
+
+    Rule 4: test the caller. `scripts/twin.py` decides mirror-or-choose per evening; if it ever
+    held its own default, withdrawing the date here would change nothing there.
+    """
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import twin as runner_script
+
+    from qalpha.live import twin as twin_module
+
+    assert runner_script.is_autonomous is twin_module.is_autonomous
+    assert runner_script.EVALUATION_START is twin_module.EVALUATION_START
+    assert runner_script.is_autonomous(date(2026, 9, 15)) is False
 
 
 def test_the_null_matches_the_committed_report() -> None:

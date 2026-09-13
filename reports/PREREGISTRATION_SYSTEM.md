@@ -94,3 +94,9 @@ the evidence.
 
 - **2026-09-12** — registered. Books seeded from the tradebook; `SYSTEM − REAL = ₹0` verified.
   Window opens 2026-09-14. Not yet autonomous.
+- **2026-09-13** — **withdrawn before the window opened.** `EVALUATION_START` is now `None` in
+  `src/qalpha/live/twin.py`: no autonomous window is registered and `SYSTEM` keeps mirroring the
+  tradebook. `SYSTEM` never made a decision under PL-1. Reason: the treatment the user wants measured
+  is an AI investor that chooses for itself, not this rulebook, and a year spent measuring the
+  rulebook answers a question he is not asking. The replacement is registered separately as `AI-PM-1`
+  and sets its own forward-dated start. Nothing above this line was edited.
