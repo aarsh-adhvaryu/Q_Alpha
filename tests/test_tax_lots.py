@@ -1,4 +1,4 @@
-"""FIFO ledger tests, including the Q_alpha.md §2.7 worked example."""
+"""FIFO ledger tests, including the §2.7 worked example."""
 
 from datetime import date
 from decimal import Decimal

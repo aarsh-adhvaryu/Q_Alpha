@@ -1,4 +1,4 @@
-"""Capital-gains tax engine (Q_alpha.md §2.7, §4.6).
+"""Capital-gains tax engine (§2.7, §4.6).
 
 Turns FIFO lot consumptions into per-lot realized STCG/LTCG and the tax due. Key Indian rules
 encoded here:
@@ -37,7 +37,7 @@ def financial_year(d: date) -> int:
 
 @dataclass(frozen=True)
 class RealizedGain:
-    """Per-lot realized gain (Q_alpha.md `realized_gain_events`)."""
+    """Per-lot realized gain (`realized_gain_events`)."""
 
     ticker: str
     lot_id: str

@@ -1,4 +1,4 @@
-"""Price-continuity guard — stop corporate actions from reading as discounts (PLAN_TRUST_REPAIR PR-2).
+"""Price-continuity guard — stop corporate actions from reading as discounts.
 
 The deploy advisor scores "cheap" as the fractional pullback below each name's 1-year high
 (:func:`~qalpha.live.deploy.cheapness_scores`), computed over yfinance **Adj Close**. That series is

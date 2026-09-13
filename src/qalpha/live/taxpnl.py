@@ -1,4 +1,4 @@
-"""Zerodha Console **Tax P&L** parser + criterion-4 reconciliation (Q_alpha.md §14 crit 4).
+"""Zerodha Console **Tax P&L** parser + criterion-4 reconciliation (§14 crit 4).
 
 The Tax P&L (Console → Reports → Tax P&L, exported as ``.xlsx``) is the broker's *official* realized
 capital-gains statement — the ground truth our FIFO engine must match before any real-money reliance.

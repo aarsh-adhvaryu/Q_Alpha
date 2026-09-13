@@ -1,4 +1,4 @@
-"""NSE corporate announcements — the primary documents themselves (PLAN_SYSTEM §L1, Phase B).
+"""NSE corporate announcements — the primary documents themselves.
 
 **What changes here.** The AI veto searched the open web, four searches for a whole basket, and its
 "verification" was a hostname allowlist. A URL on `nseindia.com` passed whether or not the page it

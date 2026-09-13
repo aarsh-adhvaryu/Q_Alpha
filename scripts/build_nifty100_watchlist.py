@@ -1,5 +1,5 @@
 """Build the product **Nifty-100 watchlist** — the forward-looking opportunity set the advisor
-deploys fresh capital into (Q_alpha.md §2.9 fresh-capital routing).
+deploys fresh capital into (§2.9 fresh-capital routing).
 
 This is NOT a backtest universe: it is *today's* constituents, used only to decide where to deploy
 **new** money now, so survivorship bias is irrelevant (we are not measuring a historical edge — we are

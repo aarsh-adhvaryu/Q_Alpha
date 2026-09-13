@@ -1,422 +1,336 @@
 # Q-Alpha
 
-[![CI](https://github.com/aarsh-adhvaryu/Q_Alpha/actions/workflows/ci.yml/badge.svg)](https://github.com/aarsh-adhvaryu/Q_Alpha/actions/workflows/ci.yml)
+**An AI that invests a paper portfolio of large Indian companies on its own — and a record honest
+enough to tell whether it is any good.**
 
-**A tax-aware quantitative investing system for Indian (NSE/BSE) equities — and an honest study of
-what actually survives once you put real taxes and costs inside the decision.**
+Its book starts as a copy of the user's real Zerodha holdings, taken from his tradebook. Each trading
+evening it reads the day's prices, the companies' filings and the headlines, reviews every holding
+and a short list of candidates, and decides to hold, buy or sell. The trades happen on paper. Its
+losses are its own. The horizon is years, not days.
 
-If you read one paragraph: most backtests look great because they ignore that, in India, selling a
-winner triggers a 20% short-term capital-gains tax, and trading costs money. Q-Alpha puts those
-frictions *inside* the buy/sell decision instead of subtracting them at the end. The surprising
-result is that the "alpha" is mostly **discipline** — trade rarely, be tax-smart — not clever
-stock-picking. Then we built the live system around that finding: an advisor that tells a human the
-**tax-smart move**, a dashboard, and a paper-trading run that self-certifies before any real money.
+**Nothing here places a real order, and nothing ever will.** If the paper record shows it works, the
+user may act on its recommendations in his own account, by hand, as his own decision.
 
-> **Status, 2026-08-29 — read this before the numbers below.**
-> **Real money is already invested** (₹3,00,000, since 2026-08-27), **before the system's own gate
-> opened.** That was a deliberate, informed decision by the author; nothing here is validated for
-> real money and the gate remains shut.
->
-> The system was **redesigned in August 2026** because the old gate graded the wrong thing: it scored
-> a paper book running the *validated funnel* while the money actually runs the deploy-into-weakness
-> advisor, which shares no selection code with it. See **[PLAN_REDESIGN.md](PLAN_REDESIGN.md)**.
->
-> ⚠️ **The headline below understates how much of the edge is not stock-picking.**
-> [Phase 4](reports/PHASE4_BACKTEST.md) found that **76% of the screen's gap over NIFTYBEES is the
-> equal-weight premium** — purchasable for ~0.41%/yr in an index fund. Against *that* benchmark the
-> system's real case is **+2.35 pp/yr, in-sample**, not the ~6 pp the index comparison suggests.
->
-> What decides it now is the **[digital twin](PLAN_REDESIGN.md#1-architecture--the-digital-twin)**:
-> five fake-money books on the author's real cash flows, one of them fully autonomous. It needs
-> **12 months of flows** (≈ August 2027) and a **−10% market fall**, which has not happened.
-
-Read-me-next: [reports/PHASE0_VERDICT.md](reports/PHASE0_VERDICT.md) (full evidence chain) ·
-[CLAUDE.md](CLAUDE.md) (developer/agent log) · [Q_alpha.md](Q_alpha.md) (the full spec).
+This file is the whole project: what it is, how to run it, what it has learned, the maths it uses,
+and what gets built next. Development rules are in [CLAUDE.md](CLAUDE.md). Past versions of every
+plan and report are in git history.
 
 ---
 
-## 1. The headline result (for the skim-reader)
+## 1. Where it stands — 2026-09-13
 
-On a **survivorship-free** point-in-time Nifty 50 universe (delisted companies included), **net of
-realistic Zerodha costs and Indian FIFO capital-gains tax**, vs the Nifty 50 **total-return** index:
-
-| Strategy | CAGR | Sharpe | Verdict |
-|---|---|---|---|
-| **Q-Alpha** (tax-aware, annual, shrinkage-weighted) | **18.2%** | **1.13** | — |
-| Nifty 50 TRI (dividends reinvested) | 14.5% | 0.98 | beaten by **+3.7%/yr** |
-| Equal-weight 1/N | 17.7% | 1.09 | beaten by **+0.5%/yr** |
-
-> ⚠️ **These are in-sample figures.** The winning configuration was selected by requiring it to beat
-> 1/N on the 2025–26 holdout, which spends the holdout — see the gate-1 box in §5. The margin over
-> 1/N is **+0.5%/yr**, and equal-weighting explains most of the gap over the cap-weighted index.
-> Sharpe assumes a risk-free rate of **zero**: harmless for the comparison, since every row is
-> computed the same way, and inflated as an absolute number. Rupee figures reproduce to about half a
-> percent between runs until dataset hashes are pinned.
-
-**Why beating "1/N" matters:** equal-weighting every stock (1/N) is famously hard to beat — most
-published strategies lose to it once costs and taxes are honest. Clearing that bar **in-sample, on a
-genuinely unseen 2025–26 holdout, AND across every rolling 3-year holding window** (it never had a
-losing 3-year stretch) is the real claim here, not the headline CAGR.
-
-```bash
-cd qalpha && uv sync --extra dev
-uv run python scripts/build_nifty_universe.py          # regenerate the point-in-time universe
-uv run python scripts/run_phase0.py --end 2024-12-31   # → reports/phase0_report.md
-```
-
----
-
-## 2. The core idea, in plain words (then the math)
-
-**Plain words.** Imagine you hold a stock that's up 50%. A "smarter" model says rotate into a slightly
-better one. But selling realizes a 20% tax on that 50% gain *today* — money that would otherwise keep
-compounding. So the rational move is usually: **don't trade unless the improvement clearly beats the
-tax bill.** Q-Alpha encodes exactly that rule.
-
-**The math (spec §4.6 — the "net-benefit gate").** A rebalance from current weights *w* to target
-weights *w\** is executed **only if**
-
-```
-ΔRisk(₹)  >  2 × ( Cost(trade)  +  Tax_FIFO(trade) )
-```
-
-- `ΔRisk(₹)` = the reduction in annualized portfolio volatility from the trade, expressed in rupees
-  (volatility × portfolio value). We compute volatility with a Ledoit–Wolf-shrunk, EWMA-weighted
-  covariance matrix (robust on short samples).
-- `Cost` = real Zerodha charges (brokerage, STT, exchange/GST/stamp) + market-impact slippage.
-- `Tax_FIFO` = the capital-gains tax the sale would realize, computed **lot-by-lot, oldest-first
-  (FIFO)** — the legally-mandated method for Indian demat accounts.
-- The `2×` is a margin of safety so we only trade when the benefit *clearly* wins.
-
-This one gate turned a strategy that's taxed to death (**5.4% CAGR — a clear NO-GO**) into one that
-beats the index net of everything (14.6% → 18.2% with later refinements).
-
-**The two refinements that mattered, and the math behind them:**
-
-1. **Trade less (annual rebalancing).** Lower turnover → fewer taxable events → more gains cross the
-   365-day line into the **12.5% long-term** bracket instead of **20% short-term**. Realized tax fell
-   from ₹1.17L (monthly) to ₹20k (annual), and *every* metric improved monotonically. We later swept
-   weekly→monthly→quarterly→annual explicitly (`Q_Alpha_Research`): weekly is catastrophic (1.6% CAGR,
-   −61% drawdown — turnover/tax eats everything); annual wins decisively. **Trading rarely is the edge.**
-
-2. **Shrinkage weighting (the DeMiguel/Tu–Zhou result).** Instead of a pure minimum-variance optimizer
-   (which over-fits noise) or pure equal-weight, blend them 50/50:
-
-   ```
-   w_final = ½ · w_minvariance  +  ½ · w_equal-weight
-   ```
-
-   This "anchor-to-1/N" shrinkage is the only optimizer change that beat 1/N **in-sample, on the
-   holdout, AND across all rolling 3-year windows.** Pure min-variance and pure score-tilt both lost.
-
-   ⚠️ **That sentence is the selection criterion, not an independent result.** Requiring a variant to
-   clear the holdout is what *chose* this one, so the holdout is validation data and the headline is
-   in-sample. See the gate-1 box in §5.
-
-**The honest takeaway:** the edge is **tax-and-friction discipline + a modest robust return tilt**, not
-stock-picking genius. Tax-aware portfolio construction for *Indian* retail (FIFO, LTCG/STCG, the
-₹1.25L annual exemption) is genuinely under-explored — the academic literature is almost entirely US.
-
----
-
-## 3. How it was validated — *including the wrong turns* (this is the real work)
-
-The validation is the point, not the CAGR. The result was stress-tested until it nearly broke, then
-fixed **honestly** rather than tuned to look good:
-
-1. **Removed survivorship bias.** Built a point-in-time Nifty 50 membership table (81 names, delisted
-   companies included) by reverse-applying index reconstitutions; the check caught 4 source errors and
-   2 missing exits. **The edge survived** — it wasn't being flattered by only looking at winners.
-2. **Used a fair benchmark.** Switched from Nifty *price* to Nifty 50 **TRI** (dividends reinvested, a
-   ~1.1%/yr higher bar) — and in doing so found and fixed a **look-ahead bug in our own 1/N baseline**
-   that had front-run future index entrants (a fake 22.4%). We hold ourselves to the same honesty.
-3. **Walk-forward across regimes.** The thesis held, but "annual is *the* optimal frequency" did not —
-   the real driver is **low *realized* turnover**, not a magic calendar number.
-4. **Out-of-time holdout (2025–26) — it initially FAILED.** On genuinely unseen data the frozen config
-   was flat (0.7%) while 1/N made 7.1%. We diagnosed the cause (the tax gate had *ossified* the book —
-   only 5 rebalances ever, coasting on stale 2013–19 winners), fixed it (`force_refresh`), and added
-   shrinkage — which then beat 1/N on the holdout too (8.1% vs 7.1%). **We published the failure.**
-
-   ⚠️ **And this is exactly why the headline is not out-of-sample.** Diagnosing on the holdout and
-   then selecting the variant that clears it spends the holdout. The honest reading: 2025–26 was a
-   *second development set*, and the project has had no untouched test period since. The forward
-   twin is the replacement, and it will not report until 2027-09.
-
-   **`force_refresh` also disabled the thing it was fixing.** In `decision.py:183` the gate is
-   `execute = first or under_invested or force_refresh or (drift_ok and benefit_ok)` — with
-   `force_refresh=True` the §4.6 benefit term **never decides**. Tax is still charged; the gate
-   simply stops gating. Low turnover comes from the annual cadence, not from the tax test.
-5. **Did not tune to win.** A gate-multiplier sweep showed no value generalizes out-of-sample, so we
-   left it at the spec default. The iron rule: never tune parameters to manufacture a "GO."
-
----
-
-## 4. The full system (beyond the backtest)
-
-Q-Alpha is not just a backtest — it's a deployed, human-in-the-loop product. **It never auto-trades:**
-it tells a human the tax-smart move; the human places the order. Every tax number is **deterministic**
-(exact, auditable — no LLM ever computes a number).
-
-- **Tax-smart advisor** (`live/advisor.py`) — three modes on the validated FIFO/cost/tax engine:
-  *Sell* (exact STCG/LTCG split, the largest ₹0-tax quantity, the ₹1.25L exemption shelter, and each
-  holding's **LTCG-safe date** — the day it crosses into the cheaper 12.5% long-term bracket, shown as
-  a column in the holdings tables), *Raise cash* (least-tax source order), *Add money* (route new
-  capital to underweights as ₹0-tax buys).
-- **The Indian tax the advisor quotes is real-ITR-accurate** (`accounting/capital_gains.py`) — the
-  number shown for a sale is exactly what you would owe on your return: **§70 intra-year loss set-off**
-  (STCL against STCG first at 20%, then LTCG at 12.5%; LTCL against LTCG only), **§74 carry-forward** of
-  any unabsorbed loss for up to 8 assessment years (forward only — a later loss never reaches an
-  earlier year's gain), the **4% Health & Education Cess** (so the effective rates are 20.8% / 13%), and
-  **§112A grandfathering** (equity bought before 1 Feb 2018 re-costed to its 31-Jan-2018 value; lots
-  missing that reference price are flagged, never silently mis-taxed). All of this lives in the
-  **advisor/reconcile layer only — never the frozen backtest engine — so the validated headline stays
-  provably unchanged** (the canonical backtest is re-run to confirm after every tax change).
-- **Corporate actions** (`accounting/corporate_actions.py`, §14 crit 5) — splits (preserve cost &
-  holding period), bonuses (₹0-cost shares dated the ex-date → can be short-term even when the
-  originals are long-term), dividends (income, never capital gains). Interleaved into the tradebook
-  replay so a held name that splits reconstructs to the broker's exact share count.
-- **Live Zerodha integration** (`live/holdings.py`, `tradebook.py`, `taxpnl.py`) — reads your real
-  holdings + live prices; a Console tradebook upload reconstructs exact dated FIFO lots; the FIFO
-  engine was **reconciled to the paise** against a real Zerodha Tax P&L (criterion 4). The tradebook is
-  kept **cumulatively** — new exports stack onto one master (de-duplicated by trade id) persisted in a
-  **private gist**, so the exact-tax view survives restarts and you never re-upload your history.
-- **Deployed dashboard** (`scripts/dashboard_app.py`, Streamlit Cloud) — two tabs: **🧠 The system**
-  (the System book below, with the validated core's full view in an expander underneath) and **🔴 Live
-  (Zerodha)** (the real account + the interactive advisor). The watch views:
-  - **🎯 GO readiness** — a deterministic, no-AI scorecard that flips to GO *only* when the forward
-    paper run clears every criterion (enough days · survived a real ≥10% market drop · keeps pace with
-    the benchmark · drawdown within the validated envelope · clean data feed). It can read **READY —
-    awaiting a stress event** when everything but a live market shock is satisfied.
-  - **🩺 Position health** — between the slow annual rebalances, flags any holding in a *company-specific*
-    breakdown (down a lot AND lagging the market — not just a market-wide dip). Advisory only.
-  - **🛡 Systemic risk** — a market-stress reading; when elevated, notes the research-proven tax-free
-    hedge as something to *consider* (informational; the product places no derivatives).
-  - **Realtime** — live tick streaming via Kite's WebSocket while the tab is open, with an honest
-    freshness badge (it says "stalled" rather than lying when ticks stop) and a 30-second polling
-    fallback.
-- **Autonomous paper run** (`scripts/paper.py` + GitHub Actions) — a notional ₹2L book marked daily by
-  a weekday cron, which **auto-applies the strategy's scheduled (annual) rebalances** so the forward
-  record tests the live strategy, not a frozen basket. This is criterion 6 — the unskippable evidence.
-
-### The System book — the whole system proving itself on its own advice
-
-The trust problem with any advisor: it *suggests* trades but never lives with them. So a second
-fake-money book (`scripts/autopilot.py`, daily cron) **runs the entire system on itself**: it receives
-cash (manually, via the dashboard's Add-money button — credited equally to all three books),
-**executes the Add-money advisor's own buy
-list** on itself (deploy-into-weakness, ₹0-tax buys, sizing paced by market weakness × a fixed rule
-over an LLM's daily market read — the AI supplies a *lean*, deterministic code acts on it), evaluates
-the **§4.6 tax-benefit gate every day** (designed to rebalance when the benefit beats 2× cost+tax —
-this week or in six months, the market decides, not a calendar — and to log every refusal with its
-reason). ⚠️ **As configured it does not decide:** `force_refresh=True` short-circuits the benefit
-term (`decision.py:183`), so what actually runs is a scheduled refresh that *charges* tax rather
-than a gate that *weighs* it. Low turnover comes from the annual cadence. It also
-carries the research-validated **tax-free hedge overlay as a daily measurement** (hedged-vs-unhedged
-return + drawdown, computed on both the System book *and*, read-only, the untouched GO book).
-
-Two comparators with **identical cash flows** keep it honest: a **shadow twin with the AI off**
-(System − Shadow = exactly what the AI adds — either sign is a valid finding) and a **NIFTYBEES
-buy-and-hold baseline** (System − Baseline = what the whole system adds over doing nothing).
-
-**Nothing unproven touches real money.** On the real-account advisor the AI's market read is shown as
-*context only* — the actionable buy list always deploys the full amount (time-in-market, the
-evidence-backed default). The AI-paced sizing rule trades exclusively fake money in the System book
-until its System-vs-Shadow verdict is in; it graduates to the real-money surface only on a positive
-verdict. (This discipline was enforced by the user mid-build — an early version offered the untested
-option on real money, and it was removed.)
-
-**The endgame contract (pre-committed):** real-money integration happens only when ALL FOUR are green —
-the core clears its deterministic GO scorecard · System > Baseline · the AI verdict is in · the hedge
-has been *witnessed* cutting a real stress event. If any pillar fails, that's reported, not integrated
-around. Real money never auto-trades; the human places every order — that rule outlives the GO.
-
----
-
-## 5. Where it stands — the §14 scorecard (10 gates to real money)
-
-`1🔴 2✅ 3✅ 4✅ 5🟡 6⏳ 7✅ 8✅ 9🟡 10✅`
-
-> ### 🔴 Gate 1 was marked `✅ out-of-sample`. It is not, and this corrects it.
->
-> The winning configuration (`shrink`) was chosen by a rule that **requires it to beat 1/N on the
-> 2025–26 holdout** — `scripts/exp_breadth.py:104` reads
-> `verdict = "BEATS 1/N both" if (ci > 17.7 and ch > nc)`, where `ch` is the holdout return. A
-> variant that lost on the holdout was not selected.
->
-> That makes the holdout **validation data, not a test set.** §3.4 below narrates the sequence
-> honestly — the holdout failed, the cause was diagnosed, shrinkage was added, and it then cleared
-> the holdout — but the label on the scorecard contradicted the story underneath it. The headline
-> **18.2% CAGR is an in-sample figure.**
->
-> **What would clear gate 1:** the forward twin run (`CORE_V1` vs a purchasable equal-weight fund),
-> registered in `reports/PREREGISTRATION_CORE_V1.md`, whose window closes 2027-09-08. That is the
-> only clean out-of-sample route this project has, and it is why the clock matters.
->
-> **Also unproven:** the screen the real money actually runs (`advise_deploy_into_weakness`) shares
-> no selection code with the validated funnel and **has never been backtested out-of-sample at all**.
-> Its worst backtested fall is **−47.5%**, against the index's −36.3%, and it runs with no stop-loss.
-
-- **✅ done:** no look-ahead (2) · survivorship-free universe (3) · FIFO tax reconciled to the paise
-  vs a real Tax P&L (4) · risk controls (7,8) · the deterministic advisor + dashboard (10).
-- **🔴 not met:** gate 1 — the headline is in-sample; see the box above.
-- **🟡 awaiting one real event each:** crit-4 final hardening wants a real *multi-lot/loss* sell to
-  reconcile; crit-5 wants one real corporate action on the account (the engine + wiring are done and
-  tested); crit-9 wants one *scheduled* (not manually-triggered) cron firing.
-- **⏳ pure waiting:** crit-6, the ~6-month forward paper run surviving ≥1 volatility event. No
-  simulation can replace it.
-
-**What remains is calendar time, real-world events, and the evidence spine.** An earlier version of
-this line read *"there is no unbuilt engineering on the critical path"*, which stopped being true
-once gate 1 was corrected: the forward twin is now the only route to an out-of-sample result, and the
-non-price evidence layer that would have flagged an expensive-and-falling name is built but **not yet
-wired to any decision**. See `CLAUDE.md` for the current open list.
-
-### ⚠️ Real money went in before the gate opened (2026-08-27)
-
-The author transferred ₹5,00,000 to his live Zerodha account and began a ₹1,00,000 + ₹50,000/month
-plan **while the scorecard read NOT YET** — a deliberate, informed decision, recorded here rather than
-tidied away. On audit day the paper book was **trailing the Nifty by 3.1 points over 50 days** and the
-volatility-event gate had **never** fired. The honest expectation he was given is the index's
-**~11–12%**, with the backtest's 16.4% treated as unproven upside.
-
-Because a claim is only as good as the instrument measuring it, `live/track_record.py` now compares his
-real account against **the same rupees on the same days in NIFTYBEES**, money-weighted (XIRR). It is
-built so it **can say he is behind**, and for the first twelve months it says the gap is entry timing
-rather than stock selection. That panel — not another backtest — is what will eventually settle
-whether the screen adds anything.
-
-### What auditing the live surfaces found
-
-Five defects in the week the money landed, **every one the same mistake**: a number labelled as
-something it is not, on a screen where the label becomes an order. The worst put a *"Deploy
-₹100,000.00"* heading over a **₹5,97,418** basket, because the advisor spends idle cash plus new money
-while the heading named only the new money — one click from a 64-share order that should have been 11.
-Another reported cash as "Equity". A third let a 70-day-stale benchmark grade the GO scorecard in
-silence, reporting a calm market when the truth was *no data*.
-
-None was caught by 481 passing tests, because each is a figure reported **about** the machinery rather
-than the machinery's own arithmetic — and four of the five only appear when the account holds idle
-cash, which no test fixture did. All are fixed. Full write-up:
-**[reports/PREFLIGHT_AUDIT.md](reports/PREFLIGHT_AUDIT.md)**.
-
----
-
-## 6. Math & methods glossary (for the curious interviewer)
-
-| Term | Plain meaning |
+| | |
 |---|---|
-| **FIFO tax lots** | India taxes share sales oldest-first. We track every purchase lot with its date so STCG-vs-LTCG and the holding period are exact. |
-| **STCG / LTCG** | Short-term (<365 days) gains taxed 20%; long-term (≥365) taxed 12.5% with a ₹1.25L/yr exemption (both carry a **+4% cess** → 20.8% / 13% effective). The whole strategy leans toward the cheaper long-term side. |
-| **§70 / §74 set-off** | Losses offset gains within the year (§70); anything unused carries forward up to 8 years to offset *future* gains (§74). Cuts the real tax bill — the advisor applies both. |
-| **§112A grandfathering** | Shares bought before 1-Feb-2018 are re-costed to their 31-Jan-2018 market value, so gains that accrued before then aren't taxed. The advisor applies it when given the reference price. |
-| **Sharpe ratio** | Return per unit of risk (volatility). Higher = smoother ride for the same return. |
-| **Max drawdown** | The worst peak-to-trough fall — the "how bad did it hurt" number. |
-| **Ledoit–Wolf shrinkage** | A covariance estimator that's stable on short data (raw sample covariance is noisy and over-fits). |
-| **EWMA** | Exponentially-weighted moving average — recent data counts more than old data. |
-| **Square-root slippage** | Market impact ≈ `k · σ · √(order ÷ daily volume)` — bigger orders in thinner stocks cost more (spec §13). Matters most when scaling to mid-caps. |
-| **1/N (equal weight)** | Put the same money in every name. The honest, hard-to-beat baseline. |
-| **Walk-forward** | Test on data the model never saw, rolling forward in time — the opposite of cheating. |
-| **QUBO / QAOA** | A way to phrase stock selection as a combinatorial optimization a quantum computer *could* solve. Explored in the research repo (honest near-miss). |
+| **Working** | The evening run: prices → filings → headlines → four paper books marked against two index funds. Tax-exact FIFO accounting. Resumes where it stopped. |
+| **Not built yet** | The investor itself (AI-PM-1). Today `SYSTEM` mirrors the user's holdings and decides nothing. |
+| **Start date** | None registered. The earlier rulebook start (2026-09-14) was withdrawn before it opened. |
+| **Proven edge** | None. See §6. |
 
 ---
 
-## 7. Explicit biases & deliberate decisions (read this — it's where the honesty lives)
+## 2. How to use it
 
-Every model embeds choices. Here are ours, stated plainly, including the ones that *are* a bias:
+1. **Double-click Q-Alpha** on the desktop. The black window *is* the app; closing it stops it. It
+   runs the evening by itself and opens `http://127.0.0.1:8787/`, which narrates the run and reloads
+   when it finishes.
+2. **Read the page**: the four books, what `SYSTEM` holds, which filings were read, and what went
+   wrong, if anything. A failed step says so in words; it is never hidden.
+3. **After you trade in your real account, drop the tradebook export into `data/tradebooks/`.**
+   Zerodha Console → Reports → Tradebook → CSV. It must reach back to your first trade
+   (2026-06-15); overlapping exports are safe — duplicates are removed by trade id.
 
-- **No real-money track record yet.** Everything is backtest + a notional paper run. The mandatory
-  ~6-month forward run is *why* — we refuse to claim live performance we don't have.
-- **Survivorship bias — handled, not ignored.** We built a point-in-time universe with delisted names.
-  But large-cap survivorship in India is genuinely *modest* (delistings ≈0.81% of Nifty-500 market
-  cap), so the correction is small — we say so rather than overclaim a heroic fix.
-- **Single market, single asset class.** Indian large-cap equities only. The tax logic is India-specific
-  (it would not transfer to, say, US wash-sale rules). This is a deliberate scope, not generality.
-- **The advisor's capital-gains tax is real-ITR-accurate; two tax heads are deliberately out of scope.**
-  Set-off, 8-year carry-forward, the 4% cess, and grandfathering are all applied. **Surcharge** (needs
-  your *total* income) and **dividend-income tax** (a separate head, taxed at your slab) are *not*
-  modelled — a capital-gains advisor doesn't know your other income, so it flags these rather than
-  guess. The frozen backtest engine also stays on the flat statutory rate (no cess) by design, so the
-  validated headline never moves; the real-life refinements live only in the advice layer.
-- **Annual rebalancing is a trade-off, not free.** Trading rarely maximizes after-tax return, but it
-  means the model can *miss* a good mid-year reallocation. We accept this (the backtest shows acting on
-  most mid-year signals loses to tax) and added a **position-health watch** for the genuine exceptions.
-- **"Cheapness" is technical, not fundamental.** The deploy-in-weakness lever scores how far a stock
-  has pulled back from its high — a *price* proxy, **not** a P/E. True valuation needs a fundamentals
-  feed we don't have (Kite doesn't expose it). We label this honestly everywhere it appears.
-- **The buy screen has never been backtested — and that is the bigger caveat.** The 18.2% headline
-  describes the **factor funnel** (`backtest/strategy.py`). The Add-money buy list is a *different*
-  rule (`live/deploy.py:advise_deploy_into_weakness`) that shares **no selection code and, on any
-  given day, typically no names** with it. No script has ever measured it against a baseline — not
-  `run_phase0.py`, not `walkforward.py`, not `holdout_2025.py`. It is a deterministic starting point
-  for the user's own judgement, and the app now says so on every render. Two defects found in it on
-  2026-08-17 are documented and fixed in `PLAN_TRUST_REPAIR.md`: corporate actions were being read as
-  discounts (a demerger step-down is not a sale — `adj_close` never corrects for it), and the advisor
-  never consulted the §4.7 breakdown detector this same system ships with. The screen now carries
-  that detector's verdict beside every name it recommends, **including when the two disagree.**
-- **Broker = Zerodha, not the spec's HDFC.** Chosen for ₹0 delivery brokerage, which changes the
-  cost-gate math. A deliberate, documented deviation (`accounting/costs.py`).
-- **The validated edge is 3-factor (price/volume).** The richer 6-factor (with fundamentals) model is
-  *data-blocked*, not run on the point-in-time universe. We don't claim the 6-factor result.
-- **The 2025–26 holdout was a YELLOW FLAG we published.** Frozen config failed out-of-time; we
-  diagnosed and fixed the cause rather than burying it. The fix (shrinkage) is what earns the GO.
-- **Iron rule:** no parameter was ever tuned to manufacture a passing result. A negative result,
-  reported honestly, is a valid outcome.
+That is all. There is no broker login. Missing two days costs the two days, not the work: the next
+run resumes what it had not finished.
+
+**Check a tax figure by hand the first time you sell something complicated.** The engine has matched
+a real Zerodha Tax P&L exactly once — a single lot, short-term, no loss (§6).
 
 ---
 
-## 8. Setup, layout, and conventions
+## 3. What runs each evening
 
-```bash
-cd qalpha
-uv sync --extra dev          # create venv + install
-uv run pytest                # 286 tests, must stay green
-uv run ruff check .          # lint
-uv run ruff format --check . # format
-uv run mypy src              # strict type-check
-uv run --extra dashboard streamlit run scripts/dashboard_app.py   # the live dashboard
 ```
+prices     yfinance → data/historical/*.parquet   (watchlist, Nifty-50 point-in-time, NIFTYBEES)
+  ↓
+scope      SYSTEM's holdings + the 8 names furthest below their 1-year high     live/screen.py
+  ↓
+filings    NSE announcements for those names → archive the bytes → extract events,
+           each with a quote checked against the archived document              scripts/evidence.py
+  ↓
+headlines  4 market feeds + one Google News search per name → archive → map → read   scripts/news.py
+  ↓
+books      credit new flows → step SYSTEM → mark all four → append history      scripts/twin.py
+  ↓
+page       data/session/qalpha.html, served by live/server.py
+```
+
+Each step is recorded in `data/session/ledger.jsonl` against a digest of its inputs (date, names,
+price panel bytes, extraction version). Finished work is not redone; changed inputs make it pending;
+a failure is recorded and the evening continues.
+
+---
+
+## 4. The four books
+
+Every book receives **the same rupees on the same days**, taken from the tradebook. They differ only
+in what they did with the money.
+
+| Book | What it is |
+|---|---|
+| `SYSTEM` | The AI investor's paper book. Seeded as an exact copy of `REAL`. |
+| `REAL` | The user's own trades, replayed. |
+| `BASELINE_EW` | The same money in a Nifty-50 **equal-weight** index fund, net of its 0.41% fee. **The bar.** |
+| `BASELINE` | The same money in NIFTYBEES, bought and held. The do-nothing floor. |
+
+`BASELINE_EW` is the bar because most of what once looked like an edge over the cap-weighted index
+turned out to be the equal-weight premium — which anyone can buy in five minutes.
+
+A gap between books is **descriptive**. One book over months is mostly timing and luck.
+
+---
+
+## 5. The investor — what is being built
+
+### AI-PM-1: the first version
+
+- **Brain:** `claude-sonnet-5`, pinned by id. A different model is a different version.
+- **Sees:** every holding and 8 candidates; verified filing and headline events; a year of prices;
+  its own memory (below). **Not yet:** financial statements or valuations.
+- **Decides:** HOLD / BUY / SELL with a quantity, a reason, a thesis, what would prove it wrong, and
+  the evidence it relied on.
+- **Code enforces**, and may cut or cancel an order with a stated reason: long-only; enough paper
+  cash including costs; at most 8 names; 20% per name; 30% per sector; every holding reviewed;
+  every cited evidence id real and about that company.
+- **Fills** at the **next** trading session's close, never at a price the decision had already seen.
+- **Incomplete is never HOLD.** No reply, a truncated reply, a missing holding or unread filings mean
+  the review did not happen, and the page says so.
+- **Memory:** a logbook the model writes each review (per company and for the portfolio), and a
+  scorecard code computes from its past decisions — both fed into the next review, labelled as its
+  own earlier beliefs and results, never as evidence.
+- **Starts** the first trading evening after: it is merged, the four held names whose filings were
+  never read (INFY, MUTHOOTFIN, TATAPOWER, WIPRO) are read, and one shadow review has run cleanly.
+
+### What a "version" means
+
+A version is a fixed description of the investor: model, prompt, what it is shown, what tools it
+has, how fills work, its limits. **The paper book is one continuous book across versions**; every
+decision is stamped with the version that made it. AI-PM-2 is the same investor once it also sees
+financial statements. Nothing is reset — versioning stops a better-informed investor's results being
+credited to an earlier one.
+
+### The build order
+
+Each step is its own registered version. Training or a knowledge graph comes only if a measured gap
+calls for it.
+
+| Step | What | Done when |
+|---|---|---|
+| **A. Accounts** | Deposits and withdrawals as explicit flows; dividends as dated cash; splits, bonuses, demergers reconciled against documents (TATAMOTORS is live). | One scenario with a deposit, dividend, corporate action, partial sale, tax, missing quote and restart reconciles with no manual edit. |
+| **B. Company facts** | Point-in-time financial statements from NSE results filings, keyed by filing time; valuation inputs computed by code. Becomes AI-PM-2. | Numbers reconcile to the filings on an answer key; restated values never leak into earlier decisions. |
+| **C. Mandate** | One versioned paper mandate: limits, cash, horizon, review triggers — out of prompts and code. | Fixed scenarios produce valid HOLD, cash, buy, trim and exit decisions through the real entry point. |
+| **D. Research tools** | Read-only tools the investor can call: search the archive, read a period, compare peers, run the calculators. Execution stays outside. | An archived run where an extra research request changed the decision; adversarial text and fake citations cannot produce an accepted order. |
+| **E. Evaluation** | Three tests: operation, decision quality, outcome. Point-in-time Nifty-100 membership so history is not survivors only. | One command rebuilds the report from immutable inputs; a negative result needs no code change. |
+| **F. Training** | Only against a measured deficiency, and only if it beats the frozen version on untouched data. | — |
+
+### Data to collect
+
+| Dataset | Why | Source |
+|---|---|---|
+| Filings for INFY, MUTHOOTFIN, TATAPOWER, WIPRO | AI-PM-1 cannot review a name nobody has read | `scripts/evidence.py backfill --only … --workers 8` (~$30–40) |
+| Ledger / funds statement | Real deposits and withdrawals for `REAL` (step A) | Zerodha Console, from the user |
+| Tax P&L, every quarter with a sale | Re-reconcile tax on multi-lot, long-term and loss cases | Zerodha Console, from the user |
+| Holdings statement | An independent check of FIFO lots | Zerodha Console, from the user |
+| Dividend and corporate-action statements | Dividends as cash; actions reconciled | Zerodha Console, from the user |
+| Company financial statements | Step B | NSE results filings (XBRL), archived with provenance |
+| Point-in-time Nifty-100 membership | Step E | NSE Next-50 circulars → `scripts/build_nifty100_pit.py` |
+
+Private account files go in `data/account/` and are never committed.
+
+---
+
+## 6. What is proven, and what is not
+
+**Proven**
+
+- The FIFO, cost and tax engine matched a real Zerodha Tax P&L **to ₹0.00** — one sale, single lot,
+  short-term, no loss.
+- **Trading less beat trading more**, net of cost and tax, in every walk-forward sub-period tested.
+- **Equal-weighting explains most of the apparent edge** over the cap-weighted index.
+- **Selling to manage risk loses to the tax**: rule-based exits finished ₹74.8 lakh behind
+  buy-and-hold over 13 years and paid ₹13.3 lakh in tax doing it.
+
+**Not proven — say so whenever a number comes up**
+
+- **No strategy here has shown an edge over the equal-weight fund.** The old screen's best reading was
+  ≈0.4–0.6%/yr against ~5%/yr of noise: separating that from luck at 95% needs roughly two hundred
+  years of one portfolio. Twelve months, in either direction, is consistent with chance.
+- **The AI investor has no record at all.**
+- **Most of the tax engine has never met a broker statement**: multi-lot, long-term, loss set-off and
+  §112A are unit-tested only.
+- **No corporate action has been reconciled live.** The likeliest thing to go wrong first.
+- **Nobody has watched this system through a market fall.**
+- **The filing corpus under-counts events.** ~25–29% of the reader's quotes fail verbatim
+  verification — true statements, not contiguous text — so absence of an event is not evidence of no
+  event.
+
+---
+
+## 7. The experiment record
+
+Everything measured on the way here. Full reports are in git at commit `53e2588`
+(`git show 53e2588:reports/<file>`).
+
+| Id | Question | Answer |
+|---|---|---|
+| Phase 0 | Does the factor optimizer beat 1/N net of cost and tax? | 18.2% headline, **not out-of-sample**: the winning setting was chosen on the holdout. |
+| Phase 4 | Where did the screen's gap over NIFTYBEES come from? | **76% of it is the equal-weight premium.** Hence `BASELINE_EW` as the bar. |
+| Screen OOS | Does "buy the biggest pullbacks" beat 1/N, 163 months? | 8 names +2.65%/yr, t = 0.60; every interval includes zero. |
+| Null matched | How long to tell this edge from luck? | ~200 years of one portfolio. The GO gate was deleted. |
+| PO-1 | The live rulebook over 14 years, point-in-time Nifty-50 | **−55%** against the equal-weight fund. |
+| PO-2 | Which layer lost it? | Raw top-8 ranking +9.1% vs the fund; filling underweights −27%; exits −55%. |
+| PL-1 | Four fixes, replayed through the real runner | Exits off +52.7% ships; breakdown-as-flag **rejected, −23.2%** (it reversed PO-2). Still −26.9% vs the fund. |
+| WC-1 | Is money invested during deep drawdowns better? | Yes: median +30.3% vs the fund — but only in 11 of 177 months, ~7 episodes. |
+| WC-2 / 2b | Can you save cash for those drawdowns? | Full period +12.2%; **both halves ≈ 0 or negative.** One alignment (COVID). No. |
+| ES-1 | Do negative filing events predict falls? | 20 days: −0.62%, t = −0.77. **Null.** 61 name-days behind the primary test. |
+| EX-3 reader | Which model reads filings? | `claude-sonnet-5`: 29% quotes discarded vs Haiku's 59%, twice the events. Readers agree on 22% of findings. |
+| EX-4 | Does a tighter prompt fix unverifiable quotes? | **Worse**: 155 events vs 200, 34.9% discarded vs 25.1% (220 documents). Reverted. |
+| Forward run 1 | 6 weeks of paper trading | **Void**: flows were injected on a calendar the real account never had. |
+| Research track | QUBO ×2, HMM regime overlay, LPPLS crash signal, futures hedge | All negative. Archived in `Q_Alpha_Research`. |
+
+---
+
+## 8. Failures this project must not repeat
+
+**Almost every serious defect here was a correct number with the wrong label**, or the right
+function fed the wrong input. Passing unit tests caught almost none of them.
+
+| It said | It was | The rule now |
+|---|---|---|
+| "ahead by ₹4,01,677 (+444%)" | ₹1,677 — parked cash counted as performance | Label every number as what was computed. |
+| "Deploy ₹1,00,000" | a ₹5,97,418 basket, 84% in one stock | Test the caller with holdings **and** cash. |
+| `BASELINE_EW`, the equal-weight fund | NIFTYBEES minus a fee | One definition per series; never reuse a neighbour's. |
+| "worst fall −34.9%" | −47.5% — deposits hid the drawdown | Unitize before measuring a book money flows into. |
+| "Clear" on the buy screen | nobody had read the filings | Unread is not clean. |
+| "25 of 25 filings read" | 25 of 30 — the cap sliced the window | Count the eligible set before any cap. |
+| a benchmark window with no data, `0.0%` | unmeasured | Unknown is never zero. |
+| a refused model call | parsed as a filing with no bad news | A missing reply is not an answer. |
+| "12 negative items" | 4 — lines in an append-only log, not events | Read the current revision, not the log. |
+| a step that failed | left **zero bytes** where yesterday's report was | Atomic writes for anything read later. |
+| an evidence step `done` after 216s | zero coverage — "nothing to do" returned 0 | Covering nothing is not success. |
+| a veto citing a source | a stock quote page | A citation must be checked against the archived document. |
+| a 30-day veto window | read the filing date, not the event date | Date events by when they happened. |
+| alphabetical one-share baskets marked `EXECUTE` | the scheduled caller fed good code bad data | Test the production entry point, not only the function. |
+| `mypy src scripts`, green | vacuous — the package resolved to `Any` | Verify the check checks something. |
+| a fill at the close the decision had seen | look-ahead | Fill at a later session. |
+| a model change mid-experiment | silently a different experiment | Pin models; a change is a new version. |
+| "−53.0%/yr" on the page | three months annualized | No annual rate under a year of history. |
+
+---
+
+## 9. The maths
+
+Formula → example → why. Section marks (§) in code comments refer to these headings; any other §
+number in an older comment is the original spec, `git show 53e2588:Q_alpha.md`.
+
+### FIFO lots (§2.7)
+
+Every buy is a **lot** with its own date and price. A sale consumes the oldest lots first.
+
+> Sell 6 TCS. Lot 1: 2 shares bought Jan 2025 — consumed fully, held over 365 days → long-term.
+> Lot 2: 4 of 8 shares bought Aug 2025 → short-term. Tax is computed per lot.
+
+*Why:* Indian demat accounts are FIFO by law; one average price per stock gets tax wrong.
+
+### Costs (§4.6) — Zerodha delivery equity
+
+| Charge | Rate |
+|---|---|
+| Brokerage | ₹0 |
+| STT | 0.1% of turnover, buy and sell — **not deductible** from capital gains |
+| Exchange transaction | 0.00297% |
+| SEBI fee | 0.0001% |
+| Stamp duty | 0.015%, buy side only |
+| GST | 18% on (brokerage + exchange + SEBI) |
+| DP charge | ₹13.50 per sell (the GST on it is not modelled) |
+| Slippage | `k · σ_daily · √(trade value ÷ ADV)`, clamped to [0.02%, 2%]; 0.2% when size data is absent |
+
+> ₹1,00,000 buy: STT ₹100, stamp ₹15, exchange ₹2.97, SEBI ₹0.10, GST ₹0.55 → ≈ ₹118.62 plus slippage.
+
+### Tax (§4.6)
+
+- **Short-term** (held < 365 days): 20%. **Long-term** (≥ 365 days): 12.5% above ₹1.25 lakh per
+  financial year (April–March). **Cess** 4% on top: effectively 20.8% and 13%.
+- **Set-off** (§70/§71): short-term losses offset any gain; long-term losses offset only long-term.
+  **Carry-forward** (§74): 8 assessment years.
+- **Grandfathering** (§55(2)(ac)): for equity bought before 2018-02-01, cost is
+  `max(actual cost, min(price on 2018-01-31, sale value))` — old gains are sheltered, but no loss is
+  manufactured.
+
+> Sell for a ₹10,000 short-term gain: tax ₹2,000 + cess ₹80 = ₹2,080.
+
+*Why:* tax is the largest cost of trading, and the one most often ignored.
+
+### Money-weighted return (XIRR)
+
+The annual rate `r` that makes `Σ flow_i / (1+r)^(t_i/365) + value_today / (1+r)^(T/365) = 0`,
+with money in negative. **Withheld under a year of history** — three months annualized reads as a
+disaster or a miracle.
+
+### Unitized NAV and relative wealth
+
+A deposit buys **units** at today's NAV instead of raising the price:
+`units_new = units + deposit ÷ NAV`, `NAV = value ÷ units`.
+
+> A ₹1,00,000 book gains 10% → ₹1,10,000. Add ₹1,00,000 to it and to a flat rival: raw ratio
+> 2,10,000 / 2,00,000 = +5%. NAV ratio stays +10%.
+
+Relative wealth between two books is `G = ln(NAV_A ÷ NAV_B)`. *Why:* deposits otherwise dilute every
+lead and hide every drawdown.
+
+### The equal-weight fund (`BASELINE_EW`)
+
+On the last trading day of each month, split the fund's value equally across the names that were
+Nifty-50 members **on that day** and had a price; hold units until the next month. The fund's fee is
+charged continuously: `value × (1 − 0.41%)^years`.
+
+*Why:* using today's members for the past would hold future winners before they joined the index.
+
+### The candidate list (§ pullback)
+
+`pullback = 1 − price_today ÷ highest price in the last 252 trading days`, floored at 0. A name whose
+price series has an unexplained jump is measured only from after the jump; with too little history
+since, it scores 0.
+
+> High ₹1,000, today ₹750 → pullback 0.25.
+
+*Why:* it narrows ~96 names to 8 the investor can read about. **A pullback is not a valuation**, and
+the investor is told so.
+
+### Evidence verification
+
+A model-reported event is kept only if its quote appears **verbatim** in the archived bytes of the
+document it cites, for a company it was given that document for. A row counts toward coverage only
+if it was read by the named corpus reader at the current extraction version.
+
+---
+
+## 10. Layout
 
 ```
 src/qalpha/
-  config.py        all tunable parameters (Q_alpha.md §16) in one place
-  data/            yfinance ingest, point-in-time universe, bad-tick sanitizer
-  factors/         momentum / volatility / liquidity scoring + regime classification
-  alloc/           Ledoit-Wolf covariance conditioning, sector allocator, optimizer (minvar|equal|score|shrink)
-  accounting/      FIFO tax lots · Zerodha costs · capital-gains tax (backtest engine) + the real-ITR advisor layer (§70 set-off · §74 carry-forward · 4% cess · §112A grandfathering) · corporate actions   ← reused live, same core the backtest validated
-  backtest/        walk-forward engine, portfolio accountant, baselines, metrics, go/no-go report
-  live/            Kite auth · holdings reader · tradebook replay · Tax-P&L reconcile · advisor · paper book · dashboard renderer · safety guards · realtime ticker · GO scorecard · position health
+  accounting/  FIFO lots · costs · slippage · capital gains · corporate actions · Portfolio
+  data/        price panels (yfinance → Parquet, atomic writes) · point-in-time universes
+  live/        announcements · evidence · extraction · news · pretrade · localmodel   (reading)
+               twin · flows · nav · benchmarks · tradebook · taxpnl · market · screen (books)
+               daily · session · server · record · panels · progress · atomic · console (running)
+scripts/       local_run (the app) · twin · evidence · news · reconcile_taxpnl · ocr_scans
+               build_nifty_universe · build_nifty100_watchlist · build_nifty100_pit
+reports/       pre-registrations still in force
+data/          evidence archive · twin books and history · universes · tradebooks (private)
 ```
 
-**Conventions that matter:** money is `decimal.Decimal` everywhere it touches accounting (never
-float); **no look-ahead, ever** (all historical reads go through `PriceData.as_of(date)`; there's a
-test that fails on look-ahead); the accounting engine is standalone so the live system reuses the
-*exact* FIFO/cost/tax code the backtest was validated on.
-
----
-
-## 9. Conclusion — the project, concluded
-
-Q-Alpha set out to answer one question honestly: *does a tax-aware strategy actually beat the
-alternatives once real Indian taxes and costs live inside the decision?* The answer, validated as far
-as simulation allows, is **yes — but the edge is discipline, not stock-picking**: trade rarely, stay
-tax-smart, anchor to 1/N. It clears the hard bar — beating the index *and* equal-weight, net of
-cost+tax, in-sample, on a genuinely unseen holdout, and across every rolling 3-year window (never a
-losing 3-year stretch) — and it earned that verdict by being stress-tested to near-failure and fixed
-*honestly* rather than tuned to look good.
-
-Around that finding sits a **complete, deployed, human-in-the-loop system**: a real-ITR-accurate tax
-advisor (§70 set-off · §74 carry-forward · 4% cess · §112A grandfathering · the LTCG-safe date for
-every holding), live Zerodha integration reconciled to the paise, an autonomous self-certifying paper
-run, and a System book that proves the whole thing on its own advice against honest same-cash-flow
-comparators — all of it fail-loud, none of it ever auto-trading real money.
-
-**On the engineering, the project is complete — there is nothing left to build on the path to
-go-live.** What stands between here and real money is not code: it is **calendar** (the mandatory
-~6-month forward paper run) and **one real market stress event** for the GO scorecard and the tax-free
-hedge to be witnessed against. Those cannot be simulated away, and by design they shouldn't be. When
-all four endgame pillars are green — core GO · System > baseline · the AI verdict in · the hedge
-witnessed — the proven pieces integrate into the real-money advisor; if any pillar fails, that is
-reported, not engineered around. Real money never auto-trades; the human places every order.
-
-The honesty *is* the product. Every wrong turn is in the record, every bias is named, and no number was
-ever tuned to look good. That is the claim worth making.
+```bash
+uv sync --extra dev --extra ai
+uv run python scripts/local_run.py --app --autorun      # what the desktop click runs
+uv run ruff check . && uv run ruff format --check . && uv run mypy src scripts && uv run pytest
+```
