@@ -19,9 +19,10 @@ anyone can buy?
 | Book | `SYSTEM`, seeded as an exact copy of `REAL` (the user's tradebook), continuous across versions |
 | Reviews | One per trading evening, on that session's close, after 17:00 IST |
 | Scope | Every holding + the 8 non-held watchlist names furthest below their 1-year high (`screen.candidates`). A pullback is not a valuation, and the prompt says so. |
-| Packet | Holdings with cost, weight and long-term status; candidates; close and 13 monthly adjusted closes per name; NSE surveillance flags; up to 6 verified filing/headline events per name (EX-3 / NEWS-1, corpus reader, knowable on the date); its own last 3 notes per name and 3 portfolio notes from earlier evenings; a scorecard of its last 20 decisions; the limits; cost and tax summary. **No financial statements** — that is AI-PM-2. |
+| Packet | Holdings with cost, weight, long-term status and anything over the drift band; candidates; close and 13 monthly adjusted closes per name; NSE surveillance flags; up to 6 verified filing/headline events per name (EX-3 / NEWS-1, corpus reader, knowable on the date); its own last 3 notes per name and 3 portfolio notes from earlier evenings; a scorecard of its last 20 decisions; the limits; cost and tax summary. **No financial statements** — that is AI-PM-2. |
 | Reply | JSON: a portfolio note, and per name HOLD/BUY/SELL, whole-number quantity, reason, thesis, invalidate-if, cited ids, note |
-| Code enforces | Long-only · at most 8 names after buying · 20% per name · 30% per sector of value including cash · cash including costs · every holding reviewed · every cited id real and for that ticker · sells before buys |
+| Code enforces **on buys** | Long-only · at most 8 names after buying · a purchase may take a name to 20% and a sector to 30% of value including cash · cash including costs · every holding reviewed · every cited id real and for that ticker · sells before buys |
+| Drift | A position that appreciates past the cap is **not** a breach: up to 22% (name) / 32% (sector) needs no action. Above the band the investor is told, and decides — trimming realises tax, and selling to manage risk has been measured here as losing to it. Code never forces a sale. |
 | Fills | At the first session after the decision (read from the benchmark's bars), at that session's raw close, only with positive volume; limits re-checked with that day's prices. A missing quote keeps the order waiting and blocks the next review. |
 | Costs and tax | The existing Zerodha cost model and FIFO capital-gains engine |
 | Records | `data/twin/manager/`: receipts (packet + reply + usage), decisions, fills, logbook, scorecard |
@@ -61,3 +62,11 @@ twelve-month anniversary is not a verdict.
 *(Append only, dated.)*
 
 - **2026-09-13** — registered. No review has run on `SYSTEM`.
+- **2026-09-13** — **amended before the start date, at the user's instruction.** The 20% and 30%
+  caps become limits on **purchases**, with a 2-point drift band above them. The first shadow review
+  trimmed two holdings (TATAPOWER 21.4%, VBL 20.9%) that had merely appreciated; a rule that forces a
+  sale on price drift pays capital-gains tax to undo a gain, which is the trade this repository has
+  already measured as a loser. Buying stays capped; drift is shown, never acted on by code.
+- **2026-09-13** — **shadow review run and read** (start condition 3). 8 holdings reviewed on
+  2026-09-11's close: 5 HOLD citing specific filings, 3 trims. 25,020 input + 10,217 output tokens.
+  Records in `data/twin/manager/shadow/`. Start conditions 1 and 2 are not yet met.
