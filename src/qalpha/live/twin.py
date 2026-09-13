@@ -1,40 +1,16 @@
-"""The digital twin — five books, one set of cash flows, and the only honest way to grade the system.
+"""The books — one set of cash flows, four ways of using it.
 
-**The defect this exists to fix.** The GO scorecard graded a paper book running the *validated
-funnel* — shrink-weighted, annual, tax-aware rebalancing. The real money runs the
-deploy-into-weakness advisor, which shares no selection code and no names with it. Grading the thing
-you do not run, in order to authorise the thing you do, is a category error: every criterion could
-have gone green without saying anything about the money at risk. That book is archived
-(``reports/ARCHIVE_2026-08-28.md``) and this replaces it.
+- ``SYSTEM``      — the AI investor's paper book. Seeded from ``REAL``; mirrors it until a registered
+  start date, then decides for itself.
+- ``REAL``        — the user's own trades, replayed from his tradebook.
+- ``BASELINE_EW`` — the same rupees into a Nifty-50 equal-weight index fund, net of its fee.
+- ``BASELINE``    — the same rupees into NIFTYBEES, bought and held.
 
-**The design (PLAN_REDESIGN.md §1).** The real Zerodha account is the *state source*; a fake-money
-twin is the *autonomous system*. Nothing autonomous ever touches Zerodha.
+**Every book receives the same rupees on the same days.** The flows come from the tradebook and
+nowhere else. :func:`assert_identical_flows` asserts it rather than assuming it, because a flow one
+book got and another did not would silently make the comparison about timing instead of decisions.
 
-- ``REAL``      — the user's own orders, replayed from his tradebook.
-- ``SYSTEM`` — the headline: everything on, the AI acting rather than advising.
-- ``TWIN_NO_AI`` / ``TWIN_NO_EXITS`` — one factor removed each, so every gap is attributable to
-  exactly one thing.
-- ``TWIN_NO_HEDGE`` — ⚠️ **not a live ablation.** ``runner._hedge`` emits ``HEDGE_ON``/``HEDGE_OFF``
-  decisions and moves no money: the overlay needs a futures position the real account cannot hold
-  below ~₹19L (PLAN_REDESIGN §4b-i), so it is deliberately signal-only. The consequence is that
-  ``SYSTEM − TWIN_NO_HEDGE`` is **₹0 by construction** and can never be evidence about the hedge.
-  It is kept as a *signal log* — when the gauge fired, and for how long — and must never be reported
-  as a measured hedge effect. Same shape as the defect that left the AI ablation starved, and named
-  here so nobody reads its zero as a finding in 2027.
-- ``BASELINE``  — the same rupees into NIFTYBEES. Does any of it beat doing nothing?
-
-**Only ``SYSTEM − BASELINE`` gates** (GO criterion 3). The ablations are descriptive: four
-comparisons at 95% throw a false positive about one run in five, so if an ablation could open the
-gate, the gate would eventually open on noise. That is the bar forward run 1 was voided for.
-
-**The load-bearing invariant: every book receives the same rupees on the same days.** The flows come
-from the tradebook and nowhere else — there is no SIP schedule (§4c). A calendar injection the real
-account never received would silently destroy the comparison, which is the flaw that voided forward
-run 1's predecessor. :func:`assert_identical_flows` is that invariant, asserted rather than assumed.
-
-Phase 2 builds the *structure* and wires ``REAL`` and ``BASELINE``, which are fully determined by the
-tradebook. The twins are seeded and marked here; their autonomous decisions arrive in Phase 3, so
-until then they hold cash and are honest about it.
+Nothing here touches a broker. These are paper books.
 """
 
 from __future__ import annotations
@@ -49,37 +25,23 @@ from pathlib import Path
 
 import pandas as pd
 
+from qalpha.accounting.portfolio import Portfolio
 from qalpha.accounting.tax_lots import TaxLot
-from qalpha.backtest.portfolio import Portfolio
 from qalpha.config import Config
+from qalpha.live.flows import Flow, benchmark_leg, flows_from_trades, xirr
 from qalpha.live.nav import unitized_nav
-from qalpha.live.track_record import Flow, benchmark_leg, flows_from_trades, xirr
 
-#: The four books, and the whole comparison.
-#:
-#: **It was nine** until 2026-09-12: a headline, three single-factor ablations, a separate core
-#: track, two baselines, the real account, and a gate over the top. The ablations asked which
-#: component earns its keep — a harder question than the one that cannot be answered — and the gate
-#: graded a verdict that needed two hundred years to arrive. What is left is the only comparison
-#: that was ever going to mean anything: **the system, against what you could buy instead, beside
-#: what you actually did.**
+#: The user's own trades, replayed.
 REAL = "REAL"
-#: The system deciding for itself: the screen, the evidence layer, the governor, the §4.7 exits,
-#: costs and tax, all acting on fake money. It is seeded from ``REAL`` and follows the tradebook
-#: until the day it is switched to autonomous; after that the two diverge and the gap is the point.
+#: The AI investor's paper book.
 SYSTEM = "SYSTEM"
 #: The cap-weighted index, bought and held. The do-nothing comparison.
 BASELINE = "BASELINE"
-#: The equal-weight index fund — the baseline that actually decides whether this is worth running.
-#: Phase 4 found that **76% of the screen's gap over NIFTYBEES is the equal-weight premium**, and
-#: that premium is purchasable (Nifty-50 EW index funds exist; DSP 0.41% direct). Beating the
-#: cap-weighted index is therefore not the achievement it looks like: the honest question is whether
-#: the system beats a fund anyone can buy in five minutes. See reports/PHASE4_BACKTEST.md.
+#: The equal-weight Nifty-50 index fund, net of its fee — the bar. Beating cap-weighted NIFTYBEES is
+#: not the achievement it looks like: most of that gap is an equal-weight premium anyone can buy.
 BASELINE_EW = "BASELINE_EW"
 
-#: Books that make their own decisions. One, now.
-AUTONOMOUS = (SYSTEM,)
-#: Every book that steps itself each day.
+#: Books that make their own decisions.
 DECIDING = (SYSTEM,)
 #: Every book in the comparison, in report order.
 ALL_BOOKS = (REAL, SYSTEM, BASELINE_EW, BASELINE)
@@ -87,6 +49,9 @@ ALL_BOOKS = (REAL, SYSTEM, BASELINE_EW, BASELINE)
 #: Annual expense ratio of the cheapest Nifty-50 equal-weight index fund available (DSP, direct).
 #: Charged against the EW baseline so it is a purchasable alternative, not an unattainable index.
 EW_FUND_FEE = Decimal("0.0041")
+
+#: Below a year of history an annualized rate is withheld from the page rather than extrapolated.
+MIN_DAYS_FOR_A_RATE = 365
 
 
 @dataclass
@@ -257,86 +222,6 @@ def baseline_mark(flows: Sequence[Flow], series: pd.Series, as_of: date) -> Book
     )
 
 
-#: Below this many months the comparison is dominated by *when* money went in, not by *what* was
-#: picked. Same bar as ``track_record.MIN_MONTHS_FOR_A_VERDICT`` and the one that voided forward run
-#: 1 — a difference smaller than the noise it sits in is not a result.
-MIN_MONTHS_FOR_A_VERDICT = 12
-
-# ---- GO criterion 3: the statistic, pre-registered 2026-08-30 -----------------------------------
-#
-# **What was wrong before.** This used to be ``BACKTEST_NOISE_FLOOR = Decimal("8411106")`` — the p95
-# of 60 no-skill draws from ``backtest_phase4.py``. That number was estimated over thirteen years and
-# ₹78.5L of contributions **against the cap-weighted NIFTYBEES**, and then applied to a ₹3L book over
-# twelve months **against the equal-weight fund**. Mismatched in scale, in horizon, and in benchmark:
-# it asked a ₹3L book to beat luck by ₹84 lakh. The gate could not open, so twelve months of forward
-# evidence would have bought a guaranteed non-answer. Retired, not re-tuned.
-#
-# **The replacement.** Every book receives *identical cash flows* (``assert_identical_flows``), so the
-# ratio of terminal values isolates exactly what the strategy did differently — the flows cancel:
-#
-#     G = ln( V_SYSTEM / V_BASELINE_EW )
-#
-# Log relative wealth, not a difference of two XIRRs: no root-finding, no convergence failures on a
-# lumpy SIP, and it is additive across sub-periods, so a 12-month G is the sum of its months. It is
-# **scale-free** — the monthly SIP can grow the book by any factor and G is unmoved, which is the
-# property the rupee floor lacked and the reason that floor died.
-#
-# Read it as a percentage with ``expm1(G)``: G = 0.02 is "2% more terminal wealth than the fund".
-#
-#: The null this is judged against, to be generated by a matched simulation and pre-registered
-#: BEFORE the evaluation window closes. Its specification is fixed here on 2026-08-30 and may not be
-#: changed while the clock runs — that is what voided forward run 1:
-#:
-#:   * 12-month windows drawn from point-in-time Nifty-50 history;
-#:   * the same initial-capital-to-SIP ratio, ₹3L + ₹50,000/month;
-#:   * identical deposit dates for the strategy leg and the benchmark leg;
-#:   * random selection pushed through otherwise identical machinery (same costs, same tax, same
-#:     whole-share rounding), so the null carries every friction the real book carries;
-#:   * the equal-weight fund **net of its fee** as the benchmark leg.
-#:
-#: ``None`` until that null has been run — and ``None`` means the criterion reads CANNOT ASSESS, never
-#: a pass. A bar that does not exist must never be silently treated as a bar of zero.
-#: ⛔ **WITHDRAWN 2026-09-06, hours after being set.** The value 0.071877 was computed to a
-#: specification, but **not to CORE_V1's**, and four mismatches were found on review. It is back to
-#: ``None``, which reads ⚪ CANNOT ASSESS and blocks the gate — the honest state.
-#:
-#: 1. **The two pre-registrations specify different statistics.** Run 2 §2 says p95 of |G|; CORE_V1
-#:    §4 says p95 of G. They differ by 20% (0.0719 vs 0.0600). I wrote the CORE_V1 line.
-#: 2. **A one-sided gate against a two-sided bar.** ``go_gate`` tests ``log_rel_wealth > null_p95``,
-#:    so the real false-positive rate is **2.32%**, not the 5% the report claimed.
-#: 3. **The null diversifies into ~50 of 51 index members** — 12 deployments × 15 fresh random picks
-#:    with no sells — while CORE_V1 holds a capped basket. Measured tracking error: a 15-name book
-#:    is **sd 0.053, p95|G| 0.105**; an 8-name book is **sd 0.081, p95|G| 0.162**; the null produced
-#:    **sd 0.036, p95|G| 0.072**. So the bar was **1.5×–2.3× too low**.
-#: 4. **CORE_V1 has ``use_exits=True`` and can sell; the null never sells**, so it charges no
-#:    realised tax the live book would pay.
-#:
-#: A bar that is too low is the dangerous direction: it makes noise look like skill. Fixing it makes
-#: the power problem worse, not better — at p95|G| ≈ 0.105 the bar is ~25× the claimed edge.
-#:
-#: **Do not set a value here until the generator matches CORE_V1's actual policy** and one statistic
-#: is registered in both documents. See reports/NULL_MATCHED.md §6.
-NULL_P95_LOG_REL_WEALTH: float | None = None
-
-#: The day the registered 12-month window opens. **Immutable once the clock starts.**
-#:
-#: It exists because ``months`` was being counted from the first flow *ever recorded* — 2026-06-15,
-#: two IPO-era trades that predate the experiment — so a window registered to open on 2026-08-31
-#: would have reported "12 months" around June 2027, two months early, on evidence that includes a
-#: period nobody registered. The evaluation window is a decision with a date; it is not "however far
-#: back the tradebook happens to reach".
-#:
-#: Everything before this date is *starting basis*, already inside each book's opening value. The
-#: gate measures what happens after it.
-#:
-#: **Moved 2026-08-31 from that date to the next, before any valid in-window row existed.** The cron
-#: ran on the 31st against the *old* code — the mis-wired ``BASELINE_EW`` (NIFTYBEES minus a fee) and
-#: the raw-value statistic — so that row is a snapshot of a benchmark the experiment does not use.
-#: Opening the window on a day whose only observation was computed against the wrong bar would put a
-#: known-bad row inside the registered evidence. Both existing rows are therefore **pre-window**, kept
-#: as the state-at-registration record, and the window opens on the first day the corrected code runs.
-#: The cost is one day; the alternative is twelve months of evidence whose first entry is wrong.
-#:
 #: **The day SYSTEM starts deciding for itself — and today there is no such day.** ``None`` means
 #: no autonomous window is registered: SYSTEM mirrors the user's tradebook and chooses nothing.
 #:
@@ -352,25 +237,6 @@ NULL_P95_LOG_REL_WEALTH: float | None = None
 EVALUATION_START: date | None = None
 
 
-def evaluation_months(as_of: date, *, start: date | None = EVALUATION_START) -> int:
-    """Whole months of the registered window elapsed at ``as_of`` — never counted from a stray flow.
-
-    **Day-aware, and it has to be.** Calendar-month subtraction alone reports a window that opened on
-    the 8th as one month old on the 1st, after 23 days. Run 2 opens on the 1st so it never noticed;
-    ``EVALUATION_START`` is 2026-09-08 and would have inherited a month it had not served. A
-    partial month rounds **down** — under-counting delays a gate, over-counting opens one early, and
-    only one of those errors can authorise capital.
-
-    With no registered start nothing has elapsed: an unregistered window is not a window.
-    """
-    if start is None or as_of < start:
-        return 0
-    months = (as_of.year - start.year) * 12 + as_of.month - start.month
-    if as_of.day < start.day:
-        months -= 1
-    return max(0, months)
-
-
 def is_autonomous(as_of: date, *, start: date | None = EVALUATION_START) -> bool:
     """May ``SYSTEM`` decide for itself on this day?
 
@@ -384,119 +250,42 @@ def is_autonomous(as_of: date, *, start: date | None = EVALUATION_START) -> bool
 
 @dataclass(frozen=True)
 class Gap:
-    """One book measured against another, and whether it is allowed to mean anything yet."""
+    """One book against another over the same flows. **Descriptive — it authorises nothing.**
+
+    One book over months is mostly timing and luck. The rupee gap is shown for the reader; relative
+    wealth is ``ln(NAV_left / NAV_right)`` on unitized NAVs, which a deposit does not dilute.
+    """
 
     left: str
     right: str
     rupees: Decimal
-    months: int
-    #: Which experiment this comparison belongs to. One now: ``system``.
-    track: str = ""
     left_value: Decimal = Decimal("0")
     right_value: Decimal = Decimal("0")
-    #: Unitized NAVs from ``EVALUATION_START`` — the gating statistic's actual inputs.
+    #: Unitized NAVs from the registered start. ``None`` until a window exists — never 1.0.
     left_nav: float | None = None
     right_nav: float | None = None
-    #: p95 of the pre-registered null, in log units. ``None`` until that null exists.
-    null_p95: float | None = None
 
     @property
     def log_rel_wealth(self) -> float | None:
-        """G = ln(NAV_left / NAV_right) — the gating statistic. ``None`` until both NAVs exist.
-
-        **Corrected 2026-08-30.** This was ``ln(V_left / V_right)`` on raw book *values*, described
-        as scale-free. It is not. Identical contributions do not cancel in a ratio, they dilute it::
-
-            ln(110 / 100)             = 0.0953
-            ln((110+100) / (100+100)) = 0.0488
-
-        Nothing happened in the market, and the measured lead halved. The old test multiplied two
-        finished marks by ten and passed, because that proves invariance under *multiplicative*
-        scaling — which is not what a SIP does to a book. A monthly deposit is additive, so the raw
-        statistic would have drifted toward zero all year, understating whatever the strategy did.
-
-        Both legs are now **unitized NAVs** (:mod:`qalpha.live.nav`), measured from
-        ``EVALUATION_START``, which *is* invariant to contributions — that is the entire point of
-        unitization. The rupee gap is kept alongside for the reader, never as the criterion.
-        """
         if self.left_nav is None or self.right_nav is None:
             return None
         if self.left_nav <= 0 or self.right_nav <= 0:
             return None
         return math.log(self.left_nav / self.right_nav)
 
-    @property
-    def readable(self) -> bool:
-        """Is this gap old enough, and larger than the pre-registered null, to be evidence?"""
-        if self.months < MIN_MONTHS_FOR_A_VERDICT:
-            return False
-        if self.null_p95 is None:
-            return False
-        g = self.log_rel_wealth
-        return g is not None and abs(g) > self.null_p95
-
     def render(self) -> str:
         direction = "ahead of" if self.rupees >= 0 else "behind"
         head = f"**{self.left}** is {direction} **{self.right}** by ₹{abs(self.rupees):,.0f}"
         g = self.log_rel_wealth
-        if g is not None:
-            head += f" ({math.expm1(g) * 100:+.2f}% relative wealth, G={g:+.4f})"
-        # Time first: before the window closes, no size of gap means anything, so the size is never
-        # dressed up as a finding. This is the branch the report will sit in for the next 12 months.
-        if self.months < MIN_MONTHS_FOR_A_VERDICT:
-            return (
-                f"{head} — **descriptive only**, {self.months} of {MIN_MONTHS_FOR_A_VERDICT} months. "
-                "A window this short is dominated by *when* the money went in, not *what* was "
-                "picked. No verdict before the locked 12-month evaluation."
-            )
         if g is None:
-            return (
-                f"{head} — **not readable**: the unitized NAVs the statistic needs are not "
-                "available yet (they accrue from EVALUATION_START in data/twin/history.jsonl)."
-            )
-        if self.null_p95 is None:
-            return (
-                f"{head} — **not yet readable**: the pre-registered null has not been run, so there "
-                "is no bar to say whether this is bigger than chance. See NULL_P95_LOG_REL_WEALTH."
-            )
-        if not self.readable:
-            return (
-                f"{head}, which is **inside the ±{self.null_p95:.4f} null band** — that is not a "
-                "result, it is what luck produces at this horizon."
-            )
-        return f"{head}, clearing the ±{self.null_p95:.4f} null band."
+            return f"{head} — relative wealth not measurable yet (no registered window)."
+        return f"{head} ({math.expm1(g) * 100:+.2f}% relative wealth since the start)."
 
 
-def _months_between(start: date | None, end: date) -> int:
-    if start is None:
-        return 0
-    return max(0, (end.year - start.year) * 12 + end.month - start.month)
-
-
-def compare(
-    marks: dict[str, BookMark],
-    *,
-    null_p95: float | None = None,
-    navs: Mapping[str, float] | None = None,
-) -> list[Gap]:
-    """Every comparison the design asks for, with exactly one of them marked as gating.
-
-    Order matters for the report: the gating pair leads, the ablations follow as diagnostics, and
-    ``SYSTEM − REAL`` — does autonomy beat the user's own judgement — comes last because it is
-    information about *him*, never a pass/fail on the system.
-    """
-    pairs = [
-        # The one that matters: the system against the fund anyone can buy in five minutes.
-        (SYSTEM, BASELINE_EW, "system"),
-        # The do-nothing floor. Reported, never the bar — 76% of the screen's gap over NIFTYBEES is
-        # the equal-weight premium, which is purchasable and which the system did not create.
-        (SYSTEM, BASELINE, "system"),
-        # Does deciding beat what the user actually did? Information about HIM, never a pass or a
-        # fail on the system, and it comes last for that reason.
-        (SYSTEM, REAL, "system"),
-    ]
+def compare(marks: dict[str, BookMark], *, navs: Mapping[str, float] | None = None) -> list[Gap]:
+    """SYSTEM against the fund, against doing nothing, and against what the user actually did."""
     out: list[Gap] = []
-    for left, right, track in pairs:
+    for left, right in ((SYSTEM, BASELINE_EW), (SYSTEM, BASELINE), (SYSTEM, REAL)):
         if left not in marks or right not in marks:
             continue
         lm, rm = marks[left], marks[right]
@@ -505,39 +294,33 @@ def compare(
                 left=left,
                 right=right,
                 rupees=lm.gain - rm.gain,
-                track=track,
-                # Each track counts from its OWN registered start, never from the other's.
-                months=evaluation_months(lm.as_of, start=EVALUATION_START),
                 left_value=lm.value,
                 right_value=rm.value,
-                left_nav=(navs or {}).get(f"{track}:{left}", (navs or {}).get(left)),
-                right_nav=(navs or {}).get(f"{track}:{right}", (navs or {}).get(right)),
-                null_p95=null_p95,
+                left_nav=(navs or {}).get(left),
+                right_nav=(navs or {}).get(right),
             )
         )
     return out
 
 
 def comparison_markdown(marks: dict[str, BookMark], gaps: Sequence[Gap]) -> str:
-    """The panel. Leads with the gating comparison and says plainly what does *not* count."""
     lines = ["| Book | Net money in | Worth today | Gain | XIRR |", "|---|---:|---:|---:|---:|"]
     for name in ALL_BOOKS:
         m = marks.get(name)
         if m is None:
             continue
-        rate = "—" if m.rate is None else f"{m.rate * 100:+.1f}%/yr"
+        # An annual rate from a few months of returns reads as a disaster or a miracle. Under a
+        # year of history the rate is withheld, not extrapolated.
+        young = m.start is None or (m.as_of - m.start).days < MIN_DAYS_FOR_A_RATE
+        rate = (
+            "— (under a year)" if young else ("—" if m.rate is None else f"{m.rate * 100:+.1f}%/yr")
+        )
         lines.append(
             f"| {'**' + name + '**' if name == SYSTEM else name} | ₹{m.net_invested:,.0f} | "
             f"₹{m.value:,.0f} | ₹{m.gain:+,.0f} | {rate} |"
         )
     if gaps:
-        lines += [
-            "",
-            "**Descriptive. Nothing here authorises anything** — the GO gate was removed on "
-            "2026-09-12 because the verdict it graded needed roughly two hundred years of data to "
-            "arrive. These say what happened between two books, which is all a gap was ever "
-            "entitled to say:",
-        ]
+        lines += ["", "Descriptive — what happened between two books, not evidence of skill:"]
         lines += [f"- {g.render()}" for g in gaps]
     return "\n".join(lines)
 
@@ -552,7 +335,7 @@ def ew_fund_mark(
     """The same rupees into an equal-weight index **fund** — the bar that decides whether to bother.
 
     ``ew_series`` is a point-in-time equal-weight index level (see
-    :func:`qalpha.backtest.baselines.equal_weight_pit`, which rebalances monthly over the names
+    :func:`qalpha.live.benchmarks.equal_weight_pit`, which rebalances monthly over the names
     actually in the index that month rather than holding today's survivors). The fund's annual fee is
     charged continuously, because the premium is only worth what it is worth **after** the cost of
     buying it — an unattainable zero-fee index is not an alternative anyone can hold.
@@ -595,12 +378,6 @@ TWIN_STATE = Path("data/twin/books.json")
 #:
 #: One line per day is ~600 bytes; a decade is under 2 MB. There is no reason to prune it, ever.
 TWIN_HISTORY = Path("data/twin/history.jsonl")
-
-#: Every AI keep/drop verdict, with the provenance needed to grade it later. Also append-only.
-#: A verdict without its *decision date and the price on that date* cannot be scored afterwards —
-#: the counterfactual ("what did the name we dropped go on to do?") is exactly the question the
-#: whole AI experiment exists to answer, and it is unanswerable from a verdict alone.
-AI_VERDICT_HISTORY = Path("data/twin/ai_verdicts.jsonl")
 
 
 def _append_jsonl(path: Path, rows: Sequence[Mapping[str, object]], *, key: str) -> int:
@@ -700,35 +477,10 @@ def append_history(
 ) -> int:
     """Record one day of every book, so a path exists to look back at. Returns total rows on file.
 
-    Stores the **inputs to every later statistic**, not the statistics themselves: value, net
-    invested and XIRR per book, plus the gating gap in both rupees and log relative wealth. Anything
-    computed downstream — drawdown, tracking error, the significance of the gap — is recoverable from
-    these, and recoverable *retroactively*, which is the whole point of keeping them.
+    Stores the **inputs to every later statistic**: value, net invested and XIRR per book, plus each
+    gap. Drawdown, tracking error and anything else are recoverable from these, retroactively.
     """
 
-    def _stat(g: Gap | None) -> dict[str, object]:
-        # ``pair`` is read off the gap itself. It used to be the module constant GATING_PAIR while
-        # the numbers came from ``next(g for g in gaps if g.gates)`` — and once CORE_V1 existed that
-        # picked the *core* comparison, so the row would have carried core numbers under a
-        # SYSTEM label beside a run-2 verdict. A label must name the thing that was computed.
-        if g is None:
-            return {
-                "pair": None,
-                "rupees": None,
-                "log_rel_wealth": None,
-                "months": None,
-                "null_p95": None,
-                "authorizes": False,
-            }
-        return {
-            "pair": [g.left, g.right],
-            "rupees": str(g.rupees),
-            "log_rel_wealth": g.log_rel_wealth,
-            "months": g.months,
-            "null_p95": g.null_p95,
-        }
-
-    by_track = {g.track: g for g in gaps if g.track}
     row: dict[str, object] = {
         "as_of": as_of.isoformat(),
         "books": {
@@ -740,8 +492,10 @@ def append_history(
             }
             for name, m in sorted(marks.items())
         },
-        # Every track's own statistic, each labelled with the pair it was actually computed from.
-        "tracks": {name: _stat(g) for name, g in sorted(by_track.items())},
+        "gaps": [
+            {"pair": [g.left, g.right], "rupees": str(g.rupees), "log_rel_wealth": g.log_rel_wealth}
+            for g in gaps
+        ],
     }
     return _append_jsonl(path, [row], key="as_of")
 
@@ -827,90 +581,6 @@ def navs_from_history(
     return out
 
 
-def append_ai_attempt(
-    *,
-    as_of: date,
-    status: str,
-    detail: str = "",
-    raw: str = "",
-    model: str = "",
-    prompt_version: str = "",
-    undeployed_cash: str = "",
-    cash_unit: str = "",
-    path: Path = AI_VERDICT_HISTORY,
-) -> int:
-    """Record that the AI step *happened*, whatever came of it. One row per eligible day.
-
-    **Why silence is not good enough.** Before this, four very different days all produced no rows at
-    all: cash under the deploy floor so the model was never asked; no API key; an error or refusal;
-    and a clean run where the model kept every name. In August 2027 those are indistinguishable, and
-    the difference between "the AI never got to speak" and "the AI looked and found nothing" is the
-    difference between no experiment and a null result.
-
-    ``raw`` keeps the model's actual response — the searched text behind the twelve-word reason.
-    Without it a veto cannot be re-read later, and re-reading it is how a legitimate governance call
-    is told apart from a fabrication.
-
-    ``cash_unit`` says what ``undeployed_cash`` is denominated in, and it exists because that field
-    silently was not money. Rows written before 2026-09-05 carry a **share count** and no
-    ``cash_unit``; rows from PR-8c onward carry rupees and say so. A number on a record that will be
-    read a year from now must be labelled as the thing that was computed.
-    """
-    row = {
-        "as_of": as_of.isoformat(),
-        "kind": "attempt",
-        "status": status,
-        "detail": detail[:500],
-        "model": model,
-        "prompt_version": prompt_version,
-        "undeployed_cash": undeployed_cash,
-        "cash_unit": cash_unit,
-        "raw": raw[:20000],
-        "_key": f"{as_of.isoformat()}:__attempt__",
-    }
-    return _append_jsonl(path, [row], key="_key")
-
-
-def append_ai_verdicts(
-    verdicts: Mapping[str, Mapping[str, object]],
-    prices: Mapping[str, Decimal],
-    *,
-    as_of: date,
-    model: str,
-    prompt_version: str,
-    path: Path = AI_VERDICT_HISTORY,
-) -> int:
-    """Record every keep/drop verdict with what is needed to score it a year from now.
-
-    ``price_at_decision`` is the load-bearing field: with it, the counterfactual for a dropped name
-    is a lookup against any later price panel. Without it, a DROP is an opinion with no outcome
-    attached and the experiment can never be settled.
-    """
-    rows = [
-        {
-            "as_of": as_of.isoformat(),
-            "ticker": ticker,
-            "call": str(v.get("call", "")),
-            "confidence": str(v.get("confidence", "")),
-            "reason": str(v.get("reason", "")),
-            "source": str(v.get("source", "")),
-            "source_tier": str(v.get("source_tier", "")),
-            "demoted": bool(v.get("demoted", False)),
-            "price_at_decision": str(prices.get(ticker, "")),
-            "model": model,
-            "prompt_version": prompt_version,
-            "kind": "verdict",
-        }
-        for ticker, v in sorted(verdicts.items())
-    ]
-    if not rows:
-        return 0
-    # Keyed on date+ticker so a same-day re-run corrects rather than duplicates.
-    for r in rows:
-        r["_key"] = f"{r['as_of']}:{r['ticker']}"
-    return _append_jsonl(path, rows, key="_key")
-
-
 def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
     """Persist every book's portfolio and flows.
 
@@ -932,7 +602,10 @@ def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
             for name, book in books.items()
         },
     }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # Atomic: a failure mid-write must leave yesterday's books, not a truncated file.
+    from qalpha.live import atomic
+
+    atomic.write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
@@ -1019,38 +692,6 @@ def comparison_frame(marks: dict[str, BookMark]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def holdings_frame(book: TwinBook, prices: dict[str, Decimal]) -> pd.DataFrame:
-    """One row per holding with its share of the book — the input to a composition chart.
-
-    Weights are of **equity**, not of equity + cash. A slice labelled with the account total would
-    understate every position: on the real account the same mistake read HCLTECH at 3.3% when it was
-    17.8%, and it is the number concentration is judged by.
-    """
-    equity = book.portfolio.holdings_value(prices)
-    rows = [
-        {
-            "Ticker": t.removesuffix(".NS"),
-            "Value": float(q * prices[t]),
-            "Share %": float(q * prices[t] / equity * 100) if equity else 0.0,
-        }
-        for t, q in sorted(book.portfolio.positions().items())
-        if t in prices
-    ]
-    # An empty frame has no columns, so sorting by name raises KeyError — which took the live
-    # dashboard down on a book that held nothing (or whose names the panel could not price).
-    # Return the shape the caller expects rather than an untyped empty frame.
-    columns = ["Ticker", "Value", "Share %"]
-    if not rows:
-        return pd.DataFrame(columns=columns)
-    return (
-        pd.DataFrame(rows, columns=columns)
-        .sort_values("Value", ascending=False)
-        .reset_index(drop=True)
-    )
-
-
-# ---- off-market credits: IPO allotments, gifts, demat transfers -----------------------------------
-
 OFF_MARKET_PATH = Path("data/twin/off_market.json")
 
 
@@ -1131,105 +772,3 @@ def apply_off_market(portfolio: Portfolio, credits: Sequence[OffMarketCredit]) -
                 buy_price=credit.cost_per_share,
             )
         )
-
-
-def unexplained_holdings(
-    replayed: Portfolio, broker_qty: Mapping[str, Decimal], broker_price: Mapping[str, Decimal]
-) -> list[OffMarketCredit]:
-    """Shares the broker holds that the tradebook cannot explain — detected, not typed.
-
-    ``kite.holdings()`` returns **settled demat holdings**, so an IPO allotment appears there as soon
-    as it credits. That gives three of the four fields for free: the ticker, the quantity, and
-    ``average_price`` — which for an allotment *is* the issue price paid. The one thing the broker
-    cannot supply is the **acquisition date**: ``holdings()`` carries no purchase dates at all.
-
-    So the missing shares are dated **conservatively by the caller** rather than guessed. Assuming a
-    recent acquisition makes them short-term, which taxes at 20% instead of 12.5% — an over-statement.
-    The user can set the true allotment date in ``off_market.json`` to recover the correct twelve-month
-    clock; until then the figure is wrong in the direction that cannot cost him money.
-    """
-    held = replayed.positions()
-    out: list[OffMarketCredit] = []
-    for ticker, qty in sorted(broker_qty.items()):
-        gap = qty - held.get(ticker, Decimal("0"))
-        price = broker_price.get(ticker)
-        if gap > 0 and price is not None and price > 0:
-            out.append(
-                OffMarketCredit(
-                    ticker=ticker,
-                    on=date.today(),  # placeholder; the caller stamps the conservative date
-                    quantity=gap,
-                    cost_per_share=price,
-                    note="detected from broker holdings — date unknown",
-                )
-            )
-    return out
-
-
-def off_market_snippet(credits: Sequence[OffMarketCredit]) -> str:
-    """A ready-to-paste ``off_market.json`` entry, pre-filled with everything the broker knew.
-
-    Only ``on`` is left for the user, because it is the only field he holds that the API does not.
-    """
-    lines = [
-        '  "credits": [',
-        *[
-            "    {"
-            f'"ticker": "{c.ticker}", "on": "YYYY-MM-DD", '
-            f'"quantity": "{c.quantity.normalize()}", '
-            f'"cost_per_share": "{c.cost_per_share}", "note": "IPO allotment"'
-            "}" + ("," if i < len(credits) - 1 else "")
-            for i, c in enumerate(credits)
-        ],
-        "  ]",
-    ]
-    return "\n".join(lines)
-
-
-def inceptions(path: Path = TWIN_HISTORY) -> dict[str, str]:
-    """The first day each book was actually **marked** — not the seeding date they all share.
-
-    Moved here from the dashboard when Streamlit was removed. The logic outlives the page it was
-    written for, because the rule it enforces is about the RECORD, not about a screen.
-
-    ### Why this exists
-
-    Every book's ``start`` field reads 2026-06-15, because that is when the cash flows begin. It is
-    not when the book existed. ``CORE_V1``'s first mark is **2026-09-07**, and every lot it holds is
-    dated that day: it was constituted last Monday, at that Monday's prices, while ``SYSTEM`` had
-    been accumulating since 2026-08-29 and had fallen ₹10,627 over the stretch in between.
-
-    So CORE_V1 appeared in the record **already ₹10,293 ahead of SYSTEM**, and in the one day
-    both books have been alive they have diverged by ₹475. The dashboard was rendering that ₹10,768
-    as "The screen ▲ +₹6,109 vs the fund" — an inception artefact presented as performance, which is
-    the defect family this whole repo is organised around. A book cannot outperform over a period it
-    did not exist for.
-
-    Reads the append-only history at the highest revision per day, the same rule every other reader
-    uses.
-    """
-    out: dict[str, str] = {}
-    try:
-        rows = [
-            json.loads(line)
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-    except (OSError, ValueError, json.JSONDecodeError):
-        return out
-    latest: dict[str, dict[str, object]] = {}
-    for row in rows:
-        day = str(row.get("as_of"))
-        if day not in latest or int(str(row.get("revision", 0))) >= int(
-            str(latest[day].get("revision", 0))
-        ):
-            latest[day] = row
-    for day in sorted(latest):
-        books = latest[day].get("books")
-        if not isinstance(books, dict):
-            continue
-        for name, book in books.items():
-            # A book with no value that day was not marked; it is not yet alive for this purpose.
-            if isinstance(book, dict) and book.get("value") and str(name) not in out:
-                out[str(name)] = day
-    return out

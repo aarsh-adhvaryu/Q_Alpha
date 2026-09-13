@@ -1,25 +1,12 @@
-"""The evening pipeline, on this machine — what the cron used to do, where you can watch it.
+"""The evening pipeline — prices, filings, headlines, the books — run when the user presses the button.
 
-### Why this module exists
+Three rules:
 
-``.github/workflows/paper.yml`` ran five steps every weekday at 12:23 UTC: refresh prices, mark the
-paper book, read filings, write the brief, step the twin. Across 60 scheduled runs **not one fired
-on time** — median lateness 2.4 hours — and the workflow's own ``continue-on-error`` reported a step
-that had been SIGKILLed at 20m12s as a success. The schedule was never the useful part; the *step
-list* was. This module is that list, run when you press the button, on hardware you can see.
-
-### The three rules it is built on
-
-1. **A failed step is recorded and the run continues.** The cron was fail-soft too, and that was
-   the problem: every step reported success whatever happened, so a dead credential degraded the
-   whole pipeline silently for as long as nobody looked. Here a failure is *written down and
-   surfaced on the page*, which is what fail-soft was supposed to mean.
-2. **Finished work is never redone.** Each step's completion is appended to the task ledger against
-   the digest of the inputs it ran on. Stop the machine halfway, come back in two days, and it
-   resumes at the step it had not reached — because that is what a ledger is for.
-3. **Changing the inputs makes everything pending again.** The digest covers the holdings, the cash
-   and the price panel. Work finished against yesterday's prices is not work finished against
-   today's, and pretending otherwise is how a stale number becomes an order.
+1. **A failed step is recorded and the run continues.** Written to the task ledger and printed on
+   the page — fail-soft, never fail-silent.
+2. **Finished work is never redone.** Each step's completion is keyed to the digest of the inputs
+   it ran on; an interrupted evening resumes at the step it had not reached.
+3. **A skip is not a completion.** A step missing its credential is reported and left pending.
 
 Nothing here places an order, and no step in the list could.
 """
@@ -51,9 +38,8 @@ class Step:
     #: Environment variables without which this step cannot do its job. A step missing one is
     #: **skipped and said so**, never run into a confusing failure.
     needs: tuple[str, ...] = ()
-    #: Variables of which **at least one** must be set. For work that has two routes: the brief can
-    #: be written by a local model over archived headlines or by a cloud model over web search, and
-    #: requiring the cloud key alone would skip it on a machine that can do the job.
+    #: Variables of which **at least one** must be set, for work with two routes (a local model or a
+    #: cloud key) — requiring one alone would skip work this machine can do.
     needs_any: tuple[str, ...] = ()
     #: Why it is worth the wait, shown when it is the slow one.
     slow: bool = False
@@ -128,10 +114,7 @@ def _checked(name: str, code: int) -> None:
 def _step_prices() -> None:
     """Bring EVERY panel a run reads up to date, not just the paper book's.
 
-    This used to call ``paper._refresh_prices()`` alone, which rebuilds the book's panel from the
-    Nifty-50 membership list. The screen reads a different panel built from the 96-name watchlist,
-    and nothing refreshed it — so the gate said "prices are 13 days old" and pressing **Refresh
-    market data** could never make that untrue. See :mod:`qalpha.live.panels`.
+    See :mod:`qalpha.live.panels`: the refresh follows the same panel names every reader uses.
     """
     from qalpha.data.ingest import download_prices, save_parquet
     from qalpha.data.prices import PriceData
@@ -157,9 +140,6 @@ def _step_prices() -> None:
         save_parquet(frame, str(panel))
         LOG.say(f"{panel.name} → {PriceData.from_long(frame).dates[-1].date()}", "detail")
 
-    # The benchmark, inline rather than through `paper._refresh_benchmark`: this is three lines,
-    # and a module under src/ reaching into scripts/ only works when scripts/ happens to be on
-    # sys.path — which is true when launched by local_run and false everywhere else, tests included.
     b_start, b_existing = _fetch_window(BENCHMARK_PANEL)
     LOG.say(f"{BENCHMARK_PANEL.name}: the Nifty TRI proxy from {b_start}…", "detail")
     save_parquet(
@@ -298,12 +278,6 @@ def _universe_tickers(path: Path) -> list[str]:
     return list(seen)
 
 
-def _step_mark() -> None:
-    import paper
-
-    _checked("paper dashboard", paper.main(["dashboard"]))
-
-
 def _step_evidence() -> None:
     import evidence
 
@@ -320,12 +294,6 @@ def _step_twin() -> None:
     import twin
 
     _checked("twin", twin.main(["daily"]))
-
-
-def _step_brief() -> None:
-    import ai_brief
-
-    _checked("ai_brief", ai_brief.main(["daily"]))
 
 
 def refresh_steps() -> list[Step]:
@@ -346,38 +314,18 @@ def day_scope(on: date) -> str:
 def research_steps() -> list[Step]:
     """The work done **against** a fixed set of inputs, and therefore resumable across days.
 
-    Filings, then headlines, then the twin — so the autonomous books step on the evidence rather
-    than ahead of it, and the brief is written from headlines this run actually fetched. The account
-    layer is **not** in this list: it runs after, in ``local_run``, because a proposal must be the
-    last thing decided and must see everything above it.
+    Filings, then headlines, then the books — so the books step on the evidence rather than ahead
+    of it.
     """
     return [
-        Step(
-            "mark",
-            "Marking the model book to today's close",
-            _step_mark,
-        ),
         Step(
             "evidence",
             "Reading company filings and the exchange's own surveillance file",
             _step_evidence,
             slow=True,
         ),
-        Step(
-            "news",
-            "Fetching, archiving and reading the day's headlines",
-            _step_news,
-            slow=True,
-        ),
-        Step(
-            "twin",
-            "Stepping the autonomous books and grading them against the fund",
-            _step_twin,
-        ),
-        # THE MARKET BRIEF IS NO LONGER RUN (2026-09-13). No decision code reads it -- it was a news
-        # summary for the page, ~55,000 input tokens an evening, and on its first day it returned
-        # an apology instead of a brief. The user asked for it gone. `_step_brief` and the
-        # `ai_brief` module stay, because `verdicts.py` imports types from that module.
+        Step("news", "Fetching, archiving and reading the day's headlines", _step_news, slow=True),
+        Step("twin", "Marking the books against the fund", _step_twin),
     ]
 
 

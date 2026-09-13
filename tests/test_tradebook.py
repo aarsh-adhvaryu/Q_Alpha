@@ -12,7 +12,6 @@ from decimal import Decimal
 
 from qalpha.accounting.costs import Side
 from qalpha.config import Config
-from qalpha.live.advisor import advise_sell
 from qalpha.live.tradebook import (
     EXPORT_DIR,
     parse_tradebook,
@@ -56,15 +55,6 @@ def test_replay_builds_dated_lots_and_realizes_tax() -> None:
     # TCS was a ~₹50k short-term gain → taxed at 20%; INFY long-term gain sits inside the exemption.
     assert Decimal("8000") < result.realized_tax < Decimal("11000")
     assert not result.warnings
-
-
-def test_dated_lot_makes_advice_long_term() -> None:
-    pf = replay_tradebook(_trades(), Config(), cash=Decimal("0")).portfolio
-    # HDFCBANK bought 2023-01-02; selling on 2024-06-03 is long-term (>365d) — exact only because the
-    # lot is dated. A holdings-snapshot (undated) portfolio would wrongly treat it as short-term.
-    advice = advise_sell(pf, "HDFCBANK.NS", Decimal("1700"), date(2024, 6, 3), Config())
-    assert advice.ltcg_gain > 0
-    assert advice.stcg_gain == 0
 
 
 def test_reconcile_positions_flags_mismatch() -> None:
@@ -198,13 +188,13 @@ def test_an_empty_folder_says_so_rather_than_reading_as_no_trades(tmp_path) -> N
     assert any("No readable export" in n for n in notes)
 
 
-def test_both_readers_point_at_one_folder() -> None:
+def test_every_reader_points_at_one_folder() -> None:
     """Asserted on the constant, because the defect was two literals that agreed until one moved."""
     import sys
     from pathlib import Path as _Path
 
     sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "scripts"))
-    import local_run
+    import twin
 
-    assert local_run.TRADEBOOK_DIR is EXPORT_DIR
+    assert twin.EXPORT_DIR is EXPORT_DIR
     assert _Path("data/tradebooks") == EXPORT_DIR

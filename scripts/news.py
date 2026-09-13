@@ -54,14 +54,13 @@ BUDGET_SECONDS = int(os.environ.get("NEWS_BUDGET_SECONDS", "600"))
 
 
 def _scope(cfg: Config, as_of: date) -> list[str]:
-    """The names worth spending a search on: what the screen proposes plus what is held.
+    """The names worth a search: the research scope — what SYSTEM holds plus its candidates.
 
-    Not the whole watchlist. Ninety-six searches a day is a request rate that gets a machine
-    blocked, and the flags exist for the basket in front of the user, not for the index.
+    Not the whole watchlist. Ninety-six searches a day is a request rate that gets a machine blocked.
     """
-    from evidence import _screen_basket
+    from qalpha.live.screen import research_scope
 
-    return list(_screen_basket(cfg, as_of).tickers)
+    return research_scope(as_of)
 
 
 def _archive(scope: list[str], as_of: date) -> tuple[list[FeedArchive], list[str], int]:

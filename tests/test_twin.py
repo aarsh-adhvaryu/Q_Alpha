@@ -1,8 +1,8 @@
-"""The digital twin: five books, one set of cash flows (PLAN_REDESIGN.md §1).
+"""The books: one set of cash flows, four ways of using it.
 
 The properties here are the design, not the arithmetic. Each one closes a specific way a previous
-forward run was lost: flows drifting apart between books, a gap being read before it could mean
-anything, and an ablation being allowed to authorise something.
+forward run was lost: flows drifting apart between books, a gap read as more than a description,
+and a book reporting a lead it only has because the export behind the comparison was short.
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ import pytest
 
 from qalpha.accounting.costs import Side
 from qalpha.config import Config
+from qalpha.live.flows import Flow
 from qalpha.live.nav import unitized_nav
-from qalpha.live.track_record import Flow
 from qalpha.live.twin import (
     ALL_BOOKS,
     BASELINE,
@@ -130,60 +130,6 @@ def test_the_comparison_is_the_system_against_the_purchasable_fund() -> None:
     ]
 
 
-def test_a_gap_is_unreadable_before_twelve_months() -> None:
-    """The bar that voided forward run 1: too short is not a small result, it is no result."""
-    marks = _marks(SYSTEM=50000, BASELINE=0)
-    marks[SYSTEM] = BookMark(
-        SYSTEM, date(2026, 9, 1), date(2026, 6, 15), Decimal("100000"), Decimal("150000"), None
-    )
-    gap = compare(marks, null_p95=0.01)[0]
-    assert not gap.readable
-    assert "No verdict before" in gap.render()
-
-
-@pytest.fixture
-def registered_window(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A registered start, for tests of what a gap may *say* once a window is old enough.
-
-    No start is registered in the live code (withdrawn 2026-09-13), so every gap reads 0 months.
-    These tests are about the gap's reading rules, not about the date — they supply one.
-    """
-    from qalpha.live import twin as twin_module
-
-    monkeypatch.setattr(twin_module, "EVALUATION_START", date(2024, 1, 1))
-
-
-def test_a_gap_inside_the_null_band_is_not_a_result(registered_window: None) -> None:
-    gap = compare(
-        _marks(SYSTEM=1200, BASELINE=1000),
-        null_p95=0.05,
-        navs={SYSTEM: 1.012, BASELINE: 1.010},
-    )[0]
-    assert not gap.readable
-    assert "null band" in gap.render()
-
-
-def test_a_gap_is_readable_only_when_old_enough_and_big_enough(registered_window: None) -> None:
-    gap = compare(
-        _marks(SYSTEM=90000, BASELINE=1000),
-        null_p95=0.05,
-        navs={SYSTEM: 1.90, BASELINE: 1.01},
-    )[0]
-    assert gap.readable
-    assert "clearing" in gap.render()
-
-
-def test_without_a_null_nothing_is_readable(registered_window: None) -> None:
-    """The matched null has not been run. No bar means no verdict — never a bar of zero."""
-    gap = compare(_marks(SYSTEM=90000, BASELINE=1000), navs={SYSTEM: 1.9, BASELINE: 1.0})[0]
-    assert gap.null_p95 is None
-    assert not gap.readable
-    assert "has not been run" in gap.render()
-
-
-# ---- the baseline ---------------------------------------------------------------------------------
-
-
 def test_the_baseline_replays_the_same_flows_into_the_index() -> None:
     books = seed_books(_trades(), Config())
     idx = pd.bdate_range("2026-06-01", "2026-09-01")
@@ -205,17 +151,25 @@ def test_the_baseline_refuses_rather_than_inventing_a_number() -> None:
     )
 
 
-def test_the_panel_separates_the_gate_from_the_diagnostics() -> None:
+def test_the_panel_says_a_gap_is_a_description_and_leads_with_the_fund() -> None:
     marks = _marks(SYSTEM=5000, BASELINE_EW=3000, BASELINE=1000, REAL=2000)
-    md = comparison_markdown(marks, compare(marks, null_p95=0.001))
-    assert "Nothing here authorises anything" in md
-    assert "GO gate was removed" in md
+    md = comparison_markdown(marks, compare(marks))
+    assert "not evidence of skill" in md
     # Read the gap lines, not the books table above them: REAL heads that table.
     gap_lines = [ln for ln in md.splitlines() if ln.startswith("- ")]
     assert BASELINE_EW in gap_lines[0], "the fund anyone can buy leads the comparison"
 
 
-def test_the_gating_statistic_survives_a_contribution() -> None:
+def test_relative_wealth_is_unmeasured_without_a_window_never_zero() -> None:
+    """No registered window means no NAVs. The gap must say so, not print +0.00%."""
+    gap = compare(_marks(SYSTEM=5000, BASELINE_EW=3000))[0]
+    assert gap.log_rel_wealth is None
+    assert "not measurable yet" in gap.render() and "0.00%" not in gap.render()
+    with_navs = compare(_marks(SYSTEM=5000, BASELINE_EW=3000), navs={SYSTEM: 1.1, BASELINE_EW: 1.0})
+    assert with_navs[0].log_rel_wealth == pytest.approx(math.log(1.1))
+
+
+def test_the_relative_wealth_statistic_survives_a_contribution() -> None:
     """The property the old test claimed and did not prove.
 
     ``log_rel_wealth`` was once ``ln(V_left / V_right)`` on raw book values, described as
@@ -246,21 +200,6 @@ def test_the_gating_statistic_survives_a_contribution() -> None:
     assert with_flow.iloc[-1] == pytest.approx(with_flow.iloc[0]), "a deposit is not a return"
 
 
-def test_the_window_is_the_registered_one_not_the_first_flow_ever() -> None:
-    """``months`` counted from the earliest flow on file — which predates the experiment.
-
-    The tradebook reaches back to 2026-06-15 (two IPO-era trades). A window opening 2026-09-01 would
-    therefore have reported "12 months" around June 2027 — months early, and partly on evidence from
-    before anything was registered.
-    """
-    from qalpha.live.twin import evaluation_months
-
-    start = date(2026, 9, 14)
-    assert evaluation_months(date(2026, 9, 13), start=start) == 0, "before the window, nothing"
-    assert evaluation_months(date(2027, 6, 15), start=start) == 9, "a June-2026 flow buys no months"
-    assert evaluation_months(date(2027, 9, 14), start=start) == 12
-
-
 def test_no_registered_start_means_system_never_decides() -> None:
     """The rulebook start (2026-09-14) was withdrawn before it opened, on 2026-09-13.
 
@@ -268,19 +207,13 @@ def test_no_registered_start_means_system_never_decides() -> None:
     would start choosing on the rulebook on the first evening after the withdrawal — the exact
     outcome the withdrawal exists to prevent. Checked on the days around the old start and far out.
     """
-    from qalpha.live.twin import (
-        EVALUATION_START,
-        evaluation_months,
-        is_autonomous,
-        navs_from_history,
-    )
+    from qalpha.live.twin import EVALUATION_START, is_autonomous, navs_from_history
 
     assert EVALUATION_START is None, (
         "a start is set only by a written registration — see reports/PREREGISTRATION_SYSTEM.md §6"
     )
     for day in (date(2026, 9, 14), date(2026, 9, 15), date(2030, 1, 1)):
         assert is_autonomous(day) is False
-        assert evaluation_months(day) == 0
     rows = [{"as_of": "2026-09-15", "books": {"SYSTEM": {"value": "100", "net_invested": "100"}}}]
     assert navs_from_history(rows) == {}, "no window: unmeasured, never a NAV of 1.0"
 
@@ -301,72 +234,6 @@ def test_the_daily_caller_asks_the_registered_start() -> None:
     assert runner_script.is_autonomous is twin_module.is_autonomous
     assert runner_script.EVALUATION_START is twin_module.EVALUATION_START
     assert runner_script.is_autonomous(date(2026, 9, 15)) is False
-
-
-def test_the_null_matches_the_committed_report() -> None:
-    """The bar in code and the bar in the record must be the same number.
-
-    The previous version of this test asserted ``NULL_P95_LOG_REL_WEALTH is None`` — a test of a
-    *state*, which went red the moment the state legitimately changed and would have gone green
-    again if someone deleted the value. This asserts the *property*: whatever the constant says, it
-    is what ``scripts/exp_null.py`` actually produced and committed.
-    """
-    import json
-    from pathlib import Path as _Path
-
-    from qalpha.live.twin import NULL_P95_LOG_REL_WEALTH
-
-    report = _Path("reports/NULL_MATCHED.json")
-    if not report.exists():  # pragma: no cover - the report ships with the repo
-        pytest.skip("null report not present")
-    recorded = json.loads(report.read_text())
-    if NULL_P95_LOG_REL_WEALTH is None:
-        # A withdrawn or ungenerated bar is a valid state: it reads CANNOT ASSESS and blocks.
-        return
-    assert not recorded.get("withdrawn"), (
-        "the constant is set from a report marked withdrawn — a bar that was found not to match "
-        "the experiment must never be in force"
-    )
-    assert abs(NULL_P95_LOG_REL_WEALTH - recorded["p95_abs_log_rel_wealth"]) < 5e-7
-    assert recorded["draws"] >= 1000, "the specification requires at least 1,000 draws"
-
-
-def test_a_withdrawn_null_is_not_in_force() -> None:
-    """The invariant that matters: a withdrawn bar and a live constant cannot coexist.
-
-    On 2026-09-06 a value was set and withdrawn hours later, because it was matched to *a*
-    specification and not to ``CORE_V1``'s — the null diversified into ~50 of 51 index members
-    while ``CORE_V1`` holds a capped basket, making the bar 1.5–2.3× too low. Too low is the
-    dangerous direction: it makes noise look like skill.
-    """
-    import json
-    from pathlib import Path as _Path
-
-    from qalpha.live.twin import NULL_P95_LOG_REL_WEALTH
-
-    report = _Path("reports/NULL_MATCHED.json")
-    if not report.exists():  # pragma: no cover
-        pytest.skip("null report not present")
-    if json.loads(report.read_text()).get("withdrawn"):
-        assert NULL_P95_LOG_REL_WEALTH is None
-
-
-def test_the_null_is_a_null_and_not_a_bug() -> None:
-    """Random selection must beat the fund about half the time and average about zero.
-
-    The first run of the generator returned mean G = −0.68 with **0 of 20** draws beating the fund,
-    because the value series applied the final basket across the whole window. A null where nothing
-    ever wins is not a null; it is a bug reporting itself. These are the two numbers that catch it.
-    """
-    import json
-    from pathlib import Path as _Path
-
-    report = _Path("reports/NULL_MATCHED.json")
-    if not report.exists():  # pragma: no cover
-        pytest.skip("null report not present")
-    r = json.loads(report.read_text())
-    assert 0.40 <= r["fraction_beating_the_fund"] <= 0.60
-    assert abs(r["mean_log_rel_wealth"]) < 0.01
 
 
 def test_the_bar_is_the_purchasable_alternative_not_the_index() -> None:
@@ -442,7 +309,7 @@ def test_no_new_trades_credits_nothing() -> None:
 
 
 def test_an_empty_tradebook_read_must_not_be_treated_as_an_empty_account() -> None:
-    """The silent failure this guards: a failed gist read makes REAL replay to ₹0.
+    """The silent failure this guards: a failed tradebook read makes REAL replay to ₹0.
 
     With flows stored per book, REAL would show ₹0 against ₹3,04,144 of net money in — a −100% line,
     with every twin appearing to beat it by three lakh, written to the dashboard as a verdict. The
@@ -469,97 +336,6 @@ def test_an_empty_tradebook_read_must_not_be_treated_as_an_empty_account() -> No
     assert "return ABORTED" in src[abort_at : abort_at + 900], "abort must return before writing"
 
 
-def test_holdings_frame_survives_a_book_with_nothing_in_it() -> None:
-    """An empty frame has no columns, so sorting by name raises KeyError.
-
-    This took the live dashboard down: `_twin_panel` charts REAL and SYSTEM side by side, and a
-    book holding nothing — or whose names the deployed panel could not price — crashed the page
-    rather than drawing an empty chart.
-    """
-    from qalpha.live.twin import holdings_frame
-
-    empty = seed_books(_trades(), Config())[SYSTEM]
-    frame = holdings_frame(empty, {})  # no prices at all
-    assert frame.empty
-    assert list(frame.columns) == ["Ticker", "Value", "Share %"], "shape must survive"
-
-
-def test_holdings_frame_skips_names_it_cannot_price() -> None:
-    """A holding with no price is omitted, never valued at zero — that would understate the book."""
-    from qalpha.live.twin import holdings_frame
-
-    books = seed_books(_trades(), Config())
-    book = books[SYSTEM]
-    book.portfolio.buy(date(2026, 8, 28), "INFY.NS", Decimal("10"), Decimal("1140"))
-    book.portfolio.buy(date(2026, 8, 28), "TCS.NS", Decimal("5"), Decimal("2340"))
-    frame = holdings_frame(book, {"INFY.NS": Decimal("1140")})  # TCS unpriced
-    assert list(frame["Ticker"]) == ["INFY"]
-    assert abs(frame["Share %"].sum() - 100.0) < 1e-6, "shares are of what could be priced"
-
-
-# ``_twin_prices`` and its test went with the dashboard on 2026-09-09. The lesson it carried —
-# MERGE the price panels, never take the first that yields anything, or a holding the watchlist
-# cannot price vanishes from a book that is valuing it — is built into ``scripts/local_run.py::_prices``
-# from the start, which reports every unpriced name rather than dropping it.
-
-
-def test_a_book_younger_than_the_fund_gets_no_gap_column() -> None:
-    """A book cannot out- or under-perform over a period it did not exist for.
-
-    Found 2026-09-09 by asking why CORE_V1 was "working". It was not. Its first mark in
-    ``history.jsonl`` is 2026-09-07 and every lot it holds is dated that day — it was constituted
-    last Monday, while SYSTEM had been accumulating since 08-29 and fell ₹10,627 in between. It
-    entered the record **already ₹10,293 ahead**, and in the one day both books had been alive they
-    diverged by ₹475. The dashboard was rendering that as "The screen ▲ +₹6,109 vs the fund".
-
-    Every book's ``start`` field says 2026-06-15 — that is when the CASH FLOWS begin, not when the
-    book existed — so the inception has to be read from the first day the book was actually marked.
-    """
-    from qalpha.live.twin import inceptions
-
-    born = inceptions()
-    if not born:
-        pytest.skip("no twin history on this host")
-    assert "BASELINE_EW" in born
-    # INCEPTION IS THE FIRST MARK, NEVER THE SHARED `start`. Asserting that the books differ from
-    # each other only works while they do — a fresh seed gives every book the same birthday and the
-    # guard silently goes inert. What must always hold is that no inception equals the cash-flow
-    # start every book carries, because that is the field the defect read.
-    flow_start = "2026-06-15"
-    assert all(str(day) != flow_start for day in born.values()), (
-        "an inception equal to the shared cash-flow start means first-mark is not being read"
-    )
-
-
-def test_inception_is_the_first_marked_day_not_the_first_row() -> None:
-    """A book present in a row but carrying no value was not marked, and is not yet alive."""
-    import json
-    from pathlib import Path
-
-    from qalpha.live import twin as twin_mod
-
-    rows = [
-        {"as_of": "2026-09-01", "revision": 0, "books": {"A": {}, "B": {"value": "100"}}},
-        {"as_of": "2026-09-02", "revision": 0, "books": {"A": {"value": "90"}}},
-    ]
-    path = Path("data/twin/_inception_probe.jsonl")
-    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
-    try:
-        born = twin_mod.inceptions(path)
-    finally:
-        path.unlink(missing_ok=True)
-    assert born == {"B": "2026-09-01", "A": "2026-09-02"}, (
-        "a book listed with no value that day has not been marked and is not alive yet"
-    )
-
-
-# ---- the export has to reach back to the first flow ---------------------------------------------
-#
-# `REAL` is replayed from the export on every run while the twins keep the flows they were credited.
-# An export that starts after the first flow therefore replays REAL SHORT, and every twin reads as
-# beating it by whatever the missing lots are worth. The empty-tradebook check cannot see this: one
-# row is not zero rows. A Console export is chosen by date range in a dropdown, so it is the mistake
-# a person actually makes.
 def test_an_export_that_starts_after_the_first_flow_is_refused() -> None:
     from qalpha.live.twin import partial_export_reason
 
@@ -594,21 +370,19 @@ def test_the_twin_reads_the_same_folder_the_page_does(tmp_path, monkeypatch) -> 
 
     from qalpha.live import tradebook
 
-    monkeypatch.delenv("GIST_TOKEN", raising=False)
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     (tmp_path / "export.csv").write_text(
         "symbol,trade_date,trade_type,quantity,price,trade_id\nINFY,2026-06-15,buy,5,1136,11\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(tradebook, "EXPORT_DIR", tmp_path)
+    monkeypatch.setattr(twin_script, "EXPORT_DIR", tmp_path)
+    assert twin_script.EXPORT_DIR is not tradebook.EXPORT_DIR  # patched for this test only
     trades, notes = twin_script._tradebook()
     assert [t.ticker for t in trades] == ["INFY.NS"]  # type: ignore[attr-defined]
     assert notes == []
 
 
 def test_the_abort_tells_the_user_about_the_folder_not_about_a_job() -> None:
-    """It said "Check: GIST_TOKEN present in the job". There is no job, and the credential is
-    optional — the thing to actually go and do is drop a Console export in a folder."""
+    """The thing to actually go and do is drop a Console export in a folder — say that."""
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -618,4 +392,16 @@ def test_the_abort_tells_the_user_about_the_folder_not_about_a_job() -> None:
 
     source = inspect.getsource(twin_script.cmd_daily)
     assert "data/tradebooks/" in source
-    assert "GIST_TOKEN present in the job" not in source
+
+
+def test_an_annual_rate_is_not_extrapolated_from_a_few_months() -> None:
+    """Three months of -2.7% printed as -53.0%/yr on the page. Under a year, the rate is withheld."""
+    young = BookMark(
+        SYSTEM, date(2026, 9, 13), date(2026, 6, 15), Decimal("100"), Decimal("97"), -0.53
+    )
+    old = BookMark(
+        SYSTEM, date(2027, 9, 13), date(2026, 6, 15), Decimal("100"), Decimal("97"), -0.02
+    )
+    assert "-53.0%/yr" not in comparison_markdown({SYSTEM: young}, [])
+    assert "under a year" in comparison_markdown({SYSTEM: young}, [])
+    assert "-2.0%/yr" in comparison_markdown({SYSTEM: old}, [])
