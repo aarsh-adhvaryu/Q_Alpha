@@ -337,23 +337,22 @@ NULL_P95_LOG_REL_WEALTH: float | None = None
 #: as the state-at-registration record, and the window opens on the first day the corrected code runs.
 #: The cost is one day; the alternative is twelve months of evidence whose first entry is wrong.
 #:
-#: **The day SYSTEM starts deciding for itself**, and therefore the day the measured window opens.
-#: Before it, SYSTEM holds exactly what the user holds — the tradebook replayed — so the two books
-#: begin from one state and every later difference is a decision rather than a different starting
-#: point. On and after it, SYSTEM chooses and the gap against ``BASELINE_EW`` is the experiment.
+#: **The day SYSTEM starts deciding for itself — and today there is no such day.** ``None`` means
+#: no autonomous window is registered: SYSTEM mirrors the user's tradebook and chooses nothing.
 #:
-#: **Registered 2026-09-12, forward-dated to the 14th, before any of those days were observed.**
-#: That direction matters and is the reason for the two-day gap: starting an experiment on days
-#: whose outcome is already known is selection on the outcome, and this project has twice adopted a
-#: result as the expected value after seeing it.
+#: It was ``2026-09-14``, registered on 2026-09-12 for the rulebook policy (PL-1). **Withdrawn on
+#: 2026-09-13, before the window opened**, because the treatment the user wants measured is an AI
+#: investor, not that rulebook, and a year spent measuring the rulebook answers a question nobody is
+#: asking. SYSTEM never made a decision under PL-1. The withdrawal is recorded in
+#: ``reports/PREREGISTRATION_SYSTEM.md`` §6.
 #:
-#: It replaces a window that opened 2026-09-01 for books that no longer exist. Nine books collapsed
-#: to one on 2026-09-12 and the state was reseeded from the first trade; a clock measuring a
-#: composite that has been dissolved cannot be carried over to the thing that replaced it.
-EVALUATION_START = date(2026, 9, 14)
+#: The next start is set by the AI investor's own registration, on the day it is written, forward-
+#: dated as before: starting an experiment on days whose outcome is already known is selection on
+#: the outcome.
+EVALUATION_START: date | None = None
 
 
-def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
+def evaluation_months(as_of: date, *, start: date | None = EVALUATION_START) -> int:
     """Whole months of the registered window elapsed at ``as_of`` — never counted from a stray flow.
 
     **Day-aware, and it has to be.** Calendar-month subtraction alone reports a window that opened on
@@ -361,8 +360,10 @@ def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
     ``EVALUATION_START`` is 2026-09-08 and would have inherited a month it had not served. A
     partial month rounds **down** — under-counting delays a gate, over-counting opens one early, and
     only one of those errors can authorise capital.
+
+    With no registered start nothing has elapsed: an unregistered window is not a window.
     """
-    if as_of < start:
+    if start is None or as_of < start:
         return 0
     months = (as_of.year - start.year) * 12 + as_of.month - start.month
     if as_of.day < start.day:
@@ -370,14 +371,15 @@ def evaluation_months(as_of: date, *, start: date = EVALUATION_START) -> int:
     return max(0, months)
 
 
-def is_autonomous(as_of: date, *, start: date = EVALUATION_START) -> bool:
+def is_autonomous(as_of: date, *, start: date | None = EVALUATION_START) -> bool:
     """May ``SYSTEM`` decide for itself on this day?
 
     Before the registered start it mirrors the user: same holdings, no choices of its own. The date
     is a constant rather than a flag so that "when did it start deciding" has exactly one answer,
-    on file, and cannot be nudged by a run that went badly.
+    on file, and cannot be nudged by a run that went badly. **No registered start means never** —
+    an absent date is not a date in the past.
     """
-    return as_of >= start
+    return start is not None and as_of >= start
 
 
 @dataclass(frozen=True)
@@ -766,7 +768,7 @@ def load_history(path: Path = TWIN_HISTORY) -> list[dict[str, object]]:
 
 
 def navs_from_history(
-    rows: Sequence[Mapping[str, object]], *, start: date = EVALUATION_START
+    rows: Sequence[Mapping[str, object]], *, start: date | None = EVALUATION_START
 ) -> dict[str, float]:
     """Each book's unitized NAV at the last recorded day, measured from ``start``.
 
@@ -779,7 +781,12 @@ def navs_from_history(
     Rows before ``start`` are ignored: whatever happened before the registered window is opening
     basis, already inside the first value. Returns ``{}`` when fewer than one row qualifies, which
     propagates to a ``log_rel_wealth`` of ``None`` and a criterion 3 of ⚪ CANNOT ASSESS.
+
+    With no registered start there is no window to unitize from, so the answer is ``{}`` —
+    unmeasured, never a NAV of 1.0.
     """
+    if start is None:
+        return {}
     usable = [r for r in rows if str(r.get("as_of", "")) >= start.isoformat()]
     if not usable:
         return {}
