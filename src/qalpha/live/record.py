@@ -28,7 +28,6 @@ HISTORY = Path("data/twin/history.jsonl")
 BOOKS = Path("data/twin/books.json")
 MARKS = Path("data/twin/marks.json")
 WATCHLIST = Path("data/universes/nifty100_watchlist.csv")
-COVERAGE = Path("data/evidence/coverage.jsonl")
 MANAGER = Path("data/twin/manager")
 
 #: Below this many distinct observations a series is drawn as points and labelled with its count.
@@ -150,29 +149,31 @@ def _last_closes() -> dict[str, float]:
     return out
 
 
-def _coverage() -> list[dict[str, Any]]:
-    """Which held names have had their filings read, at the current version and reader."""
-    from qalpha.live.extraction import EXTRACTION_VERSION, reader_matches
+def _coverage(as_of: date) -> list[dict[str, Any]]:
+    """Which held names were read, how much of each, and what could not be read.
 
-    latest: dict[str, dict[str, Any]] = {}
-    for row in _rows(COVERAGE):
-        if row.get("extraction_version") != EXTRACTION_VERSION:
-            continue
-        if not reader_matches(row.get("reader")):
-            continue
-        ticker = str(row.get("ticker", ""))
-        if ticker:
-            latest[ticker] = row  # append-only: the last row for a name is its current revision
-    held = {h.ticker for h in _holdings()}
+    ``as_of`` is the page's own date, not ``today``: a page drawn for a past day must not count a
+    coverage row written after it.
+    """
+    from qalpha.live.evidence_log import coverage
+
+    held = sorted({h.ticker for h in _holdings()})
+    if not held:
+        return []
+    found = coverage(held, as_of=as_of)
     return [
         {
             "ticker": t.removesuffix(".NS"),
-            "read": bool(latest.get(t, {}).get("complete")),
-            "documents": int(latest.get(t, {}).get("documents_read", 0) or 0),
-            "filings": int(latest.get(t, {}).get("filings_in_window", 0) or 0),
-            "seen": t in latest,
+            "opened": found[t.removesuffix(".NS")].opened,
+            "complete": found[t.removesuffix(".NS")].complete,
+            "documents": found[t.removesuffix(".NS")].read,
+            "filings": found[t.removesuffix(".NS")].filed,
+            "unread": [
+                {"on": u["on"], "subject": u["subject"]}
+                for u in found[t.removesuffix(".NS")].unread
+            ],
         }
-        for t in sorted(held)
+        for t in held
     ]
 
 
@@ -290,7 +291,7 @@ def dashboard_data(as_of: date | None = None) -> dict[str, Any]:
         "sectors": [
             {"sector": k, "value": v} for k, v in sorted(sectors.items(), key=lambda kv: -kv[1])
         ],
-        "coverage": _coverage(),
+        "coverage": _coverage(today),
         "investor": _investor(),
         "min_for_a_line": MIN_FOR_A_LINE,
     }
@@ -329,7 +330,7 @@ def _kpis(data: dict[str, Any]) -> str:
                 "up" if gap >= 0 else "down",
             )
         )
-    read = sum(1 for c in data["coverage"] if c["read"])
+    read = sum(1 for c in data["coverage"] if c["complete"])
     cells.append(
         (
             "filings read",
@@ -401,12 +402,17 @@ def _holdings_table(data: dict[str, Any]) -> str:
 def _coverage_chips(data: dict[str, Any]) -> str:
     out = []
     for c in data["coverage"]:
-        if c["read"]:
-            colour, label = "var(--up)", f"{c['documents']}/{c['filings']} read"
-        elif c["seen"]:
-            colour, label = "var(--warn)", f"{c['documents']}/{c['filings']} — INCOMPLETE"
-        else:
+        if not c["opened"]:
             colour, label = "var(--down)", "never read"
+        elif c["complete"]:
+            colour, label = "var(--up)", f"{c['documents']}/{c['filings']} read"
+        else:
+            gaps = c["unread"]
+            subjects = ", ".join(sorted({str(u["subject"]) for u in gaps})[:2]) or "unknown"
+            colour = "var(--warn)"
+            label = (
+                f"{c['documents']}/{c['filings']} read · {len(gaps)} could not be read ({subjects})"
+            )
         out.append(
             f'<span class="chip"><span class="dot" style="background:{colour}"></span>'
             f'<b>{_esc(c["ticker"])}</b> <span class="dim">{_esc(label)}</span></span>'
@@ -533,7 +539,8 @@ def dashboard_html(as_of: date | None = None, *, top: str = "", bottom: str = ""
 
   <div class="card wide"><h2>Filings read</h2>
     <p class="note"><b>Unread is not clean.</b> A name nobody has read tells you nothing about that
-     company — it is a gap, not a clean bill.</p>
+     company. A filing that was fetched and could not be read — a scanned newspaper page — is named
+     here and shown to the investor, rather than the company being quietly set aside.</p>
     {_coverage_chips(data)}</div>
 </div>
 {bottom}
