@@ -24,6 +24,8 @@ from qalpha.live.news import NEWS_EVENTS, NEWS_VERSION
 EVENT_LOG = Path("data/evidence/events.jsonl")
 COVERAGE_LOG = Path("data/evidence/coverage.jsonl")
 EXTRACTED_LOG = Path("data/evidence/extracted.jsonl")
+#: Documents the reader declined, one row per refusal (written by ``scripts/evidence.py``).
+REFUSED_LOG = Path("data/evidence/refused.jsonl")
 ANNOUNCEMENTS = Path("data/evidence/announcements")
 NEWS_EVENT_LOG = NEWS_EVENTS
 
@@ -172,6 +174,15 @@ def _extracted_hashes(path: Path | None = None) -> set[str]:
     }
 
 
+def refused_hashes(path: Path | None = None) -> set[str]:
+    """Documents this reader has declined, whatever the count — for saying *why* one was not read."""
+    return {
+        str(row.get("sha256"))
+        for row in rows(path or REFUSED_LOG)
+        if row.get("extraction_version") == EXTRACTION_VERSION and reader_matches(row.get("reader"))
+    }
+
+
 def unread_documents(
     ticker: str, *, window_days: int, as_of: date, archive: Path | None = None
 ) -> list[dict[str, str]]:
@@ -198,6 +209,7 @@ def unread_documents(
     except (OSError, ValueError):
         return []
     known = _extracted_hashes()
+    declined = refused_hashes()
     out: list[dict[str, str]] = []
     for ann in since(listed, as_of - timedelta(days=window_days)):
         if not ann.has_document or ann.disseminated_at.date() > as_of:
@@ -210,10 +222,18 @@ def unread_documents(
         except (OSError, ValueError):
             continue
         if sha and sha not in known:
+            has_text = (base / f"{ann.seq_id}.txt.gz").exists()
             out.append(
                 {
                     "on": ann.disseminated_at.date().isoformat(),
                     "subject": ann.subject or "(no subject given)",
+                    "why": (
+                        "the reader declined to read it"
+                        if sha in declined
+                        else "a scan with no text, and transcription failed"
+                        if not has_text
+                        else "not read yet"
+                    ),
                     "url": ann.attachment_url,
                 }
             )

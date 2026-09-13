@@ -539,3 +539,68 @@ def test_a_buy_is_still_capped_at_twenty_percent(world: dict[str, Any]) -> None:
     )
     bought = Decimal(order["quantity"]) * world["market"].prices["EEE.NS"]
     assert bought <= nav * manager.NAME_CAP, "a purchase may not exceed the 20% cap"
+
+
+# ---- the monthly allowance ------------------------------------------------------------------------
+
+
+def test_a_buy_is_capped_at_the_months_allowance(world: dict[str, Any]) -> None:
+    """The user invests ₹50,000 a month. A book holding a year of instalments must not spend them
+    the day they arrive — that is a different strategy from the one being tested."""
+    world["book"].portfolio.cash = Decimal("900000")
+    _review(world, _brain(world, lambda p: [*_hold_all(p), _decision("EEE.NS", "BUY", 100_000)]))
+    order = world["book"].manager["pending"]["orders"][0]
+    spend = Decimal(order["quantity"]) * world["market"].prices["EEE.NS"]
+    assert spend <= manager.MONTHLY_BUDGET
+    assert spend > manager.MONTHLY_BUDGET * Decimal("0.9"), "it should use most of the allowance"
+    row = json.loads(world["store"].decisions.read_text(encoding="utf-8").splitlines()[-1])
+    assert "allowance" in row["status"]
+
+
+def test_what_was_spent_this_month_comes_from_fills_not_intentions(world: dict[str, Any]) -> None:
+    """An order queued and never filled has spent nothing."""
+    store = world["store"]
+    store.root.mkdir(parents=True, exist_ok=True)
+    manager._append(
+        store.fills,
+        [
+            {
+                "version": manager.VERSION,
+                "action": "BUY",
+                "on": DECIDE.isoformat(),
+                "filled": 10,
+                "price": "2000",
+                "cost": "25",
+            },
+            {  # a different month must not count against this one
+                "version": manager.VERSION,
+                "action": "BUY",
+                "on": (DECIDE.replace(day=1) - timedelta(days=1)).isoformat(),
+                "filled": 50,
+                "price": "1000",
+                "cost": "60",
+            },
+            {  # a sale is not a purchase
+                "version": manager.VERSION,
+                "action": "SELL",
+                "on": DECIDE.isoformat(),
+                "filled": 5,
+                "price": "3000",
+                "cost": "15",
+            },
+        ],
+    )
+    assert manager.spent_this_month(DECIDE, store) == Decimal("20025")
+    assert manager.budget_left(DECIDE, store) == Decimal("29975")
+
+
+def test_selling_is_never_limited_by_the_allowance(world: dict[str, Any]) -> None:
+    results = manager.apply_orders(
+        world["book"].portfolio.clone(),
+        [{"ticker": "AAA.NS", "action": "SELL", "quantity": 200}],
+        world["market"].prices,
+        SECTORS,
+        DECIDE,
+        allowance=Decimal("0"),
+    )
+    assert results[0]["filled"] == 200, "raising cash must always be possible"
