@@ -22,7 +22,7 @@ plan and report are in git history.
 | | |
 |---|---|
 | **Working** | The evening run: prices → filings → headlines → four paper books marked against two index funds. Tax-exact FIFO accounting. Resumes where it stopped. |
-| **Not built yet** | The investor itself (AI-PM-1). Today `SYSTEM` mirrors the user's holdings and decides nothing. |
+| **Built, not started** | The investor (AI-PM-1, `live/manager.py`), registered in [reports/PREREGISTRATION_AI_PM1.md](reports/PREREGISTRATION_AI_PM1.md). Until its start date `SYSTEM` mirrors the user's holdings. |
 | **Start date** | None registered. The earlier rulebook start (2026-09-14) was withdrawn before it opened. |
 | **Proven edge** | None. See §6. |
 
@@ -59,7 +59,7 @@ filings    NSE announcements for those names → archive the bytes → extract e
   ↓
 headlines  4 market feeds + one Google News search per name → archive → map → read   scripts/news.py
   ↓
-books      credit new flows → step SYSTEM → mark all four → append history      scripts/twin.py
+books      credit flows → fill yesterday's orders → the investor reviews → mark   scripts/twin.py
   ↓
 page       data/session/qalpha.html, served by live/server.py
 ```
@@ -107,8 +107,8 @@ A gap between books is **descriptive**. One book over months is mostly timing an
 - **Memory:** a logbook the model writes each review (per company and for the portfolio), and a
   scorecard code computes from its past decisions — both fed into the next review, labelled as its
   own earlier beliefs and results, never as evidence.
-- **Starts** the first trading evening after: it is merged, the four held names whose filings were
-  never read (INFY, MUTHOOTFIN, TATAPOWER, WIPRO) are read, and one shadow review has run cleanly.
+- **Starts** the next trading day after: it is merged, every held name's filings are read, and one
+  shadow review (`scripts/twin.py shadow`) has run on real data and been read by a person.
 
 ### What a "version" means
 
@@ -321,6 +321,7 @@ src/qalpha/
   accounting/  FIFO lots · costs · slippage · capital gains · corporate actions · Portfolio
   data/        price panels (yfinance → Parquet, atomic writes) · point-in-time universes
   live/        announcements · evidence · extraction · news · pretrade · localmodel   (reading)
+               manager · evidence_log · decisions                                 (the investor)
                twin · flows · nav · benchmarks · tradebook · taxpnl · market · screen (books)
                daily · session · server · record · panels · progress · atomic · console (running)
 scripts/       local_run (the app) · twin · evidence · news · reconcile_taxpnl · ocr_scans

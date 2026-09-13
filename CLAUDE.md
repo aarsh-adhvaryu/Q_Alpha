@@ -29,8 +29,8 @@ only when he asks. When he asks about the maths: formula → example → why.
 the build plan. Read it first. Keep it true: edit the line that changed; never append a log.
 
 Order of work: (1) rulebook start withdrawn ✓ · (2) repo cut to what the system uses ✓ ·
-(3) README as the one document ✓ · (4) **build AI-PM-1** — the manager, its memory, next-session
-fills, the operational journal — then register and start it.
+(3) README as the one document ✓ · (4) AI-PM-1 built and registered ✓ · (5) **start it**: every
+held name read, one shadow review read by the user, then set `EVALUATION_START`.
 
 ---
 
@@ -100,7 +100,8 @@ uv run python scripts/local_run.py --app --autorun   # what the desktop click (Q
 uv run python scripts/evidence.py daily              # filings for held names and candidates
 uv run python scripts/evidence.py backfill --only INFY --workers 8   # a year of one name, once
 uv run python scripts/news.py daily                  # headlines
-uv run python scripts/twin.py daily                  # the books
+uv run python scripts/twin.py daily                  # the books (and the investor, once started)
+uv run python scripts/twin.py shadow                 # one real review on a COPY of SYSTEM
 ```
 
 Runs natively on Windows from `D:\q-alpha`. The only server is the one the click starts, on
