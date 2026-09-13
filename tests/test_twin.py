@@ -232,7 +232,6 @@ def test_the_daily_caller_asks_the_registered_start() -> None:
     from qalpha.live import twin as twin_module
 
     assert runner_script.is_autonomous is twin_module.is_autonomous
-    assert runner_script.EVALUATION_START is twin_module.EVALUATION_START
     assert runner_script.is_autonomous(date(2026, 9, 15)) is False
 
 

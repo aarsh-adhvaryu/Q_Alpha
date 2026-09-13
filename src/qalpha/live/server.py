@@ -15,7 +15,6 @@ import threading
 from collections.abc import Callable
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from qalpha.live import browser
@@ -24,9 +23,6 @@ from qalpha.live.progress import IST, LOG
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
-#: What the last evening said about itself — failures, skips, what moved. Written by ``local_run``.
-LAST_RUN = Path("data/session/last_run.json")
-
 APP_CSS = """<style>
 form{display:inline}
 .btn{font:inherit;font-size:13px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;
@@ -119,22 +115,21 @@ def _top(message: str = "") -> str:
 
 
 def _last_run() -> str:
-    """The last evening's own notes. Absent is a sentence, not a blank."""
-    if not LAST_RUN.exists():
+    """The last evening's own row in the journal. Absent is a sentence, not a blank."""
+    from qalpha.live.session import last_run
+
+    row = last_run()
+    if row is None:
         return (
             '<div class="banner">No evening has run on this install yet. '
             "Press <b>Run the evening</b>.</div>"
         )
-    try:
-        data = json.loads(LAST_RUN.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return '<div class="banner warn">The last run&rsquo;s notes are unreadable.</div>'
-    notes = data.get("notes") if isinstance(data, dict) else None
-    when = escape(str(data.get("finished_at", "?"))) if isinstance(data, dict) else "?"
-    if not notes:
-        return f'<div class="banner">Last evening finished {when} with nothing to report.</div>'
-    items = "".join(f"<li>{escape(str(n))}</li>" for n in notes)
-    return f'<div class="banner"><b>Last evening ({when})</b><ul class="notes">{items}</ul></div>'
+    when = f"{row.at.astimezone(IST):%d %b %H:%M}"
+    tone = "" if row.state == "done" else ' <b class="down">INCOMPLETE</b>'
+    return (
+        f'<div class="banner"><b>Last evening ({escape(when)})</b>{tone}<br>'
+        f"{escape(row.detail)}</div>"
+    )
 
 
 def _bottom() -> str:

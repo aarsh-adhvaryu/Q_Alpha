@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -71,6 +72,10 @@ class TwinBook:
     #: re-execute that day's paper decisions — buying the same basket a second time — and the
     #: append-only record would show one day's flows twice. Compared, never trusted to a lock file.
     stepped_through: date | None = None
+    #: The investor's own state for this book: version, model, orders waiting for their fill session,
+    #: and the last review. Empty for a book no investor has run. Its records live in
+    #: ``data/twin/manager/``; this is only what the next evening must know.
+    manager: dict[str, Any] = field(default_factory=dict)
 
     @property
     def net_invested(self) -> Decimal:
@@ -598,6 +603,7 @@ def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
                 "stepped_through": (
                     book.stepped_through.isoformat() if book.stepped_through else None
                 ),
+                "manager": book.manager,
             }
             for name, book in books.items()
         },
@@ -626,6 +632,7 @@ def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
                 if entry.get("stepped_through")
                 else None
             ),
+            manager=dict(entry.get("manager") or {}),
         )
         for name, entry in raw["books"].items()
     }

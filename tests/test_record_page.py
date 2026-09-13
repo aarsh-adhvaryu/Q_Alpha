@@ -67,7 +67,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(record, "HISTORY", history)
     monkeypatch.setattr(record, "BOOKS", books)
     monkeypatch.setattr(record, "WATCHLIST", watch)
-    monkeypatch.setattr(record, "COVERAGE", tmp_path / "absent.jsonl")
+    monkeypatch.setattr("qalpha.live.evidence_log.COVERAGE_LOG", tmp_path / "absent.jsonl")
     monkeypatch.setattr("qalpha.live.panels.NIFTY50_PANEL", panel)
     monkeypatch.setattr("qalpha.live.panels.WATCHLIST_PANEL", tmp_path / "absent.parquet")
     return tmp_path
@@ -163,10 +163,12 @@ def test_filings_count_as_read_only_when_the_corpus_reader_read_them(
             row["reader"] = reader
         path = tmp_path / "cov.jsonl"
         path.write_text(json.dumps(row) + "\n", encoding="utf-8")
-        monkeypatch.setattr(record, "COVERAGE", path)
+        monkeypatch.setattr("qalpha.live.evidence_log.COVERAGE_LOG", path)
         rows: list[dict[str, Any]] = record.dashboard_data(date(2026, 9, 15))["coverage"]
         return rows
 
-    assert coverage(corpus_reader())[0]["read"] is True
-    assert coverage("qwen3-8b-32k")[0]["read"] is False
-    assert coverage(None)[0]["read"] is False, "a row with no reader says nothing about who read it"
+    assert coverage(corpus_reader())[0]["opened"] is True
+    assert coverage("qwen3-8b-32k")[0]["opened"] is False
+    assert coverage(None)[0]["opened"] is False, (
+        "a row with no reader says nothing about who read it"
+    )
