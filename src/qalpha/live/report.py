@@ -651,7 +651,7 @@ def render(
 {warnings}
 {ui.section("Holdings", note="marked at the run's prices")}
 {_holdings_table(account, prices)}
-{_brief_panel(ist.date())}
+
 {_desk_panel(desk)}
 {_concerns_panel(desk)}
 {ui.section("Today's basket", note="the screen, sized to this month's allowance")}

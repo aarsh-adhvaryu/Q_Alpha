@@ -210,8 +210,9 @@ def test_no_step_requires_the_cloud_key_alone() -> None:
     route and requiring the cloud key would skip work the machine can do.
     """
     assert {s.name for s in daily.steps() if "ANTHROPIC_API_KEY" in s.needs} == set()
-    brief = next(s for s in daily.steps() if s.name == "brief")
-    assert set(brief.needs_any) == {"QALPHA_LOCAL_MODEL", "ANTHROPIC_API_KEY"}
+    # The brief step itself was removed on 2026-09-13: nothing read it and it cost ~55k tokens a
+    # night. Pinned so it does not quietly come back.
+    assert "brief" not in {s.name for s in daily.steps()}
 
 
 def test_a_step_with_alternatives_runs_when_either_is_present(
@@ -241,10 +242,9 @@ def test_a_step_with_alternatives_skips_only_when_all_are_absent(
 
 
 def test_the_news_step_runs_after_the_filings_and_before_the_twin() -> None:
-    """The books must step on the evidence, and the brief on headlines this run fetched."""
+    """The books must step on the evidence this run fetched."""
     names = [s.name for s in daily.steps()]
     assert names.index("evidence") < names.index("news") < names.index("twin")
-    assert names.index("news") < names.index("brief")
 
 
 # --- the entry points must let a failure out ------------------------------------------------------
