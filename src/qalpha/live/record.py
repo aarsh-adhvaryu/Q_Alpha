@@ -28,7 +28,7 @@ HISTORY = Path("data/twin/history.jsonl")
 BOOKS = Path("data/twin/books.json")
 MARKS = Path("data/twin/marks.json")
 WATCHLIST = Path("data/universes/nifty100_watchlist.csv")
-COVERAGE = Path("data/evidence/coverage.jsonl")
+MANAGER = Path("data/twin/manager")
 
 #: Below this many distinct observations a series is drawn as points and labelled with its count.
 #: Two dots joined by a line read as a trend; they are two dots.
@@ -149,30 +149,64 @@ def _last_closes() -> dict[str, float]:
     return out
 
 
-def _coverage() -> list[dict[str, Any]]:
-    """Which held names have had their filings read, at the current version and reader."""
-    from qalpha.live.extraction import EXTRACTION_VERSION, reader_matches
+def _coverage(as_of: date) -> list[dict[str, Any]]:
+    """Which held names were read, how much of each, and what could not be read.
 
-    latest: dict[str, dict[str, Any]] = {}
-    for row in _rows(COVERAGE):
-        if row.get("extraction_version") != EXTRACTION_VERSION:
-            continue
-        if not reader_matches(row.get("reader")):
-            continue
-        ticker = str(row.get("ticker", ""))
-        if ticker:
-            latest[ticker] = row  # append-only: the last row for a name is its current revision
-    held = {h.ticker for h in _holdings()}
+    ``as_of`` is the page's own date, not ``today``: a page drawn for a past day must not count a
+    coverage row written after it.
+    """
+    from qalpha.live.evidence_log import coverage
+
+    held = sorted({h.ticker for h in _holdings()})
+    if not held:
+        return []
+    found = coverage(held, as_of=as_of)
     return [
         {
             "ticker": t.removesuffix(".NS"),
-            "read": bool(latest.get(t, {}).get("complete")),
-            "documents": int(latest.get(t, {}).get("documents_read", 0) or 0),
-            "filings": int(latest.get(t, {}).get("filings_in_window", 0) or 0),
-            "seen": t in latest,
+            "opened": found[t.removesuffix(".NS")].opened,
+            "complete": found[t.removesuffix(".NS")].complete,
+            "documents": found[t.removesuffix(".NS")].read,
+            "filings": found[t.removesuffix(".NS")].filed,
+            "unread": [
+                {"on": u["on"], "subject": u["subject"]}
+                for u in found[t.removesuffix(".NS")].unread
+            ],
         }
-        for t in sorted(held)
+        for t in held
     ]
+
+
+def _investor() -> dict[str, Any]:
+    """What the investor last did, read from its own records. Absent records say so."""
+    state: dict[str, Any] = {}
+    if BOOKS.exists():
+        try:
+            state = (
+                json.loads(BOOKS.read_text(encoding="utf-8"))["books"][SYSTEM].get("manager") or {}
+            )
+        except (OSError, ValueError, KeyError):
+            state = {}
+    notes: dict[str, dict[str, str]] = {}
+    for row in _rows(MANAGER / "logbook.jsonl"):
+        notes[str(row.get("ticker", ""))] = {
+            "on": str(row.get("as_of")),
+            "note": str(row.get("note")),
+        }
+    decided = _rows(MANAGER / "decisions.jsonl")
+    last_day = max((str(r.get("as_of")) for r in decided), default="")
+    card: dict[str, Any] = {}
+    if (MANAGER / "scorecard.json").exists():
+        try:
+            card = json.loads((MANAGER / "scorecard.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            card = {}
+    return {
+        "state": state,
+        "notes": notes,
+        "last_decisions": [r for r in decided if str(r.get("as_of")) == last_day],
+        "scorecard": card.get("decisions", []),
+    }
 
 
 def dashboard_data(as_of: date | None = None) -> dict[str, Any]:
@@ -257,7 +291,8 @@ def dashboard_data(as_of: date | None = None) -> dict[str, Any]:
         "sectors": [
             {"sector": k, "value": v} for k, v in sorted(sectors.items(), key=lambda kv: -kv[1])
         ],
-        "coverage": _coverage(),
+        "coverage": _coverage(today),
+        "investor": _investor(),
         "min_for_a_line": MIN_FOR_A_LINE,
     }
 
@@ -295,7 +330,7 @@ def _kpis(data: dict[str, Any]) -> str:
                 "up" if gap >= 0 else "down",
             )
         )
-    read = sum(1 for c in data["coverage"] if c["read"])
+    read = sum(1 for c in data["coverage"] if c["complete"])
     cells.append(
         (
             "filings read",
@@ -367,17 +402,86 @@ def _holdings_table(data: dict[str, Any]) -> str:
 def _coverage_chips(data: dict[str, Any]) -> str:
     out = []
     for c in data["coverage"]:
-        if c["read"]:
-            colour, label = "var(--up)", f"{c['documents']}/{c['filings']} read"
-        elif c["seen"]:
-            colour, label = "var(--warn)", f"{c['documents']}/{c['filings']} — INCOMPLETE"
-        else:
+        if not c["opened"]:
             colour, label = "var(--down)", "never read"
+        elif c["complete"]:
+            colour, label = "var(--up)", f"{c['documents']}/{c['filings']} read"
+        else:
+            gaps = c["unread"]
+            subjects = ", ".join(sorted({str(u["subject"]) for u in gaps})[:2]) or "unknown"
+            colour = "var(--warn)"
+            label = (
+                f"{c['documents']}/{c['filings']} read · {len(gaps)} could not be read ({subjects})"
+            )
         out.append(
             f'<span class="chip"><span class="dot" style="background:{colour}"></span>'
             f'<b>{_esc(c["ticker"])}</b> <span class="dim">{_esc(label)}</span></span>'
         )
     return "".join(out) or '<p class="dim">Nothing held.</p>'
+
+
+def _investor_card(data: dict[str, Any]) -> str:
+    inv = data["investor"]
+    state = inv["state"]
+    if not state and not inv["last_decisions"]:
+        return (
+            '<div class="card wide"><h2>The investor</h2><p class="note">It has not reviewed this '
+            "book yet. Until a start date is registered, SYSTEM mirrors your holdings.</p></div>"
+        )
+    pending = state.get("pending")
+    waiting = (
+        "<p><b>Waiting to fill</b> at the next session's close: "
+        + ", ".join(
+            f"{_esc(o['action'])} {o['quantity']} {_esc(str(o['ticker']).removesuffix('.NS'))}"
+            for o in pending["orders"]
+        )
+        + (
+            f' <span class="warn">— {_esc(pending["waiting"])}</span>'
+            if pending.get("waiting")
+            else ""
+        )
+        + "</p>"
+        if pending
+        else ""
+    )
+    last = state.get("last_review") or {}
+    rows = "".join(
+        f"<tr><td>{_esc(str(r['ticker']).removesuffix('.NS'))}</td><td>{_esc(r['action'])}</td>"
+        f"<td>{_esc(str(r.get('accepted_quantity', '')))}</td><td>{_esc(r.get('status', ''))}</td>"
+        f'<td style="white-space:normal;text-align:left">{_esc(r.get("reason", ""))}</td></tr>'
+        for r in inv["last_decisions"]
+    )
+    notes = "".join(
+        f'<li><b>{_esc(t.removesuffix(".NS"))}</b> <span class="dim">{_esc(n["on"])}</span> — '
+        f"{_esc(n['note'])}</li>"
+        for t, n in sorted(inv["notes"].items())
+        if t != "PORTFOLIO"
+    )
+    portfolio_note = inv["notes"].get("PORTFOLIO")
+
+    def change(value: object) -> str:
+        return "—" if value is None else f"{float(str(value)):+.2f}%"
+
+    card = "".join(
+        f"<tr><td>{_esc(r['as_of'])}</td><td>{_esc(str(r['ticker']).removesuffix('.NS'))}</td>"
+        f"<td>{_esc(r['action'])}</td><td>{change(r['change_pct'])}</td>"
+        f"<td>{r['high_events_since']}</td></tr>"
+        for r in inv["scorecard"]
+    )
+    return f"""<div class="card wide"><h2>The investor</h2>
+    <p class="note">{_esc(str(state.get("version", "")))} · {_esc(str(state.get("model", "")))} · last
+     review {_esc(str(last.get("as_of", "—")))}. Its notes are its own beliefs, not evidence.</p>
+    {waiting}
+    {f"<p><b>Portfolio note</b> — {_esc(portfolio_note['note'])}</p>" if portfolio_note else ""}
+    <div class="scroll"><table><thead><tr><th>Name</th><th>Decision</th><th>Qty</th><th>Status</th>
+    <th style="text-align:left">Reason</th></tr></thead><tbody>{rows}</tbody></table></div>
+    <h2 style="margin-top:14px">Latest note per name</h2><ul>{notes}</ul>
+    <h2 style="margin-top:14px">How its decisions went</h2>
+    <p class="note">Change is the close now against the close it saw. High events since: verified,
+     high-materiality events recorded for that name after the decision.</p>
+    <div class="scroll"><table><thead><tr><th>Decided</th><th>Name</th><th>Decision</th>
+    <th>Change since</th><th>High events since</th></tr></thead><tbody>{card}</tbody></table></div>
+    </div>"""
 
 
 def dashboard_html(as_of: date | None = None, *, top: str = "", bottom: str = "") -> str:
@@ -426,6 +530,8 @@ def dashboard_html(as_of: date | None = None, *, top: str = "", bottom: str = ""
     <p class="note">By value of what is held. The 30% cap applies to the book, not to one basket.</p>
     <div id="sector-chart"></div><div id="sector-legend" style="margin-top:10px"></div></div>
 
+  {_investor_card(data)}
+
   <div class="card wide"><h2>Positions</h2>
     <p class="note">Quantity and average cost from the lot ledger; value is quantity × mark,
      the only arithmetic this page performs.</p>
@@ -433,7 +539,8 @@ def dashboard_html(as_of: date | None = None, *, top: str = "", bottom: str = ""
 
   <div class="card wide"><h2>Filings read</h2>
     <p class="note"><b>Unread is not clean.</b> A name nobody has read tells you nothing about that
-     company — it is a gap, not a clean bill.</p>
+     company. A filing that was fetched and could not be read — a scanned newspaper page — is named
+     here and shown to the investor, rather than the company being quietly set aside.</p>
     {_coverage_chips(data)}</div>
 </div>
 {bottom}

@@ -69,14 +69,31 @@ def cheapness_scores(
 CANDIDATES = 8
 
 
-def research_scope(as_of: date, *, candidates: int = CANDIDATES) -> list[str]:
-    """Every name the evening reads about: what SYSTEM holds, then the furthest-pulled-back others.
+def candidates(
+    panel: PriceData,
+    watchlist: list[str],
+    as_of: date,
+    *,
+    held: Collection[str],
+    rebase_from: Mapping[str, date] | None = None,
+    no_tilt: Collection[str] | None = None,
+    n: int = CANDIDATES,
+) -> list[tuple[str, float]]:
+    """The ``n`` non-held names furthest below their 1-year high, with the pullback. Ties by ticker."""
+    scores = cheapness_scores(panel, watchlist, as_of, rebase_from=rebase_from, no_tilt=no_tilt)
+    ranked = sorted(
+        ((t, s) for t, s in scores.items() if t not in held and s > 0),
+        key=lambda ts: (-ts[1], ts[0]),
+    )
+    return ranked[:n]
 
-    **One definition.** Filings, headlines and the investor's review all read this list, so what is
-    read is exactly what the investor will be shown — never a basket from a different rule.
 
-    Held names always come first and are never dropped. Candidates need the watchlist panel; without
-    it the scope is the held names alone, and says so.
+def research_scope(as_of: date, *, n: int = CANDIDATES) -> list[str]:
+    """Every name the evening reads about: what SYSTEM holds, then its candidates.
+
+    **One definition.** Filings, headlines and the investor's review all use :func:`candidates`, so
+    what is read is exactly what the investor can be shown. Held names always come first and are
+    never dropped; without the watchlist panel the scope is the held names alone, and says so.
     """
     from qalpha.config import Config
     from qalpha.data.ingest import load_parquet
@@ -96,10 +113,13 @@ def research_scope(as_of: date, *, candidates: int = CANDIDATES) -> list[str]:
     watchlist = [t for t in listed if t in panel.adj_close.columns]
     on = min(as_of, pd.Timestamp(panel.adj_close.index.max()).date())
     gaps = unexplained_gaps(panel.adj_close, watchlist, on)
-    scores = cheapness_scores(
-        panel, watchlist, on, rebase_from=rebase_starts(gaps), no_tilt=excluded_from_tilt(gaps)
+    picked = candidates(
+        panel,
+        watchlist,
+        on,
+        held=held,
+        rebase_from=rebase_starts(gaps),
+        no_tilt=excluded_from_tilt(gaps),
+        n=n,
     )
-    others = sorted(
-        (t for t in scores if t not in held and scores[t] > 0), key=lambda t: (-scores[t], t)
-    )
-    return held + others[:candidates]
+    return held + [t for t, _score in picked]

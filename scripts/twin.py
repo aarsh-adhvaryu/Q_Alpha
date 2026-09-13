@@ -3,6 +3,7 @@
     uv run python scripts/twin.py seed     # ONE TIME. Refuses to overwrite existing books.
     uv run python scripts/twin.py daily    # credit new flows → step SYSTEM → mark → append history
     uv run python scripts/twin.py status   # print the comparison without writing anything
+    uv run python scripts/twin.py shadow   # one investor review on a COPY of SYSTEM; changes no book
 
 **Paper books only.** No broker client is imported; nothing here can place an order.
 
@@ -16,7 +17,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date
+from collections.abc import Callable
+from datetime import date, datetime
 from decimal import Decimal
 
 import pandas as pd
@@ -24,9 +26,11 @@ import pandas as pd
 from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
 from qalpha.data.universe import Universe
-from qalpha.live import atomic
+from qalpha.live import atomic, manager
+from qalpha.live import calendar as nse
 from qalpha.live.benchmarks import equal_weight_pit
 from qalpha.live.console import use_utf8
+from qalpha.live.decisions import Decision, decisions_markdown
 from qalpha.live.market import Market
 from qalpha.live.panels import (
     BENCHMARK_PANEL,
@@ -41,11 +45,12 @@ from qalpha.live.price_integrity import (
     repair_price_spikes,
     unexplained_gaps,
 )
+from qalpha.live.progress import IST
 from qalpha.live.tradebook import EXPORT_DIR, TradebookTrade, read_exports, replay_tradebook
 from qalpha.live.twin import (
     DECIDING,
-    EVALUATION_START,
     REAL,
+    SYSTEM,
     TWIN_HISTORY,
     TWIN_STATE,
     BookMark,
@@ -100,22 +105,35 @@ def _benchmark_series() -> pd.Series:
 
 
 def _market(as_of: date) -> Market | None:
-    """The evening's world. ``None`` when a panel is missing — never a silent default."""
+    """The evening's world, dated by **the session its prices come from**.
+
+    ``as_of`` is the day being asked about; the market's own date is the last session on or before it
+    that the panel actually holds. Run this on a Sunday and the world is Friday's, and says Friday —
+    a market carrying Friday's closes under Sunday's date is a number wearing the wrong label, and
+    everything downstream (the fill session, the history row, "is today's close final") reads it.
+    """
     if not (WATCHLIST_PANEL.exists() and WATCHLIST_UNIVERSE.exists() and BENCHMARK_PANEL.exists()):
         print(f"[twin] missing {WATCHLIST_PANEL}, {WATCHLIST_UNIVERSE} or {BENCHMARK_PANEL}")
         return None
     wl_prices = load_parquet(str(WATCHLIST_PANEL))
     wl = pd.read_csv(WATCHLIST_UNIVERSE)
     watchlist = [t for t in wl["ticker"] if t in wl_prices.adj_close.columns]
-    gaps = unexplained_gaps(wl_prices.adj_close, watchlist, as_of)
     adj = wl_prices.adj_close
+    sessions = [d.date() for d in pd.DatetimeIndex(adj.index) if d.date() <= as_of]
+    if not sessions:
+        print(f"[twin] the price panel holds no session on or before {as_of}")
+        return None
+    session = max(sessions)
+    if session != as_of:
+        print(f"[twin] {nse.describe(as_of, traded=False)}; the world is {session}'s close")
+    gaps = unexplained_gaps(adj, watchlist, session)
     marks = {
-        t: Decimal(str(float(adj[t].loc[: pd.Timestamp(as_of)].dropna().iloc[-1])))
+        t: Decimal(str(float(adj[t].loc[: pd.Timestamp(session)].dropna().iloc[-1])))
         for t in adj.columns
-        if not adj[t].loc[: pd.Timestamp(as_of)].dropna().empty
+        if not adj[t].loc[: pd.Timestamp(session)].dropna().empty
     }
     return Market(
-        as_of=as_of,
+        as_of=session,
         prices=marks,
         index_close=_benchmark_series(),
         adj_close=adj,
@@ -184,14 +202,14 @@ def _marks_and_gaps(
     *,
     persist: bool = True,
 ) -> tuple[dict[str, BookMark], list[Gap]]:
-    """Mark every book and both baselines. ``persist=False`` is genuinely read-only."""
-    marks = {n: mark(b, market.prices, market.as_of) for n, b in books.items() if n != REAL}
-    real = replay_tradebook(trades, cfg).portfolio
-    # An allotment is not a trade: give REAL the lot with its allotment date, which is what
-    # §2(42A) counts the holding period from.
-    apply_off_market(real, load_off_market())
-    books[REAL].portfolio = real
-    marks[REAL] = mark(books[REAL], market.prices, market.as_of)
+    """Mark every book and both baselines. ``persist=False`` is genuinely read-only.
+
+    ``REAL`` must already hold the replayed tradebook — see :func:`replay_real`. It used to be
+    replayed *here*, after the books were saved, so ``books.json`` recorded the user's own book as
+    the cash it was seeded with and no holdings at all. The marks were right and the file was wrong,
+    which is the shape of every labelling defect in this repository.
+    """
+    marks = {n: mark(b, market.prices, market.as_of) for n, b in books.items()}
 
     flows = books[REAL].flows
     ew_series = _ew_fund_series()
@@ -208,6 +226,16 @@ def _marks_and_gaps(
         append_history(marks, [], as_of=market.as_of)
     gaps = compare(marks, navs=navs_from_history(load_history()))
     return marks, gaps
+
+
+def replay_real(book: TwinBook, trades: list[TradebookTrade], cfg: Config) -> None:
+    """Put the user's actual holdings into ``REAL`` — the tradebook replayed, plus what it cannot show.
+
+    An allotment is not a trade, so the replay cannot know about it; it is added as a dated lot,
+    because §2(42A) counts the holding period from the allotment date.
+    """
+    book.portfolio = replay_tradebook(trades, cfg).portfolio
+    apply_off_market(book.portfolio, load_off_market())
 
 
 def cmd_daily(cfg: Config) -> int:
@@ -249,28 +277,27 @@ def cmd_daily(cfg: Config) -> int:
         return ABORTED
 
     autonomous = is_autonomous(market.as_of)
+    failure: str | None = None
     for name in DECIDING:
         book = books.get(name)
-        if book is None or book.stepped_through == market.as_of:
+        if book is None:
             continue
         if autonomous:
-            # A registered start with no decider wired would silently leave SYSTEM frozen while the
-            # record says it is deciding. Refuse instead.
-            print(
-                f"[twin] ABORT — {name} is registered to decide from {EVALUATION_START}, but no "
-                "decider is wired into this step. Nothing was stepped.",
-                file=sys.stderr,
-            )
-            return ABORTED
+            failure = step_system(book, market, now=datetime.now(IST))
+            continue
+        if book.stepped_through == market.as_of:
+            continue
         # Mirror: until a start is registered, SYSTEM holds exactly what the user holds.
-        book.portfolio = replay_tradebook(trades, cfg).portfolio
-        apply_off_market(book.portfolio, credits)
+        replay_real(book, trades, cfg)
         book.stepped_through = market.as_of
     if not autonomous:
         print(
             "[twin] SYSTEM mirrors REAL — no start date is registered, so it makes no choices of "
             "its own."
         )
+    # BEFORE the save, so the file records what REAL actually holds rather than the cash it was
+    # seeded with.
+    replay_real(books[REAL], trades, cfg)
     save_books(books)
 
     marks, gaps = _marks_and_gaps(books, trades, market, cfg)
@@ -288,6 +315,90 @@ def cmd_daily(cfg: Config) -> int:
     rows = append_history(marks, gaps, as_of=as_of)
     print(f"✓ history: {rows} row(s) on file → {TWIN_HISTORY}")
     print(comparison_markdown(marks, gaps))
+    if failure:
+        # The books are marked and saved; the REVIEW did not happen, and the ledger must say so.
+        print(f"[twin] the investor's review is INCOMPLETE: {failure}", file=sys.stderr)
+        return ABORTED
+    return 0
+
+
+def step_system(
+    book: TwinBook,
+    market: Market,
+    *,
+    now: datetime,
+    make_brain: Callable[[], manager.Brain] = manager.brain,
+    store: manager.Store = manager.STORE,
+) -> str | None:
+    """One evening for the investor's book: fill what was queued, then review. The reason it failed, or None.
+
+    Fills first, so a review sees the book its earlier orders produced. A fill that is still waiting
+    for its session is not a failure; a review that cannot happen is.
+    """
+    today = now.astimezone(IST).date()
+    if market.as_of != today:
+        # A closed exchange is not a failed evening. A weekday with no closing prices and no known
+        # closure IS one: something did not download, and calling that "a quiet day" is the
+        # substitution this repository keeps finding.
+        why = nse.closure_reason(today)
+        if why is None:
+            return (
+                f"{nse.describe(today, traded=False)} — the latest close is {market.as_of}. "
+                "Refresh prices; nothing was reviewed."
+            )
+        print(f"[investor] {nse.describe(today, traded=False)} — nothing to review.")
+    for fill in manager.fill_pending(book, market, now=now, store=store):
+        print(
+            f"[investor] {fill['action']} {fill['filled']}/{fill['requested']} {fill['ticker']} "
+            f"@ ₹{fill['price']} — {fill['status']}"
+        )
+    if market.as_of != today:
+        return None  # the exchange was shut; the fills above are all this evening had to do
+    try:
+        decisions = manager.review(book, market, now=now, make_brain=make_brain, store=store)
+    except manager.IncompleteReviewError as exc:
+        return str(exc)
+    print(decisions_markdown(decisions) if decisions else "[investor] already reviewed today")
+    return None
+
+
+def cmd_shadow(cfg: Config) -> int:
+    """One real review on a COPY of SYSTEM. Nothing is saved to the books; its records go to shadow/.
+
+    This is how a version is checked before its start date is registered: a real model call, a
+    real receipt, real limits — and no book that has to live with it.
+    """
+    books = load_books(cfg)
+    book = books.get(SYSTEM)
+    market = _market(date.today())
+    if book is None or market is None:
+        print("[shadow] no SYSTEM book or no market data", file=sys.stderr)
+        return ABORTED
+    copy = TwinBook(
+        name=f"{SYSTEM}-shadow", portfolio=book.portfolio.clone(), flows=list(book.flows)
+    )
+    store = manager.Store(manager.STORE.root / "shadow")
+    try:
+        now = datetime.now(IST)
+        decisions: list[Decision] = manager.review(
+            copy, market, now=now, store=store, require_today=False, known_on=now.date()
+        )
+    except manager.IncompleteReviewError as exc:
+        print(f"[shadow] INCOMPLETE: {exc}", file=sys.stderr)
+        return ABORTED
+    print(decisions_markdown(decisions))
+    pending = copy.manager.get("pending") or {}
+    orders = pending.get("orders", [])
+    print(
+        f"[shadow] {len(decisions)} decision(s); "
+        + (
+            "would queue "
+            + ", ".join(f"{o['action']} {o['quantity']} {o['ticker']}" for o in orders)
+            if orders
+            else "nothing to queue"
+        )
+    )
+    print(f"[shadow] receipt, notes and scorecard in {store.root} — no book was changed.")
     return 0
 
 
@@ -301,6 +412,7 @@ def cmd_status(cfg: Config) -> int:
         print("[twin] no market data.")
         return 0
     trades, _notes = _tradebook()
+    replay_real(books[REAL], trades, cfg)
     marks, gaps = _marks_and_gaps(books, trades, market, cfg, persist=False)
     print(comparison_markdown(marks, gaps))
     return 0
@@ -309,11 +421,13 @@ def cmd_status(cfg: Config) -> int:
 def main(argv: list[str] | None = None) -> int:
     use_utf8()  # first: Windows pipes fall back to cp1252 and die on a rupee sign
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("cmd", choices=["seed", "daily", "status"])
+    ap.add_argument("cmd", choices=["seed", "daily", "status", "shadow"])
     args = ap.parse_args(argv)
     cfg = Config()
     if args.cmd == "seed":
         return cmd_seed(cfg)
+    if args.cmd == "shadow":
+        return cmd_shadow(cfg)
     return cmd_daily(cfg) if args.cmd == "daily" else cmd_status(cfg)
 
 
