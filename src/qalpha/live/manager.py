@@ -826,7 +826,13 @@ def review(
             "as_of": market.as_of.isoformat(),
             "digest": digest,
             "orders": queued,
-            "sectors": sectors,
+            # Only the sectors the fill will need. The whole watchlist's map was being written into
+            # the book, where a record of three orders carried ninety-six names it never used.
+            "sectors": {
+                t: sectors[t]
+                for t in {o["ticker"] for o in queued} | set(book.portfolio.positions())
+                if t in sectors
+            },
         }
         if queued
         else None,
