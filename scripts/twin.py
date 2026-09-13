@@ -49,6 +49,7 @@ from qalpha.live.progress import IST
 from qalpha.live.tradebook import EXPORT_DIR, TradebookTrade, read_exports, replay_tradebook
 from qalpha.live.twin import (
     DECIDING,
+    EVALUATION_START,
     REAL,
     SYSTEM,
     TWIN_HISTORY,
@@ -287,14 +288,23 @@ def cmd_daily(cfg: Config) -> int:
             continue
         if book.stepped_through == market.as_of:
             continue
-        # Mirror: until a start is registered, SYSTEM holds exactly what the user holds.
+        if book.manager.get("last_review"):
+            # It has decided for itself before. The mirror is keyed to the session date, and on a
+            # holiday that date is the previous session — which can sit before the start. Copying
+            # REAL over a book that has made its own decisions would erase them.
+            print(f"[twin] {name} has decided before; it is not re-mirrored to REAL.")
+            continue
+        # Mirror: until the investor starts, SYSTEM holds exactly what the user holds.
         replay_real(book, trades, cfg)
         book.stepped_through = market.as_of
     if not autonomous:
-        print(
-            "[twin] SYSTEM mirrors REAL — no start date is registered, so it makes no choices of "
-            "its own."
+        when = (
+            f"until {EVALUATION_START}"
+            + (f" ({why})" if (why := nse.closure_reason(EVALUATION_START)) else "")
+            if EVALUATION_START
+            else "— no start date is registered"
         )
+        print(f"[twin] SYSTEM mirrors REAL {when}; it makes no choices of its own yet.")
     # BEFORE the save, so the file records what REAL actually holds rather than the cash it was
     # seeded with.
     replay_real(books[REAL], trades, cfg)

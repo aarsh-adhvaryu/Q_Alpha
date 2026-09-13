@@ -227,19 +227,19 @@ def baseline_mark(flows: Sequence[Flow], series: pd.Series, as_of: date) -> Book
     )
 
 
-#: **The day SYSTEM starts deciding for itself — and today there is no such day.** ``None`` means
-#: no autonomous window is registered: SYSTEM mirrors the user's tradebook and chooses nothing.
+#: **The day the AI investor starts deciding for itself.**
 #:
-#: It was ``2026-09-14``, registered on 2026-09-12 for the rulebook policy (PL-1). **Withdrawn on
-#: 2026-09-13, before the window opened**, because the treatment the user wants measured is an AI
-#: investor, not that rulebook, and a year spent measuring the rulebook answers a question nobody is
-#: asking. SYSTEM never made a decision under PL-1. The withdrawal is recorded in
-#: ``reports/PREREGISTRATION_SYSTEM.md`` §6.
+#: Registered 2026-09-13 in ``reports/PREREGISTRATION_AI_PM1.md``, forward-dated: starting an
+#: experiment on days whose outcome is already known is selection on the outcome.
 #:
-#: The next start is set by the AI investor's own registration, on the day it is written, forward-
-#: dated as before: starting an experiment on days whose outcome is already known is selection on
-#: the outcome.
-EVALUATION_START: date | None = None
+#: 2026-09-14 is Ganesh Chaturthi and the exchange is shut, which needs no special case — the day a
+#: book is stepped on is the day its prices come from, so the first review happens on the first
+#: session on or after this date. A start date that fell on a holiday used to be the sort of thing
+#: that silently skipped a day or reviewed Friday's close twice.
+#:
+#: It replaced ``None``, which is what the withdrawn rulebook start left behind (2026-09-13, before
+#: that window opened). ``None`` still means "no autonomous window is registered".
+EVALUATION_START: date | None = date(2026, 9, 14)
 
 
 def is_autonomous(as_of: date, *, start: date | None = EVALUATION_START) -> bool:
@@ -283,7 +283,10 @@ class Gap:
         head = f"**{self.left}** is {direction} **{self.right}** by ₹{abs(self.rupees):,.0f}"
         g = self.log_rel_wealth
         if g is None:
-            return f"{head} — relative wealth not measurable yet (no registered window)."
+            return (
+                f"{head} — relative wealth not measurable yet: no unitized NAVs on file for the "
+                "registered window."
+            )
         return f"{head} ({math.expm1(g) * 100:+.2f}% relative wealth since the start)."
 
 

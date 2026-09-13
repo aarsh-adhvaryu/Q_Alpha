@@ -50,6 +50,12 @@ from qalpha.live.twin import TwinBook
 VERSION = "AI-PM-1"
 MODEL = "claude-sonnet-5"
 
+#: The most the investor may spend on purchases in one calendar month, whatever cash the book holds.
+#: The user's own plan is a ₹50,000 monthly instalment, and a book that spent a year of instalments
+#: the day they arrived would be running a different strategy from the one he is testing. Sells are
+#: not capped: raising cash is always allowed, and nothing forces the money to be spent again.
+MONTHLY_BUDGET = Decimal("50000")
+
 MAX_NAMES = 8
 #: What a **purchase** may take a name or a sector to. A buy is cut to fit; this is never breached
 #: by a decision of the investor's.
@@ -194,6 +200,29 @@ def _append(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
         existing += "\n"  # a torn last line must not swallow the next record
     body = "".join(json.dumps(r, sort_keys=True, default=str) + "\n" for r in rows)
     atomic.write_text(path, existing + body)
+
+
+def spent_this_month(on: date, store: Store = STORE) -> Decimal:
+    """What purchases have cost in ``on``'s calendar month — the money, including charges.
+
+    Read from the fills, which are what actually happened, not from the decisions, which are what
+    was intended. An order queued and never filled has spent nothing.
+    """
+    spent = Decimal("0")
+    for row in _jsonl(store.fills):
+        if row.get("version") != VERSION or row.get("action") != BUY:
+            continue
+        day = str(row.get("on", ""))
+        if day[:7] != on.isoformat()[:7]:
+            continue
+        spent += Decimal(str(row.get("filled", 0))) * Decimal(str(row.get("price", "0")))
+        spent += Decimal(str(row.get("cost", "0")))
+    return spent
+
+
+def budget_left(on: date, store: Store = STORE) -> Decimal:
+    """This month's remaining allowance. Never negative."""
+    return max(Decimal("0"), MONTHLY_BUDGET - spent_this_month(on, store))
 
 
 def memory(names: Sequence[str], *, before: date, store: Store = STORE) -> dict[str, Any]:
@@ -479,6 +508,12 @@ def build_packet(
             "over_the_drift_band": sorted(over_band),
             "long_only": True,
         },
+        "budget": {
+            "monthly_limit": str(MONTHLY_BUDGET),
+            "spent_this_month": str(spent_this_month(as_of, store)),
+            "left_this_month": str(budget_left(as_of, store)),
+            "note": "purchases only; selling is never limited by it, and freed cash does not raise it",
+        },
         "costs": {
             "buy": "about 0.12% of value (STT 0.1%, stamp 0.015%, exchange, SEBI, GST)",
             "sell": "about 0.1% + Rs 13.50, plus capital-gains tax: 20.8% on gains held under 365 "
@@ -502,7 +537,8 @@ Rules:
 - A fall in price is not by itself a sign of value. Evidence can be incomplete even when coverage says read.
 - Orders fill at the NEXT session's close, not at the prices shown.
 - Code will enforce, on BUYS only: at most 8 names after buying, 20% per name, 30% per sector (of total
-  value including cash), and available cash including costs. It may reduce or cancel an order.
+  value including cash), available cash including costs, and "budget.left_this_month" — the monthly
+  purchase allowance. It may reduce or cancel an order. Selling is not limited by the allowance.
 - A position that has DRIFTED above 20% on price alone is not a breach. Up to 22% needs no action.
   Above 22% ("over_the_drift_band") consider trimming — and weigh it against the cost and the capital
   gains tax a sale realises. Holding an appreciated position is a legitimate answer.
@@ -600,9 +636,17 @@ def apply_orders(
     prices: Mapping[str, Decimal],
     sectors: Mapping[str, str],
     on: date,
+    *,
+    allowance: Decimal | None = None,
 ) -> list[dict[str, Any]]:
-    """Execute sells, then buys, within the limits. Mutates ``portfolio``; returns what happened to each."""
+    """Execute sells, then buys, within the limits. Mutates ``portfolio``; returns what happened to each.
+
+    ``allowance`` is what may still be spent on purchases this month. Sells are never capped by it —
+    raising cash is always allowed — and money freed by a sell does not raise it either: the cap is
+    on buying, not on the balance.
+    """
     results: list[dict[str, Any]] = []
+    left = MONTHLY_BUDGET if allowance is None else allowance
     for order in sorted(orders, key=lambda o: o["action"] != SELL):
         ticker, action, wanted = order["ticker"], order["action"], int(order["quantity"])
         price = prices[ticker]
@@ -619,11 +663,24 @@ def apply_orders(
                 qty, status = 0, f"cancelled: already {len(held)} names"
             else:
                 qty = _largest_allowed_buy(portfolio, ticker, wanted, prices, sectors, on)
-                trade = portfolio.buy(on, ticker, Decimal(qty), price) if qty else None
-                if qty == 0:
-                    status = "cancelled: cash or the 20%/30% limits allow none"
-                elif qty < wanted:
-                    status = f"cut from {wanted} to {qty}: cash or the 20%/30% limits"
+                affordable = int(left / price) if price > 0 else 0
+                capped = min(qty, affordable)
+                trade = portfolio.buy(on, ticker, Decimal(capped), price) if capped else None
+                if trade is not None:
+                    left -= Decimal(trade.quantity) * price + trade.cost
+                if capped == 0:
+                    status = (
+                        "cancelled: this month's allowance is spent"
+                        if qty and not affordable
+                        else "cancelled: cash or the 20%/30% limits allow none"
+                    )
+                elif capped < wanted:
+                    status = (
+                        f"cut from {wanted} to {capped}: this month's allowance"
+                        if capped < qty
+                        else f"cut from {wanted} to {capped}: cash or the 20%/30% limits"
+                    )
+                qty = capped
         filled = int(trade.quantity) if trade is not None else 0
         if filled == 0 and status == "filled":
             status = "cancelled: nothing could be filled"
@@ -715,7 +772,11 @@ def fill_pending(
         pending["waiting"] = f"no usable close on {day} for {', '.join(sorted(set(missing)))}"
         return []
     trial = book.portfolio.clone()
-    results = apply_orders(trial, pending["orders"], prices, pending["sectors"], day)
+    # The allowance is re-checked on the fill day, not carried from the decision: an order decided
+    # on the 30th and filled on the 1st spends the new month's money.
+    results = apply_orders(
+        trial, pending["orders"], prices, pending["sectors"], day, allowance=budget_left(day, store)
+    )
     book.portfolio = trial
     _append(
         store.fills,
@@ -797,6 +858,7 @@ def review(
         closes,
         sectors,
         market.as_of,
+        allowance=budget_left(market.as_of, store),
     )
     accepted = {(p["ticker"], p["action"]): p for p in preview}
     queued = [

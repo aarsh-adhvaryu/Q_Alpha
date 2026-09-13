@@ -73,7 +73,17 @@ twelve-month anniversary is not a verdict.
 - **2026-09-13** — start condition 2 met: all eight holdings opened by `claude-sonnet-5` under EX-3.
   Six scanned filings were transcribed; three remain unreadable (two newspaper advertisements, one
   depositories certificate) and are named in the packet. INFY 222/224, TATAPOWER 144/145, the rest
-  complete.
+  complete. TATAPOWER's gap turned out to be a document the **reader refuses**, deterministically:
+  refusals are now recorded and a document declined twice is retired rather than re-read at cost on
+  every run.
+- **2026-09-13** — amended before the start: purchases are capped at **₹50,000 per calendar month**
+  (`manager.MONTHLY_BUDGET`), matching the user's own instalment plan. Selling is never limited by
+  it, and cash freed by a sale does not raise it. A book that spent a year of instalments the day
+  they arrived would not be running the strategy under test.
+- **2026-09-13** — **start date set to 2026-09-14**, at the user's instruction, with all three
+  conditions met. The 14th is Ganesh Chaturthi, so the first review falls on the first session on or
+  after it: the evening of Tuesday 2026-09-15, on that day's close, with fills on the 16th. From
+  here §1–§6 are fixed; only this section may be added to.
 - **2026-09-13** — **shadow review run and read** (start condition 3). 8 holdings reviewed on
   2026-09-11's close: 5 HOLD citing specific filings, 3 trims. 25,020 input + 10,217 output tokens.
   Records in `data/twin/manager/shadow/`. Start conditions 1 and 2 are not yet met.

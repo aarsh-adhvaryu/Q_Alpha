@@ -200,30 +200,48 @@ def test_the_relative_wealth_statistic_survives_a_contribution() -> None:
     assert with_flow.iloc[-1] == pytest.approx(with_flow.iloc[0]), "a deposit is not a return"
 
 
-def test_no_registered_start_means_system_never_decides() -> None:
-    """The rulebook start (2026-09-14) was withdrawn before it opened, on 2026-09-13.
+def test_an_unregistered_start_means_the_book_never_decides() -> None:
+    """``None`` is not a date in the past. If it ever compared as "already begun", a book with no
+    registered window would start deciding on its own."""
+    from qalpha.live.twin import is_autonomous, navs_from_history
 
-    An absent start is not a date in the past. If ``None`` ever compared as "already begun", SYSTEM
-    would start choosing on the rulebook on the first evening after the withdrawal — the exact
-    outcome the withdrawal exists to prevent. Checked on the days around the old start and far out.
-    """
-    from qalpha.live.twin import EVALUATION_START, is_autonomous, navs_from_history
-
-    assert EVALUATION_START is None, (
-        "a start is set only by a written registration — see reports/PREREGISTRATION_SYSTEM.md §6"
-    )
     for day in (date(2026, 9, 14), date(2026, 9, 15), date(2030, 1, 1)):
-        assert is_autonomous(day) is False
+        assert is_autonomous(day, start=None) is False
     rows = [{"as_of": "2026-09-15", "books": {"SYSTEM": {"value": "100", "net_invested": "100"}}}]
-    assert navs_from_history(rows) == {}, "no window: unmeasured, never a NAV of 1.0"
+    assert navs_from_history(rows, start=None) == {}, "no window: unmeasured, never a NAV of 1.0"
+
+
+def test_the_start_in_the_code_is_the_start_in_the_registration() -> None:
+    """A start date is a registered fact. The two must not be able to drift apart."""
+    import re
+
+    from qalpha.live.twin import EVALUATION_START
+
+    recorded = Path(__file__).resolve().parents[1] / "reports/PREREGISTRATION_AI_PM1.md"
+    dates = set(
+        re.findall(r"start date set to (\d{4}-\d{2}-\d{2})", recorded.read_text(encoding="utf-8"))
+    )
+    assert EVALUATION_START is not None
+    assert dates == {EVALUATION_START.isoformat()}, (
+        "the registration must record the start date the code runs on"
+    )
+
+
+def test_the_start_holds_across_a_holiday() -> None:
+    """The start falls on Ganesh Chaturthi. A book is stepped on the day its prices come from, so
+    the first review lands on the first session on or after it — not on Friday's close twice."""
+    from qalpha.live import calendar as nse
+    from qalpha.live.twin import EVALUATION_START, is_autonomous
+
+    assert EVALUATION_START is not None
+    assert nse.closure_reason(EVALUATION_START), "this test is about a start on a closed day"
+    assert is_autonomous(date(2026, 9, 11)) is False, "Friday's close is before the window"
+    assert is_autonomous(date(2026, 9, 15)) is True, "the first session on or after it decides"
 
 
 def test_the_daily_caller_asks_the_registered_start() -> None:
-    """The scheduled caller must reach the same ``is_autonomous`` — not a copy with its own date.
-
-    Rule 4: test the caller. `scripts/twin.py` decides mirror-or-choose per evening; if it ever
-    held its own default, withdrawing the date here would change nothing there.
-    """
+    """Rule 4: test the caller. `scripts/twin.py` decides mirror-or-choose every evening; if it held
+    its own copy of the date, changing it here would change nothing there."""
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -232,7 +250,8 @@ def test_the_daily_caller_asks_the_registered_start() -> None:
     from qalpha.live import twin as twin_module
 
     assert runner_script.is_autonomous is twin_module.is_autonomous
-    assert runner_script.is_autonomous(date(2026, 9, 15)) is False
+    for day in (date(2026, 9, 11), date(2026, 9, 15)):
+        assert runner_script.is_autonomous(day) == twin_module.is_autonomous(day)
 
 
 def test_the_bar_is_the_purchasable_alternative_not_the_index() -> None:

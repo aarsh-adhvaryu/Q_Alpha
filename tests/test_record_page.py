@@ -120,8 +120,12 @@ def test_the_banner_says_whether_system_is_deciding_yet(
     assert "deciding for itself" in record.dashboard_html(date(2026, 9, 15))
 
 
-def test_with_no_registered_start_the_banner_counts_down_to_nothing(repo: Path) -> None:
-    """No start date is registered. The page must say so, not print a countdown to ``None``."""
+def test_with_no_registered_start_the_banner_counts_down_to_nothing(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A book with no registered start must say so, not print a countdown to ``None``."""
+    monkeypatch.setattr(record, "EVALUATION_START", None)
+    monkeypatch.setattr(record, "is_autonomous", lambda d: False)
     banner = record._banner(record.dashboard_data(date(2026, 9, 15)))
     assert "SYSTEM is not deciding" in banner
     assert "starts deciding" not in banner and "deciding for itself" not in banner
