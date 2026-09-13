@@ -316,3 +316,54 @@ def replace_verdicts(market: Market, call: str) -> Market:
     from dataclasses import replace
 
     return replace(market, ai_verdicts={"A.NS": call})
+
+
+def test_cash_freed_by_a_sale_is_spendable_the_same_day() -> None:
+    """The property `_execute`'s docstring always claimed and the ordering always defeated.
+
+    `_deploy` sizes the basket from `book.portfolio.cash`. It used to run while every harvest and
+    exit was still an UNEXECUTED decision, so it sized against the pre-sale balance and the
+    proceeds idled until the next evening.
+
+    On SYSTEM's first autonomous day (2026-09-14) six of its eight holdings harvest a loss. With
+    the old ordering the book went ~57% to cash for a day before buying back — the opposite of the
+    thing it is supposed to do, on day one of a registered twelve-month window.
+
+    The book here starts with ZERO cash, so a DEPLOY can only exist if the sale executed first.
+    """
+    from qalpha.data.prices import PriceData
+
+    # 1,000 shares so the proceeds clear `idle_cash_floor` (₹5,000). Below it the deploy declines
+    # by design -- "a deploy is charges wearing a strategy costume" -- and the test would pass for
+    # the wrong reason by never reaching the behaviour it is about.
+    lots = (("FALLER.NS", date(2026, 1, 5), "1000", "200"),)  # bought at 200, now 40: a real loss
+    flat = [100.0] * len(_DATES)
+    adj = _frame(**{"FALLER.NS": list(np.linspace(200.0, 40.0, len(_DATES))), "A.NS": flat})
+    frame = pd.DataFrame({"A.NS": flat}, index=_DATES)
+    market = Market(
+        as_of=_AS_OF,
+        prices={"FALLER.NS": Decimal("40"), "A.NS": Decimal("100")},
+        index_close=_calm_index(),
+        adj_close=adj,
+        watchlist=["A.NS"],
+        sector_of={"A.NS": "IT"},
+        wl_prices=PriceData(frame, frame.copy(), frame.copy() * 0 + 1e6),
+    )
+    book = _book(SYSTEM, cash="0", lots=lots)
+    assert book.portfolio.cash == Decimal("0"), "the premise: nothing to spend before the sale"
+
+    decisions = step(book, POLICIES[SYSTEM], market, cfg=Config())
+
+    sold = [d for d in decisions if d.action in (HARVEST, EXIT)]
+    bought = [d for d in decisions if d.action == DEPLOY]
+    assert sold, "this test is vacuous unless the day actually sells something"
+    assert bought, (
+        "the sale's proceeds were not spendable until tomorrow — _deploy sized against pre-sale cash"
+    )
+    # …and the proceeds did not simply pile up as idle cash.
+    held = sum(float(market.prices[t]) * float(q) for t, q in book.portfolio.positions().items())
+    total = float(book.portfolio.cash) + held
+    assert total > 0
+    assert float(book.portfolio.cash) / total < 0.25, (
+        f"{float(book.portfolio.cash) / total:.0%} of the book is sitting in cash after a harvest"
+    )
