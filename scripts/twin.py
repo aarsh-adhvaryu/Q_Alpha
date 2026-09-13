@@ -557,10 +557,14 @@ def cmd_daily(cfg: Config) -> int:
 
     autonomous = is_autonomous(market.as_of)
     if not autonomous:
+        until = (
+            f"until {EVALUATION_START}"
+            if EVALUATION_START
+            else "— no start date is registered (the rulebook start was withdrawn on 2026-09-13)"
+        )
         print(
-            f"[twin] SYSTEM mirrors REAL until {EVALUATION_START} — it holds what you hold and "
-            "makes no choices of its own. Registered before the window opened; see "
-            "reports/PREREGISTRATION_SYSTEM.md."
+            f"[twin] SYSTEM mirrors REAL {until}. It holds what you hold and makes no choices of "
+            "its own; see reports/PREREGISTRATION_SYSTEM.md."
         )
     for name in DECIDING:
         book = books.get(name)

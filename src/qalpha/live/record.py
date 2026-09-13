@@ -273,9 +273,10 @@ def dashboard_data(as_of: date | None = None) -> dict[str, Any]:
     return {
         "as_of": today.isoformat(),
         "latest_day": latest_day,
-        "evaluation_start": EVALUATION_START.isoformat(),
+        # None when no autonomous window is registered — never a countdown to a date that is not set.
+        "evaluation_start": EVALUATION_START.isoformat() if EVALUATION_START else None,
         "autonomous": is_autonomous(today),
-        "days_to_start": (EVALUATION_START - today).days,
+        "days_to_start": (EVALUATION_START - today).days if EVALUATION_START else None,
         "books": books_now,
         "series": series,
         "equity": equity,
@@ -360,6 +361,12 @@ def _banner(data: dict[str, Any]) -> str:
             "places an order.</div>"
         )
     days = data["days_to_start"]
+    if days is None:
+        return (
+            '<div class="banner"><b>SYSTEM is not deciding.</b> No start date is registered, so it '
+            "mirrors your tradebook exactly. It will start only when the AI investor's own "
+            "registration sets a date.</div>"
+        )
     when = "tomorrow" if days == 1 else f"in {days} days" if days > 0 else "today"
     return (
         f'<div class="banner"><b>SYSTEM starts deciding {_esc(when)}</b> '
