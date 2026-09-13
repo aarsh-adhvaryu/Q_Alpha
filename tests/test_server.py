@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import threading
 from http.client import HTTPConnection
+from pathlib import Path
 
 import pytest
 
@@ -284,9 +285,32 @@ def test_without_autorun_the_app_waits_to_be_asked(monkeypatch: pytest.MonkeyPat
     assert started == []
 
 
-def test_the_empty_state_names_a_button_that_exists(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    """It said "Press Run the analysis". There is no such button, and the one there is says a
-    different thing — an instruction that cannot be followed reads as a broken page."""
-    monkeypatch.setattr(server, "LAST_RUN", tmp_path / "never-written.json")
+def test_the_empty_state_names_a_button_that_exists(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """It once said "Press Run the analysis". There is no such button, and an instruction that
+    cannot be followed reads as a broken page."""
+    from qalpha.live import session
+
+    monkeypatch.setattr(session, "LEDGER_PATH", tmp_path / "never-written.jsonl")
     body = server._last_run()
     assert "Run the evening" in body and "Run the analysis" not in body
+
+
+def test_the_evening_and_its_steps_are_in_one_journal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """One file answers "what has this machine done": the steps AND the run's own summary."""
+    from datetime import UTC, datetime
+
+    from qalpha.live import session
+
+    ledger = tmp_path / "ledger.jsonl"
+    monkeypatch.setattr(session, "LEDGER_PATH", ledger)
+    at = datetime(2026, 9, 13, 13, 30, tzinfo=UTC)
+    session.record_task("digest1", "evidence", "failed", at, detail="no key", path=ledger)
+    session.record_run(at=at, notes=["evidence was skipped: no key"], complete=False, path=ledger)
+
+    assert [r.task for r in session.history(ledger)] == ["evidence", session.RUN_TASK]
+    body = server._last_run()
+    assert "INCOMPLETE" in body and "no key" in body
