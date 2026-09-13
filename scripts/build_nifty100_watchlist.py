@@ -20,6 +20,8 @@ from pathlib import Path
 import pandas as pd
 from build_nifty_universe import CURRENT_2025, NAME_TO_SYMBOL
 
+from qalpha.live.panels import WATCHLIST_PANEL
+
 # Current NIFTY Next 50 → coarse sector (engine taxonomy). "LTM"/"TMCV" Wikipedia artifacts dropped.
 NEXT_50: dict[str, str] = {
     "ABB": "INFRA",
@@ -128,7 +130,7 @@ def main() -> None:
         help="also download the watchlist's price history → the watchlist panel, so the advisor's "
         "deploy-weakness can actually see all the names (esp. the Next-50 midcaps).",
     )
-    ap.add_argument("--prices-out", default="data/historical/prices_watchlist.parquet")
+    ap.add_argument("--prices-out", default=str(WATCHLIST_PANEL))
     ap.add_argument("--start", default="2012-01-01")
     args = ap.parse_args()
     members = build()

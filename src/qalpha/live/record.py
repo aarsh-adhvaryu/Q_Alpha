@@ -1,27 +1,15 @@
-"""The record, drawn — the interactive page at ``/record``.
+"""The page — the four books, what SYSTEM holds, and which filings were read.
 
-### What this is allowed to do
-
-**It reads. It does not compute.** Every figure comes from the file that produced it —
-``data/twin/history.jsonl``, ``data/twin/books.json``, ``data/twin/marks.json``,
-``reports/paper_equity.csv`` — for the same reason :mod:`qalpha.live.twinpanel` does: a number
-invented on a display surface is how every labelling defect in this repository has started. The one
+**It reads. It does not compute.** Every figure comes from the file that produced it
+(``data/twin/history.jsonl``, ``data/twin/books.json``, the price panels, the coverage log). A number
+invented on a display surface is how every labelling defect in this repository started. The one
 arithmetic it performs is ``quantity × mark``, and it says so on the page.
 
-### Why it is not a chart library
+**No chart library.** Served from ``127.0.0.1`` and meant to work unplugged: SVG drawn by vanilla
+JavaScript over a JSON blob inlined into the page, so the data and the drawing stay separable.
 
-The page is served from ``127.0.0.1`` by Python's own ``http.server`` and must work with the
-network unplugged, so there is no CDN and no bundler. The charts are SVG drawn by a few hundred
-lines of vanilla JavaScript over a JSON blob inlined into the page. That also keeps the rule the
-rest of the live layer follows: the data and the drawing are separable, and the drawing never
-decides what a number means.
-
-### What it refuses to do
-
-**A sparse series is drawn as points, not as a line.** ``SYSTEM`` begins deciding on 2026-09-14, so
-for the first weeks its history is one or two observations. Joining two dots into a trend is the
-chart-shaped version of the defect this file exists to avoid, and the page says "N observations"
-beside anything with fewer than five.
+**A sparse series is drawn as points, not a line**, with its observation count beside it. Two dots
+joined read as a trend; they are two dots.
 """
 
 from __future__ import annotations
@@ -39,19 +27,16 @@ from qalpha.live.twin import BASELINE, BASELINE_EW, EVALUATION_START, REAL, SYST
 HISTORY = Path("data/twin/history.jsonl")
 BOOKS = Path("data/twin/books.json")
 MARKS = Path("data/twin/marks.json")
-EQUITY = Path("reports/paper_equity.csv")
 WATCHLIST = Path("data/universes/nifty100_watchlist.csv")
 COVERAGE = Path("data/evidence/coverage.jsonl")
 
 #: Below this many distinct observations a series is drawn as points and labelled with its count.
 #: Two dots joined by a line read as a trend; they are two dots.
 MIN_FOR_A_LINE = 5
-#: A daily move this large that reverses the next session is flagged as a suspect mark.
-SUSPECT_MOVE = 0.20
 
 BOOK_ORDER = (SYSTEM, BASELINE_EW, BASELINE, REAL)
 BOOK_NOTE = {
-    SYSTEM: "the whole thing deciding for itself",
+    SYSTEM: "the AI investor's paper book",
     BASELINE_EW: "the equal-weight index fund, charged 0.41%/yr — the bar",
     BASELINE: "NIFTYBEES bought and held — the do-nothing floor, never the bar",
     REAL: "your tradebook replayed — what you actually did",
@@ -138,10 +123,13 @@ def _last_closes() -> dict[str, float]:
     The page says *"marked at the last close in the panel"* rather than "current price", because on
     a Saturday that close is Friday's and the two are not the same claim.
     """
-    from qalpha.live.panels import BOOK_PANEL, SCREEN_PANEL
+    from qalpha.live.panels import NIFTY50_PANEL, WATCHLIST_PANEL
 
     out: dict[str, float] = {}
-    for panel in (BOOK_PANEL, SCREEN_PANEL):  # screen second: it wins where both carry a name
+    for panel in (
+        NIFTY50_PANEL,
+        WATCHLIST_PANEL,
+    ):  # watchlist second: it wins where both carry a name
         if not panel.exists():
             continue
         try:
@@ -215,31 +203,6 @@ def dashboard_data(as_of: date | None = None) -> dict[str, Any]:
                 {"date": day, "value": value, "invested": invested}
             )
 
-    equity: list[dict[str, float | str]] = []
-    if EQUITY.exists():
-        with EQUITY.open(encoding="utf-8", newline="") as fh:
-            for r in csv.DictReader(fh):
-                try:
-                    equity.append(
-                        {
-                            "date": str(r["date"]),
-                            "equity": float(r["equity"]),
-                            "cash": float(r["cash"]),
-                            "return_pct": float(r["return_pct"]),
-                        }
-                    )
-                except (KeyError, TypeError, ValueError):
-                    continue
-
-    # A ONE-DAY COLLAPSE THAT FULLY REVERSES THE NEXT SESSION IS A BAD MARK, NOT A MARKET. The
-    # committed curve holds 2026-08-28 at -39.24% between two ordinary days with cash unchanged. It is
-    # not edited here -- the record stands as written -- but it is flagged, drawn apart from the line,
-    # and never joined into it, because a line through it teaches the eye a crash that did not happen.
-    for i in range(1, len(equity) - 1):
-        prev, cur, nxt = (float(equity[j]["equity"]) for j in (i - 1, i, i + 1))
-        if prev > 0 and cur > 0 and cur / prev - 1 < -SUSPECT_MOVE and nxt / cur - 1 > SUSPECT_MOVE:
-            equity[i]["suspect"] = True
-
     sector_of = _sectors()
     holdings = _holdings()
     sectors: dict[str, float] = {}
@@ -279,7 +242,6 @@ def dashboard_data(as_of: date | None = None) -> dict[str, Any]:
         "days_to_start": (EVALUATION_START - today).days if EVALUATION_START else None,
         "books": books_now,
         "series": series,
-        "equity": equity,
         "holdings": [
             {
                 "ticker": h.ticker.removesuffix(".NS"),
@@ -375,18 +337,6 @@ def _banner(data: dict[str, Any]) -> str:
     )
 
 
-def _suspect_note(data: dict[str, Any]) -> str:
-    bad = [str(p["date"]) for p in data["equity"] if p.get("suspect")]
-    if not bad:
-        return ""
-    return (
-        f' <span class="warn"><b>{len(bad)} suspect mark{"" if len(bad) == 1 else "s"}</b> '
-        f"({_esc(', '.join(bad))}): a one-day fall of more than {SUSPECT_MOVE:.0%} that fully "
-        "reversed the next session, drawn apart from the line. Most likely a missing price, not a "
-        "market move — left as recorded, not trusted.</span>"
-    )
-
-
 def _holdings_table(data: dict[str, Any]) -> str:
     rows = []
     for h in sorted(data["holdings"], key=lambda x: -(x["value"] or 0)):
@@ -430,8 +380,12 @@ def _coverage_chips(data: dict[str, Any]) -> str:
     return "".join(out) or '<p class="dim">Nothing held.</p>'
 
 
-def dashboard_html(as_of: date | None = None) -> str:
-    """The whole page: the data inlined, the charts drawn from it in the browser."""
+def dashboard_html(as_of: date | None = None, *, top: str = "", bottom: str = "") -> str:
+    """The whole page: the data inlined, the charts drawn from it in the browser.
+
+    ``top`` and ``bottom`` are HTML the app places around the record — its controls and run feed
+    above, the task trail below — so the app and the saved file are one page, not two.
+    """
     from qalpha.live.record_assets import CSS, JS
 
     data = dashboard_data(as_of)
@@ -449,11 +403,12 @@ def dashboard_html(as_of: date | None = None) -> str:
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Q-Alpha · the record</title><style>{CSS}</style></head>
+<title>Q-Alpha</title><style>{CSS}</style></head>
 <body><div class="wrap">
-<h1>Q-Alpha — the record</h1>
-<p class="sub">Read from the files that produced it, as of {_esc(data["latest_day"] or "—")}.
- Nothing on this page places an order. <a href="/">Back to the run</a></p>
+<h1>Q-Alpha</h1>
+<p class="sub">An AI investor&rsquo;s paper book, read from the files that produced it, as of
+ {_esc(data["latest_day"] or "—")}. Nothing on this page places an order.</p>
+{top}
 {_banner(data)}
 {_kpis(data)}
 <div class="grid">
@@ -461,11 +416,6 @@ def dashboard_html(as_of: date | None = None) -> str:
     <p class="note">Same cash flows, same days. <b>BASELINE_EW is the bar</b>; NIFTYBEES is the
      do-nothing floor and never the bar.{sparse}</p>
     <div id="books-chart"></div><div class="legend" id="books-legend"></div></div>
-
-  <div class="card wide"><h2>Model book equity</h2>
-    <p class="note">{len(data["equity"])} daily marks from <code>reports/paper_equity.csv</code>.
-     Hover for the return on contributions.{_suspect_note(data)}</p>
-    <div id="equity-chart"></div></div>
 
   <div class="card"><h2>What SYSTEM holds</h2>
     <p class="note">Green is above cost, red below. Marked at the last close in the panel —
@@ -486,6 +436,7 @@ def dashboard_html(as_of: date | None = None) -> str:
      company — it is a gap, not a clean bill.</p>
     {_coverage_chips(data)}</div>
 </div>
+{bottom}
 </div>
 <script>window.__QALPHA__ = {blob};</script>
 <script>{JS}</script>

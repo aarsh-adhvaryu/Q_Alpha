@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from qalpha.backtest.portfolio import Portfolio
+from qalpha.accounting.portfolio import Portfolio
 from qalpha.config import Config
 from qalpha.live.evidence import (
     STALENESS_TOLERANCE_DAYS,
@@ -64,12 +64,10 @@ def _marks() -> dict[str, BookMark]:
 # --- the critical defect ------------------------------------------------------------------------
 
 
-def test_one_track_is_recorded_under_its_own_pair(tmp_path: Path) -> None:
-    """A track's statistic must name the pair it was computed from, not a module constant.
+def test_each_gap_is_recorded_under_the_pair_it_was_computed_from(tmp_path: Path) -> None:
+    """A gap's numbers must sit beside the pair that produced them, never a module constant.
 
-    It used to write ``GATING_PAIR`` regardless of which gap it had actually read, so a row could
-    name one comparison and carry another's numbers. Nine books made that easy to miss; one makes it
-    impossible to hide, and the assertion stays because the defect was never about the count.
+    A row once named one comparison and carried another's numbers.
     """
     marks = {
         SYSTEM: _mark(SYSTEM, "305000"),
@@ -78,15 +76,15 @@ def test_one_track_is_recorded_under_its_own_pair(tmp_path: Path) -> None:
     path = tmp_path / "history.jsonl"
     append_history(marks, compare(marks), as_of=date(2026, 9, 9), path=path)
     row = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
-    tracks = row["tracks"]
-    assert tracks["system"]["pair"] == [SYSTEM, BASELINE_EW]
+    by_pair = {tuple(g["pair"]): g for g in row["gaps"]}
+    assert by_pair[(SYSTEM, BASELINE_EW)]["rupees"] == str(Decimal("5000"))
 
 
 def test_history_still_loads_after_the_row_shape_changed(tmp_path: Path) -> None:
     marks = _marks()
     append_history(marks, compare(marks), as_of=AS_OF, path=tmp_path / "h.jsonl")
     rows = load_history(tmp_path / "h.jsonl")
-    assert len(rows) == 1 and "tracks" in rows[0]
+    assert len(rows) == 1 and "gaps" in rows[0]
 
 
 # --- same-day idempotence -------------------------------------------------------------------------
@@ -95,7 +93,7 @@ def test_history_still_loads_after_the_row_shape_changed(tmp_path: Path) -> None
 def test_stepped_through_survives_a_save_and_reload(tmp_path: Path) -> None:
     """The guard is only worth having if it is on the file the retry reads back."""
     cfg = Config()
-    from qalpha.live.track_record import Flow
+    from qalpha.live.flows import Flow
 
     flows = [Flow(on=date(2026, 9, 1), amount=Decimal("100000"))]
     books = {
@@ -117,7 +115,7 @@ def test_stepped_through_survives_a_save_and_reload(tmp_path: Path) -> None:
 def test_a_book_with_no_marker_is_treated_as_unstepped(tmp_path: Path) -> None:
     """Existing books.json files predate the field; absent must mean "not yet", never "already"."""
     cfg = Config()
-    from qalpha.live.track_record import Flow
+    from qalpha.live.flows import Flow
 
     books = {
         SYSTEM: TwinBook(

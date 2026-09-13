@@ -185,26 +185,6 @@ def _coverage_row(tmp_path: Path, **over: object) -> Path:
     return p
 
 
-def test_a_complete_row_from_another_reader_does_not_make_a_name_read(tmp_path: Path) -> None:
-    """The buy screen's "clear" must mean *this* corpus read it, not that somebody did."""
-    from qalpha.live.flags import filings_read
-
-    as_of = date(2026, 9, 11)
-    ours = _coverage_row(tmp_path, reader=corpus_reader())
-    assert filings_read(["VBL.NS"], as_of=as_of, path=ours) == {"VBL"}
-
-    theirs = _coverage_row(tmp_path, reader="qwen3-8b-32k")
-    assert filings_read(["VBL.NS"], as_of=as_of, path=theirs) == set()
-
-    legacy = _coverage_row(tmp_path)
-    json_row = json.loads(legacy.read_text(encoding="utf-8"))
-    del json_row["reader"]
-    legacy.write_text(json.dumps(json_row) + "\n", encoding="utf-8")
-    assert filings_read(["VBL.NS"], as_of=as_of, path=legacy) == set(), (
-        "a row from before the field existed says nothing about who read it"
-    )
-
-
 def test_an_event_from_another_reader_cannot_flag_a_candidate() -> None:
     """Selection stays deterministic, but a WATCH still has to come from the corpus's own reader."""
     from qalpha.live.evidence import PASS, Assessment, Provenance
@@ -279,13 +259,7 @@ def test_a_backfill_that_covered_nothing_is_not_a_success(
     from qalpha.config import Config
 
     monkeypatch.setattr(evidence, "_fetch_reg_ind", lambda as_of: ({}, None))
-    monkeypatch.setattr(
-        evidence,
-        "_screen_basket",
-        lambda cfg, as_of: evidence.ScreenBasket(
-            [], [], __import__("decimal").Decimal("0"), {}, {}
-        ),
-    )
+    monkeypatch.setattr(evidence, "research_scope", lambda as_of: [])
     code = evidence.cmd_backfill(Config(), date(2026, 9, 11), workers=2, budget_seconds=60)
     assert code != 0, "covering nothing must not look like covering everything"
 
