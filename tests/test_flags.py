@@ -436,7 +436,7 @@ def test_an_event_recorded_after_the_decision_date_is_not_shown_at_it(tmp_path: 
     assert seen_later and not seen_then, "an event is only knowable from the day it was recorded"
 
 
-def test_a_flagged_name_still_says_its_filings_were_not_read() -> None:
+def test_a_flagged_name_still_says_its_filings_were_not_read(monkeypatch) -> None:
     """THE BRANCH NOTHING COVERED. A name with any flag skipped the unread check entirely.
 
     The `clean`/`unread` split happens in the branch a name only reaches when it has **nothing**
@@ -449,6 +449,27 @@ def test_a_flagged_name_still_says_its_filings_were_not_read() -> None:
     """
     if load_archive(AS_OF)[1] is None:  # pragma: no cover - the archive ships with the repo
         return
+    # THE CONDITION IS BUILT, NOT BORROWED. The first version relied on a real VBL headline in the
+    # news log — present on the machine that wrote it, from uncommitted evening runs, and absent in
+    # CI, where the name was unflagged and the test failed on its own vacuity guard. A test of one
+    # rendering branch must supply the state that reaches that branch.
+    from qalpha.live import flags
+
+    monkeypatch.setattr(
+        flags,
+        "recent_news",
+        lambda tickers, **_: {
+            "VBL": [
+                {
+                    "stance": "negative",
+                    "summary": "Competition regulator investigating a stake bid",
+                    "source": "fixture",
+                    "link": "",
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(flags, "filings_read", lambda tickers, **_: set())
     panel = flags_markdown(["VBL.NS"], as_of=AS_OF)
     assert "🟡 news:" in panel, "this test is vacuous unless the name is actually flagged"
     assert "Filings NOT read" in panel, "a flagged name concealed that nobody read its filings"
