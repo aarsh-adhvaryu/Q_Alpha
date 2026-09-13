@@ -52,6 +52,10 @@ def research_digest(
     return h.hexdigest()[:16]
 
 
+#: The task name an evening's own summary is written under, so the whole run is one journal.
+RUN_TASK = "evening"
+
+
 @dataclass(frozen=True)
 class TaskRecord:
     """One unit of work against one snapshot. Written the moment it finishes, never before."""
@@ -70,13 +74,14 @@ def record_task(
     at: datetime,
     *,
     detail: str = "",
-    path: Path = LEDGER_PATH,
+    path: Path | None = None,
 ) -> None:
     """Append one finished task. Append-only: a failure stays on file after its later success.
 
     A ledger that erased failures would hide the thing most worth seeing — that a task needed three
     attempts, or that it has been failing quietly for a week.
     """
+    path = path or LEDGER_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     row = {
         "digest": digest,
@@ -105,12 +110,13 @@ def record_task(
         os.fsync(fh.fileno())  # the record must be on the platter before the caller moves on
 
 
-def completed(digest: str, path: Path = LEDGER_PATH) -> set[str]:
+def completed(digest: str, path: Path | None = None) -> set[str]:
     """Tasks already done for this snapshot. A failed task is NOT done and will be retried.
 
     Scoped by digest on purpose: change the inputs and every task is pending again, because work
     finished against different holdings is not work finished against these.
     """
+    path = path or LEDGER_PATH
     if not path.exists():
         return set()
     done: set[str] = set()
@@ -126,14 +132,43 @@ def completed(digest: str, path: Path = LEDGER_PATH) -> set[str]:
     return done
 
 
-def pending(digest: str, tasks: Iterable[str], path: Path = LEDGER_PATH) -> list[str]:
+def pending(digest: str, tasks: Iterable[str], path: Path | None = None) -> list[str]:
     """What is left to do, in the order given. This is the whole of "resume where it stopped"."""
     done = completed(digest, path)
     return [t for t in tasks if t not in done]
 
 
-def history(path: Path = LEDGER_PATH, *, limit: int = 50) -> list[TaskRecord]:
-    """The recent trail, newest last — what ran, what failed, and when."""
+def record_run(
+    *, at: datetime, notes: Sequence[str], complete: bool, path: Path | None = None
+) -> None:
+    """Write the evening itself into the same journal its steps went to.
+
+    One file answers "what has this machine done, and what went wrong" — a second place for the
+    run's own summary is how a failure ends up recorded in one file and reported from another.
+    """
+    record_task(
+        f"run:{at.isoformat(timespec='seconds')}",
+        RUN_TASK,
+        "done" if complete else "failed",
+        at,
+        detail=" · ".join(notes) if notes else "nothing to report",
+        path=path,
+    )
+
+
+def last_run(path: Path | None = None) -> TaskRecord | None:
+    """The most recent evening's own row, or ``None`` when none has been recorded."""
+    runs = [r for r in history(path or LEDGER_PATH, limit=500) if r.task == RUN_TASK]
+    return runs[-1] if runs else None
+
+
+def history(path: Path | None = None, *, limit: int = 50) -> list[TaskRecord]:
+    """The recent trail, newest last — what ran, what failed, and when.
+
+    The path is resolved **at call time**: a module constant bound as a default argument is fixed at
+    import, so a caller that redirects the journal would be read from the old one.
+    """
+    path = path or LEDGER_PATH
     if not path.exists():
         return []
     out: list[TaskRecord] = []

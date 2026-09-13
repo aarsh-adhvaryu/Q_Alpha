@@ -16,7 +16,6 @@ No broker is contacted. The books are seeded from the tradebook exports in ``dat
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -30,10 +29,10 @@ from qalpha.live.daily import day_scope, refresh_steps, research_steps, run_pipe
 from qalpha.live.extraction import EXTRACTION_VERSION
 from qalpha.live.panels import BENCHMARK_PANEL, NIFTY50_PANEL, WATCHLIST_PANEL
 from qalpha.live.progress import LOG
-from qalpha.live.session import research_digest
+from qalpha.live.session import record_run, research_digest
 
 PAGE = Path("data/session/qalpha.html")
-LAST_RUN = Path("data/session/last_run.json")
+#: One journal: every step and the evening's own summary go here.
 LEDGER = Path("data/session/ledger.jsonl")
 
 
@@ -92,14 +91,7 @@ def main(argv: list[str] | None = None) -> int:
         notes += research.notes()
         if not research.complete:
             LOG.say("The evening is INCOMPLETE — the page says which step and why.", "warn")
-        atomic.write_text(
-            LAST_RUN,
-            json.dumps(
-                {"finished_at": datetime.now(UTC).isoformat(timespec="seconds"), "notes": notes},
-                indent=2,
-            )
-            + "\n",
-        )
+        record_run(at=datetime.now(UTC), notes=notes, complete=research.complete, path=LEDGER)
 
     from qalpha.live.record import dashboard_html
 
