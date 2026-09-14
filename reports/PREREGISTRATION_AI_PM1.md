@@ -42,7 +42,10 @@ flows, same days. Relative wealth by unitized NAV from the start date. No annual
 ## 5. Start conditions — all must hold
 
 1. This version is merged.
-2. Every held name's filings are read (INFY, MUTHOOTFIN, TATAPOWER, WIPRO were not on 2026-09-13).
+2. **Every held name has been opened** — a current coverage row from the corpus reader — and any
+   document that could not be read is named in the packet by the exchange's subject line. Amended
+   from "fully read" to match §2: a scanned newspaper advertisement nobody can transcribe is a
+   permanent gap, and freezing a company for ever because of one is its own wrong answer.
 3. One shadow review (`scripts/twin.py shadow`) has completed on real data, and its receipt has been
    read by a person.
 
@@ -67,6 +70,10 @@ twelve-month anniversary is not a verdict.
   trimmed two holdings (TATAPOWER 21.4%, VBL 20.9%) that had merely appreciated; a rule that forces a
   sale on price drift pays capital-gains tax to undo a gain, which is the trade this repository has
   already measured as a loser. Buying stays capped; drift is shown, never acted on by code.
+- **2026-09-13** — start condition 2 met: all eight holdings opened by `claude-sonnet-5` under EX-3.
+  Six scanned filings were transcribed; three remain unreadable (two newspaper advertisements, one
+  depositories certificate) and are named in the packet. INFY 222/224, TATAPOWER 144/145, the rest
+  complete.
 - **2026-09-13** — **shadow review run and read** (start condition 3). 8 holdings reviewed on
   2026-09-11's close: 5 HOLD citing specific filings, 3 trims. 25,020 input + 10,217 output tokens.
   Records in `data/twin/manager/shadow/`. Start conditions 1 and 2 are not yet met.
