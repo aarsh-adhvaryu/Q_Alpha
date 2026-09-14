@@ -97,13 +97,16 @@ NIFTYBEES, which is the do-nothing floor.
 
 ## 7. Known limits, stated before the start
 
-- **The financials are stale.** The exchange's results archive currently ends at the December 2024
-  quarter for these names, roughly 20 months behind the price panel. The packet says so per name, in
-  words, and the evaluation harness names this as a confound. Any effect of financials on decisions
-  is entangled with their age.
-- **Banks have none.** Nine watchlist banks file under a taxonomy with no `RevenueFromOperations`
-  tag. They are shown as **unknown**, explicitly not as weak.
-- **25 filed quarters do not reconcile** against their own internal identities and are not fed.
+- **Financials lag results season, not years.** Results are read from both the exchange's old
+  results feed (to December 2024) and SEBI's Integrated Filing feed (2025 on), so a name's newest
+  quarter is the newest one it has filed — about six weeks after a quarter ends. Each packet states
+  every figure's age in words.
+- **Banks are read under the banking taxonomy.** "Revenue" for a bank is interest earned, and the
+  packet adds net interest income, provisions and NPA ratios. A consolidated bank filing leaves NPA
+  ratios blank; they are shown as not reported, never as zero.
+- **Filed quarters that do not add up against their own statement are refused** and named, not fed.
+- **Candidates must have had their filings read.** A cheap name whose filings nobody has read is
+  listed as not shown, with the reason, rather than put in front of the investor unread.
 - **No point-in-time Nifty-100.** Candidate scope is the Nifty-50 universe, which is point-in-time.
 - **Cash is a live confound.** The books hold ₹2,00,533 of real deposited cash that the ₹50,000
   monthly limit releases slowly, while the baselines are fully invested from day one. In a falling
@@ -140,3 +143,18 @@ NIFTYBEES, which is the do-nothing floor.
   the test passes its own, and the test suite fingerprints the 2,934 files that make up the record
   (books, history, the investor's records, evidence logs, financials) before and after the session
   and fails if any changed. The suite runs green with it in place.
+- **2026-09-14** — **the three data limits in §7 are closed, before the first review.**
+  1. *Stale financials.* The latest quarter for every name was December 2024 because SEBI's
+     Integrated Filing moved results to a different exchange feed in 2025. Both feeds are now read;
+     the new filings carry the same Ind-AS tags under an `in-capmkt:` prefix. TCS's newest quarter
+     becomes June 2026, filed 9 July 2026.
+  2. *Banks.* Read under the banking taxonomy: revenue is interest earned; net interest income,
+     provisions and NPA ratios are added; a consolidated filing's blank (0) NPA is shown as not
+     reported. Bank statements are checked with their own identity (operating profit less provisions
+     equals PBT) and refused if they do not add up.
+  3. *TATAMOTORS.* The candidate watchlist names TMPV, the listing that continues the company after
+     the 2025 demerger. The point-in-time index membership is unchanged; its switch date is unsourced.
+  Also: a period longer than 100 days is never stored as a quarter. These change what the packet
+  contains, so they are part of AI-PM-2 **only if merged and imported before the first review on
+  2026-09-15**; after it, the same change would be a new version. Six candidates still have unread
+  filings and are shown to the investor as not shown, with the reason, until a backfill reads them.

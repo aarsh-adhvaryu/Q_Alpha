@@ -355,10 +355,10 @@ def _financials(names: list[str], known: date) -> dict[str, Any]:
             out[ticker] = {
                 "status": "nothing on file that was public on this date",
                 "note": (
-                    "The exchange's results archive has no parsed, reconciling quarterly filing for "
-                    "this name. Banks and other financials report under a different taxonomy this "
-                    "reader does not parse. Treat the company's financial position as UNKNOWN — "
-                    "not as weak, and not as strong."
+                    "The exchange has no parsed, reconciling quarterly filing for this name that "
+                    "was public on this date — none filed, none that adds up, or one this reader "
+                    "cannot parse. Treat the company's financial position as UNKNOWN — not as "
+                    "weak, and not as strong."
                 ),
             }
             continue
@@ -586,7 +586,8 @@ Rules:
   only filings the market had on this date. "how_current" says how old they are: where that says the
   figures are months old, they describe the company as it WAS. Growth and margin there were computed
   by code, not by you — do not recompute them. A name whose "status" says nothing is on file has an
-  UNKNOWN financial position: not a weak one. Banks file under a taxonomy this reader does not parse.
+  UNKNOWN financial position: not a weak one. For a bank, "revenue" is interest earned, and "bank"
+  adds net interest income, provisions and NPA ratios; a null NPA means not reported in that filing.
 - "coverage" says how much of each company's filings were actually read. Anything under
   "could_not_read" was filed with the exchange and could NOT be read here — usually a scanned page.
   You are told its subject and date. Absence of an event is not evidence that nothing happened.

@@ -235,9 +235,9 @@ def _not_measurable() -> list[str]:
         "membership. Candidate selection is therefore judged only against the Nifty-50 universe, "
         "which IS point-in-time. Filling it with today's constituents would look complete and "
         "reintroduce ~3.8%/yr of survivorship bias, so it stays empty until it is sourced.",
-        "- **Whether the financials helped.** The exchange's results archive runs well behind the "
-        "price panel for these names, so the investor is reading quarters that are months old and "
-        "is told so. Any effect of financials on decisions is confounded with their staleness.",
+        "- **Whether the financials helped.** The investor always has financials, so there is no "
+        "record without them to compare against. Their effect on decisions cannot be separated "
+        "from everything else in the packet without running a version that lacks them.",
         "- **Counterfactual decisions.** The record shows what it did, never what the alternative "
         "would have returned. There is no way to ask this system what it would have done with a "
         "different packet without running a different version.",

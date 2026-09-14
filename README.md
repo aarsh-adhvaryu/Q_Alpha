@@ -17,13 +17,13 @@ plan and report are in git history.
 
 ---
 
-## 1. Where it stands — 2026-09-13
+## 1. Where it stands — 2026-09-14
 
 | | |
 |---|---|
-| **Working** | The evening run: prices → filings → headlines → four paper books marked against two index funds. Tax-exact FIFO accounting. Resumes where it stopped. |
-| **Built, not started** | The investor (AI-PM-1, `live/manager.py`), registered in [reports/PREREGISTRATION_AI_PM1.md](reports/PREREGISTRATION_AI_PM1.md). Until its start date `SYSTEM` mirrors the user's holdings. |
-| **Start date** | None registered. The earlier rulebook start (2026-09-14) was withdrawn before it opened. |
+| **Working** | The evening run: prices → filings → headlines → filed results → four paper books marked against two index funds. Tax-exact FIFO accounting. Resumes where it stopped. |
+| **Built, starting** | The investor (AI-PM-2, `live/manager.py`), registered in [reports/PREREGISTRATION_AI_PM2.md](reports/PREREGISTRATION_AI_PM2.md). AI-PM-1 was closed before it made a decision. Until its first review `SYSTEM` mirrors the user's holdings. |
+| **Start date** | 2026-09-14 (Ganesh Chaturthi, exchange closed): the first review is the evening of Tue 2026-09-15, filling on the 16th. |
 | **Proven edge** | None. See §6. |
 
 ---
@@ -58,6 +58,8 @@ filings    NSE announcements for those names → archive the bytes → extract e
            each with a quote checked against the archived document              scripts/evidence.py
   ↓
 headlines  4 market feeds + one Google News search per name → archive → map → read   scripts/news.py
+  ↓
+results    each company's filed quarterly results, both NSE feeds → check → store  scripts/financials.py
   ↓
 books      credit flows → fill yesterday's orders → the investor reviews → mark   scripts/twin.py
   ↓
@@ -106,7 +108,7 @@ adjustment factor before it is applied. Between the first trade and 2026-09-11 t
 ₹0 of them: everything but the starter position was bought on 2026-08-28, after every ex-date.
 
 **Names the bar cannot price.** Seven Nifty-50 members have no price in the panel at all —
-TATAMOTORS (symbol retired at the 2025 demerger), HDFC, CAIRN, IDFC, JPASSOCIAT, LTIM, STER. They
+TATAMOTORS (symbol retired at the 2025 demerger; the watchlist names its successor, TMPV), HDFC, CAIRN, IDFC, JPASSOCIAT, LTIM, STER. They
 were always excluded from the equal weighting; now they are named on every run rather than silently
 missing, so "the fifty" is never quietly forty-nine. A member that stops being priced mid-life makes
 the day's level **unknown** rather than ₹0 or its last price.
@@ -117,11 +119,14 @@ A gap between books is **descriptive**. One book over months is mostly timing an
 
 ## 5. The investor — what is being built
 
-### AI-PM-1: the first version
+### AI-PM-2: the version that runs
 
 - **Brain:** `claude-sonnet-5`, pinned by id. A different model is a different version.
 - **Sees:** every holding and 8 candidates; verified filing and headline events; a year of prices;
-  its own memory (below). **Not yet:** financial statements or valuations.
+  each company's own filed quarterly results, as published by that date (banks under the banking
+  taxonomy); its own memory (below). **May ask once** for up to 6 read-only look-ups before deciding
+  (`live/tools.py`). **Not given:** valuation multiples, which would need share counts and prices
+  joined point in time — a calculation not yet built.
 - **Decides:** HOLD / BUY / SELL with a quantity, a reason, a thesis, what would prove it wrong, and
   the evidence it relied on.
 - **Code enforces on purchases**, and may cut or cancel an order with a stated reason: long-only;
@@ -154,7 +159,7 @@ calls for it.
 | Step | What | Done when |
 |---|---|---|
 | **A. Accounts** ✓ | Deposits and withdrawals as explicit flows, from the broker's ledger. Dividends as dated cash on the ex-date, each cross-checked against the price panel's own adjustment before any book receives it. Splits and bonuses through the replay, checked by the share count against the broker's statement. | Done: `tests/test_accounting_scenario.py` runs one book through a deposit, a dividend, a split, a partial sale with tax, an unpriced holding and a restart, and reconciles with no manual edit. |
-| **B. Company facts** ✓ | Filed Ind-AS XBRL from the exchange, keyed by the time it was published; growth and margin computed by code. Refreshed every evening; a re-import is byte-identical. **This is what makes the investor AI-PM-2.** | Done: 709 filings across 92 names, 684 reconciling against the statement's own internal identities; 25 that do not are named and not fed. A filing is invisible to a packet dated before it was filed, and a restatement supersedes only from the day it was filed — both pinned by tests. |
+| **B. Company facts** ✓ | The companies' own filed quarterly results, from both of the exchange's feeds — the old results feed (to Dec 2024) and SEBI's Integrated Filing feed (2025 on) — keyed by the time each was published; banks read under the banking taxonomy (interest earned, provisions, NPAs); growth and margin computed by code; refreshed every evening, and a re-import is byte-identical. **This is what makes the investor AI-PM-2.** | Done: every filing is checked against its own statement's identities and refused if it does not add up; a filing is invisible to a packet dated before it was published, a restatement supersedes only from its own date, a full year is never stored as a quarter, and a fetch never deletes a stored filing — all pinned by tests. `financials.py` prints the counts. |
 | **C. Mandate** ✓ | One versioned mandate (`live/mandate.py`): every limit in one place, read by the manager, stated in the prompt, and written into every receipt. | Done: the prompt's numbers are asserted to be the numbers code enforces, a mandate file that sets an unknown field is refused rather than silently ignored, and the whole mandate is in the packet. |
 | **D. Research tools** ✓ | Four read-only look-ups (`live/tools.py`) the investor may ask for **once**, before deciding: more filings, every filed quarter, one metric across names, a finer price history. Answers join the packet and the receipt. | Done: every tool is bounded by the review's own date and by the names in front of it; requests beyond the limit are refused out loud; research surfaces archived ids and never mints one, so a citation earned by research is checked like any other. |
 | **E. Evaluation** ✓ | `scripts/evaluate.py` — one command, immutable inputs, three separate tests, no gate. It prints **no outcome figure** below 60 observations, and names what it cannot measure. | Done. Point-in-time Nifty-100 is **still unsourced and stays that way**: `NEXT_50_CHANGES` is empty, and filling it from today's constituents would look complete while reintroducing ~3.8%/yr of survivorship bias. The harness reports that as a named limit. |
@@ -164,12 +169,9 @@ calls for it.
 
 | Dataset | Why | Source |
 |---|---|---|
-| Filings for INFY, MUTHOOTFIN, TATAPOWER, WIPRO | AI-PM-1 cannot review a name nobody has read | `scripts/evidence.py backfill --only … --workers 8` (~$30–40) |
-| Ledger / funds statement | Real deposits and withdrawals for `REAL` (step A) | Zerodha Console, from the user |
+| A year of filings for candidates nobody has read (now IRFC, ITC, HDFCLIFE, GODREJCP, HDFCBANK, IOC, TMPV) | A candidate whose filings are unread is not shown to the investor | `scripts/evidence.py backfill --only … --workers 8` — about $2 a name; the evening prints the exact command |
 | Tax P&L, every quarter with a sale | Re-reconcile tax on multi-lot, long-term and loss cases | Zerodha Console, from the user |
-| Holdings statement | An independent check of FIFO lots | Zerodha Console, from the user |
-| Dividend and corporate-action statements | Dividends as cash; actions reconciled | Zerodha Console, from the user |
-| Company financial statements | Step B | NSE results filings (XBRL), archived with provenance |
+| Dividend and corporate-action statements | Check the vendor's dividend record against the broker's | Zerodha Console, from the user |
 | Point-in-time Nifty-100 membership | Step E | NSE Next-50 circulars → `scripts/build_nifty100_pit.py` |
 
 Private account files go in `data/account/` and are never committed.

@@ -139,7 +139,7 @@ def test_stale_figures_say_how_old_they_are() -> None:
     assert summary["days_since_filed"] > 700
     assert "MONTHS OLD" in summary["how_current"]
     fresh = facts.summarise([_parse(filed="2026-08-15T18:30:00")], as_of=date(2026, 9, 14))  # type: ignore[list-item]
-    assert fresh is not None and "within the last quarter" in fresh["how_current"]
+    assert fresh is not None and "newest quarter" in fresh["how_current"]
 
 
 def test_the_store_survives_a_round_trip(tmp_path: Path) -> None:
@@ -191,3 +191,150 @@ def test_a_fetch_that_omits_a_filing_never_removes_it_from_the_store(
         "a filing tonight's fetch did not list is kept"
     )
     assert new.source_url in urls
+
+
+# ---- SEBI's Integrated Filing (2025 on), and banks ------------------------------------------------
+
+INTEGRATED = """<?xml version="1.0"?>
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance">
+  <xbrli:context id="OneD"><xbrli:period><xbrli:startDate>2026-04-01</xbrli:startDate>
+    <xbrli:endDate>2026-06-30</xbrli:endDate></xbrli:period></xbrli:context>
+  <in-capmkt:DateOfStartOfReportingPeriod contextRef="OneD">2026-04-01</in-capmkt:DateOfStartOfReportingPeriod>
+  <in-capmkt:DateOfEndOfReportingPeriod contextRef="OneD">2026-06-30</in-capmkt:DateOfEndOfReportingPeriod>
+  <in-capmkt:NatureOfReportStandaloneConsolidated contextRef="OneD">Consolidated</in-capmkt:NatureOfReportStandaloneConsolidated>
+  <in-capmkt:RevenueFromOperations contextRef="OneD">722750000000</in-capmkt:RevenueFromOperations>
+  <in-capmkt:OtherIncome contextRef="OneD">15680000000</in-capmkt:OtherIncome>
+  <in-capmkt:Income contextRef="OneD">738430000000</in-capmkt:Income>
+  <in-capmkt:Expenses contextRef="OneD">552310000000</in-capmkt:Expenses>
+  <in-capmkt:ProfitBeforeExceptionalItemsAndTax contextRef="OneD">186120000000</in-capmkt:ProfitBeforeExceptionalItemsAndTax>
+  <in-capmkt:ProfitBeforeTax contextRef="OneD">179440000000</in-capmkt:ProfitBeforeTax>
+  <in-capmkt:TaxExpense contextRef="OneD">45240000000</in-capmkt:TaxExpense>
+  <in-capmkt:ProfitLossForPeriod contextRef="OneD">134200000000</in-capmkt:ProfitLossForPeriod>
+</xbrli:xbrl>
+"""
+
+BANK = """<?xml version="1.0"?>
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance">
+  <xbrli:context id="OneD"><xbrli:period><xbrli:startDate>2026-04-01</xbrli:startDate>
+    <xbrli:endDate>2026-06-30</xbrli:endDate></xbrli:period></xbrli:context>
+  <in-capmkt:DateOfStartOfReportingPeriod contextRef="OneD">2026-04-01</in-capmkt:DateOfStartOfReportingPeriod>
+  <in-capmkt:DateOfEndOfReportingPeriod contextRef="OneD">2026-06-30</in-capmkt:DateOfEndOfReportingPeriod>
+  <in-capmkt:NatureOfReportStandaloneConsolidated contextRef="OneD">Consolidated</in-capmkt:NatureOfReportStandaloneConsolidated>
+  <in-capmkt:InterestEarned contextRef="OneD">905753300000</in-capmkt:InterestEarned>
+  <in-capmkt:OtherIncome contextRef="OneD">425350300000</in-capmkt:OtherIncome>
+  <in-capmkt:Income contextRef="OneD">1331103600000</in-capmkt:Income>
+  <in-capmkt:InterestExpended contextRef="OneD">476256300000</in-capmkt:InterestExpended>
+  <in-capmkt:ExpenditureExcludingProvisionsAndContingencies contextRef="OneD">{expenditure}</in-capmkt:ExpenditureExcludingProvisionsAndContingencies>
+  <in-capmkt:OperatingProfitBeforeProvisionAndContingencies contextRef="OneD">309960000000</in-capmkt:OperatingProfitBeforeProvisionAndContingencies>
+  <in-capmkt:ProvisionsOtherThanTaxAndContingencies contextRef="OneD">38028400000</in-capmkt:ProvisionsOtherThanTaxAndContingencies>
+  <in-capmkt:ExceptionalItems contextRef="OneD">0</in-capmkt:ExceptionalItems>
+  <in-capmkt:ProfitLossFromOrdinaryActivitiesBeforeTax contextRef="OneD">271931600000</in-capmkt:ProfitLossFromOrdinaryActivitiesBeforeTax>
+  <in-capmkt:TaxExpense contextRef="OneD">68104700000</in-capmkt:TaxExpense>
+  <in-capmkt:ProfitLossForThePeriod contextRef="OneD">203826900000</in-capmkt:ProfitLossForThePeriod>
+  <in-capmkt:PercentageOfGrossNpa contextRef="OneD">0</in-capmkt:PercentageOfGrossNpa>
+</xbrli:xbrl>
+"""
+
+
+def _read(xml: str, ticker: str = "TEST.NS") -> facts.Quarter | None:
+    return facts.parse(
+        xml,
+        ticker=ticker,
+        filed_at=datetime(2026, 7, 9, 18, 36),
+        url="https://example.invalid/if.xml",
+        sha256="s",
+    )
+
+
+def test_an_integrated_filing_is_read_under_its_own_prefix() -> None:
+    """From 2025 results are tagged in-capmkt:, not in-bse-fin:. One prefix read them as empty."""
+    q = _read(INTEGRATED)
+    assert q is not None, "a 2025-format filing must parse"
+    assert q.get("revenue") == Decimal("722750000000")
+    assert q.reconciled, q.breaks
+
+
+def test_a_bank_reports_interest_earned_as_its_revenue_and_adds_up_its_own_way() -> None:
+    q = _read(BANK.format(expenditure="1021143600000"), "BANK.NS")
+    assert q is not None and q.is_bank
+    assert q.get("revenue") == Decimal("905753300000"), "interest earned is a bank's revenue"
+    assert q.get("profit_after_tax") == Decimal("203826900000")
+    assert q.reconciled, q.breaks
+    summary = facts.summarise([q], as_of=date(2026, 9, 14))
+    assert summary is not None
+    assert summary["bank"]["net_interest_income"] == "429497000000"
+
+
+def test_a_bank_whose_statement_does_not_add_up_is_refused() -> None:
+    q = _read(BANK.format(expenditure="999999999999"), "BANK.NS")
+    assert q is not None and not q.reconciled
+    assert any("operating profit" in b for b in q.breaks)
+
+
+def test_a_zero_npa_in_a_consolidated_filing_is_not_reported_rather_than_no_bad_loans() -> None:
+    """The regulator requires NPA ratios only in the standalone accounts. A 0 there is a blank."""
+    q = _read(BANK.format(expenditure="1021143600000"), "BANK.NS")
+    assert q is not None
+    assert q.get("gross_npa_pct") is None
+    summary = facts.summarise([q], as_of=date(2026, 9, 14))
+    assert summary is not None and summary["bank"]["gross_npa_pct"] is None
+
+
+def test_a_full_year_is_never_stored_as_a_quarter() -> None:
+    """A year stored as a quarter reports four quarters of revenue as one and 300% 'growth'."""
+    yearly = INTEGRATED.replace(
+        '<in-capmkt:DateOfStartOfReportingPeriod contextRef="OneD">2026-04-01',
+        '<in-capmkt:DateOfStartOfReportingPeriod contextRef="OneD">2025-07-01',
+    )
+    assert _read(yearly) is None
+
+
+def test_absent_figures_are_absent_not_the_word_none() -> None:
+    q = _read(INTEGRATED)
+    assert q is not None
+    summary = facts.summarise([q], as_of=date(2026, 9, 14))
+    assert summary is not None
+    assert summary["eps_basic"] is None, "an untagged EPS must be null, never the string 'None'"
+
+
+def test_the_importer_reads_both_the_old_feed_and_the_integrated_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reading only the old feed is why every name's newest quarter was December 2024."""
+    import json
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import financials as importer
+
+    legacy = [
+        {
+            "toDate": "31-Dec-2024",
+            "broadCastDate": "09-Jan-2025 21:39:43",
+            "consolidated": "Consolidated",
+            "xbrl": "https://example.invalid/old.xml",
+        }
+    ]
+    integrated = {
+        "data": [
+            {
+                "qe_Date": "30-JUN-2026",
+                "broadcast_Date": "09-Jul-2026 18:36:12",
+                "consolidated": "Consolidated",
+                "xbrl": "https://example.invalid/new.xml",
+            }
+        ],
+        "totalCount": 1,
+    }
+
+    def fetch(url: str, **_: object) -> tuple[int, bytes]:
+        body = integrated if "integrated-filing" in url else legacy
+        return 200, json.dumps(body).encode()
+
+    monkeypatch.setattr(importer, "_urlopen_fetch", fetch)
+    listed = importer._filings("TEST")
+    periods = sorted(str(f["period"]) for f in listed)
+    assert periods == ["2024-12-31", "2026-06-30"]
+    newest = next(f for f in listed if str(f["period"]) == "2026-06-30")
+    assert newest["filed_at"] == datetime(2026, 7, 9, 18, 36, 12)
+    assert newest["consolidated"] is True

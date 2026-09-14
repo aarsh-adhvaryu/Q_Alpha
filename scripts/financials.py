@@ -91,48 +91,108 @@ def _names(cfg: Config) -> list[str]:
     return sorted({*held, *extra})
 
 
+def _fetch_json(url: str, symbol: str, label: str) -> object | None:
+    status, body = _urlopen_fetch(url)
+    if status != 200 or not body:
+        print(f"  {symbol:12s} {label} unavailable (HTTP {status})")
+        return None
+    try:
+        return json.loads(body)
+    except ValueError:
+        print(f"  {symbol:12s} {label} was not readable JSON")
+        return None
+
+
+def _filings(symbol: str) -> list[dict[str, object]]:
+    """Every quarterly results filing the exchange lists for one symbol, from BOTH feeds.
+
+    The old results feed stops at the December 2024 quarter. From 2025, SEBI's Integrated Filing
+    replaced it and results are published through a different feed with different field names.
+    Reading only the old one is why every name's newest quarter was 20 months old: nothing was
+    missing, it had moved. Both are read and normalised to ``{period, filed_at, consolidated, url}``.
+    """
+    out: list[dict[str, object]] = []
+    legacy = _fetch_json(facts.INDEX_URL.format(symbol=symbol), symbol, "results index (to 2024)")
+    for row in legacy if isinstance(legacy, list) else []:
+        period, when = _period_end(row), _filed_at(row)
+        if row.get("xbrl") and period is not None:
+            out.append(
+                {
+                    "period": period,
+                    "filed_at": when,
+                    "consolidated": str(row.get("consolidated", "")).lower().startswith("cons"),
+                    "url": str(row["xbrl"]),
+                }
+            )
+    integrated = _fetch_json(
+        facts.INTEGRATED_URL.format(symbol=symbol), symbol, "integrated filings (2025 on)"
+    )
+    rows = integrated.get("data") if isinstance(integrated, dict) else None
+    if isinstance(integrated, dict) and isinstance(rows, list):
+        total = integrated.get("totalCount")
+        if isinstance(total, int) and total > len(rows):
+            print(
+                f"  {symbol:12s} the integrated feed lists {total} filings but returned {len(rows)}"
+                " — the oldest are NOT read"
+            )
+        for row in rows:
+            try:
+                period = datetime.strptime(str(row.get("qe_Date") or "").strip(), "%d-%b-%Y").date()
+            except ValueError:
+                continue
+            when = None
+            for shape in ("%d-%b-%Y %H:%M:%S", "%d-%b-%Y %H:%M"):
+                try:
+                    when = datetime.strptime(str(row.get("broadcast_Date") or "").strip(), shape)
+                    break
+                except ValueError:
+                    continue
+            if row.get("xbrl"):
+                out.append(
+                    {
+                        "period": period,
+                        "filed_at": when,
+                        "consolidated": str(row.get("consolidated") or "")
+                        .lower()
+                        .startswith("cons"),
+                        "url": str(row["xbrl"]),
+                    }
+                )
+    return out
+
+
 def _import(names: list[str]) -> list[facts.Quarter]:
     quarters: list[facts.Quarter] = []
     facts.XBRL_DIR.mkdir(parents=True, exist_ok=True)
     for ticker in names:
         symbol = ticker.removesuffix(".NS")
-        status, body = _urlopen_fetch(facts.INDEX_URL.format(symbol=symbol))
-        if status != 200 or not body:
-            print(f"  {symbol:12s} index unavailable (HTTP {status}) — no filings recorded")
+        listed = _filings(symbol)
+        if not listed:
+            print(f"  {symbol:12s} no results filings listed by either feed — none recorded")
             continue
-        try:
-            rows = json.loads(body)
-        except ValueError:
-            print(f"  {symbol:12s} index was not readable JSON — no filings recorded")
-            continue
-        dated = [(p, r) for r in rows if r.get("xbrl") and (p := _period_end(r)) is not None]
         # Consolidated preferred, per period: a company files standalone and consolidated as separate
         # XBRL documents, and the standalone accounts of a holding company describe a shell rather
         # than the business. But EVERY filing of the preferred basis is kept, not one of them. A
-        # company that files the same quarter twice minutes apart (or restates it months later) has
-        # two dissemination times, and choosing between them here depended on the order the API
+        # company that files the same quarter twice minutes apart (or revises it months later) has
+        # two publication times, and choosing between them here depended on the order the API
         # happened to return rows in — the store came out different on every import. Which filing
         # was known on a given day is `financials.known_on`'s question, and it already answers it.
         by_period: dict[date, list[dict[str, object]]] = {}
-        for period, row in dated:
-            by_period.setdefault(period, []).append(row)
+        for filing in listed:
+            period = filing["period"]
+            assert isinstance(period, date)
+            by_period.setdefault(period, []).append(filing)
         chosen: list[tuple[date, dict[str, object]]] = []
         for period in sorted(by_period, reverse=True)[:QUARTERS]:
-            rows_here = by_period[period]
-            consolidated = [
-                r
-                for r in rows_here
-                if str(r.get("consolidated", "")).strip().lower().startswith("cons")
-            ]
-            for row in sorted(
-                consolidated or rows_here, key=lambda r: (str(_filed_at(r)), str(r.get("xbrl")))
-            ):
-                chosen.append((period, row))
+            here = by_period[period]
+            preferred = [f for f in here if f["consolidated"]] or here
+            for filing in sorted(preferred, key=lambda f: (str(f["filed_at"]), str(f["url"]))):
+                chosen.append((period, filing))
         kept = 0
-        for _period, row in chosen:
-            url = str(row["xbrl"])
-            when = _filed_at(row)
-            if when is None:
+        for _period, filing in chosen:
+            url = str(filing["url"])
+            when = filing["filed_at"]
+            if not isinstance(when, datetime):
                 print(f"  {symbol:12s} a filing has no dissemination time — skipped, not guessed")
                 continue
             cached = facts.XBRL_DIR / symbol / Path(url).name

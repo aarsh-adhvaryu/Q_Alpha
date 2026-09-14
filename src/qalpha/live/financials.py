@@ -39,34 +39,71 @@ from typing import Any
 FACTS_PATH = Path("data/facts/financials.jsonl")
 XBRL_DIR = Path("data/facts/xbrl")
 
-#: The exchange's own index of filed quarterly results for one symbol.
+#: The exchange's own index of filed quarterly results for one symbol — **up to the December 2024
+#: quarter only.** From 2025 SEBI's "Integrated Filing" replaced the old results filing, and results
+#: moved to :data:`INTEGRATED_URL`. Reading only this feed is why every name's latest quarter was
+#: Dec-2024: the data was not missing, it had moved.
 INDEX_URL = (
     "https://www.nseindia.com/api/corporates-financial-results"
     "?index=equities&symbol={symbol}&period=Quarterly"
 )
 
+#: Quarterly results from 2025 onward, under SEBI's Integrated Filing. Same Ind-AS tag names, filed
+#: under an ``in-capmkt:`` prefix instead of ``in-bse-fin:``.
+INTEGRATED_URL = (
+    "https://www.nseindia.com/api/integrated-filing-results"
+    "?index=equities&symbol={symbol}&type=Integrated%20Filing-%20Financials"
+)
+
 #: The fixed tag set. Fixed on purpose: a set that grows per company is a set that cannot be
 #: compared across companies, and "the model can have whatever it finds" is how a packet stops being
-#: reproducible. Names on the left are ours and stable; names on the right are Ind-AS taxonomy.
-TAGS: dict[str, str] = {
-    "revenue": "RevenueFromOperations",
-    "other_income": "OtherIncome",
-    "total_income": "Income",
-    "employee_cost": "EmployeeBenefitExpense",
-    "finance_costs": "FinanceCosts",
-    "depreciation": "DepreciationDepletionAndAmortisationExpense",
-    "other_expenses": "OtherExpenses",
-    "total_expenses": "Expenses",
-    "profit_before_exceptional_and_tax": "ProfitBeforeExceptionalItemsAndTax",
-    "exceptional_items": "ExceptionalItemsBeforeTax",
-    "profit_before_tax": "ProfitBeforeTax",
-    "tax": "TaxExpense",
-    "profit_after_tax": "ProfitLossForPeriod",
-    "profit_to_owners": "ProfitOrLossAttributableToOwnersOfParent",
-    "eps_basic": "BasicEarningsLossPerShareFromContinuingAndDiscontinuedOperations",
-    "equity_capital": "PaidUpValueOfEquityShareCapital",
-    "face_value": "FaceValueOfEquityShareCapital",
+#: reproducible. Names on the left are ours and stable; on the right, the taxonomy names that carry
+#: them, **first match wins**. The second name, where there is one, is the banking taxonomy's: banks
+#: report "interest earned" where a company reports "revenue from operations", and reading only the
+#: company names is why every bank read "revenue unknown".
+TAGS: dict[str, tuple[str, ...]] = {
+    "revenue": ("RevenueFromOperations", "InterestEarned"),
+    "other_income": ("OtherIncome",),
+    "total_income": ("Income",),
+    "employee_cost": ("EmployeeBenefitExpense", "EmployeesCost"),
+    "finance_costs": ("FinanceCosts",),
+    "depreciation": ("DepreciationDepletionAndAmortisationExpense",),
+    "other_expenses": ("OtherExpenses", "OtherOperatingExpenses"),
+    "total_expenses": ("Expenses", "ExpenditureExcludingProvisionsAndContingencies"),
+    "profit_before_exceptional_and_tax": ("ProfitBeforeExceptionalItemsAndTax",),
+    "exceptional_items": ("ExceptionalItemsBeforeTax", "ExceptionalItems"),
+    "profit_before_tax": ("ProfitBeforeTax", "ProfitLossFromOrdinaryActivitiesBeforeTax"),
+    "tax": ("TaxExpense",),
+    "profit_after_tax": ("ProfitLossForPeriod", "ProfitLossForThePeriod"),
+    "profit_to_owners": (
+        "ProfitOrLossAttributableToOwnersOfParent",
+        "ProfitLossAfterTaxesMinorityInterestAndShareOfProfitLossOfAssociates",
+    ),
+    "eps_basic": (
+        "BasicEarningsLossPerShareFromContinuingAndDiscontinuedOperations",
+        "BasicEarningsPerShareAfterExtraordinaryItems",
+    ),
+    "equity_capital": ("PaidUpValueOfEquityShareCapital",),
+    "face_value": ("FaceValueOfEquityShareCapital",),
+    # ---- banks only: what a bank's quarter is actually about ------------------------------------
+    "interest_earned": ("InterestEarned",),
+    "interest_expended": ("InterestExpended",),
+    "operating_profit_before_provisions": ("OperatingProfitBeforeProvisionAndContingencies",),
+    "provisions": ("ProvisionsOtherThanTaxAndContingencies",),
+    "gross_npa_pct": ("PercentageOfGrossNpa",),
+    "net_npa_pct": ("PercentageOfNpa",),
+    "return_on_assets_pct": ("ReturnOnAssets",),
 }
+
+#: Ratios a bank's consolidated filing carries as a literal ``0`` because the regulator requires
+#: them only in the standalone accounts. HDFC Bank's consolidated filing reports a gross NPA of 0.00%;
+#: the bank does not have no bad loans. A zero here is a blank, and a blank is unknown.
+ZERO_MEANS_NOT_REPORTED = frozenset({"gross_npa_pct", "net_npa_pct", "return_on_assets_pct"})
+
+#: The longest period a "quarter" may span. A Q4 filing can carry the full year beside the quarter,
+#: and a year stored as a quarter would report four quarters of revenue as one — and a year-on-year
+#: "growth" of 300%.
+MAX_QUARTER_DAYS = 100
 
 #: Context metadata read alongside the numbers.
 META_TAGS: dict[str, str] = {
@@ -108,6 +145,11 @@ class Quarter:
     def get(self, name: str) -> Decimal | None:
         return self.facts.get(name)
 
+    @property
+    def is_bank(self) -> bool:
+        """Filed under the banking taxonomy — interest income, provisions, NPAs."""
+        return self.facts.get("interest_earned") is not None
+
 
 def _decimal(raw: str) -> Decimal | None:
     try:
@@ -139,7 +181,12 @@ def _headline_context(xml: str) -> str | None:
 
 
 def _fact(xml: str, tag: str, context: str) -> str | None:
-    pattern = rf'<in-bse-fin:{tag} contextRef="{re.escape(context)}"[^>]*>([^<]*)<'
+    """One fact, under whichever taxonomy prefix the filing uses.
+
+    The old results filing tags facts ``in-bse-fin:``; SEBI's Integrated Filing tags the same facts
+    ``in-capmkt:``. Matching one prefix read the new filings as having no headline statement at all.
+    """
+    pattern = rf'<[A-Za-z][\w\-]*:{tag} contextRef="{re.escape(context)}"[^>]*>([^<]*)<'
     match = re.search(pattern, xml)
     return match.group(1) if match else None
 
@@ -170,6 +217,24 @@ def _identities(facts: dict[str, Decimal | None]) -> tuple[str, ...]:
             f"profit before exceptional items: filed {pbe}, income less expenses is "
             f"{income - expenses}"
         )
+    # A bank's statement adds up differently: income less expenditure (excluding provisions) is
+    # operating profit, and operating profit less provisions and exceptional items is PBT.
+    operating = facts.get("operating_profit_before_provisions")
+    provisions = facts.get("provisions")
+    if operating is not None and income is not None and expenses is not None:
+        if abs((income - expenses) - operating) > TOLERANCE:
+            breaks.append(
+                f"operating profit before provisions: filed {operating}, income less expenditure "
+                f"is {income - expenses}"
+            )
+        pbt_bank = facts.get("profit_before_tax")
+        if pbt_bank is not None and provisions is not None:
+            implied = operating - provisions - (facts.get("exceptional_items") or Decimal("0"))
+            if abs(implied - pbt_bank) > TOLERANCE:
+                breaks.append(
+                    f"profit before tax: filed {pbt_bank}, operating profit less provisions is "
+                    f"{implied}"
+                )
     pbt, tax, pat = facts.get("profit_before_tax"), facts.get("tax"), facts.get("profit_after_tax")
     # Discontinued operations and equity-method associates sit between PBT and PAT, so this is a
     # bound rather than an equality for a group with either. A gap larger than half of PBT is not a
@@ -193,14 +258,23 @@ def parse(xml: str, *, ticker: str, filed_at: datetime, url: str, sha256: str) -
     if not meta.get("period_start") or not meta.get("period_end"):
         return None
     facts: dict[str, Decimal | None] = {}
-    for name, tag in TAGS.items():
-        raw = _fact(xml, tag, context)
-        facts[name] = _decimal(raw) if raw is not None else None
+    for name, tags in TAGS.items():
+        value: Decimal | None = None
+        for tag in tags:
+            raw = _fact(xml, tag, context)
+            if raw is not None:
+                value = _decimal(raw)
+                break
+        if name in ZERO_MEANS_NOT_REPORTED and value == 0:
+            value = None
+        facts[name] = value
     try:
         start = date.fromisoformat(str(meta["period_start"])[:10])
         end = date.fromisoformat(str(meta["period_end"])[:10])
     except ValueError:
         return None
+    if (end - start).days > MAX_QUARTER_DAYS:
+        return None  # a year (or a half) is not a quarter, whatever the filing calls its context
     return Quarter(
         ticker=ticker,
         period_start=start,
@@ -345,14 +419,18 @@ def summarise(quarters: list[Quarter], *, as_of: date | None = None) -> dict[str
             return None
         return round(float(now / before - 1) * 100, 1)
 
-    return {
+    def text(field: str) -> str | None:
+        value = latest.get(field)
+        return None if value is None else str(value)  # absent is absent, never the string "None"
+
+    out: dict[str, Any] = {
         "quarter_ending": latest.period_end.isoformat(),
         "filed_at": latest.filed_at.isoformat(),
         "basis": latest.basis,
         "audited": latest.audited,
-        "revenue": str(latest.get("revenue")),
-        "profit_after_tax": str(latest.get("profit_after_tax")),
-        "eps_basic": str(latest.get("eps_basic")),
+        "revenue": text("revenue"),
+        "profit_after_tax": text("profit_after_tax"),
+        "eps_basic": text("eps_basic"),
         "net_margin_pct": _ratio(latest.get("profit_after_tax"), latest.get("revenue")),
         "revenue_growth_yoy_pct": growth("revenue"),
         "profit_growth_yoy_pct": growth("profit_after_tax"),
@@ -362,9 +440,11 @@ def summarise(quarters: list[Quarter], *, as_of: date | None = None) -> dict[str
         "how_current": (
             None
             if stale_days is None
+            # Results arrive about six weeks after a quarter ends and the next set about three
+            # months after that, so a filing up to ~140 days old is still the newest one due.
             else (
-                "filed within the last quarter"
-                if stale_days <= 100
+                "the newest quarter the company has filed"
+                if stale_days <= 140
                 else f"THIS IS {stale_days // 30} MONTHS OLD — the exchange has published no "
                 "newer quarter for this company, so it describes the company as it was, not as it "
                 "is. Weigh it against the price history and the filings, which are current."
@@ -376,3 +456,23 @@ def summarise(quarters: list[Quarter], *, as_of: date | None = None) -> dict[str
             "Figures are as filed, in rupees; they are not restated."
         ),
     }
+    if latest.is_bank:
+        earned, expended = latest.get("interest_earned"), latest.get("interest_expended")
+        nii = None if earned is None or expended is None else earned - expended
+        out["bank"] = {
+            "revenue_means": "interest earned — a bank's equivalent of revenue from operations",
+            "net_interest_income": None if nii is None else str(nii),
+            "operating_profit_before_provisions": text("operating_profit_before_provisions"),
+            "provisions": text("provisions"),
+            "provisions_pct_of_operating_profit": _ratio(
+                latest.get("provisions"), latest.get("operating_profit_before_provisions")
+            ),
+            "gross_npa_pct": text("gross_npa_pct"),
+            "net_npa_pct": text("net_npa_pct"),
+            "note": (
+                "NPA ratios are required only in a bank's standalone accounts; the consolidated "
+                "filing leaves them blank. Null here means NOT REPORTED IN THIS FILING, not zero bad "
+                "loans."
+            ),
+        }
+    return out
