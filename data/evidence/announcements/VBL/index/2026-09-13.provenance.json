@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=VBL",
+ "retrieved_at_utc": "2026-09-13T16:09:31Z",
+ "http_status": 200,
+ "bytes": 673946,
+ "sha256": "5339b047730362b385f62fe5e21a4265cca54c6f426c3b0008e64fd0ce0bf88d",
+ "document_date": "2026-09-13",
+ "symbol": "VBL",
+ "kind": "announcement_index"
+}
