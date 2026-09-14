@@ -21,6 +21,7 @@ import sys
 from collections.abc import Callable, Sequence
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pandas as pd
 
@@ -261,7 +262,29 @@ def cmd_seed(cfg: Config) -> int:
     return 0
 
 
-def cmd_refund(cfg: Config) -> int:
+def set_aside_history(path: Path) -> int:
+    """Move every history row aside, returning how many. Empty file, kept bytes.
+
+    Takes the path rather than reaching for the module-level one, because a caller that cannot
+    redirect it is a caller that writes to the live record — which is exactly what happened: a
+    test of the refusal path ran the success path against `data/twin/history.jsonl` and emptied
+    it. Nothing was lost, because this moves rather than deletes, but a test must not be able to
+    reach the real file at all.
+    """
+    if not path.exists():
+        return 0
+    body = path.read_text(encoding="utf-8")
+    rows = len([ln for ln in body.splitlines() if ln.strip()])
+    if not rows:
+        return 0
+    kept = path.with_name("history-before-refunding.jsonl")
+    existing = kept.read_text(encoding="utf-8") if kept.exists() else ""
+    atomic.write_text(kept, existing + body)
+    atomic.write_text(path, "")
+    return rows
+
+
+def cmd_refund(cfg: Config, *, history: Path = TWIN_HISTORY) -> int:
     """Re-fund every book from the broker's ledger, once, before anything has decided.
 
     The books were funded from the tradebook — money that reached the *market*. The ledger records
@@ -309,14 +332,7 @@ def cmd_refund(cfg: Config) -> int:
     # bases into one series draws a cliff that never happened — here, 490k falling to 294k overnight.
     # The rows are moved aside rather than deleted: they are a real record of a real basis, and the
     # only thing that is wrong is putting them on the same axis as the new one.
-    moved = 0
-    if TWIN_HISTORY.exists():
-        kept = TWIN_HISTORY.with_name("history-before-refunding.jsonl")
-        existing = kept.read_text(encoding="utf-8") if kept.exists() else ""
-        body = TWIN_HISTORY.read_text(encoding="utf-8")
-        moved = len([ln for ln in body.splitlines() if ln.strip()])
-        atomic.write_text(kept, existing + body)
-        atomic.write_text(TWIN_HISTORY, "")
+    moved = set_aside_history(history)
     modelled = books[REAL].portfolio.cash
     print(
         f"✓ re-funded {len(books)} book(s) from {record.source}\n"

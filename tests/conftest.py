@@ -1,12 +1,45 @@
-"""Shared test fixtures: synthetic price panels, no network."""
+"""Shared test fixtures: synthetic price panels, no network — and no writes to the live record."""
 
 from __future__ import annotations
+
+import hashlib
+from collections.abc import Iterator
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from qalpha.data.prices import PriceData
+
+_ROOT = Path(__file__).resolve().parent.parent
+
+#: The files that ARE the record: the books, their history, the investor's own records, the evidence
+#: logs and the financials. A test that writes to any of them is a test that can destroy something a
+#: re-run cannot recreate. One did — a refunding test emptied data/twin/history.jsonl — and nothing
+#: in 600 tests noticed, because every test checked its own outputs and none checked the real files.
+_LIVE = ("data/twin", "data/facts/financials.jsonl", "data/evidence")
+
+
+def _fingerprint() -> dict[str, str]:
+    prints: dict[str, str] = {}
+    for entry in _LIVE:
+        base = _ROOT / entry
+        files = [base] if base.is_file() else sorted(base.rglob("*.json*")) if base.is_dir() else []
+        for path in files:
+            if path.is_file():
+                prints[str(path.relative_to(_ROOT))] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return prints
+
+
+@pytest.fixture(scope="session", autouse=True)
+def the_live_record_is_untouched() -> Iterator[None]:
+    """Fail the session if any test changed the live record. Checked once, around everything."""
+    before = _fingerprint()
+    yield
+    after = _fingerprint()
+    changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k))
+    assert not changed, f"the test suite wrote to the live record: {changed}"
 
 
 @pytest.fixture

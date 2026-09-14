@@ -133,3 +133,10 @@ NIFTYBEES, which is the do-nothing floor.
   happened. They are moved to `data/twin/history-before-refunding.jsonl`, kept and not deleted, and
   `twin.py refund` now does this itself. The registered window starts 2026-09-14, so no observation
   inside it is affected.
+- **2026-09-14** — **a test wrote to the live record.** Teaching `twin.py refund` to set old-basis
+  history aside made its test run that path against the real `data/twin/history.jsonl`, and the
+  full test suite emptied it. Nothing was lost — the rows are moved, never deleted — and all three
+  ledger-basis rows were restored from the set-aside file. `cmd_refund` now takes the history path,
+  the test passes its own, and the test suite fingerprints the 2,934 files that make up the record
+  (books, history, the investor's records, evidence logs, financials) before and after the session
+  and fails if any changed. The suite runs green with it in place.
