@@ -48,6 +48,13 @@ from qalpha.live.pretrade import NewsCoverage
 
 NEWS_COVERAGE = Path("data/evidence/news_coverage.jsonl")
 
+#: Which headlines have already been read, per name, by which reader and news version. The feeds
+#: keep a week of items, and without this every evening re-sent the whole week to the model: a
+#: headline was paid for up to seven times, and six of those readings could only repeat the first.
+#: Filings were never read twice; headlines now are not either. Their events stay in the log and in
+#: every later packet, whichever evening produced them.
+NEWS_READ = Path("data/evidence/news_read.jsonl")
+
 #: A budget, not a cap — the same shape the evidence spine uses. Everything read before it is on
 #: disk; the names not reached are named, and tomorrow's run continues rather than restarting.
 BUDGET_SECONDS = int(os.environ.get("NEWS_BUDGET_SECONDS", "600"))
@@ -93,6 +100,50 @@ def _archive(scope: list[str], as_of: date) -> tuple[list[FeedArchive], list[str
             continue
         archives.append(archive)
     return archives, failures, len(feeds)
+
+
+def _read_before(model: str) -> set[tuple[str, str]]:
+    """``(ticker, item id)`` pairs this reader has already read under this news version.
+
+    A different reader or a new news version is a different reading, so nothing it did counts —
+    the same rule the corpus label applies to filings.
+    """
+    import json
+
+    if not NEWS_READ.exists():
+        return set()
+    out: set[tuple[str, str]] = set()
+    for line in NEWS_READ.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get("news_version") == NEWS_VERSION and row.get("reader") == model:
+            out.add((str(row.get("ticker")), str(row.get("item_id"))))
+    return out
+
+
+def _record_read(as_of: date, ticker: str, items: list[NewsItem], model: str) -> None:
+    """Mark items read — only after a reading that did not fail, so a failed batch is re-read."""
+    from qalpha.live.twin import _append_jsonl
+
+    _append_jsonl(
+        NEWS_READ,
+        [
+            {
+                "as_of": as_of.isoformat(),
+                "ticker": ticker,
+                "item_id": item.id,
+                "news_version": NEWS_VERSION,
+                "reader": model,
+                "_key": f"{NEWS_VERSION}:{model}:{ticker}:{item.id}",
+            }
+            for item in items
+        ],
+        key="_key",
+    )
 
 
 def _record_coverage(as_of: date, ticker: str, coverage: NewsCoverage) -> None:
@@ -181,6 +232,7 @@ def cmd_daily(cfg: Config, as_of: date, *, dry_run: bool = False) -> int:
             )
         return 0
 
+    read_before = _read_before(backend.model)
     started = datetime.now(UTC)
     budget = timedelta(seconds=BUDGET_SECONDS)
     read_any = False
@@ -192,15 +244,23 @@ def cmd_daily(cfg: Config, as_of: date, *, dry_run: bool = False) -> int:
             )
             break
         mine = [i for i in for_scope if ticker in i.tickers]
+        fresh = [i for i in mine if (ticker, i.id) not in read_before]
         ran = False
-        if mine:
+        if mine and not fresh:
+            ran = True  # every item was read on an earlier evening; its events are already logged
+            print(
+                f"  {ticker:<16} {len(mine)} item(s), all read on earlier evenings — none re-read"
+            )
+        elif fresh:
             found, discarded, _raw, usage = read_news(
-                mine,
+                fresh,
                 generate=backend.generate,
                 model=backend.model,
                 batch_chars=min(backend.batch_chars or 12_000, 12_000),
             )
             ran = usage["failed_batches"] == 0
+            if ran:
+                _record_read(as_of, ticker, fresh, backend.model)
             if not ran:
                 cut = usage["truncated_batches"]
                 why = f"{usage['failed_batches']} failed batch(es)"
@@ -214,7 +274,9 @@ def cmd_daily(cfg: Config, as_of: date, *, dry_run: bool = False) -> int:
                 _append_jsonl(NEWS_EVENTS, rows, key="_key")
                 flagged = sum(1 for e in found if e.flags)
                 print(
-                    f"  {ticker:<16} {len(mine)} item(s) read → {len(found)} labelled"
+                    f"  {ticker:<16} {len(fresh)} new item(s) read"
+                    + (f" ({len(mine) - len(fresh)} read before)" if len(mine) > len(fresh) else "")
+                    + f" → {len(found)} labelled"
                     + (f", {flagged} FLAGGED" if flagged else "")
                     + (f" ({discarded} discarded)" if discarded else "")
                 )
