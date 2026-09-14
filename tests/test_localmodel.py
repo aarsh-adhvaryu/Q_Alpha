@@ -36,6 +36,25 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(credentials, "_ENV_LOADED", False)
 
 
+class _AnyModel(dict[str, str]):
+    """A served list or pin file that holds the same digest for whatever model is asked about."""
+
+    def get(self, key: str, default: str = "") -> str:  # type: ignore[override]
+        return "sha256:registered"
+
+
+@pytest.fixture(autouse=True)
+def _registered_weights(monkeypatch: pytest.MonkeyPatch) -> None:
+    """By default the local model's weights are the pinned ones; the identity tests override this.
+
+    Without it these tests would ask the real Ollama server on the developer's machine for digests.
+    """
+    from qalpha.live import model_identity
+
+    monkeypatch.setattr(model_identity, "ollama_digests", lambda url, **kw: _AnyModel())
+    monkeypatch.setattr(model_identity, "load_pins", lambda path=None: _AnyModel())
+
+
 def test_no_model_and_no_key_is_a_named_absence() -> None:
     backend = localmodel.choose_backend()
     assert not backend.available
@@ -456,3 +475,35 @@ def test_a_real_shell_variable_still_wins_over_the_file(
     monkeypatch.setenv("QALPHA_LOCAL_MODEL", "from-the-shell")
 
     assert localmodel.configured()[1] == "from-the-shell"
+
+
+def test_an_unpinned_local_model_reads_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pinning is how a model becomes a registered reader; an unpinned one is an unregistered one."""
+    from qalpha.live import model_identity
+
+    monkeypatch.setenv(localmodel.MODEL_VAR, "qwen3.5:9b")
+    monkeypatch.setattr(localmodel, "probe", lambda url, **kw: "")
+    monkeypatch.setattr(
+        model_identity, "ollama_digests", lambda url, **kw: {"qwen3.5:9b": "sha256:new"}
+    )
+    monkeypatch.setattr(model_identity, "load_pins", lambda path=None: {})
+    backend = localmodel.choose_backend()
+    assert backend.kind == "none" and backend.generate is None
+    assert "no pinned digest" in backend.note
+
+
+def test_weights_changed_under_the_same_tag_read_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A re-pull can put different weights behind the same tag. The digest is what tells."""
+    from qalpha.live import model_identity
+
+    monkeypatch.setenv(localmodel.MODEL_VAR, "qwen3.5:9b")
+    monkeypatch.setattr(localmodel, "probe", lambda url, **kw: "")
+    monkeypatch.setattr(
+        model_identity, "ollama_digests", lambda url, **kw: {"qwen3.5:9b": "sha256:new-weights"}
+    )
+    monkeypatch.setattr(
+        model_identity, "load_pins", lambda path=None: {"qwen3.5:9b": "sha256:old-weights"}
+    )
+    backend = localmodel.choose_backend()
+    assert backend.kind == "none"
+    assert "changed under the same tag" in backend.note

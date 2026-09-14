@@ -45,6 +45,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 #: (model, prompt) -> (text, usage). Structurally identical to the seams in ``extraction`` and
 #: ``ai_brief``; re-declared rather than imported so this module stays free of both.
@@ -269,6 +270,9 @@ def local_generate(url: str, *, max_tokens: int = 3000, timeout: float | None = 
         )
         with urllib.request.urlopen(request, timeout=timeout or timeout_seconds()) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
+        from qalpha.live.model_identity import check_returned
+
+        check_returned(model_id, str(payload.get("model") or ""))
         choices = payload.get("choices") or []
         if not choices:
             return "", {}
@@ -333,12 +337,39 @@ def choose_backend(*, prefer_local: bool | None = None, workers: int = 1) -> Bac
                 "archived and left unread — this did NOT fall back to the cloud, because you "
                 "asked for local.",
             )
+        # THE WEIGHTS MUST BE THE REGISTERED ONES. A tag can be re-pulled onto different weights;
+        # the digest cannot. An unpinned or changed digest reads nothing tonight.
+        from qalpha.live.model_identity import (
+            ModelChangedError,
+            check_digest,
+            load_pins,
+            ollama_digests,
+        )
+
+        try:
+            digest = check_digest(model, ollama_digests(url), load_pins())
+        except ModelChangedError as exc:
+            return Backend(
+                None,
+                model,
+                "none",
+                f"Local model {model} was NOT used: {exc}. Filings archived, left unread.",
+            )
+        except OSError as exc:
+            return Backend(
+                None,
+                model,
+                "none",
+                f"Local model {model}'s digest could not be read ({exc}), so its identity is "
+                "unknown. Filings archived, left unread.",
+            )
         batch = min(chars, PROMPT_CHAR_BUDGET)
         return Backend(
             local_generate(url),
             model,
             "local",
-            f"Filings read locally by {model} at {url} — a {context:,}-token context, up to "
+            f"Filings read locally by {model} (digest {digest[:12]}) at {url} — a "
+            f"{context:,}-token context, up to "
             f"{batch:,} characters of filing per call, thinking off. Nothing left this machine.",
             batch_chars=batch,
             context_tokens=context,
@@ -365,3 +396,84 @@ def choose_backend(*, prefer_local: bool | None = None, workers: int = 1) -> Bac
         f"No reader configured: {MODEL_VAR} is unset and there is no ANTHROPIC_API_KEY. Filings "
         "are archived and left unread — unread is not clean.",
     )
+
+
+def cloud_generate(
+    url: str,
+    *,
+    api_key: str,
+    partition: str = "reading",
+    max_tokens: int = 3000,
+    timeout: float = 120.0,
+    ledger: Any = None,
+) -> GenerateFn:
+    """An OpenAI-compatible **cloud** chat endpoint (DeepSeek, Gemini), priced and reserved.
+
+    Same wire shape as :func:`local_generate`, with three differences that matter: a key is sent,
+    every call reserves its worst case in :mod:`qalpha.live.spend` before it is made, and the model
+    the provider returns is compared with the one asked for — DeepSeek documents serving retired
+    names with newer models.
+
+    Not selected by :func:`choose_backend`. A cloud reader becomes selectable only after it has been
+    measured against the reference set and registered.
+    """
+
+    def generate(model_id: str, prompt: str) -> tuple[str, dict[str, int]]:
+        from qalpha.live import spend
+        from qalpha.live.model_identity import check_returned
+
+        book = ledger if ledger is not None else spend.Ledger()
+        reservation = book.reserve(
+            partition=partition,
+            model=model_id,
+            input_ceiling=spend.text_input_ceiling(prompt),
+            max_output=max_tokens,
+        )
+        body = json.dumps(
+            {
+                "model": model_id,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+                "temperature": 0,
+                "stream": False,
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            book.release(reservation, f"HTTP {exc.code}: {detail}")
+            if exc.code == 402 or "insufficient" in detail.lower() or "balance" in detail.lower():
+                raise spend.CreditExhaustedError(
+                    f"{url} reports no credit left (HTTP {exc.code})"
+                ) from exc
+            raise
+        except Exception as exc:
+            book.settle_uncertain(reservation, f"{type(exc).__name__}: {exc}"[:300])
+            raise
+        usage = payload.get("usage") or {}
+        spent_in = int(usage.get("prompt_tokens", 0) or 0)
+        spent_out = int(usage.get("completion_tokens", 0) or 0)
+        returned = str(payload.get("model") or "")
+        book.settle(
+            reservation, input_tokens=spent_in, output_tokens=spent_out, returned_model=returned
+        )
+        check_returned(model_id, returned)
+        choices = payload.get("choices") or []
+        if not choices:
+            return "", {"input": spent_in, "output": spent_out}
+        choice = choices[0]
+        message = choice.get("message", {}) or {}
+        return str(message.get("content") or ""), {
+            "input": spent_in,
+            "output": spent_out,
+            "truncated": 1 if str(choice.get("finish_reason") or "") == "length" else 0,
+        }
+
+    return generate

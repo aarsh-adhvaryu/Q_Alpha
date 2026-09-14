@@ -109,6 +109,8 @@ uv run python scripts/reconcile_account.py --import  # the broker's ledger: fund
 uv run python scripts/corporate_actions.py --import  # dividends and splits, cross-checked
 uv run python scripts/financials.py --import         # filed XBRL results (no model calls)
 uv run python scripts/evaluate.py                    # the three tests; no gate, no tuning
+uv run python scripts/models.py list                 # local models: served vs pinned digests
+uv run python scripts/models.py pin qwen3.5:9b       # register a measured local model's weights
 ```
 
 Runs natively on Windows from `D:\q-alpha`. The only server is the one the click starts, on
@@ -123,3 +125,5 @@ Runs natively on Windows from `D:\q-alpha`. The only server is the one the click
 local model tag: every existing row would stop matching and every name would read "not read".
 
 **Before spending money on model calls** (a backfill, a comparison), say what it will cost and why.
+Every priced call goes through `live/spend.py`, which reserves before sending; a new call site that
+bypasses it is a defect. The user runs anything that spends money or reads the network.

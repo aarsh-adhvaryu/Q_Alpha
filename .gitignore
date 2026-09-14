@@ -100,3 +100,6 @@ data/evidence/news/**/items.jsonl
 # parsed from, so a re-fetch can be verified against what was actually read. The exchange's archive
 # is the record; this is a copy of it, and `scripts/financials.py --import` rebuilds it.
 data/facts/xbrl/
+
+# The spend ledger is the record and is committed; its lock file only exists while a call reserves.
+data/spend/*.lock

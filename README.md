@@ -75,6 +75,15 @@ evening continues.
 Saturday, or on Ganesh Chaturthi, the page says the exchange was closed and no review is asked for.
 A *trading* day with no closing prices is a failure — something did not download — and says so.
 
+**Model calls are budgeted before they are made** (`live/spend.py`). Every priced call reserves its
+worst-case cost in `data/spend/ledger.jsonl` first and runs only if the month's settled spend plus
+open reservations stays under the cap (`spend_cap_usd`, $15 by default). Reading and backfills can
+never use the part kept for decisions (`spend_decisions_reserve_usd`, $6). When the reply arrives the
+reservation is settled at the real token count. A budget reached, an account out of credit, or a
+model that is not the registered one makes the step **not run** — a review becomes INCOMPLETE, never
+a HOLD, and a reading run stops with its documents still unread. Local models cost nothing but must
+have their weights pinned (`scripts/models.py pin <tag>`) before they may read anything.
+
 ---
 
 ## 4. The four books
@@ -238,6 +247,7 @@ function fed the wrong input. Passing unit tests caught almost none of them.
 |---|---|---|
 | "ahead by ₹4,01,677 (+444%)" | ₹1,677 — parked cash counted as performance | Label every number as what was computed. |
 | "Deploy ₹1,00,000" | a ₹5,97,418 basket, 84% in one stock | Test the caller with holdings **and** cash. |
+| a backfill "running" | an API key with no credit left; nothing knew what had been spent | Reserve the worst case before every priced call; decisions keep their own share. |
 | `BASELINE_EW`, the equal-weight fund | NIFTYBEES minus a fee | One definition per series; never reuse a neighbour's. |
 | "worst fall −34.9%" | −47.5% — deposits hid the drawdown | Unitize before measuring a book money flows into. |
 | "Clear" on the buy screen | nobody had read the filings | Unread is not clean. |

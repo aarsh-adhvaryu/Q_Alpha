@@ -28,12 +28,14 @@ import base64
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from qalpha.live.console import use_utf8
 from qalpha.live.credentials import load_env
 from qalpha.live.extraction import corpus_reader
+from qalpha.live.spend import SpendStopError
 
 ARCHIVE = Path("data/evidence/announcements")
 
@@ -67,32 +69,66 @@ def scanned_documents() -> list[tuple[Path, Path]]:
     return out
 
 
-def transcribe(pdf: Path, model: str, api_key: str) -> str:
-    """One document, transcribed. Raises on failure — the caller reports and moves on."""
+def transcribe(pdf: Path, model: str, api_key: str, *, ledger: Any = None) -> str:
+    """One document, transcribed. Raises on failure — the caller reports and moves on.
+
+    Charged to the **reading** partition and reserved before sending, like every other priced call:
+    a scanned page is billed as text plus an image, so the reservation is made per page.
+    """
     import anthropic
 
-    client = anthropic.Anthropic(api_key=api_key, max_retries=3, timeout=300.0)
-    payload = base64.standard_b64encode(pdf.read_bytes()).decode("ascii")
-    resp = client.messages.create(
+    from qalpha.live import spend
+    from qalpha.live.extraction import is_credit_exhaustion
+    from qalpha.live.model_identity import check_returned
+
+    raw = pdf.read_bytes()
+    book = ledger if ledger is not None else spend.Ledger()
+    reservation = book.reserve(
+        partition=spend.READING,
         model=model,
-        max_tokens=MAX_OUTPUT_TOKENS,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "application/pdf",
-                            "data": payload,
-                        },
-                    },
-                    {"type": "text", "text": PROMPT},
-                ],
-            }
-        ],
+        input_ceiling=spend.pdf_input_ceiling(raw, PROMPT),
+        max_output=MAX_OUTPUT_TOKENS,
+        note=f"ocr {pdf.name}",
     )
+    client = anthropic.Anthropic(api_key=api_key, max_retries=3, timeout=300.0)
+    payload = base64.standard_b64encode(raw).decode("ascii")
+    try:
+        resp = client.messages.create(
+            model=model,
+            max_tokens=MAX_OUTPUT_TOKENS,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "application/pdf",
+                                "data": payload,
+                            },
+                        },
+                        {"type": "text", "text": PROMPT},
+                    ],
+                }
+            ],
+        )
+    except anthropic.APIStatusError as exc:
+        book.release(reservation, f"HTTP {exc.status_code}: {exc.message}"[:300])
+        if is_credit_exhaustion(exc):
+            raise spend.CreditExhaustedError("the Anthropic account has no credit left") from exc
+        raise
+    except Exception as exc:
+        book.settle_uncertain(reservation, f"{type(exc).__name__}: {exc}"[:300])
+        raise
+    returned = str(getattr(resp, "model", "") or "")
+    book.settle(
+        reservation,
+        input_tokens=int(getattr(resp.usage, "input_tokens", 0) or 0),
+        output_tokens=int(getattr(resp.usage, "output_tokens", 0) or 0),
+        returned_model=returned,
+    )
+    check_returned(model, returned)
     if resp.stop_reason == "refusal":
         raise RuntimeError("the model declined to transcribe this document")
     text = "".join(
@@ -142,6 +178,10 @@ def main(argv: list[str] | None = None) -> int:
     for pdf, prov_path in pending:
         try:
             text = transcribe(pdf, model, key)
+        except SpendStopError as exc:
+            # Money, not a bad document: every remaining scan would fail the same way. Stop.
+            print(f"[ocr] stopped — {exc}. {done} transcribed; the rest resume on the next run.")
+            return 3
         except Exception as exc:
             print(f"  {pdf.parent.name:<12} {pdf.stem}  FAILED - {type(exc).__name__}: {exc}")
             failed += 1
