@@ -470,9 +470,14 @@ def cmd_daily(cfg: Config) -> int:
         replay_real(book, trades, cfg)
         book.stepped_through = market.as_of
     if not autonomous:
+        # Said in terms of SESSIONS. "Mirrors REAL until 2026-09-14", printed on 2026-09-14, read as
+        # a contradiction: the start is a calendar date, but the book steps on the session its prices
+        # come from, and on a holiday that session is an earlier day.
         when = (
-            f"until {EVALUATION_START}"
+            f"— the latest session is {market.as_of} and the registered start is "
+            f"{EVALUATION_START}"
             + (f" ({why})" if (why := nse.closure_reason(EVALUATION_START)) else "")
+            + ". It first decides on the evening of the first session on or after the start"
             if EVALUATION_START
             else "— no start date is registered"
         )

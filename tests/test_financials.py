@@ -11,6 +11,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from qalpha.live import financials as facts
 
 XBRL = """<?xml version="1.0"?>
@@ -155,3 +157,37 @@ def test_the_store_survives_a_round_trip(tmp_path: Path) -> None:
 def test_a_missing_store_is_no_financials_never_an_empty_company(tmp_path: Path) -> None:
     assert facts.load(tmp_path / "absent.jsonl") == []
     assert facts.summarise([]) is None
+
+
+def test_a_fetch_that_omits_a_filing_never_removes_it_from_the_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exchange's index is not reliable about what it lists. A quiet call must not delete history.
+
+    One evening the index omitted TITAN's Sep-2023 quarter and the next it included it; an importer
+    that replaced a name's rows with the latest fetch would have dropped a filed quarter on the
+    first of those evenings.
+    """
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import financials as importer
+
+    store = tmp_path / "financials.jsonl"
+    monkeypatch.setattr(facts, "FACTS_PATH", store)
+    old = _parse(filed="2026-04-15T18:30:00")
+    assert old is not None
+    old = facts.Quarter(**{**old.__dict__, "source_url": "https://example.invalid/old.xml"})
+    facts.save([old], store)
+
+    new = _parse(filed="2026-07-15T18:30:00")
+    assert new is not None
+    monkeypatch.setattr(importer, "_import", lambda names: [new])
+    monkeypatch.setattr(importer, "_names", lambda cfg: ["TEST.NS"])
+
+    assert importer.main(["--import", "--only", "TEST"]) == 0
+    urls = {q.source_url for q in facts.load(store)}
+    assert "https://example.invalid/old.xml" in urls, (
+        "a filing tonight's fetch did not list is kept"
+    )
+    assert new.source_url in urls

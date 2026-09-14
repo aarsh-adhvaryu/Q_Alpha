@@ -233,13 +233,17 @@ def _row(q: Quarter) -> dict[str, Any]:
     }
 
 
-def save(quarters: list[Quarter], path: Path = FACTS_PATH) -> int:
+def save(quarters: list[Quarter], path: Path | None = None) -> int:
     """Write every quarter, newest last. Returns how many rows are on file.
 
-    Rewritten whole rather than appended: the source is the exchange's archive, which is itself the
-    record, so there is nothing here that a re-fetch could lose. What must never be lost is
-    ``filed_at``, and that comes from the filing.
+    Writes exactly the quarters it is given, sorted, so the same set always produces the same bytes.
+    It does not decide what to keep: ``scripts/financials.py`` merges tonight's fetch INTO what is
+    stored, because the exchange's index is not reliable about what it lists and a filing it omits
+    one evening must not disappear from the record.
     """
+    # Resolved at CALL time. A default bound at definition time is the module constant as it
+    # was on import, so a test that redirects FACTS_PATH still wrote to the live file.
+    path = FACTS_PATH if path is None else path
     from qalpha.live.atomic import write_text
 
     ordered = sorted(quarters, key=lambda q: (q.ticker, q.period_end, q.filed_at))
@@ -247,8 +251,11 @@ def save(quarters: list[Quarter], path: Path = FACTS_PATH) -> int:
     return len(ordered)
 
 
-def load(path: Path = FACTS_PATH) -> list[Quarter]:
+def load(path: Path | None = None) -> list[Quarter]:
     """Every stored quarter. A missing file is no financials, never an empty company."""
+    # Resolved at CALL time. A default bound at definition time is the module constant as it
+    # was on import, so a test that redirects FACTS_PATH still wrote to the live file.
+    path = FACTS_PATH if path is None else path
     if not path.exists():
         return []
     out: list[Quarter] = []

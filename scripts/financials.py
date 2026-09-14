@@ -189,10 +189,20 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"[facts] asking the exchange for {len(names)} name(s), {QUARTERS} quarters each")
         quarters = _import(names)
-        # Keep what was already stored for names this run did not touch.
-        existing = [q for q in facts.load() if q.ticker not in set(names)]
-        total = facts.save(existing + quarters)
-        print(f"[facts] {total} quarter(s) on file → {facts.FACTS_PATH}")
+        # The store only ever GAINS filings. A filing is an immutable fact — a restatement arrives
+        # under its own URL — so nothing stored is dropped because tonight's fetch did not list it.
+        # This used to replace each name's rows with the latest fetch, and the exchange's index is
+        # not reliable about what it lists: one evening it omitted TITAN's Sep-2023 quarter and the
+        # next it did not, so a flaky call would have deleted a filing from the record.
+        merged = {(q.ticker, q.source_url): q for q in facts.load()}
+        before = len(merged)
+        for q in quarters:
+            merged[(q.ticker, q.source_url)] = q
+        total = facts.save(list(merged.values()))
+        print(
+            f"[facts] {total} filing(s) on file → {facts.FACTS_PATH} "
+            f"({total - before} new tonight; none is ever removed by a fetch)"
+        )
 
     stored = facts.load()
     if not stored:

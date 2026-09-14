@@ -97,12 +97,15 @@ class Mandate:
 DEFAULT = Mandate()
 
 
-def load(path: Path = MANDATE_PATH) -> Mandate:
+def load(path: Path | None = None) -> Mandate:
     """The mandate in force. The defaults above unless a file deliberately overrides them.
 
     An unreadable or unknown field is refused rather than ignored: a mandate file that silently
     does nothing is worse than no mandate file, because it looks like it worked.
     """
+    # Resolved at CALL time. A default bound at definition time is the module constant as it
+    # was on import, so a test that redirects MANDATE_PATH would still read the live file.
+    path = MANDATE_PATH if path is None else path
     if not path.exists():
         return DEFAULT
     try:
