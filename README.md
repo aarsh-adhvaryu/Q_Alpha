@@ -82,7 +82,8 @@ never use the part kept for decisions (`spend_decisions_reserve_usd`, $6). When 
 reservation is settled at the real token count. A budget reached, an account out of credit, or a
 model that is not the registered one makes the step **not run** — a review becomes INCOMPLETE, never
 a HOLD, and a reading run stops with its documents still unread. Local models cost nothing but must
-have their weights pinned (`scripts/models.py pin <tag>`) before they may read anything.
+have their weights pinned (`scripts/models.py pin <tag>`) before they may read for the corpus; the
+reader comparison below records the digest it measured instead, because pinning follows measurement.
 
 ---
 
@@ -185,6 +186,24 @@ calls for it.
 
 Private account files go in `data/account/` and are never committed.
 
+### Which reader, at what cost — EX-5 (built, not yet run)
+
+Reading every filing with `claude-sonnet-5` ran the API key dry. EX-5 measures, on 150 fixed archived
+filings, whether a local model on this laptop or a cheaper API reads well enough, and which routine
+notices (trading-window closures, newspaper copies, ESOP allotments) can be skipped without hiding
+anything material. Registered in
+[reports/PREREGISTRATION_EX5_READERS.md](reports/PREREGISTRATION_EX5_READERS.md) before any run.
+
+- **The reference** is Opus 5's complete readings plus every candidate's claim that Opus judged
+  true — **checked by the user**: 20 documents read end to end, 25 of the judge's verdicts. If the
+  reference missed more than 10% of what the user found, nothing is selected.
+- **A reader qualifies** with high-materiality recall ≥ 0.85 (and ≥ 0.9 × the best), precision ≥ 0.85
+  and ≥ 90% verbatim quotes. The cheapest qualifier wins.
+- **Skipped filings are "routine, not read"**, never counted as read (`live/triage.py`). A rule that
+  hides one high-materiality event is removed.
+
+`scripts/readers.py` runs it step by step; the evening run is unchanged until a result is registered.
+
 ---
 
 ## 6. What is proven, and what is not
@@ -233,6 +252,7 @@ Everything measured on the way here. Full reports are in git at commit `53e2588`
 | ES-1 | Do negative filing events predict falls? | 20 days: −0.62%, t = −0.77. **Null.** 61 name-days behind the primary test. |
 | EX-3 reader | Which model reads filings? | `claude-sonnet-5`: 29% quotes discarded vs Haiku's 59%, twice the events. Readers agree on 22% of findings. |
 | EX-4 | Does a tighter prompt fix unverifiable quotes? | **Worse**: 155 events vs 200, 34.9% discarded vs 25.1% (220 documents). Reverted. |
+| EX-5 | Which reader is good enough at the lowest cost, and which filings need no reading? | **Built, not run.** Rule registered first. |
 | Forward run 1 | 6 weeks of paper trading | **Void**: flows were injected on a calendar the real account never had. |
 | Research track | QUBO ×2, HMM regime overlay, LPPLS crash signal, futures hedge | All negative. Archived in `Q_Alpha_Research`. |
 
@@ -361,10 +381,12 @@ src/qalpha/
   accounting/  FIFO lots · costs · slippage · capital gains · corporate actions · Portfolio
   data/        price panels (yfinance → Parquet, atomic writes) · point-in-time universes
   live/        announcements · evidence · extraction · news · pretrade · localmodel   (reading)
+               triage · readers · reference · reader_scoring     (EX-5: measuring the readers)
+               spend · model_identity                        (what a model call may cost, and who answered)
                manager · evidence_log · decisions                                 (the investor)
                twin · flows · nav · benchmarks · tradebook · taxpnl · market · screen (books)
                daily · session · server · record · panels · progress · atomic · console (running)
-scripts/       local_run (the app) · twin · evidence · news · reconcile_taxpnl · ocr_scans
+scripts/       local_run (the app) · twin · evidence · news · reconcile_taxpnl · ocr_scans · readers · models
                build_nifty_universe · build_nifty100_watchlist · build_nifty100_pit
 reports/       pre-registrations still in force
 data/          evidence archive · twin books and history · universes · tradebooks (private)

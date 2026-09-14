@@ -1,0 +1,14 @@
+# EX-5 reader candidate: Qwen3.5 9B at a 16K window (fully on the GPU; the default local candidate).
+#
+#   ollama pull qwen3.5:9b
+#   ollama create qwen3.5-9b-16k -f docs/ollama/Modelfile.qwen3.5-9b-16k
+#
+# The window is set here because Ollama's OpenAI-compatible route, which qalpha.live.localmodel
+# speaks, has nowhere to put num_ctx (see Modelfile.qwen3-8b-32k). 16K is where the plan starts: the
+# context needs memory of its own, and it is raised only after VRAM, RAM and speed are measured with
+# the evening pipeline running. The reader sizes its batches to this window (readers.LOCAL_CONTEXT).
+#
+# A candidate, not a registered reader. It is pinned (scripts/models.py pin) only if the comparison
+# under reports/PREREGISTRATION_EX5_READERS.md selects it.
+FROM qwen3.5:9b
+PARAMETER num_ctx 16384
