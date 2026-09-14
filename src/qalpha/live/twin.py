@@ -26,6 +26,7 @@ from typing import Any
 
 import pandas as pd
 
+from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.accounting.portfolio import Portfolio
 from qalpha.accounting.tax_lots import TaxLot
 from qalpha.config import Config
@@ -76,6 +77,12 @@ class TwinBook:
     #: and the last review. Empty for a book no investor has run. Its records live in
     #: ``data/twin/manager/``; this is only what the next evening must know.
     manager: dict[str, Any] = field(default_factory=dict)
+    #: The date through which corporate actions have been credited to **this** book. REAL and any
+    #: book still mirroring it get theirs from the tradebook replay, which recomputes from scratch;
+    #: a book deciding for itself has its own holdings and is credited forward from here. Two
+    #: watermarks rather than one because a dividend credited twice is indistinguishable, afterwards,
+    #: from a dividend that was larger.
+    actions_through: date | None = None
 
     @property
     def net_invested(self) -> Decimal:
@@ -95,6 +102,40 @@ class TwinBook:
         comparison must charge it for, so cash counts here and does not there.
         """
         return self.portfolio.cash + self.portfolio.holdings_value(prices)
+
+
+def credit_actions(
+    book: TwinBook,
+    actions: Sequence[CorporateAction],
+    *,
+    through: date,
+) -> list[str]:
+    """Credit corporate actions due to a book that decides for itself, and say what changed.
+
+    REAL, and any book still mirroring it, get their actions from the tradebook replay, which
+    recomputes the whole book from the trades every run and therefore cannot double-credit. A book
+    with its own holdings has no such replay, so it is credited **forward from a watermark**: only
+    actions after the last date it was brought up to date, and never past ``through``.
+
+    A book that has never been brought up to date is moved to ``through`` and credited nothing. That
+    is deliberate: the alternative is replaying every action a book may already have received
+    through some other path, and a dividend credited twice is indistinguishable, afterwards, from a
+    dividend that was larger.
+
+    Entitlement is the holding on the ex-date. A name the book does not hold is skipped rather than
+    credited zero, so the note list is what actually happened.
+    """
+    since = book.actions_through or book.stepped_through or book.start
+    notes: list[str] = []
+    if since is not None:
+        for action in sorted(actions, key=lambda a: (a.ex_date, a.ticker)):
+            if not since < action.ex_date <= through:
+                continue
+            if book.portfolio.ledger.quantity_held(action.ticker) <= 0:
+                continue
+            notes.append(book.portfolio.apply_corporate_action(action).note)
+    book.actions_through = through
+    return notes
 
 
 def assert_identical_flows(books: Sequence[TwinBook]) -> None:
@@ -639,6 +680,9 @@ def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
                 "stepped_through": (
                     book.stepped_through.isoformat() if book.stepped_through else None
                 ),
+                "actions_through": (
+                    book.actions_through.isoformat() if book.actions_through else None
+                ),
                 "manager": book.manager,
             }
             for name, book in books.items()
@@ -666,6 +710,11 @@ def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
             stepped_through=(
                 date.fromisoformat(entry["stepped_through"])
                 if entry.get("stepped_through")
+                else None
+            ),
+            actions_through=(
+                date.fromisoformat(entry["actions_through"])
+                if entry.get("actions_through")
                 else None
             ),
             manager=dict(entry.get("manager") or {}),

@@ -98,6 +98,19 @@ while the index rises is a real cost. Both now show.
 `BASELINE_EW` is the bar because most of what once looked like an edge over the cap-weighted index
 turned out to be the equal-weight premium — which anyone can buy in five minutes.
 
+**Dividends.** The baselines are marked on adjusted (total-return) series, so their dividends are
+reinvested for them. The twin's holdings are marked on raw closes, so its dividends have to be
+credited explicitly, on the ex-date, or the bar wins on arithmetic alone. They are
+(`corporate_actions.py --import`), and each is cross-checked against the price panel's own
+adjustment factor before it is applied. Between the first trade and 2026-09-11 the book earned
+₹0 of them: everything but the starter position was bought on 2026-08-28, after every ex-date.
+
+**Names the bar cannot price.** Seven Nifty-50 members have no price in the panel at all —
+TATAMOTORS (symbol retired at the 2025 demerger), HDFC, CAIRN, IDFC, JPASSOCIAT, LTIM, STER. They
+were always excluded from the equal weighting; now they are named on every run rather than silently
+missing, so "the fifty" is never quietly forty-nine. A member that stops being priced mid-life makes
+the day's level **unknown** rather than ₹0 or its last price.
+
 A gap between books is **descriptive**. One book over months is mostly timing and luck.
 
 ---
@@ -140,7 +153,7 @@ calls for it.
 
 | Step | What | Done when |
 |---|---|---|
-| **A. Accounts** | Deposits and withdrawals as explicit flows ✓ (from the ledger); dividends as dated cash; splits, bonuses, demergers reconciled against documents (TATAMOTORS is live). | One scenario with a deposit, dividend, corporate action, partial sale, tax, missing quote and restart reconciles with no manual edit. |
+| **A. Accounts** ✓ | Deposits and withdrawals as explicit flows, from the broker's ledger. Dividends as dated cash on the ex-date, each cross-checked against the price panel's own adjustment before any book receives it. Splits and bonuses through the replay, checked by the share count against the broker's statement. | Done: `tests/test_accounting_scenario.py` runs one book through a deposit, a dividend, a split, a partial sale with tax, an unpriced holding and a restart, and reconciles with no manual edit. |
 | **B. Company facts** | Point-in-time financial statements from NSE results filings, keyed by filing time; valuation inputs computed by code. Becomes AI-PM-2. | Numbers reconcile to the filings on an answer key; restated values never leak into earlier decisions. |
 | **C. Mandate** | One versioned paper mandate: limits, cash, horizon, review triggers — out of prompts and code. | Fixed scenarios produce valid HOLD, cash, buy, trim and exit decisions through the real entry point. |
 | **D. Research tools** | Read-only tools the investor can call: search the archive, read a period, compare peers, run the calculators. Execution stays outside. | An archived run where an extra research request changed the decision; adversarial text and fake citations cannot produce an accepted order. |
