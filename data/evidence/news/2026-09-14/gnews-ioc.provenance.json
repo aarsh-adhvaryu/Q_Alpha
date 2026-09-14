@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Indian+Oil%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-14T08:31:38Z",
+ "http_status": 200,
+ "bytes": 108489,
+ "sha256": "74e77857741ad80a8591e5cc4eb1617058eb27bf55a3554d1cdebabfb865b5a7",
+ "document_date": "2026-09-14",
+ "feed": "gnews-ioc",
+ "kind": "name",
+ "ticker": "IOC.NS"
+}

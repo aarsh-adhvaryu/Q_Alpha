@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22HDFC+Bank%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-14T08:31:36Z",
+ "http_status": 200,
+ "bytes": 206215,
+ "sha256": "1ea376e456bd5c429c984a20e6908c11bde59cf15dddc4da5a790768eef45eda",
+ "document_date": "2026-09-14",
+ "feed": "gnews-hdfcbank",
+ "kind": "name",
+ "ticker": "HDFCBANK.NS"
+}

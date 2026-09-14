@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Wipro%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-14T08:31:30Z",
+ "http_status": 200,
+ "bytes": 162203,
+ "sha256": "81543d1e75e123fd6020b3d674a6d5ec7bff881dacced147a94e17ddb870b915",
+ "document_date": "2026-09-14",
+ "feed": "gnews-wipro",
+ "kind": "name",
+ "ticker": "WIPRO.NS"
+}

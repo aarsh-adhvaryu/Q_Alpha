@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=INFY",
+ "retrieved_at_utc": "2026-09-14T08:30:57Z",
+ "http_status": 200,
+ "bytes": 2079517,
+ "sha256": "f6518e42ed733583d7e52555b680207ae01e5c18e823eac760016a6611f5b9c8",
+ "document_date": "2026-09-14",
+ "symbol": "INFY",
+ "kind": "announcement_index"
+}
