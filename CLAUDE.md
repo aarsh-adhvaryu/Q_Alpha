@@ -28,9 +28,12 @@ only when he asks. When he asks about the maths: formula → example → why.
 **[README.md](README.md) is the project** — what it is, how it runs, what was learned, the maths, and
 the build plan. Read it first. Keep it true: edit the line that changed; never append a log.
 
-Order of work: (1) rulebook start withdrawn ✓ · (2) repo cut to what the system uses ✓ ·
-(3) README as the one document ✓ · (4) AI-PM-1 built and registered ✓ · (5) **start it**: every
-held name read, one shadow review read by the user, then set `EVALUATION_START`.
+The build plan (README § "What is being built") is **done through step E**. The investor is
+**AI-PM-2**: it sees the companies' own filed quarterly results, point in time, and may ask for
+bounded read-only research once before deciding. Step F (training) is deliberately not started —
+there is no measured deficiency to train against, and the standard for starting is in the README.
+
+From here the job is to **run it**: one evening a day, and read what it wrote.
 
 ---
 
@@ -104,6 +107,8 @@ uv run python scripts/twin.py daily                  # the books (and the invest
 uv run python scripts/twin.py shadow                 # one real review on a COPY of SYSTEM
 uv run python scripts/reconcile_account.py --import  # the broker's ledger: funding + cash check
 uv run python scripts/corporate_actions.py --import  # dividends and splits, cross-checked
+uv run python scripts/financials.py --import         # filed XBRL results (no model calls)
+uv run python scripts/evaluate.py                    # the three tests; no gate, no tuning
 ```
 
 Runs natively on Windows from `D:\q-alpha`. The only server is the one the click starts, on

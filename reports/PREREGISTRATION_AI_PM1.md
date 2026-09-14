@@ -114,3 +114,11 @@ twelve-month anniversary is not a verdict.
   (893.6962047480171 both ways), so the bar's record is continuous. Seven members it has never been
   able to price — TATAMOTORS, HDFC, CAIRN, IDFC, JPASSOCIAT, LTIM, STER — are now printed on every
   run instead of being silently absent.
+- **2026-09-14** — **CLOSED WITH AN EMPTY RECORD, before it decided anything.** Between this
+  registration and its start date the packet gained the companies' own filed quarterly financials,
+  which §2 of this document makes a different version. Running AI-PM-1 for a single evening and
+  superseding it would have produced a one-observation record that could never mean anything, so it
+  is closed here instead. **AI-PM-1 made no real decision**; its only run is the shadow review of
+  2026-09-11, which was never the book. Its successor is `reports/PREREGISTRATION_AI_PM2.md`, which
+  starts on the same date. The books are continuous; the label is not, and nothing recorded under
+  AI-PM-1 may be pooled with AI-PM-2.
