@@ -132,14 +132,37 @@ def test_refunding_is_refused_once_the_investor_has_decided(
     saved: list[object] = []
     monkeypatch.setattr(twin_script, "save_books", lambda b: saved.append(b))
 
-    assert twin_script.cmd_refund(Config()) == twin_script.ABORTED
+    # Its own history file. This test once ran the success path against the live
+    # data/twin/history.jsonl and emptied it.
+    history = tmp_path / "history.jsonl"
+    history.write_text('{"as_of": "2026-09-11"}\n', encoding="utf-8")
+
+    assert twin_script.cmd_refund(Config(), history=history) == twin_script.ABORTED
     assert not saved, "a refused refund must not write"
     assert "has already decided" in capsys.readouterr().err
+    assert history.read_text(encoding="utf-8"), "a refused refund must not move the history either"
 
     books[SYSTEM].manager = {}
-    assert twin_script.cmd_refund(Config()) == 0
+    assert twin_script.cmd_refund(Config(), history=history) == 0
     assert saved, "with nothing decided it must actually re-fund"
     assert sum((f.amount for f in books[REAL].flows), Decimal("0")) == Decimal("505686.15")
+    assert history.read_text(encoding="utf-8") == "", "the old-basis rows leave the axis"
+    assert "2026-09-11" in (tmp_path / "history-before-refunding.jsonl").read_text(encoding="utf-8")
+
+
+def test_setting_history_aside_moves_rows_and_never_deletes_them(tmp_path: Path) -> None:
+    """Rows measured on an old funding basis are a real record; they are moved, not destroyed."""
+    source = tmp_path / "history.jsonl"
+    source.write_text('{"as_of": "2026-09-11"}\n{"as_of": "2026-09-12"}\n', encoding="utf-8")
+    kept = tmp_path / "history-before-refunding.jsonl"
+    kept.write_text('{"as_of": "2026-09-01"}\n', encoding="utf-8")
+
+    assert twin_script.set_aside_history(source) == 2
+    assert source.read_text(encoding="utf-8") == ""
+    body = kept.read_text(encoding="utf-8")
+    assert "2026-09-01" in body and "2026-09-12" in body, "earlier set-aside rows are kept too"
+    assert twin_script.set_aside_history(source) == 0, "an empty file has nothing to move"
+    assert twin_script.set_aside_history(tmp_path / "absent.jsonl") == 0
 
 
 def test_the_provenance_identifies_the_export_without_naming_the_account(tmp_path: Path) -> None:

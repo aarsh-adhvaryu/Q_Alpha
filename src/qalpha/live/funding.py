@@ -76,7 +76,10 @@ def provenance(statement: Path) -> str:
     return f"{kind} · sha256:{digest}"
 
 
-def save(funding: Funding, path: Path = FUNDING_PATH) -> None:
+def save(funding: Funding, path: Path | None = None) -> None:
+    # Resolved at CALL time. A default bound at definition time is the module constant as it
+    # was on import, so a test that redirects FUNDING_PATH still wrote to the live file.
+    path = FUNDING_PATH if path is None else path
     from qalpha.live import atomic
 
     atomic.write_text(
@@ -97,8 +100,11 @@ def save(funding: Funding, path: Path = FUNDING_PATH) -> None:
     )
 
 
-def load(path: Path = FUNDING_PATH) -> Funding | None:
+def load(path: Path | None = None) -> Funding | None:
     """The imported funding, or ``None`` when none has been imported. Never a guess."""
+    # Resolved at CALL time. A default bound at definition time is the module constant as it
+    # was on import, so a test that redirects FUNDING_PATH still wrote to the live file.
+    path = FUNDING_PATH if path is None else path
     if not path.exists():
         return None
     try:

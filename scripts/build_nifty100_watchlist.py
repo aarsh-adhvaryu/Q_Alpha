@@ -110,14 +110,29 @@ WATCHLIST_SECTOR_OVERRIDES: dict[str, str] = {
 }
 
 
+#: A symbol the exchange retired, and the listing that continues the same company under a new one.
+#: The watchlist is what the investor may be SHOWN today, so it must name something that trades.
+#: TATAMOTORS stopped trading at the 2025 demerger; the continuing listing (same ISIN line, renamed
+#: Tata Motors Passenger Vehicles) trades as TMPV. Left as TATAMOTORS, the name could never be
+#: priced, never be shown, and printed an "HTTP Error 404" at the top of every evening run.
+#:
+#: This is deliberately NOT applied to the point-in-time index membership, where the date the index
+#: itself switched is the whole point and has not been sourced.
+SUCCESSORS: dict[str, str] = {"TATAMOTORS": "TMPV"}
+
+
 def build() -> dict[str, str]:
     """{symbol: sector} for the current Nifty 100 (Nifty-50 sector wins on any overlap).
 
     ``WATCHLIST_SECTOR_OVERRIDES`` is applied last, so the FIN split wins over both halves.
+    Retired symbols are replaced by the listing that continues them (:data:`SUCCESSORS`).
     """
     members = dict(NEXT_50)
     members.update({NAME_TO_SYMBOL[n][0]: NAME_TO_SYMBOL[n][1] for n in CURRENT_2025})
     members.update({s: sec for s, sec in WATCHLIST_SECTOR_OVERRIDES.items() if s in members})
+    for retired, successor in SUCCESSORS.items():
+        if retired in members:
+            members[successor] = members.pop(retired)
     return members
 
 

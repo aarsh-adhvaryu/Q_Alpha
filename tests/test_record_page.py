@@ -108,16 +108,34 @@ def test_a_sparse_series_is_labelled_as_sparse(repo: Path) -> None:
     assert record.MIN_FOR_A_LINE >= 3
 
 
-def test_the_banner_says_whether_system_is_deciding_yet(
+def test_the_banner_follows_the_session_not_the_calendar(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """SYSTEM is stepped on the day its prices come from, so the banner must key on that day.
+
+    Keyed on the calendar instead, the page announced "deciding for itself" on the morning of a
+    closed exchange while the book was still mirroring REAL — the start date wearing the wrong
+    date's label, which is the defect this repository keeps paying for.
+    """
     from qalpha.live import twin
 
-    start = date(2026, 9, 14)
+    start = date(2026, 9, 15)
     monkeypatch.setattr(record, "EVALUATION_START", start)
     monkeypatch.setattr(record, "is_autonomous", lambda d: twin.is_autonomous(d, start=start))
-    assert "starts deciding" in record.dashboard_html(date(2026, 9, 13))
+
+    # The fixture's last marked session is 2026-09-15. Rendered on a later calendar day, or on the
+    # day itself, the banner must say the same thing — the session is what moved, not the clock.
     assert "deciding for itself" in record.dashboard_html(date(2026, 9, 15))
+    assert "deciding for itself" in record.dashboard_html(date(2026, 9, 20))
+
+    # With the start one day beyond the last session, no calendar date may claim it has begun.
+    monkeypatch.setattr(record, "EVALUATION_START", date(2026, 9, 16))
+    monkeypatch.setattr(
+        record, "is_autonomous", lambda d: twin.is_autonomous(d, start=date(2026, 9, 16))
+    )
+    page = record.dashboard_html(date(2026, 9, 20))
+    assert "starts deciding" in page
+    assert "deciding for itself" not in page
 
 
 def test_with_no_registered_start_the_banner_counts_down_to_nothing(

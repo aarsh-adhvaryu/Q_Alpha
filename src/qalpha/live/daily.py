@@ -132,8 +132,15 @@ def _step_prices() -> None:
         tickers = [str(t) for t in _universe_tickers(universe)]
         live = _still_listed(universe, tickers)
         start, existing = _fetch_window(panel)
-        skipped = len(tickers) - len(live)
+        never = _never_priced(universe, live, existing)
+        live = [t for t in live if t not in never]
+        skipped = len(tickers) - len(live) - len(never)
         note = f" (+{skipped} whose index spell has ended)" if skipped else ""
+        if never:
+            note += (
+                f" (+{len(never)} the vendor has never priced: "
+                f"{', '.join(t.removesuffix('.NS') for t in never)})"
+            )
         LOG.say(f"{panel.name}: {len(live)} names from {start}{note}…", "detail")
         fresh = download_prices(live, start, None)
         frame = _merge_panel(existing, fresh, panel)
@@ -185,6 +192,49 @@ def _still_listed(universe: Path, tickers: list[str]) -> list[str]:
     kept = [t for t in tickers if t in open_spell]
     # Never return nothing: a malformed file must not silently turn the refresh off.
     return kept or tickers
+
+
+def _never_priced(universe: Path, tickers: list[str], stored: pd.DataFrame | None) -> list[str]:
+    """Names with an open index spell that the stored panel holds **no bar for at all**, ever.
+
+    TATAMOTORS is the case: its NSE symbol retired at the 2025 demerger, the membership file still
+    shows its spell open, and every evening the download asked for it and printed "HTTP Error 404"
+    at the top of the run — which reads as a failed evening when nothing had failed.
+
+    Measured, not guessed: a name is skipped only when the panel already holds history, holds none
+    for this name, **and** its spell began more than a year before the panel's last bar. A name that
+    joined the index recently has no bars *yet* and is still fetched, which is the case a simpler
+    "no bars, skip it" rule would silently get wrong — a new member would never be priced at all.
+    """
+    import csv
+
+    import pandas as pd
+
+    if stored is None or stored.empty:
+        return []
+    try:
+        with universe.open(encoding="utf-8-sig", newline="") as fh:
+            rows = list(csv.DictReader(fh))
+    except OSError:
+        return []
+    if not rows or "start_date" not in rows[0]:
+        return []
+    last = pd.Timestamp(stored["date"].max())
+    priced = set(stored["ticker"].astype(str))
+    began: dict[str, pd.Timestamp] = {}
+    for row in rows:
+        ticker = str(row.get("ticker", "")).strip()
+        try:
+            when = pd.Timestamp(str(row.get("start_date", "")).strip())
+        except ValueError:
+            continue
+        if ticker and (ticker not in began or when < began[ticker]):
+            began[ticker] = when
+    return [
+        t
+        for t in tickers
+        if t not in priced and t in began and began[t] < last - pd.Timedelta(days=365)
+    ]
 
 
 def _fetch_window(panel: Path) -> tuple[str, pd.DataFrame | None]:
@@ -290,6 +340,17 @@ def _step_news() -> None:
     _checked("news", news.main(["daily"]))
 
 
+def _step_financials() -> None:
+    """Filed quarterly results. No model calls; already-parsed filings are served from the cache.
+
+    A quiet exchange API is not a failed evening: the stored quarters stay as they were and carry
+    their age into the packet, so a fetch that returns nothing new costs the review nothing.
+    """
+    import financials
+
+    _checked("financials", financials.main(["--import"]))
+
+
 def _step_twin() -> None:
     import twin
 
@@ -314,8 +375,8 @@ def day_scope(on: date) -> str:
 def research_steps() -> list[Step]:
     """The work done **against** a fixed set of inputs, and therefore resumable across days.
 
-    Filings, then headlines, then the books — so the books step on the evidence rather than ahead
-    of it.
+    Filings, then headlines, then filed results, then the books — so the books step on the evidence
+    rather than ahead of it.
     """
     return [
         Step(
@@ -325,6 +386,11 @@ def research_steps() -> list[Step]:
             slow=True,
         ),
         Step("news", "Fetching, archiving and reading the day's headlines", _step_news, slow=True),
+        Step(
+            "financials",
+            "Checking the exchange for newly filed quarterly results",
+            _step_financials,
+        ),
         Step("twin", "Marking the books against the fund", _step_twin),
     ]
 

@@ -159,7 +159,10 @@ def check(action: CorporateAction, panel: pd.DataFrame) -> Recorded:
     )
 
 
-def save(record: Record, path: Path = ACTIONS_PATH) -> None:
+def save(record: Record, path: Path | None = None) -> None:
+    # Resolved at CALL time. A default bound at definition time is the module constant as it
+    # was on import, so a test that redirects ACTIONS_PATH still wrote to the live file.
+    path = ACTIONS_PATH if path is None else path
     write_text(
         path,
         json.dumps(
@@ -186,8 +189,11 @@ def save(record: Record, path: Path = ACTIONS_PATH) -> None:
     )
 
 
-def load(path: Path = ACTIONS_PATH) -> Record | None:
+def load(path: Path | None = None) -> Record | None:
     """The recorded actions, or ``None`` when none have been imported. Never a guess."""
+    # Resolved at CALL time. A default bound at definition time is the module constant as it
+    # was on import, so a test that redirects ACTIONS_PATH still wrote to the live file.
+    path = ACTIONS_PATH if path is None else path
     if not path.exists():
         return None
     try:

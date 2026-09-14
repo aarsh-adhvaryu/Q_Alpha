@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Indian+Railway+Finance%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-14T08:31:31Z",
+ "http_status": 200,
+ "bytes": 24476,
+ "sha256": "ee49aed68a624705c1838259e5b8fd558d99ebf849bfe567f7c8a8b71fab886f",
+ "document_date": "2026-09-14",
+ "feed": "gnews-irfc",
+ "kind": "name",
+ "ticker": "IRFC.NS"
+}

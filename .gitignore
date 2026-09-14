@@ -94,3 +94,9 @@ data/evidence/news/**/items.jsonl
 !data/evidence/reg_ind/REG1_IND040926.csv
 !data/evidence/announcements/VBL/1067*.pdf
 !data/evidence/**/*.provenance.json
+
+# The raw XBRL the financials were parsed from: 41 MB, and a cache rather than a record. Every row
+# in data/facts/financials.jsonl carries the filing's URL and the SHA-256 of the exact bytes it was
+# parsed from, so a re-fetch can be verified against what was actually read. The exchange's archive
+# is the record; this is a copy of it, and `scripts/financials.py --import` rebuilds it.
+data/facts/xbrl/

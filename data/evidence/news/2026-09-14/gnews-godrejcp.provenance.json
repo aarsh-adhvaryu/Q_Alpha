@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Godrej+Consumer+Products%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-14T08:31:35Z",
+ "http_status": 200,
+ "bytes": 48720,
+ "sha256": "3fff1295c5ab003b38c0433343c851561bed8f75ac28271f44c582f8d22837c3",
+ "document_date": "2026-09-14",
+ "feed": "gnews-godrejcp",
+ "kind": "name",
+ "ticker": "GODREJCP.NS"
+}

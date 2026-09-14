@@ -358,7 +358,7 @@ def test_an_empty_tradebook_read_must_not_be_treated_as_an_empty_account() -> No
     assert "return ABORTED" in src[abort_at : abort_at + 900], "abort must return before writing"
 
 
-def test_an_export_that_starts_after_the_first_flow_is_refused() -> None:
+def test_an_export_that_starts_after_trading_is_known_to_have_begun_is_refused() -> None:
     from qalpha.live.twin import partial_export_reason
 
     reason = partial_export_reason(_trades()[1:], date(2026, 6, 15))
@@ -367,7 +367,7 @@ def test_an_export_that_starts_after_the_first_flow_is_refused() -> None:
     assert "data/tradebooks/" in reason
 
 
-def test_an_export_reaching_the_first_flow_is_accepted() -> None:
+def test_an_export_reaching_back_to_the_watermark_is_accepted() -> None:
     from qalpha.live.twin import partial_export_reason
 
     assert partial_export_reason(_trades(), date(2026, 6, 15)) is None

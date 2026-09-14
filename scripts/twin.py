@@ -21,6 +21,7 @@ import sys
 from collections.abc import Callable, Sequence
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pandas as pd
 
@@ -261,7 +262,29 @@ def cmd_seed(cfg: Config) -> int:
     return 0
 
 
-def cmd_refund(cfg: Config) -> int:
+def set_aside_history(path: Path) -> int:
+    """Move every history row aside, returning how many. Empty file, kept bytes.
+
+    Takes the path rather than reaching for the module-level one, because a caller that cannot
+    redirect it is a caller that writes to the live record — which is exactly what happened: a
+    test of the refusal path ran the success path against `data/twin/history.jsonl` and emptied
+    it. Nothing was lost, because this moves rather than deletes, but a test must not be able to
+    reach the real file at all.
+    """
+    if not path.exists():
+        return 0
+    body = path.read_text(encoding="utf-8")
+    rows = len([ln for ln in body.splitlines() if ln.strip()])
+    if not rows:
+        return 0
+    kept = path.with_name("history-before-refunding.jsonl")
+    existing = kept.read_text(encoding="utf-8") if kept.exists() else ""
+    atomic.write_text(kept, existing + body)
+    atomic.write_text(path, "")
+    return rows
+
+
+def cmd_refund(cfg: Config, *, history: Path = TWIN_HISTORY) -> int:
     """Re-fund every book from the broker's ledger, once, before anything has decided.
 
     The books were funded from the tradebook — money that reached the *market*. The ledger records
@@ -305,6 +328,11 @@ def cmd_refund(cfg: Config) -> int:
         if name in books:
             replay_real(books[name], trades, cfg)  # SYSTEM still mirrors REAL; it has not decided
     save_books(books)
+    # Every row written before this moment measured a different amount of money. Splicing the two
+    # bases into one series draws a cliff that never happened — here, 490k falling to 294k overnight.
+    # The rows are moved aside rather than deleted: they are a real record of a real basis, and the
+    # only thing that is wrong is putting them on the same axis as the new one.
+    moved = set_aside_history(history)
     modelled = books[REAL].portfolio.cash
     print(
         f"✓ re-funded {len(books)} book(s) from {record.source}\n"
@@ -314,6 +342,12 @@ def cmd_refund(cfg: Config) -> int:
         "  The difference is charges the tradebook does not carry (DP, payment-gateway, bank) and "
         "modelling error in the cost engine. It is shown, not absorbed."
     )
+    if moved:
+        print(
+            f"  {moved} history row(s) measured the old basis and were moved to "
+            "data/twin/history-before-refunding.jsonl. They are kept, not deleted; they are simply "
+            "not on the same axis as what follows."
+        )
     return 0
 
 
@@ -402,7 +436,7 @@ def cmd_daily(cfg: Config) -> int:
         if tradebook_notes:
             refusal += " " + " ".join(tradebook_notes)
     else:
-        refusal = partial_export_reason(trades, books[REAL].start)
+        refusal = partial_export_reason(trades, books[REAL].earliest_trade)
     if refusal:
         print(
             f"[twin] ABORT — {refusal}\n"
@@ -436,9 +470,14 @@ def cmd_daily(cfg: Config) -> int:
         replay_real(book, trades, cfg)
         book.stepped_through = market.as_of
     if not autonomous:
+        # Said in terms of SESSIONS. "Mirrors REAL until 2026-09-14", printed on 2026-09-14, read as
+        # a contradiction: the start is a calendar date, but the book steps on the session its prices
+        # come from, and on a holiday that session is an earlier day.
         when = (
-            f"until {EVALUATION_START}"
+            f"— the latest session is {market.as_of} and the registered start is "
+            f"{EVALUATION_START}"
             + (f" ({why})" if (why := nse.closure_reason(EVALUATION_START)) else "")
+            + ". It first decides on the evening of the first session on or after the start"
             if EVALUATION_START
             else "— no start date is registered"
         )
@@ -446,6 +485,12 @@ def cmd_daily(cfg: Config) -> int:
     # BEFORE the save, so the file records what REAL actually holds rather than the cash it was
     # seeded with.
     replay_real(books[REAL], trades, cfg)
+    # The export was accepted, so it defines how far back trading is known to go. It only ever
+    # moves backwards: a longer export lowers the watermark, a shorter one was refused above.
+    if trades:
+        seen = min(t.trade_date for t in trades)
+        for book in books.values():
+            book.earliest_trade = min(book.earliest_trade or seen, seen)
     save_books(books)
 
     marks, gaps = _marks_and_gaps(books, trades, market, cfg)
@@ -460,7 +505,10 @@ def cmd_daily(cfg: Config) -> int:
         )
         + "\n",
     )
-    rows = append_history(marks, gaps, as_of=as_of)
+    # **Dated by the session the marks came from, never by the calendar.** Stamping a holiday's run
+    # with today's date wrote Friday's marks under Monday's, which is one observation duplicated, not
+    # two observations — and the evaluation harness counts observations.
+    rows = append_history(marks, gaps, as_of=market.as_of)
     print(f"✓ history: {rows} row(s) on file → {TWIN_HISTORY}")
     print(comparison_markdown(marks, gaps))
     if failure:

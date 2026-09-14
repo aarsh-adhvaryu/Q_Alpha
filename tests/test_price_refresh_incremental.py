@@ -130,3 +130,43 @@ def test_a_malformed_universe_never_silently_stops_the_refresh(tmp_path: Path) -
     universe.write_text("ticker,start_date,end_date,sector\n", encoding="utf-8")
     assert daily._still_listed(universe, ["A.NS"]) == ["A.NS"]
     assert daily._still_listed(tmp_path / "missing.csv", ["A.NS"]) == ["A.NS"]
+
+
+def _stored(tickers: list[str], last: str = "2026-09-11") -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime([last] * len(tickers)),
+            "ticker": tickers,
+            "close": [1.0] * len(tickers),
+            "adj_close": [1.0] * len(tickers),
+            "volume": [1] * len(tickers),
+        }
+    )
+
+
+def test_a_member_the_vendor_has_never_priced_is_not_asked_for_again(tmp_path: Path) -> None:
+    """TATAMOTORS printed "HTTP Error 404" at the top of every run, which reads as a failed evening."""
+    universe = tmp_path / "u.csv"
+    universe.write_text(
+        "ticker,start_date,end_date,sector\nLIVE.NS,2012-01-01,,IT\nRETIRED.NS,2012-01-01,,AUTO\n",
+        encoding="utf-8",
+    )
+    never = daily._never_priced(universe, ["LIVE.NS", "RETIRED.NS"], _stored(["LIVE.NS"]))
+    assert never == ["RETIRED.NS"]
+
+
+def test_a_member_that_joined_recently_is_still_fetched(tmp_path: Path) -> None:
+    """No bars YET is not no bars ever. A simpler rule would never price a new index member."""
+    universe = tmp_path / "u.csv"
+    universe.write_text(
+        "ticker,start_date,end_date,sector\nLIVE.NS,2012-01-01,,IT\nNEW.NS,2026-08-01,,IT\n",
+        encoding="utf-8",
+    )
+    assert daily._never_priced(universe, ["LIVE.NS", "NEW.NS"], _stored(["LIVE.NS"])) == []
+
+
+def test_with_no_stored_panel_nothing_is_skipped(tmp_path: Path) -> None:
+    """A first build has no bars for anyone; skipping by 'never priced' would fetch nothing."""
+    universe = tmp_path / "u.csv"
+    universe.write_text("ticker,start_date,end_date,sector\nA.NS,2012-01-01,,IT\n", "utf-8")
+    assert daily._never_priced(universe, ["A.NS"], None) == []

@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Ambuja+Cements%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-14T08:31:33Z",
+ "http_status": 200,
+ "bytes": 66143,
+ "sha256": "f4aca3d8e8fd64c2e0b7a0f2204c86ea221d70056b2961581e037e277b78834e",
+ "document_date": "2026-09-14",
+ "feed": "gnews-ambujacem",
+ "kind": "name",
+ "ticker": "AMBUJACEM.NS"
+}

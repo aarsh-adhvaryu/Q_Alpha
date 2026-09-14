@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Infosys%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-14T08:31:23Z",
+ "http_status": 200,
+ "bytes": 173913,
+ "sha256": "89d3398f1eee81f33965213ca2e9c90fc5d90bdf9a35e2b63de93059e527bb6d",
+ "document_date": "2026-09-14",
+ "feed": "gnews-infy",
+ "kind": "name",
+ "ticker": "INFY.NS"
+}
