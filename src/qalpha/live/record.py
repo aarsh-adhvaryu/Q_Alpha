@@ -261,6 +261,10 @@ def dashboard_data(as_of: date | None = None) -> dict[str, Any]:
                     "value": float(str(fields.get("value", "nan"))),
                     "invested": float(str(fields.get("net_invested", "nan"))),
                     "xirr": float(str(fields.get("xirr", "nan"))),
+                    # Absent on rows written before cash was recorded: unknown, not zero.
+                    "cash": (
+                        float(str(fields["cash"])) if fields.get("cash") is not None else None
+                    ),
                     "note": BOOK_NOTE.get(name, ""),
                 }
             )
@@ -399,6 +403,40 @@ def _holdings_table(data: dict[str, Any]) -> str:
     )
 
 
+def _books_table(data: dict[str, Any]) -> str:
+    """The four books in rupees, with cash shown beside value.
+
+    The chart plots value, and value alone cannot distinguish a book that chose well from a book
+    that simply had not spent its money while the market fell. The baselines hold no cash by
+    construction; the investor holds it for months, because it may spend only ₹50,000 a month.
+    """
+    rows = []
+    for b in data["books"]:
+        gain = b["value"] - b["invested"]
+        tone = "up" if gain >= 0 else "down"
+        cash = (
+            f"₹{b['cash']:,.0f}"
+            if b.get("cash") is not None
+            else '<span class="dim">not recorded</span>'
+        )
+        market = (
+            f"₹{b['value'] - b['cash']:,.0f}"
+            if b.get("cash") is not None
+            else '<span class="dim">unknown</span>'
+        )
+        rows.append(
+            f"<tr><td>{_esc(b['name'])}</td><td>₹{b['invested']:,.0f}</td>"
+            f"<td>{market}</td><td>{cash}</td><td>₹{b['value']:,.0f}</td>"
+            f'<td class="{tone}">{"+" if gain >= 0 else "-"}₹{abs(gain):,.0f}</td>'
+            f'<td class="dim">{_esc(b["note"])}</td></tr>'
+        )
+    return (
+        '<div class="scroll"><table><thead><tr><th>Book</th><th>Money in</th>'
+        "<th>In the market</th><th>Cash</th><th>Worth</th><th>Gain</th><th></th>"
+        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>"
+    )
+
+
 def _coverage_chips(data: dict[str, Any]) -> str:
     out = []
     for c in data["coverage"]:
@@ -519,7 +557,12 @@ def dashboard_html(as_of: date | None = None, *, top: str = "", bottom: str = ""
   <div class="card wide"><h2>The four books</h2>
     <p class="note">Same cash flows, same days. <b>BASELINE_EW is the bar</b>; NIFTYBEES is the
      do-nothing floor and never the bar.{sparse}</p>
-    <div id="books-chart"></div><div class="legend" id="books-legend"></div></div>
+    <div id="books-chart"></div><div class="legend" id="books-legend"></div>
+    {_books_table(data)}
+    <p class="note">The baselines hold <b>no cash</b> &mdash; they buy the fund with every rupee on
+     the day it arrives. SYSTEM may spend at most &#8377;50,000 a month, so it sits on cash for
+     months: that helps it when the market falls and costs it when the market rises, for no
+     decision it made. Read any gap with the cash column beside it.</p></div>
 
   <div class="card"><h2>What SYSTEM holds</h2>
     <p class="note">Green is above cost, red below. Marked at the last close in the panel —

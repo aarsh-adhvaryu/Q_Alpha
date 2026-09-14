@@ -77,8 +77,16 @@ A *trading* day with no closing prices is a failure — something did not downlo
 
 ## 4. The four books
 
-Every book receives **the same rupees on the same days**, taken from the tradebook. They differ only
-in what they did with the money.
+Every book receives **the same rupees on the same days**, taken from the **broker's ledger** — the
+dated deposits and withdrawals themselves (`data/twin/funding.json`, imported by
+`reconcile_account.py --import`). They differ only in what they did with the money.
+
+**Cash is part of the answer.** The books were once funded by what the tradebook showed *spent on
+shares*, so ₹2,01,117 sitting in the account existed in no book and not investing it cost nothing.
+Now every book starts with the full ₹5,05,686. The baselines put all of it into their fund on the
+day it arrives; the investor may only spend ₹50,000 a month, so it will hold cash for months. That
+cuts both ways and is meant to: holding cash while the index falls is a real gain, and holding it
+while the index rises is a real cost. Both now show.
 
 | Book | What it is |
 |---|---|
@@ -132,7 +140,7 @@ calls for it.
 
 | Step | What | Done when |
 |---|---|---|
-| **A. Accounts** | Deposits and withdrawals as explicit flows; dividends as dated cash; splits, bonuses, demergers reconciled against documents (TATAMOTORS is live). | One scenario with a deposit, dividend, corporate action, partial sale, tax, missing quote and restart reconciles with no manual edit. |
+| **A. Accounts** | Deposits and withdrawals as explicit flows ✓ (from the ledger); dividends as dated cash; splits, bonuses, demergers reconciled against documents (TATAMOTORS is live). | One scenario with a deposit, dividend, corporate action, partial sale, tax, missing quote and restart reconciles with no manual edit. |
 | **B. Company facts** | Point-in-time financial statements from NSE results filings, keyed by filing time; valuation inputs computed by code. Becomes AI-PM-2. | Numbers reconcile to the filings on an answer key; restated values never leak into earlier decisions. |
 | **C. Mandate** | One versioned paper mandate: limits, cash, horizon, review triggers — out of prompts and code. | Fixed scenarios produce valid HOLD, cash, buy, trim and exit decisions through the real entry point. |
 | **D. Research tools** | Read-only tools the investor can call: search the archive, read a period, compare peers, run the calculators. Execution stays outside. | An archived run where an extra research request changed the decision; adversarial text and fake citations cannot produce an accepted order. |

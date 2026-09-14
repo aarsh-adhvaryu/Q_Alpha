@@ -75,3 +75,21 @@ def test_only_money_crossing_the_account_boundary_counts_as_funding(tmp_path: Pa
     moves = account.read_ledger(path)
     assert [m.amount for m in moves] == [Decimal("10000"), Decimal("-4313.85")]
     assert sum((m.amount for m in moves), Decimal("0")) == Decimal("5686.15")
+
+
+def test_the_closing_balance_is_the_brokers_last_one(tmp_path: Path) -> None:
+    """The only independent check on cash. Quantities can reconcile exactly while the balance is
+    wrong, and the balance is what the investor gets to spend."""
+    path = tmp_path / "ledger-TEST.xlsx"
+    _sheet(
+        path,
+        [
+            ["Client ID", "TEST01"],
+            [],
+            ["Particulars", "Posting Date", "Voucher Type", "Debit", "Credit", "Net Balance"],
+            ["Funds added using UPI", "2026-06-14", "Bank Receipts", 0, 10000, 10000],
+            ["Net settlement for Equity", "2026-06-15", "Book Voucher", 9619.15, 0, 380.85],
+            ["Opening balance", None, None, None, None, None],
+        ],
+    )
+    assert account.closing_balance(path) == Decimal("380.85")
