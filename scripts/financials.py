@@ -38,8 +38,17 @@ QUARTERS = 8
 
 
 def _filed_at(row: dict[str, object]) -> datetime | None:
-    """When the exchange published it. Never the board-meeting date, which precedes it."""
-    for field in ("exchdisstime", "broadCastDate", "filingDate"):
+    """When it was published. Never the board-meeting date, which precedes it.
+
+    ``broadCastDate`` first, because it is always populated. ``exchdisstime`` — the exchange's own
+    dissemination, a few minutes later — is the more precise figure, but the API returns it as null
+    on some calls and not others for the *same* filing, so reading it first made the stored
+    timestamp flip between imports: the same quarter was "filed" at 16:58 on one run and 17:02 on
+    the next. A point-in-time store that changes on re-import is not one. The packet's cut-off is
+    by date, so a few minutes decides nothing except across midnight, and a filing is fetched in
+    the same evening run as the review that reads it — it cannot be in the store before it exists.
+    """
+    for field in ("broadCastDate", "exchdisstime", "filingDate"):
         raw = str(row.get(field) or "").strip()
         for shape in ("%d-%b-%Y %H:%M:%S", "%d-%b-%Y %H:%M"):
             try:
@@ -97,21 +106,30 @@ def _import(names: list[str]) -> list[facts.Quarter]:
             print(f"  {symbol:12s} index was not readable JSON — no filings recorded")
             continue
         dated = [(p, r) for r in rows if r.get("xbrl") and (p := _period_end(r)) is not None]
-        # One filing per period, consolidated preferred: a company files standalone and consolidated
-        # as separate XBRL documents, and the standalone accounts of a holding company describe a
-        # shell rather than the business.
-        best: dict[date, dict[str, object]] = {}
-        for period, row in sorted(dated, key=lambda pr: pr[0]):
-            current = best.get(period)
-            consolidated = str(row.get("consolidated", "")).strip().lower().startswith("cons")
-            if current is None or (
-                consolidated
-                and not str(current.get("consolidated", "")).strip().lower().startswith("cons")
+        # Consolidated preferred, per period: a company files standalone and consolidated as separate
+        # XBRL documents, and the standalone accounts of a holding company describe a shell rather
+        # than the business. But EVERY filing of the preferred basis is kept, not one of them. A
+        # company that files the same quarter twice minutes apart (or restates it months later) has
+        # two dissemination times, and choosing between them here depended on the order the API
+        # happened to return rows in — the store came out different on every import. Which filing
+        # was known on a given day is `financials.known_on`'s question, and it already answers it.
+        by_period: dict[date, list[dict[str, object]]] = {}
+        for period, row in dated:
+            by_period.setdefault(period, []).append(row)
+        chosen: list[tuple[date, dict[str, object]]] = []
+        for period in sorted(by_period, reverse=True)[:QUARTERS]:
+            rows_here = by_period[period]
+            consolidated = [
+                r
+                for r in rows_here
+                if str(r.get("consolidated", "")).strip().lower().startswith("cons")
+            ]
+            for row in sorted(
+                consolidated or rows_here, key=lambda r: (str(_filed_at(r)), str(r.get("xbrl")))
             ):
-                best[period] = row
+                chosen.append((period, row))
         kept = 0
-        for period in sorted(best, reverse=True)[:QUARTERS]:
-            row = best[period]
+        for _period, row in chosen:
             url = str(row["xbrl"])
             when = _filed_at(row)
             if when is None:

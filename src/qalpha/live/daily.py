@@ -290,6 +290,17 @@ def _step_news() -> None:
     _checked("news", news.main(["daily"]))
 
 
+def _step_financials() -> None:
+    """Filed quarterly results. No model calls; already-parsed filings are served from the cache.
+
+    A quiet exchange API is not a failed evening: the stored quarters stay as they were and carry
+    their age into the packet, so a fetch that returns nothing new costs the review nothing.
+    """
+    import financials
+
+    _checked("financials", financials.main(["--import"]))
+
+
 def _step_twin() -> None:
     import twin
 
@@ -314,8 +325,8 @@ def day_scope(on: date) -> str:
 def research_steps() -> list[Step]:
     """The work done **against** a fixed set of inputs, and therefore resumable across days.
 
-    Filings, then headlines, then the books — so the books step on the evidence rather than ahead
-    of it.
+    Filings, then headlines, then filed results, then the books — so the books step on the evidence
+    rather than ahead of it.
     """
     return [
         Step(
@@ -325,6 +336,11 @@ def research_steps() -> list[Step]:
             slow=True,
         ),
         Step("news", "Fetching, archiving and reading the day's headlines", _step_news, slow=True),
+        Step(
+            "financials",
+            "Checking the exchange for newly filed quarterly results",
+            _step_financials,
+        ),
         Step("twin", "Marking the books against the fund", _step_twin),
     ]
 

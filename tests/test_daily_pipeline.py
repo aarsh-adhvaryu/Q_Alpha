@@ -197,7 +197,7 @@ def test_the_skip_reason_names_the_variable(
 def test_the_real_plan_reads_filings_before_the_twin_steps() -> None:
     """The books must step ON the evidence, not ahead of it — and nothing else runs in the evening."""
     names = [s.name for s in daily.steps()]
-    assert names == ["prices", "evidence", "news", "twin"]
+    assert names == ["prices", "evidence", "news", "financials", "twin"]
 
 
 def test_no_step_requires_the_cloud_key_alone() -> None:
