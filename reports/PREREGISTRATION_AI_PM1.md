@@ -87,3 +87,17 @@ twelve-month anniversary is not a verdict.
 - **2026-09-13** — **shadow review run and read** (start condition 3). 8 holdings reviewed on
   2026-09-11's close: 5 HOLD citing specific filings, 3 trims. 25,020 input + 10,217 output tokens.
   Records in `data/twin/manager/shadow/`. Start conditions 1 and 2 are not yet met.
+- **2026-09-14** — **the funding basis changed, before the first review.** Every book was funded
+  with ₹3,04,144 — what the tradebook showed spent on shares. The broker's ledger says ₹5,05,686 was
+  actually deposited, and the ₹2,01,117 difference was idle cash that no book was measuring. All
+  four books are now funded from the ledger (`data/twin/funding.json`; `twin.py refund`, which
+  refuses once any book has decided). REAL's modelled cash is ₹2,00,533 against the broker's
+  ₹2,01,117 — ₹584 of DP, gateway and bank charges the tradebook does not carry, reported, not
+  absorbed. **This makes the comparison harder in one direction and easier in the other**, and the
+  claim must be read with it: the baselines invest every rupee the day it arrives, while the
+  investor may spend at most ₹50,000 a month and will therefore sit on cash for months. On today's
+  marks that alone puts SYSTEM ₹3,732 *ahead* of BASELINE_EW in a falling market — an advantage it
+  did not earn by choosing anything. So **uninvested cash is now a column** on the comparison table
+  and on the record page, and is written into every history row, beside "in the market" — a lead
+  that is only money the book had not spent yet must not be readable as skill. The relative-wealth
+  statistic stays the unitized NAV, which is blind to when the money arrived.

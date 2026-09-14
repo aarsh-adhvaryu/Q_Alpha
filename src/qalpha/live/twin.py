@@ -146,7 +146,11 @@ def partial_export_reason(trades: Sequence[object], first_flow: date | None) -> 
 
 
 def seed_books(
-    trades: Sequence[object], cfg: Config, *, names: Sequence[str] = ALL_BOOKS
+    trades: Sequence[object],
+    cfg: Config,
+    *,
+    names: Sequence[str] = ALL_BOOKS,
+    flows: Sequence[Flow] | None = None,
 ) -> dict[str, TwinBook]:
     """Build every book from one tradebook, each funded with the identical dated flows.
 
@@ -161,12 +165,15 @@ def seed_books(
     and not the luck of when the money went in, which is what nine books funded by a cash-flow tap
     could never separate.
     """
-    flows = flows_from_trades(trades)
+    # Funding, when it has been imported from the broker's ledger, is the money that actually
+    # entered the account. Falling back to the tradebook funds every book with what was *spent on
+    # shares*, which leaves idle cash outside the comparison entirely.
+    dated = list(flows) if flows is not None else flows_from_trades(trades)
     books: dict[str, TwinBook] = {}
     for name in names:
         pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
-        pf.cash = sum((f.amount for f in flows), Decimal("0"))
-        books[name] = TwinBook(name=name, portfolio=pf, flows=list(flows))
+        pf.cash = sum((f.amount for f in dated), Decimal("0"))
+        books[name] = TwinBook(name=name, portfolio=pf, flows=list(dated))
     assert_identical_flows(list(books.values()))
     return books
 
@@ -181,10 +188,21 @@ class BookMark:
     net_invested: Decimal
     value: Decimal
     rate: float | None  # money-weighted (XIRR) — a lumpy SIP has no meaningful simple return
+    #: How much of ``value`` is uninvested cash. The baselines hold none by construction: they buy
+    #: fractional units of the fund with every rupee on the day it arrives. The investor may spend
+    #: only ₹50,000 a month, so it holds cash for months — which *helps* it in a falling market and
+    #: costs it in a rising one, for no decision it made. A lead that is only uninvested cash must
+    #: not be readable as skill, so the figure sits beside the gain rather than inside it.
+    cash: Decimal = Decimal("0")
 
     @property
     def gain(self) -> Decimal:
         return self.value - self.net_invested
+
+    @property
+    def invested(self) -> Decimal:
+        """What is actually in the market — the part of the book that can gain or lose."""
+        return self.value - self.cash
 
 
 def mark(book: TwinBook, prices: dict[str, Decimal], as_of: date) -> BookMark:
@@ -203,6 +221,7 @@ def mark(book: TwinBook, prices: dict[str, Decimal], as_of: date) -> BookMark:
         net_invested=book.net_invested,
         value=value,
         rate=xirr(dated) if book.flows else None,
+        cash=book.portfolio.cash,
     )
 
 
@@ -312,7 +331,10 @@ def compare(marks: dict[str, BookMark], *, navs: Mapping[str, float] | None = No
 
 
 def comparison_markdown(marks: dict[str, BookMark], gaps: Sequence[Gap]) -> str:
-    lines = ["| Book | Net money in | Worth today | Gain | XIRR |", "|---|---:|---:|---:|---:|"]
+    lines = [
+        "| Book | Net money in | In the market | Cash | Worth today | Gain | XIRR |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
     for name in ALL_BOOKS:
         m = marks.get(name)
         if m is None:
@@ -325,10 +347,18 @@ def comparison_markdown(marks: dict[str, BookMark], gaps: Sequence[Gap]) -> str:
         )
         lines.append(
             f"| {'**' + name + '**' if name == SYSTEM else name} | ₹{m.net_invested:,.0f} | "
+            f"₹{m.invested:,.0f} | ₹{m.cash:,.0f} | "
             f"₹{m.value:,.0f} | ₹{m.gain:+,.0f} | {rate} |"
         )
     if gaps:
-        lines += ["", "Descriptive — what happened between two books, not evidence of skill:"]
+        lines += [
+            "",
+            "The baselines hold no cash: they buy the fund with every rupee on the day it arrives. "
+            "A book holding cash is not a book that is winning or losing — read the gap with the "
+            "cash column.",
+            "",
+            "Descriptive — what happened between two books, not evidence of skill:",
+        ]
         lines += [f"- {g.render()}" for g in gaps]
     return "\n".join(lines)
 
@@ -495,6 +525,9 @@ def append_history(
             name: {
                 "value": str(m.value),
                 "net_invested": str(m.net_invested),
+                # Uninvested cash, so a later reader can tell a lead that was earned from a lead
+                # that is only money the book had not spent yet.
+                "cash": str(m.cash),
                 "xirr": m.rate,
                 "start": m.start.isoformat() if m.start else None,
             }
@@ -647,6 +680,8 @@ def sync_flows(
     books: dict[str, TwinBook],
     trades: Sequence[object],
     credits: Sequence[OffMarketCredit] = (),
+    *,
+    flows: Sequence[Flow] | None = None,
 ) -> list[Flow]:
     """Credit any **new or amended** cash flows to every book, keeping them identical.
 
@@ -665,7 +700,7 @@ def sync_flows(
     """
     if not books:
         return []
-    current = flows_with_off_market(trades, credits)
+    current = list(flows) if flows is not None else flows_with_off_market(trades, credits)
     known = {f.on: f.amount for f in next(iter(books.values())).flows}
     deltas = [
         Flow(on=f.on, amount=f.amount - known.get(f.on, Decimal("0")))

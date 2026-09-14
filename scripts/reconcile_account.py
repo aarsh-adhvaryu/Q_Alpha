@@ -1,6 +1,7 @@
 """Check the books against the broker's own statements: holdings, and the money that came in.
 
-    uv run python scripts/reconcile_account.py
+    uv run python scripts/reconcile_account.py            # check the books against the statements
+    uv run python scripts/reconcile_account.py --import   # …and record the funding the books use
 
 Reads what Zerodha Console exports into ``data/account/`` (gitignored — they carry a name and a PAN):
 
@@ -8,10 +9,10 @@ Reads what Zerodha Console exports into ``data/account/`` (gitignored — they c
   ledger: quantities must match exactly. Average price is expected to differ, because a lot's cost
   basis here includes the buy-side charges that are deductible against capital gains and Zerodha's
   "Average Price" is the execution price alone. The difference is reported, never hidden.
-* **ledger** — the real deposits and withdrawals. The books' flows come from the tradebook, so they
-  are *money that reached the market*, not money that reached the account. Both are printed, because
-  the gap between them is idle cash sitting in the broker account, and calling either one "what you
-  invested" without saying which is how a number ends up wearing the wrong label.
+* **ledger** — the real deposits and withdrawals: the money the books are funded with, and the
+  broker's own closing balance. Both are checked. Funding that does not match what was deposited
+  means every comparison is against the wrong amount of money; cash that does not match the broker's
+  balance means a trade or a movement is missing, and cash is what the investor gets to spend.
 
 **It changes nothing.** No book, no ledger, no decision — it reads and reports. A statement that is
 absent is named as absent.
@@ -19,8 +20,10 @@ absent is named as absent.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -29,10 +32,14 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from qalpha.config import Config
+from qalpha.live import funding as funding_record
 from qalpha.live.console import use_utf8
 from qalpha.live.twin import REAL, load_books
 
 ACCOUNT = Path("data/account")
+#: How far the modelled cash may sit from the broker's balance before it is a problem rather than
+#: charges. The known gaps are DP fees, payment-gateway fees and cost-model rounding — tens of rupees on a five-lakh account. A larger one means a trade or a movement is missing.
+CASH_TOLERANCE = Decimal("1000")
 
 
 def _header_row(raw: pd.DataFrame, marker: str) -> int:
@@ -74,6 +81,7 @@ class CashMove:
     on: str
     amount: Decimal  # positive into the account, negative out
     what: str
+    kind: str = ""  # the broker's voucher type, which carries no personal detail
 
 
 def read_ledger(path: Path) -> list[CashMove]:
@@ -93,13 +101,30 @@ def read_ledger(path: Path) -> list[CashMove]:
                 on=str(row["Posting Date"])[:10],
                 amount=credit - debit,
                 what=str(row.get("Particulars", ""))[:60],
+                kind=voucher,
             )
         )
     return moves
 
 
+def closing_balance(path: Path) -> Decimal:
+    """The broker's own last balance — what the modelled cash is checked against."""
+    raw = pd.read_excel(path, sheet_name="Equity", header=None)
+    frame = pd.read_excel(path, sheet_name="Equity", header=_header_row(raw, "Particulars"))
+    frame = frame[frame["Net Balance"].notna()]
+    return Decimal(str(frame["Net Balance"].iloc[-1]))
+
+
 def main(argv: list[str] | None = None) -> int:
     use_utf8()
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--import",
+        dest="do_import",
+        action="store_true",
+        help="write the ledger's deposits and withdrawals to data/twin/funding.json",
+    )
+    args = ap.parse_args(argv)
     holdings_file = next(ACCOUNT.glob("holdings-*.xlsx"), None)
     ledger_file = next(ACCOUNT.glob("ledger-*.xlsx"), None)
     books = load_books(Config())
@@ -152,13 +177,52 @@ def main(argv: list[str] | None = None) -> int:
         for move in moves:
             print(f"  {move.on}  {move.amount:>12,.2f}  {move.what}")
         deposited = sum((m.amount for m in moves), Decimal("0"))
-        invested = sum((f.amount for f in books[REAL].flows), Decimal("0"))
-        print(f"  net into the account:      ₹{deposited:,.2f}")
-        print(f"  net into the market (books): ₹{invested:,.2f}")
+        funded = sum((f.amount for f in books[REAL].flows), Decimal("0"))
+        print(f"  net into the account:  ₹{deposited:,.2f}")
+        print(f"  the books are funded:  ₹{funded:,.2f}")
+        if funded != deposited:
+            problems += 1
+            print(
+                "  ← THE BOOKS ARE NOT FUNDED WITH THE MONEY THAT WAS DEPOSITED. Run\n"
+                "  `twin.py refund` (after `--import`), or every comparison is against a different\n"
+                "  amount of money than you actually put in."
+            )
+
+        # Quantities can reconcile exactly while the cash is wrong, and cash is what the investor
+        # gets to spend. This is the only check on it.
+        broker_cash = closing_balance(ledger_file)
+        gap = book.cash - broker_cash
+        print(f"\n  cash:  ₹{book.cash:,.2f} modelled · ₹{broker_cash:,.2f} at the broker")
+        if abs(gap) > CASH_TOLERANCE:
+            problems += 1
+            print(f"  ← off by ₹{gap:,.2f}, more than the ₹{CASH_TOLERANCE:,.0f} tolerance")
+        else:
+            print(
+                f"  difference ₹{gap:,.2f}: charges the tradebook does not carry (DP, payment\n"
+                "  gateway, bank) and rounding in the cost model. Within tolerance, and shown\n"
+                "  rather than absorbed."
+            )
+
+    if args.do_import:
+        if ledger_file is None:
+            print("[account] nothing to import: no ledger.", file=sys.stderr)
+            return 2
+        record = funding_record.Funding(
+            movements=tuple(
+                funding_record.Movement(on=date.fromisoformat(m.on), amount=m.amount, kind=m.kind)
+                for m in read_ledger(ledger_file)
+            ),
+            closing_balance=closing_balance(ledger_file),
+            # Not the file name: a Console export is named for the client id, and this record is
+            # committed while the statement is not.
+            source=funding_record.provenance(ledger_file),
+            imported_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        )
+        funding_record.save(record)
         print(
-            f"  difference:                ₹{deposited - invested:,.2f} — cash that reached the\n"
-            "  account and not the market. The books compare invested money, so this is not a gap\n"
-            "  in them; it is the part of your balance no book is measuring."
+            f"\n[account] funding recorded → {funding_record.FUNDING_PATH}: "
+            f"{len(record.movements)} movement(s), net ₹{record.net:,.2f}, "
+            f"broker's closing balance ₹{record.closing_balance:,.2f}"
         )
 
     print(

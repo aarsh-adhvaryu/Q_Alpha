@@ -21,7 +21,7 @@ def _write_taxpnl_xlsx(path: Path) -> None:
     separated from their section titles by blank rows.
     """
     rows: list[list[object]] = [
-        [None, "Client ID", "YHK037"],
+        [None, "Client ID", "ZZZ999"],
         [None, None, None],
         [None, "Realized Profit Breakdown", None],
         [None, "Intraday/Speculative profit", 0],
@@ -57,7 +57,7 @@ def statement(tmp_path: Path) -> TaxPnL:
 
 
 def test_parses_realized_breakdown(statement: TaxPnL) -> None:
-    assert statement.client_id == "YHK037"
+    assert statement.client_id == "ZZZ999"
     assert statement.short_term_profit == Decimal("25.25")
     assert statement.long_term_profit == Decimal("0")
     assert statement.intraday_profit == Decimal("0")
@@ -149,7 +149,7 @@ def test_zero_cost_replay_reproduces_gross_gain(tmp_path: Path) -> None:
 def _rows_new_format() -> list[list[object]]:
     """The Q1-Q2 layout: every equity heading gained an 'Equity ' prefix; 'Non Equity' row dropped."""
     return [
-        [None, "Client ID", "YHK037"],
+        [None, "Client ID", "ZZZ999"],
         [None, None, None],
         [None, "Realized Profit Breakdown", None],
         [None, "Equity Intraday/Speculative profit", 0],
@@ -198,7 +198,7 @@ def test_an_unreadable_statement_refuses_to_grade_rather_than_reporting_zero(
     _write_rows(
         p,
         [
-            [None, "Client ID", "YHK037"],
+            [None, "Client ID", "ZZZ999"],
             [None, "Realized Profit Breakdown", None],
             [None, "Cash Segment Short Term gains", 25.25],  # a rename we do not know
         ],
@@ -221,7 +221,7 @@ def test_a_present_zero_is_still_a_real_zero(tmp_path: Path) -> None:
     _write_rows(
         p,
         [
-            [None, "Client ID", "YHK037"],
+            [None, "Client ID", "ZZZ999"],
             [None, "Realized Profit Breakdown", None],
             [None, "Equity Short Term profit", 0],
             [None, "Equity Long Term profit", 0],

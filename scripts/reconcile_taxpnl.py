@@ -8,9 +8,12 @@ against the official Console **Tax P&L** export, to the paise:
 
 Usage:
     uv run python scripts/reconcile_taxpnl.py \
-        [--tradebook data/tradebook-YHK037-EQ.csv] \
-        [--taxpnl data/taxpnl-YHK037-2026_2027-Q1-Q1.xlsx] \
+        [--tradebook data/tradebooks/<export>.csv] \
+        [--taxpnl data/account/taxpnl-*.xlsx] \
         [--report reports/crit4_reconciliation.md]
+
+The defaults find the exports by shape, not by name: a Console export is named for the client
+id, and this repository is public.
 """
 
 from __future__ import annotations
@@ -26,8 +29,19 @@ from qalpha.config import Config, CostConfig
 from qalpha.live.taxpnl import parse_taxpnl, reconcile_gross
 from qalpha.live.tradebook import parse_tradebook, replay_tradebook
 
-_DEF_TRADEBOOK = "data/tradebook-YHK037-EQ.csv"
-_DEF_TAXPNL = "data/taxpnl-YHK037-2026_2027-Q1-Q1.xlsx"
+
+def _first(*patterns: str) -> str:
+    """The first export matching any pattern, or the pattern itself so the error names what is
+    missing. Never a hard-coded file name: Console names its exports for the client id."""
+    for pattern in patterns:
+        found = sorted(Path().glob(pattern))
+        if found:
+            return str(found[-1])
+    return patterns[0]
+
+
+_DEF_TRADEBOOK = _first("data/tradebooks/*.csv", "data/tradebook-*.csv")
+_DEF_TAXPNL = _first("data/account/taxpnl-*.xlsx", "data/taxpnl-*.xlsx")
 _DEF_REPORT = "reports/crit4_reconciliation.md"
 
 

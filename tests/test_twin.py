@@ -74,8 +74,12 @@ def test_drifted_flows_are_refused_loudly() -> None:
         assert_identical_flows(list(books.values()))
 
 
-def test_the_flows_come_from_the_tradebook_and_nowhere_else() -> None:
-    """There is no SIP schedule (§4c): a calendar injection the real account never got is the flaw."""
+def test_with_no_ledger_the_flows_come_from_the_tradebook_and_nowhere_else() -> None:
+    """There is no SIP schedule (§4c): a calendar injection the real account never got is the flaw.
+
+    The ledger, when imported, replaces this with the dated deposits themselves — the same property,
+    on a better source. What is never allowed is money no statement records.
+    """
     books = seed_books(_trades(), Config())
     assert [f.on for f in books[SYSTEM].flows] == [date(2026, 6, 15), date(2026, 8, 28)]
     # 2026-08-28 nets the two same-day buys into one flow, as a day's net effect should.

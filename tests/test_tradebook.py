@@ -123,7 +123,7 @@ def test_setoff_reconciliation_through_replay() -> None:
 # --- the drop folder, which is now the only spelling of "the tradebook" ---------------------------
 #
 # `local_run` read `data/tradebooks/` while `scripts/twin.py` read a private gist and
-# `data/tradebook-YHK037-EQ.csv`, a file that does not exist. So README.md's instruction — drop
+# `data/tradebook-ZZZ999-EQ.csv`, a file that does not exist. So README.md's instruction — drop
 # the Console export in `data/tradebooks/` — dated the page's lots and could never stop the twin
 # aborting, which it did on every run of 2026-09-10 with a message about a credential this desktop
 # does not use. One reader, one folder.

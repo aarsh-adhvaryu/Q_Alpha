@@ -176,3 +176,40 @@ def test_filings_count_as_read_only_when_the_corpus_reader_read_them(
     assert coverage(None)[0]["opened"] is False, (
         "a row with no reader says nothing about who read it"
     )
+
+
+def test_a_book_holding_cash_says_so_beside_its_value(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Value alone cannot tell a lead that was chosen from a lead that is only unspent money.
+
+    SYSTEM may buy ₹50,000 a month; the baselines buy the fund with every rupee the day it arrives.
+    In a falling market that difference alone puts SYSTEM ahead, and the page must not let that read
+    as skill.
+    """
+    (repo / "twin" / "history.jsonl").write_text(
+        json.dumps(
+            {
+                "as_of": "2026-09-15",
+                "books": {
+                    "SYSTEM": {"value": "500", "net_invested": "500", "cash": "200"},
+                    "BASELINE_EW": {"value": "480", "net_invested": "500", "cash": "0"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    page = record.dashboard_html(date(2026, 9, 15))
+    table = page.split("<h2>The four books</h2>", 1)[1].split("</div>", 1)[0]
+    assert "Cash" in page and "In the market" in page
+    assert "₹200" in page, "SYSTEM's uninvested cash must be on the page"
+    assert "no cash" in page, "the page must say the baselines hold none"
+    assert table is not None
+
+
+def test_a_history_row_written_before_cash_was_recorded_is_unknown_not_zero(repo: Path) -> None:
+    """The rows already on file carry no cash field. Printing ₹0 would claim they were fully
+    invested, which is the substitution this repository keeps paying for."""
+    page = record.dashboard_html(date(2026, 9, 15))
+    assert "not recorded" in page
+    assert "₹0" not in page.split("<h2>The four books</h2>", 1)[1][:2000]
