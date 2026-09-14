@@ -20,6 +20,11 @@ it; reserving under one lock cannot.
 ``cap - decisions_reserve``, so a long backfill can never spend the money the evening review needs.
 Decisions may use the whole cap.
 
+**Research is a one-time job with its own explicit budget**, not part of the monthly operating cap:
+building and validating the reader reference set is a measurement, approved once, with a stated
+ceiling. A research reservation names its job and is checked against that job's total ceiling across
+every month; it never draws on the operating cap, so it can never spend the evening review's money.
+
 **The ledger is the state.** An append-only JSONL file: ``reserve``, ``settle``, ``release`` rows.
 An open reservation is a ``reserve`` row with no later ``settle`` or ``release`` for its id — so a
 batch submitted before a restart is still counted after it, with nothing held in memory.
@@ -54,7 +59,13 @@ LEDGER_PATH = Path("data/spend/ledger.jsonl")
 #: Partitions a call may be charged to.
 DECISIONS = "decisions"
 READING = "reading"
+RESEARCH = "research"
 PARTITIONS = (DECISIONS, READING)
+ALL_PARTITIONS = (DECISIONS, READING, RESEARCH)
+
+#: Batch API discount by provider. DeepSeek offers no batch interface, so a batch reservation for it
+#: is refused rather than priced at a discount that does not exist.
+BATCH_DISCOUNT = {"anthropic": Decimal("0.5"), "google": Decimal("0.5")}
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -118,6 +129,10 @@ class UnpricedModelError(SpendStopError):
     """No price is on file for this model, so its cost cannot be reserved."""
 
 
+class NoBatchPriceError(SpendStopError):
+    """The provider offers no batch price, so a batch reservation cannot be priced."""
+
+
 def deepseek_peak(at: datetime) -> bool:
     """DeepSeek's peak window: 01:00-04:00 and 06:00-10:00 UTC, Monday to Friday."""
     utc = at.astimezone(UTC)
@@ -136,7 +151,12 @@ def price_for(model: str) -> Price:
 
 
 def cost(
-    model: str, input_tokens: int, output_tokens: int, *, at: datetime | None = None
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    *,
+    at: datetime | None = None,
+    batch: bool = False,
 ) -> Decimal:
     """What a call cost, at the rate that applied when it completed."""
     p = price_for(model)
@@ -145,12 +165,17 @@ def cost(
         inp = p.offpeak_input_per_m
         out = p.offpeak_output_per_m or out
     usd = (Decimal(input_tokens) * inp + Decimal(output_tokens) * out) / Decimal(1_000_000)
+    if batch:
+        discount = BATCH_DISCOUNT.get(p.provider)
+        if discount is None:
+            raise NoBatchPriceError(f"{p.provider} has no batch price on file for {model!r}")
+        usd *= discount
     return usd.quantize(Decimal("0.000001"), rounding=ROUND_CEILING)
 
 
-def worst_case(model: str, input_ceiling: int, max_output: int) -> Decimal:
+def worst_case(model: str, input_ceiling: int, max_output: int, *, batch: bool = False) -> Decimal:
     """The reservation: the peak rate, the input ceiling, and every output token allowed."""
-    return cost(model, input_ceiling, max_output, at=None)
+    return cost(model, input_ceiling, max_output, at=None, batch=batch)
 
 
 def text_input_ceiling(prompt: str) -> int:
@@ -197,6 +222,7 @@ class Reservation:
     model: str
     usd: Decimal
     month: str
+    batch: bool = False
 
 
 @dataclass(frozen=True)
@@ -221,9 +247,20 @@ _THREAD_LOCK = threading.Lock()
 class Ledger:
     """The append-only spend record. Safe across threads and across processes."""
 
-    def __init__(self, path: Path | None = None, *, limits: Limits | None = None) -> None:
+    def __init__(
+        self,
+        path: Path | None = None,
+        *,
+        limits: Limits | None = None,
+        job: str = "",
+        job_limit_usd: Decimal | None = None,
+    ) -> None:
         self._path = path
         self._limits = limits
+        #: The one-time research job this ledger instance charges, and its total ceiling. Required
+        #: for any ``research`` reservation; meaningless for the operating partitions.
+        self.job = job
+        self.job_limit_usd = job_limit_usd
 
     @property
     def path(self) -> Path:
@@ -317,6 +354,43 @@ class Ledger:
             existing += "\n"
         write_text(self.path, existing + json.dumps(row, sort_keys=True) + "\n")
 
+    def job_committed(self, job: str, rows: list[dict[str, Any]] | None = None) -> Decimal:
+        """Everything a research job has settled or still holds, across every month."""
+        rows = self.rows() if rows is None else rows
+        reserves = {
+            str(r["id"]): r for r in rows if r.get("kind") == "reserve" and r.get("job") == job
+        }
+        total = Decimal("0")
+        closed: set[str] = set()
+        for row in rows:
+            rid = str(row.get("id", ""))
+            if rid in reserves and row.get("kind") in ("settle", "release"):
+                closed.add(rid)
+                if row.get("kind") == "settle":
+                    total += Decimal(str(row["usd"]))
+        for rid, row in reserves.items():
+            if rid not in closed:
+                total += Decimal(str(row["usd"]))
+        return total
+
+    def reservation(self, reservation_id: str) -> Reservation | None:
+        """An open reservation rebuilt from the ledger — how a batch is settled after a restart."""
+        rows = self.rows()
+        closed = {str(r["id"]) for r in rows if r.get("kind") in ("settle", "release")}
+        if reservation_id in closed:
+            return None
+        for row in rows:
+            if row.get("kind") == "reserve" and str(row["id"]) == reservation_id:
+                return Reservation(
+                    id=reservation_id,
+                    partition=str(row["partition"]),
+                    model=str(row["model"]),
+                    usd=Decimal(str(row["usd"])),
+                    month=str(row["month"]),
+                    batch=bool(row.get("batch", False)),
+                )
+        return None
+
     def reserve(
         self,
         *,
@@ -329,11 +403,26 @@ class Ledger:
         now: datetime | None = None,
     ) -> Reservation:
         """Reserve the worst case, or raise :class:`BudgetExceededError` having reserved nothing."""
-        if partition not in PARTITIONS:
+        if partition not in ALL_PARTITIONS:
             raise ValueError(f"unknown spend partition {partition!r}")
         at = now or datetime.now(UTC)
-        usd = worst_case(model, input_ceiling, max_output)
+        usd = worst_case(model, input_ceiling, max_output, batch=batch)
         month = month_of(at)
+        if partition == RESEARCH:
+            if not self.job or self.job_limit_usd is None:
+                raise BudgetExceededError(
+                    "a research call needs a named job with an explicit budget; none was given"
+                )
+            with self._locked():
+                after = self.job_committed(self.job) + usd
+                if after > self.job_limit_usd:
+                    raise BudgetExceededError(
+                        f"research job {self.job!r} would commit ${after:.4f} against its "
+                        f"${self.job_limit_usd:.2f} budget"
+                    )
+                return self._write_reservation(
+                    partition, model, usd, month, at, input_ceiling, max_output, batch, note
+                )
         limits = self.limits
         with self._locked():
             state = self.state(month)
@@ -352,25 +441,43 @@ class Ledger:
                     f"this call would commit ${total_after:.4f} this month against the "
                     f"${limits.cap_usd:.2f} cap"
                 )
-            reservation = Reservation(
-                id=uuid.uuid4().hex, partition=partition, model=model, usd=usd, month=month
+            return self._write_reservation(
+                partition, model, usd, month, at, input_ceiling, max_output, batch, note
             )
-            self._append(
-                {
-                    "kind": "reserve",
-                    "id": reservation.id,
-                    "at": at.isoformat(timespec="seconds"),
-                    "month": month,
-                    "partition": partition,
-                    "provider": price_for(model).provider,
-                    "model": model,
-                    "input_ceiling": input_ceiling,
-                    "max_output": max_output,
-                    "usd": str(usd),
-                    "batch": batch,
-                    "note": note,
-                }
-            )
+
+    def _write_reservation(
+        self,
+        partition: str,
+        model: str,
+        usd: Decimal,
+        month: str,
+        at: datetime,
+        input_ceiling: int,
+        max_output: int,
+        batch: bool,
+        note: str,
+    ) -> Reservation:
+        """Append the reserve row. The caller holds the lock."""
+        reservation = Reservation(
+            id=uuid.uuid4().hex, partition=partition, model=model, usd=usd, month=month, batch=batch
+        )
+        self._append(
+            {
+                "kind": "reserve",
+                "id": reservation.id,
+                "at": at.isoformat(timespec="seconds"),
+                "month": month,
+                "partition": partition,
+                "job": self.job if partition == RESEARCH else "",
+                "provider": price_for(model).provider,
+                "model": model,
+                "input_ceiling": input_ceiling,
+                "max_output": max_output,
+                "usd": str(usd),
+                "batch": batch,
+                "note": note,
+            }
+        )
         return reservation
 
     def settle(
@@ -384,7 +491,7 @@ class Ledger:
     ) -> Decimal:
         """Close a reservation at what the call actually cost. Returns that cost."""
         at = now or datetime.now(UTC)
-        usd = cost(reservation.model, input_tokens, output_tokens, at=at)
+        usd = cost(reservation.model, input_tokens, output_tokens, at=at, batch=reservation.batch)
         with self._locked():
             self._append(
                 {

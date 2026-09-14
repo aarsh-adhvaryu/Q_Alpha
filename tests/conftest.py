@@ -18,7 +18,14 @@ _ROOT = Path(__file__).resolve().parent.parent
 #: logs and the financials. A test that writes to any of them is a test that can destroy something a
 #: re-run cannot recreate. One did — a refunding test emptied data/twin/history.jsonl — and nothing
 #: in 600 tests noticed, because every test checked its own outputs and none checked the real files.
-_LIVE = ("data/twin", "data/facts/financials.jsonl", "data/evidence", "data/spend", "data/models")
+_LIVE = (
+    "data/twin",
+    "data/facts/financials.jsonl",
+    "data/evidence",
+    "data/spend",
+    "data/models",
+    "data/readers",
+)
 
 
 def _fingerprint() -> dict[str, str]:
@@ -67,13 +74,14 @@ def synthetic_prices(synthetic_long: pd.DataFrame) -> PriceData:
 
 @pytest.fixture(autouse=True)
 def _private_spend_and_pins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every test gets its own spend ledger and model pins.
+    """Every test gets its own spend ledger, model pins and reader-comparison store.
 
     A priced call reserves in the ledger before it is made. Without this, any test that exercises a
     real backend with a fake client would write reservations into ``data/spend/ledger.jsonl`` — and
     count test calls against the user's real monthly budget.
     """
-    from qalpha.live import model_identity, spend
+    from qalpha.live import model_identity, readers, spend
 
     monkeypatch.setattr(spend, "LEDGER_PATH", tmp_path / "spend" / "ledger.jsonl")
     monkeypatch.setattr(model_identity, "PINS_PATH", tmp_path / "models" / "pins.json")
+    monkeypatch.setattr(readers, "READERS_DIR", tmp_path / "readers")

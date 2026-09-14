@@ -109,6 +109,7 @@ uv run python scripts/reconcile_account.py --import  # the broker's ledger: fund
 uv run python scripts/corporate_actions.py --import  # dividends and splits, cross-checked
 uv run python scripts/financials.py --import         # filed XBRL results (no model calls)
 uv run python scripts/evaluate.py                    # the three tests; no gate, no tuning
+uv run python scripts/readers.py status              # EX-5 reader comparison (steps in its docstring)
 uv run python scripts/models.py list                 # local models: served vs pinned digests
 uv run python scripts/models.py pin qwen3.5:9b       # register a measured local model's weights
 ```

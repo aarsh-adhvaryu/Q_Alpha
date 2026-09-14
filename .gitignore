@@ -103,3 +103,7 @@ data/facts/xbrl/
 
 # The spend ledger is the record and is committed; its lock file only exists while a call reserves.
 data/spend/*.lock
+
+# EX-5 reader comparison: full-document copies for the checks you do by hand (public filings, but
+# bulky and regenerable from the archive by `scripts/readers.py worksheet omissions`).
+data/readers/human/documents/
