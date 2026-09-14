@@ -690,12 +690,24 @@ MAX_OUTPUT_TOKENS = 8000
 DEFAULT_MODEL = "claude-haiku-4-5"
 
 
+def is_credit_exhaustion(exc: BaseException) -> bool:
+    """The provider's "no credit left" answer, as opposed to a bad request or a refusal.
+
+    Anthropic answers an empty account with HTTP 400 and a message about the credit balance. It is
+    matched on the message because the status code alone is shared with every malformed request.
+    """
+    text = str(getattr(exc, "message", "") or exc).lower()
+    return "credit balance" in text or "insufficient credit" in text or "billing" in text
+
+
 def default_generate(
     api_key: str,
     *,
     max_tokens: int = MAX_OUTPUT_TOKENS,
     max_retries: int = 5,
     timeout: float = 120.0,
+    partition: str = "reading",
+    ledger: Any = None,
 ) -> GenerateFn:
     """The real model call for extraction — **with no tools, deliberately**.
 
@@ -730,15 +742,51 @@ def default_generate(
             return cell["client"]
 
     def generate(model_id: str, prompt: str) -> tuple[str, dict[str, int]]:
-        resp = client().messages.create(
+        # MONEY FIRST. The worst case is reserved before the request exists, so concurrent workers
+        # cannot each pass a check and together overspend. See `qalpha.live.spend`.
+        from qalpha.live import spend
+        from qalpha.live.model_identity import check_returned
+
+        book = ledger if ledger is not None else spend.Ledger()
+        reservation = book.reserve(
+            partition=partition,
             model=model_id,
-            max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
+            input_ceiling=spend.text_input_ceiling(prompt),
+            max_output=max_tokens,
         )
+        import anthropic
+
+        try:
+            resp = client().messages.create(
+                model=model_id,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except anthropic.APIStatusError as exc:
+            # A status answer means the request was judged and not served: nothing was billed.
+            book.release(reservation, f"HTTP {exc.status_code}: {exc.message}"[:300])
+            if is_credit_exhaustion(exc):
+                raise spend.CreditExhaustedError(
+                    "the Anthropic account has no credit left — nothing was read; top up or wait "
+                    "for the budget to reset, and the run resumes where it stopped"
+                ) from exc
+            raise
+        except Exception as exc:
+            # A timeout or dropped connection after sending may have been billed. Count it.
+            book.settle_uncertain(reservation, f"{type(exc).__name__}: {exc}"[:300])
+            raise
+        returned = str(getattr(resp, "model", "") or "")
         usage = {
             "input": int(getattr(resp.usage, "input_tokens", 0) or 0),
             "output": int(getattr(resp.usage, "output_tokens", 0) or 0),
         }
+        book.settle(
+            reservation,
+            input_tokens=usage["input"],
+            output_tokens=usage["output"],
+            returned_model=returned,
+        )
+        check_returned(model_id, returned)
         if resp.stop_reason == "refusal":
             # NOT an empty reading. The documents in this call went unread, and the caller has to
             # be able to tell that from a filing that simply carried nothing material. Returning

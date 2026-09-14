@@ -225,6 +225,28 @@ def _outcome() -> tuple[list[str], int]:
     return lines, 0
 
 
+def _spend() -> list[str]:
+    """Month-to-date model spend: settled, still reserved, and the limits it runs under."""
+    from qalpha.live import spend
+
+    s = spend.summary()
+    lines = [
+        f"- Month {s['month']}: **${s['committed_usd']}** committed of a ${s['cap_usd']} cap "
+        f"(${s['decisions_reserve_usd']} kept for decisions).",
+    ]
+    for part in spend.PARTITIONS:
+        lines.append(
+            f"  - {part}: ${s['settled_usd'][part]} settled, ${s['reserved_usd'][part]} reserved"
+        )
+    if s["open_reservations"]:
+        lines.append(
+            f"- **{s['open_reservations']} reservation(s) still open** — calls in flight, batches "
+            "outstanding, or a run that stopped before settling. They count against the cap until "
+            "closed."
+        )
+    return lines
+
+
 def _not_measurable() -> list[str]:
     """Named limits. A harness that lists only what it computes teaches that nothing else matters."""
     out = [
@@ -272,6 +294,9 @@ def main(argv: list[str] | None = None) -> int:
         "",
         "## 3. Outcome — did it beat the bar?",
         *outcome,
+        "",
+        "## Model spend",
+        *_spend(),
         "",
         "## What this cannot measure",
         *_not_measurable(),

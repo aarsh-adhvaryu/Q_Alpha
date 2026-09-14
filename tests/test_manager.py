@@ -676,3 +676,44 @@ def test_both_passes_are_counted_in_what_the_review_cost(world: dict[str, Any]) 
     assert usage["input"] == 300, "both passes' input tokens"
     assert usage["output"] == 30, "both passes' output tokens"
     assert usage["research_requests"] == 1
+
+
+# ---- money and identity: a review that could not run is not a HOLD -----------------------------
+
+
+@pytest.mark.parametrize(
+    "stop",
+    ["budget", "credit", "model"],
+)
+def test_a_review_stopped_by_money_or_identity_is_incomplete_never_a_hold(
+    world: dict[str, Any], stop: str
+) -> None:
+    """No decision was made tonight, and the record must say exactly that."""
+    from qalpha.live.model_identity import ModelChangedError
+    from qalpha.live.spend import BudgetExceededError, CreditExhaustedError
+
+    raised = {
+        "budget": BudgetExceededError("this call would commit $15.20 against the $15.00 cap"),
+        "credit": CreditExhaustedError("the account has no credit left"),
+        "model": ModelChangedError("asked for claude-sonnet-5 but another model answered"),
+    }[stop]
+
+    def generate(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        world["calls"].append(prompt)
+        raise raised
+
+    book = world["book"]
+    before = book.portfolio.positions()
+    with pytest.raises(manager.IncompleteReviewError, match="not run"):
+        manager.review(
+            book,
+            world["market"],
+            now=_evening(DECIDE),
+            make_brain=lambda: manager.Brain(manager.MODEL, generate),
+            store=world["store"],
+        )
+    assert book.portfolio.positions() == before
+    assert "pending" not in book.manager
+    assert not list(world["store"].decisions.parent.glob("decisions.jsonl")) or not any(
+        line.strip() for line in world["store"].decisions.read_text(encoding="utf-8").splitlines()
+    ), "no decision row may be written for a review that did not happen"

@@ -78,6 +78,15 @@ class Mandate:
     #: Quarters actually rendered into the packet.
     financial_quarters_shown: int = 4
 
+    # ---- what model calls may cost -----------------------------------------------------------
+    #: US dollars of priced model calls per calendar month (India time), across everything. A
+    #: target the ledger enforces by reserving before each call — see :mod:`qalpha.live.spend`.
+    spend_cap_usd: Decimal = Decimal("15")
+    #: Of the cap, what is kept for decisions (the evening review and confirmations). Reading and
+    #: backfills can never commit more than ``spend_cap_usd - spend_decisions_reserve_usd``, so a
+    #: long backfill cannot spend the money the next review needs.
+    spend_decisions_reserve_usd: Decimal = Decimal("6")
+
     # ---- how it runs ------------------------------------------------------------------------
     #: A daily bar is final only after this time on its own day; before it the vendor can serve a
     #: live price, and a live price is not a close.

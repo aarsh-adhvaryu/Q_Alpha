@@ -101,7 +101,27 @@ def brain() -> Brain:
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not key:
         raise IncompleteReviewError("ANTHROPIC_API_KEY is not set, so the investor could not run.")
-    return Brain(MODEL, default_generate(key, max_tokens=MAX_OUTPUT_TOKENS, timeout=600.0))
+    return Brain(
+        MODEL,
+        default_generate(key, max_tokens=MAX_OUTPUT_TOKENS, timeout=600.0, partition="decisions"),
+    )
+
+
+def _ask(mind: Brain, prompt: str) -> tuple[str, dict[str, int]]:
+    """One call to the decider. **Money and identity failures are a review that did not happen.**
+
+    A budget reached, an account out of credit, or a model that is not the registered one all mean
+    no decision was made tonight — recorded as INCOMPLETE with the reason, never as a HOLD.
+    """
+    from qalpha.live.model_identity import ModelChangedError
+    from qalpha.live.spend import SpendStopError
+
+    try:
+        return mind.generate(MODEL, prompt)
+    except SpendStopError as exc:
+        raise IncompleteReviewError(f"not run: {exc}") from exc
+    except ModelChangedError as exc:
+        raise IncompleteReviewError(f"not run: {exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -925,7 +945,7 @@ def review(
         mind = make_brain()
         if mind.model != MODEL:
             raise IncompleteReviewError(f"asked to run on {mind.model}; {VERSION} is {MODEL}")
-        reply, usage = mind.generate(MODEL, prompt)
+        reply, usage = _ask(mind, prompt)
         asked = _research_requests(reply)
         if asked:
             # One round, read-only, inside this review's scope and date. The answers become packet
@@ -938,7 +958,7 @@ def review(
             )
             packet = {**packet, "research": research}
             prompt = PROMPT + json.dumps(packet, sort_keys=True, default=str)
-            reply, again = mind.generate(MODEL, prompt)
+            reply, again = _ask(mind, prompt)
             # Both passes are one review and cost what they both cost. The keys are the backend's
             # own ("input"/"output"); naming them anything else here silently reported zero.
             usage = {
