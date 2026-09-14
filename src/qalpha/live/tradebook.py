@@ -77,6 +77,10 @@ class ReplayResult:
     realized_tax: Decimal  # total FIFO capital-gains tax across all sells in the tradebook
     n_trades: int
     realized_gains: list[RealizedGain]  # per-lot realized gains from every sell (for crit-4 recon)
+    #: What the trades consumed: everything paid for buys, less everything sells returned, charges
+    #: and tax included. The caller needs it to work out a real balance, because ``cash`` here only
+    #: SETS the closing figure — a caller that subtracted it from the sentinel got ₹-1,000,000,000,000.
+    net_spent: Decimal = Decimal("0")
 
 
 def parse_tradebook(source: str | IO[bytes] | IO[str]) -> list[TradebookTrade]:
@@ -203,6 +207,7 @@ def replay_tradebook(
                 f"{payload.trade_date}: sell {payload.quantity} {payload.ticker} could not be "
                 f"matched ({exc}) — tradebook history may be incomplete."
             )
+    spent = _UNCONSTRAINED_CASH - pf.cash
     pf.cash = cash
     return ReplayResult(
         portfolio=pf,
@@ -210,6 +215,7 @@ def replay_tradebook(
         realized_tax=realized_tax,
         n_trades=matched,
         realized_gains=realized_gains,
+        net_spent=spent,
     )
 
 

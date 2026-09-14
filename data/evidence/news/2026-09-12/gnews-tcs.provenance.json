@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Tata+Consultancy+Services%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-12T16:21:00Z",
+ "http_status": 200,
+ "bytes": 93765,
+ "sha256": "9082f1f07b3b1abb3cf315cc6764b7c60ea7613e772f561d47d944bfd030c642",
+ "document_date": "2026-09-12",
+ "feed": "gnews-tcs",
+ "kind": "name",
+ "ticker": "TCS.NS"
+}

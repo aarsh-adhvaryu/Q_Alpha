@@ -3,6 +3,7 @@
     uv run python scripts/twin.py seed     # ONE TIME. Refuses to overwrite existing books.
     uv run python scripts/twin.py daily    # credit new flows → step SYSTEM → mark → append history
     uv run python scripts/twin.py status   # print the comparison without writing anything
+    uv run python scripts/twin.py refund   # re-fund every book from the imported ledger
     uv run python scripts/twin.py shadow   # one investor review on a COPY of SYSTEM; changes no book
 
 **Paper books only.** No broker client is imported; nothing here can place an order.
@@ -17,20 +18,24 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 
 import pandas as pd
 
+from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
 from qalpha.data.universe import Universe
+from qalpha.live import actions as actions_record
 from qalpha.live import atomic, manager
 from qalpha.live import calendar as nse
-from qalpha.live.benchmarks import equal_weight_pit
+from qalpha.live import funding as funding_record
+from qalpha.live.benchmarks import equal_weight_pit, unpriceable_members
 from qalpha.live.console import use_utf8
 from qalpha.live.decisions import Decision, decisions_markdown
+from qalpha.live.flows import Flow
 from qalpha.live.market import Market
 from qalpha.live.panels import (
     BENCHMARK_PANEL,
@@ -46,9 +51,15 @@ from qalpha.live.price_integrity import (
     unexplained_gaps,
 )
 from qalpha.live.progress import IST
-from qalpha.live.tradebook import EXPORT_DIR, TradebookTrade, read_exports, replay_tradebook
+from qalpha.live.tradebook import (
+    EXPORT_DIR,
+    TradebookTrade,
+    read_exports,
+    replay_tradebook,
+)
 from qalpha.live.twin import (
     DECIDING,
+    EVALUATION_START,
     REAL,
     SYSTEM,
     TWIN_HISTORY,
@@ -63,6 +74,7 @@ from qalpha.live.twin import (
     compare,
     comparison_frame,
     comparison_markdown,
+    credit_actions,
     ew_fund_mark,
     flows_with_off_market,
     is_autonomous,
@@ -90,6 +102,49 @@ def _tradebook() -> tuple[list[TradebookTrade], list[str]]:
     for note in notes:
         print(f"[twin] {note}")
     return list(trades), notes
+
+
+def _flows(trades: Sequence[TradebookTrade], credits: Sequence[object]) -> list[Flow] | None:
+    """The dated money every book is funded with: the broker's ledger when it has been imported.
+
+    ``None`` falls back to the tradebook — money that reached the market rather than money that
+    reached the account — and says so, because the two are different figures and only one of them
+    is what the user actually put in.
+    """
+    record = funding_record.load()
+    if record is None:
+        print(
+            "[twin] no funding imported (data/twin/funding.json) — the books are funded from the "
+            "tradebook, so idle cash sits outside the comparison. "
+            "Run: uv run python scripts/reconcile_account.py --import"
+        )
+        return None
+    flows = record.flows()
+    print(
+        f"[twin] funded from {record.source}: {len(flows)} movement(s), net ₹{record.net:,.2f} "
+        f"(the broker's closing balance was ₹{record.closing_balance:,.2f})"
+    )
+    return flows
+
+
+def _actions() -> list[CorporateAction]:
+    """The corporate actions the replay may apply: reconciled ones only, or none with a reason.
+
+    Unreconciled actions are named here rather than silently dropped — a dividend whose amount does
+    not match the panel's own price adjustment is a thing to look at, not a rounding difference.
+    """
+    record = actions_record.load()
+    if record is None:
+        print(
+            "[twin] no corporate actions imported (data/twin/corporate_actions.json) — dividends "
+            "are NOT credited, while the baselines are marked on a total-return index that "
+            "reinvests theirs. Run: uv run python scripts/corporate_actions.py --import"
+        )
+        return []
+    if record.unreconciled:
+        for r in record.unreconciled:
+            print(f"[twin] NOT applied — {r.action.ticker} {r.action.ex_date}: {r.note}")
+    return record.for_replay()
 
 
 def _benchmark_series() -> pd.Series:
@@ -157,7 +212,19 @@ def _ew_fund_series() -> pd.Series | None:
         return None
     panel = load_parquet(str(NIFTY50_PANEL))
     universe = Universe.from_csv(str(NIFTY50_UNIVERSE))
-    return equal_weight_pit(panel, universe, pd.DatetimeIndex(panel.dates), Decimal("100"))
+    index = pd.DatetimeIndex(panel.dates)
+    # A member the panel cannot price is left out of the equal weighting. That is the right number
+    # and the wrong silence: the bar is then fifty names' worth of label over forty-nine names'
+    # worth of arithmetic, so it is said out loud on every run.
+    missing = unpriceable_members(panel, universe, index)
+    if missing:
+        named = ", ".join(f"{t.removesuffix('.NS')} ({n})" for t, n in list(missing.items())[:8])
+        print(
+            f"[twin] BASELINE_EW excludes {len(missing)} index member(s) the panel cannot price, "
+            f"on this many sessions each: {named}. TATAMOTORS is the live case — its NSE symbol "
+            "retired at the 2025 demerger and the membership file still carries no end date for it."
+        )
+    return equal_weight_pit(panel, universe, index, Decimal("100"))
 
 
 def cmd_seed(cfg: Config) -> int:
@@ -174,7 +241,7 @@ def cmd_seed(cfg: Config) -> int:
         print("[twin] no tradebook — nothing to seed from.", file=sys.stderr)
         return 1
     credits = load_off_market()
-    books = seed_books(trades, cfg)
+    books = seed_books(trades, cfg, flows=_flows(trades, credits))
     if credits:
         # Allotments never appear in a tradebook. Fund every book with them so REAL does not hold
         # shares the other books were never given money for.
@@ -190,6 +257,62 @@ def cmd_seed(cfg: Config) -> int:
     print(
         f"✓ seeded {len(books)} books from {len(trades)} trades · {len(flows)} flows · "
         f"₹{books[REAL].net_invested:,.2f} net invested · start {flows[0].on}"
+    )
+    return 0
+
+
+def cmd_refund(cfg: Config) -> int:
+    """Re-fund every book from the broker's ledger, once, before anything has decided.
+
+    The books were funded from the tradebook — money that reached the *market*. The ledger records
+    money that reached the *account*, which is what the user actually put in, and the difference was
+    ₹2,01,542 of idle cash that no book was measuring. Switching the basis changes what every
+    comparison means, so it is a deliberate command rather than something a daily run does, it
+    **refuses once any book has made its own decision**, and it is recorded in the registration.
+    """
+    record = funding_record.load()
+    if record is None:
+        print(
+            "[twin] no funding imported. Run: uv run python scripts/reconcile_account.py --import",
+            file=sys.stderr,
+        )
+        return ABORTED
+    books = load_books(cfg)
+    if not books:
+        print("[twin] not seeded.", file=sys.stderr)
+        return ABORTED
+    decided = [n for n, b in books.items() if b.manager.get("last_review")]
+    if decided:
+        print(
+            f"[twin] {', '.join(decided)} has already decided for itself. Re-funding would change "
+            "the basis of a record that is already running; it is refused.",
+            file=sys.stderr,
+        )
+        return ABORTED
+
+    trades, notes = _tradebook()
+    if notes or not trades:
+        print(f"[twin] tradebook unusable: {'; '.join(notes) or 'it is empty'}", file=sys.stderr)
+        return ABORTED
+    before = sum((f.amount for f in books[REAL].flows), Decimal("0"))
+    flows = record.flows()
+    for book in books.values():
+        book.flows = list(flows)
+        book.portfolio.cash = record.net  # the baselines hold cash until they are marked into units
+    assert_identical_flows(list(books.values()))
+    replay_real(books[REAL], trades, cfg)
+    for name in DECIDING:
+        if name in books:
+            replay_real(books[name], trades, cfg)  # SYSTEM still mirrors REAL; it has not decided
+    save_books(books)
+    modelled = books[REAL].portfolio.cash
+    print(
+        f"✓ re-funded {len(books)} book(s) from {record.source}\n"
+        f"  net money in: ₹{before:,.2f} (tradebook) → ₹{record.net:,.2f} (ledger)\n"
+        f"  REAL cash:    ₹{modelled:,.2f} modelled · ₹{record.closing_balance:,.2f} at the broker "
+        f"· difference ₹{modelled - record.closing_balance:,.2f}\n"
+        "  The difference is charges the tradebook does not carry (DP, payment-gateway, bank) and "
+        "modelling error in the cost engine. It is shown, not absorbed."
     )
     return 0
 
@@ -233,9 +356,22 @@ def replay_real(book: TwinBook, trades: list[TradebookTrade], cfg: Config) -> No
 
     An allotment is not a trade, so the replay cannot know about it; it is added as a dated lot,
     because §2(42A) counts the holding period from the allotment date.
+
+    **The cash is what the book was funded with, less what the trades spent.** The tradebook does not
+    record a balance, so before funding was imported this was ₹0 — an account that plainly held two
+    lakh showed none, and every book was compared on money that had reached the market rather than
+    money the user had put in.
+
+    Corporate actions are interleaved into the replay by date, so a dividend credits cash on its
+    ex-date before that day's trades (buying on the ex-date does not earn it) and a split reshapes
+    the lots the broker's own share count has to match. Because the replay recomputes the book from
+    the trades every run, nothing here can be credited twice.
     """
-    book.portfolio = replay_tradebook(trades, cfg).portfolio
+    replay = replay_tradebook(trades, cfg, corporate_actions=_actions())
+    book.portfolio = replay.portfolio
     apply_off_market(book.portfolio, load_off_market())
+    funded = sum((f.amount for f in book.flows), Decimal("0"))
+    book.portfolio.cash = funded - replay.net_spent
 
 
 def cmd_daily(cfg: Config) -> int:
@@ -252,7 +388,7 @@ def cmd_daily(cfg: Config) -> int:
 
     trades, tradebook_notes = _tradebook()
     credits = load_off_market()
-    for d in sync_flows(books, trades, credits):
+    for d in sync_flows(books, trades, credits, flows=_flows(trades, credits)):
         print(f"[twin] credited ₹{d.amount:,.2f} on {d.on} to all {len(books)} books")
 
     # A tradebook that reads empty while the books hold flows is a FAILED READ, not an empty account:
@@ -283,18 +419,30 @@ def cmd_daily(cfg: Config) -> int:
         if book is None:
             continue
         if autonomous:
+            # Before it decides: a dividend is cash it may spend, and a split changes what it holds.
+            for note in credit_actions(book, _actions(), through=market.as_of):
+                print(f"[twin] {name}: {note}")
             failure = step_system(book, market, now=datetime.now(IST))
             continue
         if book.stepped_through == market.as_of:
             continue
-        # Mirror: until a start is registered, SYSTEM holds exactly what the user holds.
+        if book.manager.get("last_review"):
+            # It has decided for itself before. The mirror is keyed to the session date, and on a
+            # holiday that date is the previous session — which can sit before the start. Copying
+            # REAL over a book that has made its own decisions would erase them.
+            print(f"[twin] {name} has decided before; it is not re-mirrored to REAL.")
+            continue
+        # Mirror: until the investor starts, SYSTEM holds exactly what the user holds.
         replay_real(book, trades, cfg)
         book.stepped_through = market.as_of
     if not autonomous:
-        print(
-            "[twin] SYSTEM mirrors REAL — no start date is registered, so it makes no choices of "
-            "its own."
+        when = (
+            f"until {EVALUATION_START}"
+            + (f" ({why})" if (why := nse.closure_reason(EVALUATION_START)) else "")
+            if EVALUATION_START
+            else "— no start date is registered"
         )
+        print(f"[twin] SYSTEM mirrors REAL {when}; it makes no choices of its own yet.")
     # BEFORE the save, so the file records what REAL actually holds rather than the cash it was
     # seeded with.
     replay_real(books[REAL], trades, cfg)
@@ -421,13 +569,15 @@ def cmd_status(cfg: Config) -> int:
 def main(argv: list[str] | None = None) -> int:
     use_utf8()  # first: Windows pipes fall back to cp1252 and die on a rupee sign
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("cmd", choices=["seed", "daily", "status", "shadow"])
+    ap.add_argument("cmd", choices=["seed", "daily", "status", "shadow", "refund"])
     args = ap.parse_args(argv)
     cfg = Config()
     if args.cmd == "seed":
         return cmd_seed(cfg)
     if args.cmd == "shadow":
         return cmd_shadow(cfg)
+    if args.cmd == "refund":
+        return cmd_refund(cfg)
     return cmd_daily(cfg) if args.cmd == "daily" else cmd_status(cfg)
 
 

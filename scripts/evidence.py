@@ -21,7 +21,9 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from qalpha.config import Config
+from qalpha.live import evidence_log
 from qalpha.live.announcements import (
+    ARCHIVE_DIR,
     Announcement,
     SourceDocument,
     documents_for,
@@ -59,6 +61,14 @@ EVENT_LOG = Path("data/evidence/events.jsonl")
 #: filing is re-read every day of its window — measured at ~33 model calls a day, roughly ten times
 #: what is needed, because a 10-day window re-presents the same documents ten times.
 EXTRACTED_LOG = Path("data/evidence/extracted.jsonl")
+#: Documents the reader **refused**, one row per refusal. A refusal is not a failure to retry for
+#: ever: the model declines the same document every time at temperature zero, so a name holding one
+#: would be re-read, re-charged and left incomplete on every run. The path lives in
+#: :mod:`qalpha.live.evidence_log`, which is what the investor's packet reads it from.
+REFUSED_LOG = evidence_log.REFUSED_LOG
+#: Refusals of one document before it is treated as unreadable BY THIS READER. Two, so a single
+#: transient decline does not retire a document.
+REFUSALS_BEFORE_UNREADABLE = 2
 COVERAGE_LOG = Path("data/evidence/coverage.jsonl")
 
 #: How far back to look for filings. Wider than a day so a missed run is caught up rather than
@@ -357,19 +367,97 @@ def _persist_events(events: list[ExtractedEvent], as_of: date) -> bool:
         return False
 
 
+def _record_refusals(documents: Sequence[SourceDocument], *, as_of: date, reader: str) -> None:
+    """One row per refused document per run. Append-only; nothing is ever marked read by this."""
+    rows = [
+        {
+            # One row per refusal, not per day: two runs are two observations, and the point of the
+            # threshold is that one transient decline does not retire a document.
+            "_key": f"{d.provenance.sha256}:{datetime.now(UTC).isoformat(timespec='seconds')}",
+            "as_of": as_of.isoformat(),
+            "at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "ticker": d.announcement.symbol,
+            "sha256": d.provenance.sha256,
+            "subject": d.announcement.subject,
+            "reader": reader,
+            "extraction_version": EXTRACTION_VERSION,
+        }
+        for d in documents
+    ]
+    if rows:
+        _append_jsonl(REFUSED_LOG, rows, key="_key")
+        print(
+            f"  {'':16} {len(rows)} document(s) the reader declined — recorded, not retried blind"
+        )
+
+
+def refused_documents(ticker: str = "") -> set[str]:
+    """Document hashes this reader has declined at least :data:`REFUSALS_BEFORE_UNREADABLE` times."""
+    if not REFUSED_LOG.exists():
+        return set()
+    counts: dict[str, int] = {}
+    for line in REFUSED_LOG.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("extraction_version") != EXTRACTION_VERSION or not reader_matches(
+            row.get("reader")
+        ):
+            continue
+        if ticker and str(row.get("ticker", "")).removesuffix(".NS") != ticker.removesuffix(".NS"):
+            continue
+        sha = str(row.get("sha256"))
+        counts[sha] = counts.get(sha, 0) + 1
+    return {sha for sha, seen in counts.items() if seen >= REFUSALS_BEFORE_UNREADABLE}
+
+
+def _unreadable_documents(ticker: str) -> int:
+    """Archived filings this corpus cannot read: no text layer, or refused by the reader.
+
+    The first is a scan ``ocr_scans.py`` could not transcribe. The second is a document the model
+    declines — a newspaper advertisement, in the case that found this — which it declines again on
+    every run, at the same price. Both are permanent for this reader, so a window that reached every
+    other document is as finished as it will ever be.
+    """
+    base = ARCHIVE_DIR / ticker.removesuffix(".NS")
+    if not base.exists():
+        return 0
+    declined = refused_documents(ticker)
+    count = 0
+    for prov in base.glob("*.provenance.json"):
+        stem = prov.name.removesuffix(".provenance.json")
+        if not (base / f"{stem}.txt.gz").exists():
+            count += 1  # no text layer at all, and the transcriber could not help
+            continue
+        try:
+            sha = str(json.loads(prov.read_text(encoding="utf-8")).get("sha256", ""))
+        except (OSError, ValueError):
+            continue
+        if sha in declined:
+            count += 1  # text, but this reader declines to read it
+    return count
+
+
 def _seen_before(ticker: str) -> bool:
-    """Has this name ever been **successfully** covered at the current extractor?
+    """Has a year of this name been read — everything in it that *can* be read?
 
     Not "does a row exist". A row is written every run including the failed ones — no API key, an
-    extraction that errored, a document cap that left the window unread. Counting those as seen
-    means the 365-day bootstrap is skipped for a name nobody ever finished reading, which is the
-    only chance that name gets at a year of history.
+    extraction that errored, a cap that left the window unread. Counting those as seen would skip
+    the 365-day bootstrap for a name nobody ever finished, which is the only chance it gets at a
+    year of history. Sixteen such rows were written during local testing on 2026-09-08.
 
-    Sixteen incomplete rows written during local testing on 2026-09-08 would have done exactly that
-    to sixteen names.
+    **And not "complete" either.** ``complete`` needs every filed document read, so one scanned
+    newspaper advertisement made a name permanently unseen: deferred every evening, never given a
+    fresh coverage row, and — four days later — indistinguishable from a company nobody had opened.
+    INFY (222 of 224) and TATAPOWER (144 of 145) were both in that state. A bootstrap window whose
+    only gaps are documents with no text has read everything there is to read.
     """
     if not COVERAGE_LOG.exists():
         return False
+    unreadable = _unreadable_documents(ticker)
     for line in COVERAGE_LOG.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -377,15 +465,19 @@ def _seen_before(ticker: str) -> bool:
             row = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if (
-            row.get("ticker") == ticker
-            and row.get("complete")
-            and row.get("extraction_version") == EXTRACTION_VERSION
-            # AND BY THE CORPUS READER. Without this a name fully read by yesterday's local model
-            # would count as seen, the 365-day bootstrap would be skipped, and the corpus would
-            # quietly become two readers' work wearing one label.
-            and reader_matches(row.get("reader"))
-        ):
+        if row.get("ticker") != ticker or row.get("extraction_version") != EXTRACTION_VERSION:
+            continue
+        # AND BY THE CORPUS READER. Without this a name fully read by yesterday's local model would
+        # count as seen, the bootstrap would be skipped, and the corpus would quietly become two
+        # readers' work wearing one label.
+        if not reader_matches(row.get("reader")):
+            continue
+        if row.get("complete"):
+            return True
+        read = int(str(row.get("documents_read", 0) or 0))
+        filed = int(str(row.get("filings_in_window", 0) or 0))
+        window = int(str(row.get("window_days", 0) or 0))
+        if window >= BOOTSTRAP_DAYS and read and read + unreadable >= filed:
             return True
     return False
 
@@ -522,6 +614,14 @@ def _cover_name(
         # 2026-09-11 having paid for every one, and would have every run after. A document whose
         # batches all succeeded has been read; only the ones in a failed batch have not.
         read_docs = [d for d in docs_to_read if d.provenance.sha256 not in unread]
+        if usage.get("refused_batches", 0):
+            # The reader declined these. Recorded per document so the next run can tell a document
+            # nobody will read from one nobody has read yet.
+            _record_refusals(
+                [d for d in docs_to_read if d.provenance.sha256 in unread],
+                as_of=as_of,
+                reader=model,
+            )
         extraction_ran = usage.get("calls", 0) > 0
         events, unverified = found, discarded
         if usage.get("failed_batches", 0):

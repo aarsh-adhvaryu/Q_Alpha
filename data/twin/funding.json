@@ -1,0 +1,22 @@
+{
+  "source": "ledger \u00b7 sha256:202d6388242a",
+  "imported_at": "2026-09-14T04:04:35+00:00",
+  "closing_balance": "201116.9406",
+  "movements": [
+    {
+      "on": "2026-06-14",
+      "amount": "10000.0",
+      "kind": "Bank Receipts"
+    },
+    {
+      "on": "2026-08-07",
+      "amount": "-4313.85",
+      "kind": "Bank Payments"
+    },
+    {
+      "on": "2026-08-24",
+      "amount": "500000.0",
+      "kind": "Bank Receipts"
+    }
+  ]
+}

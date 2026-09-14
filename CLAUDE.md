@@ -102,6 +102,8 @@ uv run python scripts/evidence.py backfill --only INFY --workers 8   # a year of
 uv run python scripts/news.py daily                  # headlines
 uv run python scripts/twin.py daily                  # the books (and the investor, once started)
 uv run python scripts/twin.py shadow                 # one real review on a COPY of SYSTEM
+uv run python scripts/reconcile_account.py --import  # the broker's ledger: funding + cash check
+uv run python scripts/corporate_actions.py --import  # dividends and splits, cross-checked
 ```
 
 Runs natively on Windows from `D:\q-alpha`. The only server is the one the click starts, on

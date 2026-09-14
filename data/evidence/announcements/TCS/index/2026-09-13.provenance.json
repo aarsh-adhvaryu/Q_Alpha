@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=TCS",
+ "retrieved_at_utc": "2026-09-13T16:09:29Z",
+ "http_status": 200,
+ "bytes": 2487284,
+ "sha256": "186bd57d3347871daf45955bd509386ee87f94f89464fde3c92dc43ceb07188a",
+ "document_date": "2026-09-13",
+ "symbol": "TCS",
+ "kind": "announcement_index"
+}

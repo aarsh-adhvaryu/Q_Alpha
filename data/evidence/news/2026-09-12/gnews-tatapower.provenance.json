@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Tata+Power%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-12T16:20:59Z",
+ "http_status": 200,
+ "bytes": 135070,
+ "sha256": "cc5f07bd1202c28cd84beaf63a7ac69bd6fa80a8339d351c3bb05457afcaa843",
+ "document_date": "2026-09-12",
+ "feed": "gnews-tatapower",
+ "kind": "name",
+ "ticker": "TATAPOWER.NS"
+}

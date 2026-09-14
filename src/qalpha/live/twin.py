@@ -26,6 +26,7 @@ from typing import Any
 
 import pandas as pd
 
+from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.accounting.portfolio import Portfolio
 from qalpha.accounting.tax_lots import TaxLot
 from qalpha.config import Config
@@ -76,6 +77,12 @@ class TwinBook:
     #: and the last review. Empty for a book no investor has run. Its records live in
     #: ``data/twin/manager/``; this is only what the next evening must know.
     manager: dict[str, Any] = field(default_factory=dict)
+    #: The date through which corporate actions have been credited to **this** book. REAL and any
+    #: book still mirroring it get theirs from the tradebook replay, which recomputes from scratch;
+    #: a book deciding for itself has its own holdings and is credited forward from here. Two
+    #: watermarks rather than one because a dividend credited twice is indistinguishable, afterwards,
+    #: from a dividend that was larger.
+    actions_through: date | None = None
 
     @property
     def net_invested(self) -> Decimal:
@@ -95,6 +102,40 @@ class TwinBook:
         comparison must charge it for, so cash counts here and does not there.
         """
         return self.portfolio.cash + self.portfolio.holdings_value(prices)
+
+
+def credit_actions(
+    book: TwinBook,
+    actions: Sequence[CorporateAction],
+    *,
+    through: date,
+) -> list[str]:
+    """Credit corporate actions due to a book that decides for itself, and say what changed.
+
+    REAL, and any book still mirroring it, get their actions from the tradebook replay, which
+    recomputes the whole book from the trades every run and therefore cannot double-credit. A book
+    with its own holdings has no such replay, so it is credited **forward from a watermark**: only
+    actions after the last date it was brought up to date, and never past ``through``.
+
+    A book that has never been brought up to date is moved to ``through`` and credited nothing. That
+    is deliberate: the alternative is replaying every action a book may already have received
+    through some other path, and a dividend credited twice is indistinguishable, afterwards, from a
+    dividend that was larger.
+
+    Entitlement is the holding on the ex-date. A name the book does not hold is skipped rather than
+    credited zero, so the note list is what actually happened.
+    """
+    since = book.actions_through or book.stepped_through or book.start
+    notes: list[str] = []
+    if since is not None:
+        for action in sorted(actions, key=lambda a: (a.ex_date, a.ticker)):
+            if not since < action.ex_date <= through:
+                continue
+            if book.portfolio.ledger.quantity_held(action.ticker) <= 0:
+                continue
+            notes.append(book.portfolio.apply_corporate_action(action).note)
+    book.actions_through = through
+    return notes
 
 
 def assert_identical_flows(books: Sequence[TwinBook]) -> None:
@@ -146,7 +187,11 @@ def partial_export_reason(trades: Sequence[object], first_flow: date | None) -> 
 
 
 def seed_books(
-    trades: Sequence[object], cfg: Config, *, names: Sequence[str] = ALL_BOOKS
+    trades: Sequence[object],
+    cfg: Config,
+    *,
+    names: Sequence[str] = ALL_BOOKS,
+    flows: Sequence[Flow] | None = None,
 ) -> dict[str, TwinBook]:
     """Build every book from one tradebook, each funded with the identical dated flows.
 
@@ -161,12 +206,15 @@ def seed_books(
     and not the luck of when the money went in, which is what nine books funded by a cash-flow tap
     could never separate.
     """
-    flows = flows_from_trades(trades)
+    # Funding, when it has been imported from the broker's ledger, is the money that actually
+    # entered the account. Falling back to the tradebook funds every book with what was *spent on
+    # shares*, which leaves idle cash outside the comparison entirely.
+    dated = list(flows) if flows is not None else flows_from_trades(trades)
     books: dict[str, TwinBook] = {}
     for name in names:
         pf = Portfolio(cfg.cost, cfg.tax, cash=Decimal("0"))
-        pf.cash = sum((f.amount for f in flows), Decimal("0"))
-        books[name] = TwinBook(name=name, portfolio=pf, flows=list(flows))
+        pf.cash = sum((f.amount for f in dated), Decimal("0"))
+        books[name] = TwinBook(name=name, portfolio=pf, flows=list(dated))
     assert_identical_flows(list(books.values()))
     return books
 
@@ -181,10 +229,21 @@ class BookMark:
     net_invested: Decimal
     value: Decimal
     rate: float | None  # money-weighted (XIRR) — a lumpy SIP has no meaningful simple return
+    #: How much of ``value`` is uninvested cash. The baselines hold none by construction: they buy
+    #: fractional units of the fund with every rupee on the day it arrives. The investor may spend
+    #: only ₹50,000 a month, so it holds cash for months — which *helps* it in a falling market and
+    #: costs it in a rising one, for no decision it made. A lead that is only uninvested cash must
+    #: not be readable as skill, so the figure sits beside the gain rather than inside it.
+    cash: Decimal = Decimal("0")
 
     @property
     def gain(self) -> Decimal:
         return self.value - self.net_invested
+
+    @property
+    def invested(self) -> Decimal:
+        """What is actually in the market — the part of the book that can gain or lose."""
+        return self.value - self.cash
 
 
 def mark(book: TwinBook, prices: dict[str, Decimal], as_of: date) -> BookMark:
@@ -203,6 +262,7 @@ def mark(book: TwinBook, prices: dict[str, Decimal], as_of: date) -> BookMark:
         net_invested=book.net_invested,
         value=value,
         rate=xirr(dated) if book.flows else None,
+        cash=book.portfolio.cash,
     )
 
 
@@ -227,19 +287,19 @@ def baseline_mark(flows: Sequence[Flow], series: pd.Series, as_of: date) -> Book
     )
 
 
-#: **The day SYSTEM starts deciding for itself — and today there is no such day.** ``None`` means
-#: no autonomous window is registered: SYSTEM mirrors the user's tradebook and chooses nothing.
+#: **The day the AI investor starts deciding for itself.**
 #:
-#: It was ``2026-09-14``, registered on 2026-09-12 for the rulebook policy (PL-1). **Withdrawn on
-#: 2026-09-13, before the window opened**, because the treatment the user wants measured is an AI
-#: investor, not that rulebook, and a year spent measuring the rulebook answers a question nobody is
-#: asking. SYSTEM never made a decision under PL-1. The withdrawal is recorded in
-#: ``reports/PREREGISTRATION_SYSTEM.md`` §6.
+#: Registered 2026-09-13 in ``reports/PREREGISTRATION_AI_PM1.md``, forward-dated: starting an
+#: experiment on days whose outcome is already known is selection on the outcome.
 #:
-#: The next start is set by the AI investor's own registration, on the day it is written, forward-
-#: dated as before: starting an experiment on days whose outcome is already known is selection on
-#: the outcome.
-EVALUATION_START: date | None = None
+#: 2026-09-14 is Ganesh Chaturthi and the exchange is shut, which needs no special case — the day a
+#: book is stepped on is the day its prices come from, so the first review happens on the first
+#: session on or after this date. A start date that fell on a holiday used to be the sort of thing
+#: that silently skipped a day or reviewed Friday's close twice.
+#:
+#: It replaced ``None``, which is what the withdrawn rulebook start left behind (2026-09-13, before
+#: that window opened). ``None`` still means "no autonomous window is registered".
+EVALUATION_START: date | None = date(2026, 9, 14)
 
 
 def is_autonomous(as_of: date, *, start: date | None = EVALUATION_START) -> bool:
@@ -283,7 +343,10 @@ class Gap:
         head = f"**{self.left}** is {direction} **{self.right}** by ₹{abs(self.rupees):,.0f}"
         g = self.log_rel_wealth
         if g is None:
-            return f"{head} — relative wealth not measurable yet (no registered window)."
+            return (
+                f"{head} — relative wealth not measurable yet: no unitized NAVs on file for the "
+                "registered window."
+            )
         return f"{head} ({math.expm1(g) * 100:+.2f}% relative wealth since the start)."
 
 
@@ -309,7 +372,10 @@ def compare(marks: dict[str, BookMark], *, navs: Mapping[str, float] | None = No
 
 
 def comparison_markdown(marks: dict[str, BookMark], gaps: Sequence[Gap]) -> str:
-    lines = ["| Book | Net money in | Worth today | Gain | XIRR |", "|---|---:|---:|---:|---:|"]
+    lines = [
+        "| Book | Net money in | In the market | Cash | Worth today | Gain | XIRR |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
     for name in ALL_BOOKS:
         m = marks.get(name)
         if m is None:
@@ -322,10 +388,18 @@ def comparison_markdown(marks: dict[str, BookMark], gaps: Sequence[Gap]) -> str:
         )
         lines.append(
             f"| {'**' + name + '**' if name == SYSTEM else name} | ₹{m.net_invested:,.0f} | "
+            f"₹{m.invested:,.0f} | ₹{m.cash:,.0f} | "
             f"₹{m.value:,.0f} | ₹{m.gain:+,.0f} | {rate} |"
         )
     if gaps:
-        lines += ["", "Descriptive — what happened between two books, not evidence of skill:"]
+        lines += [
+            "",
+            "The baselines hold no cash: they buy the fund with every rupee on the day it arrives. "
+            "A book holding cash is not a book that is winning or losing — read the gap with the "
+            "cash column.",
+            "",
+            "Descriptive — what happened between two books, not evidence of skill:",
+        ]
         lines += [f"- {g.render()}" for g in gaps]
     return "\n".join(lines)
 
@@ -492,6 +566,9 @@ def append_history(
             name: {
                 "value": str(m.value),
                 "net_invested": str(m.net_invested),
+                # Uninvested cash, so a later reader can tell a lead that was earned from a lead
+                # that is only money the book had not spent yet.
+                "cash": str(m.cash),
                 "xirr": m.rate,
                 "start": m.start.isoformat() if m.start else None,
             }
@@ -603,6 +680,9 @@ def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
                 "stepped_through": (
                     book.stepped_through.isoformat() if book.stepped_through else None
                 ),
+                "actions_through": (
+                    book.actions_through.isoformat() if book.actions_through else None
+                ),
                 "manager": book.manager,
             }
             for name, book in books.items()
@@ -632,6 +712,11 @@ def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
                 if entry.get("stepped_through")
                 else None
             ),
+            actions_through=(
+                date.fromisoformat(entry["actions_through"])
+                if entry.get("actions_through")
+                else None
+            ),
             manager=dict(entry.get("manager") or {}),
         )
         for name, entry in raw["books"].items()
@@ -644,6 +729,8 @@ def sync_flows(
     books: dict[str, TwinBook],
     trades: Sequence[object],
     credits: Sequence[OffMarketCredit] = (),
+    *,
+    flows: Sequence[Flow] | None = None,
 ) -> list[Flow]:
     """Credit any **new or amended** cash flows to every book, keeping them identical.
 
@@ -662,7 +749,7 @@ def sync_flows(
     """
     if not books:
         return []
-    current = flows_with_off_market(trades, credits)
+    current = list(flows) if flows is not None else flows_with_off_market(trades, credits)
     known = {f.on: f.amount for f in next(iter(books.values())).flows}
     deltas = [
         Flow(on=f.on, amount=f.amount - known.get(f.on, Decimal("0")))
