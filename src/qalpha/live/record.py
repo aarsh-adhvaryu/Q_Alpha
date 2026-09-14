@@ -276,7 +276,13 @@ def dashboard_data(as_of: date | None = None) -> dict[str, Any]:
         "latest_day": latest_day,
         # None when no autonomous window is registered — never a countdown to a date that is not set.
         "evaluation_start": EVALUATION_START.isoformat() if EVALUATION_START else None,
-        "autonomous": is_autonomous(today),
+        # **The session, not the calendar.** The twin steps SYSTEM on the day its prices come from,
+        # so on a holiday that is the previous session. Asking `is_autonomous(today)` made the page
+        # announce "deciding for itself" on the morning of a closed exchange while the book was
+        # still mirroring REAL — the start date wearing the wrong date's label.
+        "autonomous": is_autonomous(
+            date.fromisoformat(latest_day) if latest_day else today,
+        ),
         "days_to_start": (EVALUATION_START - today).days if EVALUATION_START else None,
         "books": books_now,
         "series": series,

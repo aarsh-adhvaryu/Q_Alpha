@@ -1,6 +1,8 @@
 {
   "books": {
     "BASELINE": {
+      "actions_through": null,
+      "earliest_trade": "2026-06-15",
       "flows": [
         {
           "amount": "10000.0",
@@ -24,6 +26,8 @@
       "stepped_through": null
     },
     "BASELINE_EW": {
+      "actions_through": null,
+      "earliest_trade": "2026-06-15",
       "flows": [
         {
           "amount": "10000.0",
@@ -47,6 +51,8 @@
       "stepped_through": null
     },
     "REAL": {
+      "actions_through": null,
+      "earliest_trade": "2026-06-15",
       "flows": [
         {
           "amount": "10000.0",
@@ -70,7 +76,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "1136.10",
-            "lot_id": "e38799eb-af93-4b7c-b083-020253011aa8",
+            "lot_id": "14ddfe6d-3e2d-4e06-9514-e0cae856163c",
             "other_costs": "0.21",
             "pool": "core",
             "quantity_original": "5",
@@ -83,7 +89,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "1140.00",
-            "lot_id": "cd4de3f7-9525-490a-9a39-8f1b0c408ce8",
+            "lot_id": "447c3506-d8b5-4b47-bf4d-cd24521952f6",
             "other_costs": "0.63",
             "pool": "core",
             "quantity_original": "15",
@@ -96,7 +102,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "238.00",
-            "lot_id": "79cca636-8606-443f-8934-193ca944d105",
+            "lot_id": "aa2bd8e4-3b79-449d-a5ea-9f83fabd2fc2",
             "other_costs": "1.66",
             "pool": "core",
             "quantity_original": "192",
@@ -109,7 +115,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "352.40",
-            "lot_id": "13e239b2-82a5-4bc1-ab9c-2062497d843b",
+            "lot_id": "2d7a35eb-78f0-4664-851d-3337e3802df2",
             "other_costs": "2.14",
             "pool": "core",
             "quantity_original": "167",
@@ -122,7 +128,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "352.35",
-            "lot_id": "74ac1745-0dae-435d-9094-43ea6a86db5e",
+            "lot_id": "646aa891-9de2-4d16-809b-f4c6b9e8d294",
             "other_costs": "0.06",
             "pool": "core",
             "quantity_original": "5",
@@ -135,7 +141,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "1319.00",
-            "lot_id": "6d8cea9d-d43e-4f83-8140-7995dff9b510",
+            "lot_id": "c9aadd02-f85d-4c88-b4ac-e8ea78e7ac49",
             "other_costs": "0.77",
             "pool": "core",
             "quantity_original": "16",
@@ -148,7 +154,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "3102.40",
-            "lot_id": "1f538a1f-3087-4366-8354-c98e25862ebd",
+            "lot_id": "9a932d82-3d29-4908-b9e7-ff505d4db66c",
             "other_costs": "1.69",
             "pool": "core",
             "quantity_original": "15",
@@ -161,7 +167,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "414.15",
-            "lot_id": "bd477fef-9324-49f4-9534-6a995d9a0c7d",
+            "lot_id": "fbaeccd3-bfe4-4d73-bf3f-ceab7ec07dc6",
             "other_costs": "2.21",
             "pool": "core",
             "quantity_original": "147",
@@ -174,7 +180,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "180.97",
-            "lot_id": "9a9eb7d8-4808-4a49-a90c-7578542868c7",
+            "lot_id": "f97de21e-0460-48c1-97e2-71ee38f2d590",
             "other_costs": "0.84",
             "pool": "core",
             "quantity_original": "128",
@@ -187,7 +193,7 @@
             "broker_trade_id": null,
             "brokerage": "0.00",
             "buy_price": "2339.60",
-            "lot_id": "21b16cb9-5aa3-4553-94b2-c80061cd9736",
+            "lot_id": "046ea388-c952-487d-a67d-378dcd638ebe",
             "other_costs": "0.84",
             "pool": "core",
             "quantity_original": "10",
@@ -201,6 +207,8 @@
       "stepped_through": null
     },
     "SYSTEM": {
+      "actions_through": null,
+      "earliest_trade": "2026-06-15",
       "flows": [
         {
           "amount": "10000.0",

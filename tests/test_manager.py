@@ -604,3 +604,75 @@ def test_selling_is_never_limited_by_the_allowance(world: dict[str, Any]) -> Non
         allowance=Decimal("0"),
     )
     assert results[0]["filled"] == 200, "raising cash must always be possible"
+
+
+# ---- research: the investor may ask once, and the record must show what it asked -----------------
+
+
+def _asks_then_decides(world: dict[str, Any]) -> Callable[[], manager.Brain]:
+    """A brain that requests research on the first pass and decides on the second."""
+
+    def generate(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        world["calls"].append(prompt)
+        packet = _packet_of(prompt)
+        if "research" not in packet:
+            asked = {"research": [{"tool": "prices", "ticker": "AAA.NS", "months": 6}]}
+            return json.dumps(asked), {"input": 100, "output": 10}
+        return json.dumps({"portfolio_note": "read the prices", "decisions": _hold_all(packet)}), {
+            "input": 200,
+            "output": 20,
+        }
+
+    return lambda: manager.Brain(manager.MODEL, generate)
+
+
+def test_a_research_request_is_answered_and_the_second_reply_decides(
+    world: dict[str, Any],
+) -> None:
+    """One round: the answers become packet content, and the reply is judged against them."""
+    decisions = manager.review(
+        world["book"],
+        world["market"],
+        now=_evening(DECIDE),
+        make_brain=_asks_then_decides(world),
+        store=world["store"],
+    )
+    assert decisions, "the second pass must produce the review's decisions"
+    assert len(world["calls"]) == 2, "exactly two passes — asking, then deciding"
+    second = _packet_of(world["calls"][1])
+    assert "research" in second, "the answers must be in the packet the model decided from"
+
+
+def test_the_receipt_holds_what_the_investor_actually_knew(world: dict[str, Any]) -> None:
+    """The packet is the whole of what the model knew — including what it asked for and got."""
+    manager.review(
+        world["book"],
+        world["market"],
+        now=_evening(DECIDE),
+        make_brain=_asks_then_decides(world),
+        store=world["store"],
+    )
+    receipts = sorted(world["store"].receipts.glob("*.json"))
+    assert receipts, "a review must leave a receipt"
+    saved = json.loads(receipts[-1].read_text(encoding="utf-8"))
+    assert "research" in saved["packet"], (
+        "a receipt without the research answers cannot explain the decision it records"
+    )
+
+
+def test_both_passes_are_counted_in_what_the_review_cost(world: dict[str, Any]) -> None:
+    """A two-call review that reports one call's tokens is a real number under the wrong label."""
+    manager.review(
+        world["book"],
+        world["market"],
+        now=_evening(DECIDE),
+        make_brain=_asks_then_decides(world),
+        store=world["store"],
+    )
+    saved = json.loads(
+        sorted(world["store"].receipts.glob("*.json"))[-1].read_text(encoding="utf-8")
+    )
+    usage = saved["usage"]
+    assert usage["input"] == 300, "both passes' input tokens"
+    assert usage["output"] == 30, "both passes' output tokens"
+    assert usage["research_requests"] == 1

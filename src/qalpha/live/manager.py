@@ -938,12 +938,12 @@ def review(
             packet = {**packet, "research": research}
             prompt = PROMPT + json.dumps(packet, sort_keys=True, default=str)
             reply, again = mind.generate(MODEL, prompt)
+            # Both passes are one review and cost what they both cost. The keys are the backend's
+            # own ("input"/"output"); naming them anything else here silently reported zero.
             usage = {
                 **again,
-                "input_tokens": int(usage.get("input_tokens", 0))
-                + int(again.get("input_tokens", 0)),
-                "output_tokens": int(usage.get("output_tokens", 0))
-                + int(again.get("output_tokens", 0)),
+                "input": int(usage.get("input", 0)) + int(again.get("input", 0)),
+                "output": int(usage.get("output", 0)) + int(again.get("output", 0)),
                 "research_requests": len(asked),
             }
             digest = hashlib.sha256(f"{VERSION}|{MODEL}|{prompt}".encode()).hexdigest()[:24]

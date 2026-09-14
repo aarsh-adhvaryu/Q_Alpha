@@ -114,3 +114,22 @@ NIFTYBEES, which is the do-nothing floor.
 *(Append only, dated.)*
 
 - **2026-09-14** — registered. No review has run under AI-PM-2.
+- **2026-09-14** — **dry run before the start, and three defects it found.** One shadow review on a
+  copy of SYSTEM: 8 holdings held with filing-grounded reasons, one MARUTI buy proposed and
+  **cancelled by code** ("already 8 names"). 32,564 input + 7,507 output tokens, about $0.21. The run
+  exposed three things, all fixed before the first real review:
+  1. The export guard compared the tradebook's first trade against the books' first *cash flow*.
+     Once the books were funded from the ledger, the first flow became a deposit — and money sits in
+     an account before it buys anything — so the guard refused a complete export. It now compares
+     against a watermark of the earliest trade any export has shown, which is strictly tighter.
+  2. The history row was stamped with the **calendar** date rather than the session its marks came
+     from, so a holiday wrote Friday's marks under Monday's date: one observation duplicated, not
+     two, in the series the evaluation harness counts. Rows are now dated by the session. The one
+     mis-dated row written today was removed.
+  3. The record page's "deciding for itself" banner keyed on the calendar too, and announced the
+     start on the morning of a closed exchange while the book was still mirroring REAL.
+  Separately, the refunding of 2026-09-14 left 16 history rows measuring the **old** funding basis
+  (₹3,04,144) beside rows measuring the new one (₹5,05,686) — a 40% cliff in the chart that never
+  happened. They are moved to `data/twin/history-before-refunding.jsonl`, kept and not deleted, and
+  `twin.py refund` now does this itself. The registered window starts 2026-09-14, so no observation
+  inside it is affected.

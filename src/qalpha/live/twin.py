@@ -83,6 +83,10 @@ class TwinBook:
     #: watermarks rather than one because a dividend credited twice is indistinguishable, afterwards,
     #: from a dividend that was larger.
     actions_through: date | None = None
+    #: The earliest trade date any export has ever shown for this account. The export guard compares
+    #: against it, so a later, shorter export cannot quietly replay REAL without its oldest lots.
+    #: It only ever moves **backwards**: a longer export lowers it, a shorter one is refused.
+    earliest_trade: date | None = None
 
     @property
     def net_invested(self) -> Decimal:
@@ -158,30 +162,38 @@ def assert_identical_flows(books: Sequence[TwinBook]) -> None:
             )
 
 
-def partial_export_reason(trades: Sequence[object], first_flow: date | None) -> str | None:
-    """Why this export cannot fund the books, or ``None`` when it reaches far enough back.
+def partial_export_reason(trades: Sequence[object], earliest_seen: date | None) -> str | None:
+    """Why this export cannot rebuild the books, or ``None`` when it reaches far enough back.
 
     ### The failure this closes
 
     ``REAL`` is replayed from the export on every run while the twins keep the flows they were
-    credited. An export that starts *after* the first flow therefore replays ``REAL`` short — it
-    buys none of the earlier lots — and every twin appears to beat it by whatever those lots are
-    worth. That is the empty-tradebook defect with one row in it instead of none, and the empty
-    check alone does not see it.
+    credited. An export that starts *after* trading began therefore replays ``REAL`` short — it buys
+    none of the earlier lots — and every twin appears to beat it by whatever those lots are worth.
+    That is the empty-tradebook defect with one row in it instead of none, and the empty check alone
+    does not see it. A Console export is chosen by date range in a dropdown, so this is the mistake
+    a person actually makes.
 
-    A Console export is chosen by date range in a dropdown, so this is the mistake a person actually
-    makes. Refusing is cheap; a dashboard reporting a manufactured lead is not.
+    ### What it compares against, and why that changed
+
+    ``earliest_seen`` is the earliest trade date **any** export has ever shown — a watermark the
+    books keep. It used to be the first cash flow, which worked only while the flows came from the
+    tradebook and the first flow therefore *was* the first trade. Once the books were funded from
+    the broker's ledger, the first flow became a deposit, and money sits in an account before it
+    buys anything: the guard fired on a complete export whose first trade was one day after the
+    deposit that paid for it. The watermark says what the guard actually means, and is strictly
+    tighter — it catches a shorter export even when no deposit precedes it.
     """
-    if not trades or first_flow is None:
+    if not trades or earliest_seen is None:
         return None
     earliest = min(t.trade_date for t in trades)  # type: ignore[attr-defined]
-    if earliest <= first_flow:
+    if earliest <= earliest_seen:
         return None
     return (
-        f"the export starts {earliest} but the books hold a cash flow from {first_flow}. Replaying "
-        f"REAL from it would miss every trade before {earliest}, and each missing lot would read as "
-        "a lead for every other book. Export from Zerodha Console covering "
-        f"{first_flow} to today and drop it in data/tradebooks/ (overlapping ranges are safe — "
+        f"the export starts {earliest} but an earlier export showed trading from {earliest_seen}. "
+        f"Replaying REAL from it would miss every trade before {earliest}, and each missing lot "
+        "would read as a lead for every other book. Export from Zerodha Console covering "
+        f"{earliest_seen} to today and drop it in data/tradebooks/ (overlapping ranges are safe — "
         "they de-duplicate on trade ids)."
     )
 
@@ -683,6 +695,9 @@ def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
                 "actions_through": (
                     book.actions_through.isoformat() if book.actions_through else None
                 ),
+                "earliest_trade": (
+                    book.earliest_trade.isoformat() if book.earliest_trade else None
+                ),
                 "manager": book.manager,
             }
             for name, book in books.items()
@@ -716,6 +731,9 @@ def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
                 date.fromisoformat(entry["actions_through"])
                 if entry.get("actions_through")
                 else None
+            ),
+            earliest_trade=(
+                date.fromisoformat(entry["earliest_trade"]) if entry.get("earliest_trade") else None
             ),
             manager=dict(entry.get("manager") or {}),
         )
