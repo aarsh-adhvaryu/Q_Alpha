@@ -101,3 +101,16 @@ twelve-month anniversary is not a verdict.
   and on the record page, and is written into every history row, beside "in the market" — a lead
   that is only money the book had not spent yet must not be readable as skill. The relative-wealth
   statistic stays the unitized NAV, which is blind to when the money arrived.
+- **2026-09-14** — **dividends are credited, and the bar's silent exclusions are named.** Before the
+  first review: the baselines were marked on total-return series while the twin's holdings were
+  marked on raw closes and credited no dividend at all, which handed the bar a free lead on
+  arithmetic. Dividends now credit cash on the ex-date inside the tradebook replay (entitlement is
+  the holding *going into* the ex-date), each one cross-checked against the price panel's own
+  adjustment factor — an amount that does not reconcile is recorded and **not applied**. On this
+  book the correction is ₹0 so far: everything but the starter position was bought 2026-08-28,
+  after every ex-date. Separately, the equal-weight bar's forward-fill is now bounded at 5 sessions
+  and a held name it cannot price makes the day's level unknown rather than ₹0 or its last price;
+  measured on the 2012-2026 panel this changes the series' last level by nothing at all
+  (893.6962047480171 both ways), so the bar's record is continuous. Seven members it has never been
+  able to price — TATAMOTORS, HDFC, CAIRN, IDFC, JPASSOCIAT, LTIM, STER — are now printed on every
+  run instead of being silently absent.

@@ -1,0 +1,76 @@
+{
+  "source": "yfinance dividends/splits, cross-checked against the panel's own adjustment",
+  "fetched_at": "2026-09-14T04:22:57+00:00",
+  "actions": [
+    {
+      "ticker": "HDFCBANK.NS",
+      "ex_date": "2026-06-19",
+      "kind": "DIVIDEND",
+      "ratio": "0",
+      "amount_per_share": "13.0",
+      "implied": "13.0000",
+      "reconciled": true,
+      "note": "\u20b913.0/share; the panel's own price adjustment implies \u20b913.0000 - they agree to \u20b90.0000."
+    },
+    {
+      "ticker": "TATAPOWER.NS",
+      "ex_date": "2026-06-23",
+      "kind": "DIVIDEND",
+      "ratio": "0",
+      "amount_per_share": "2.5",
+      "implied": "2.5000",
+      "reconciled": true,
+      "note": "\u20b92.5/share; the panel's own price adjustment implies \u20b92.5000 - they agree to \u20b90.0000."
+    },
+    {
+      "ticker": "TCS.NS",
+      "ex_date": "2026-07-15",
+      "kind": "DIVIDEND",
+      "ratio": "0",
+      "amount_per_share": "12.0",
+      "implied": "12.0000",
+      "reconciled": true,
+      "note": "\u20b912.0/share; the panel's own price adjustment implies \u20b912.0000 - they agree to \u20b90.0000."
+    },
+    {
+      "ticker": "HCLTECH.NS",
+      "ex_date": "2026-07-17",
+      "kind": "DIVIDEND",
+      "ratio": "0",
+      "amount_per_share": "12.0",
+      "implied": "12.0000",
+      "reconciled": true,
+      "note": "\u20b912.0/share; the panel's own price adjustment implies \u20b912.0000 - they agree to \u20b90.0000."
+    },
+    {
+      "ticker": "WIPRO.NS",
+      "ex_date": "2026-07-27",
+      "kind": "DIVIDEND",
+      "ratio": "0",
+      "amount_per_share": "2.0",
+      "implied": "2.0000",
+      "reconciled": true,
+      "note": "\u20b92.0/share; the panel's own price adjustment implies \u20b92.0000 - they agree to \u20b90.0000."
+    },
+    {
+      "ticker": "VBL.NS",
+      "ex_date": "2026-07-31",
+      "kind": "DIVIDEND",
+      "ratio": "0",
+      "amount_per_share": "0.5",
+      "implied": "0.5000",
+      "reconciled": true,
+      "note": "\u20b90.5/share; the panel's own price adjustment implies \u20b90.5000 - they agree to \u20b90.0000."
+    },
+    {
+      "ticker": "JIOFIN.NS",
+      "ex_date": "2026-08-10",
+      "kind": "DIVIDEND",
+      "ratio": "0",
+      "amount_per_share": "0.6",
+      "implied": "0.6000",
+      "reconciled": true,
+      "note": "\u20b90.6/share; the panel's own price adjustment implies \u20b90.6000 - they agree to \u20b90.0000."
+    }
+  ]
+}

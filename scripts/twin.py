@@ -24,13 +24,15 @@ from decimal import Decimal
 
 import pandas as pd
 
+from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.config import Config
 from qalpha.data.ingest import load_parquet
 from qalpha.data.universe import Universe
+from qalpha.live import actions as actions_record
 from qalpha.live import atomic, manager
 from qalpha.live import calendar as nse
 from qalpha.live import funding as funding_record
-from qalpha.live.benchmarks import equal_weight_pit
+from qalpha.live.benchmarks import equal_weight_pit, unpriceable_members
 from qalpha.live.console import use_utf8
 from qalpha.live.decisions import Decision, decisions_markdown
 from qalpha.live.flows import Flow
@@ -72,6 +74,7 @@ from qalpha.live.twin import (
     compare,
     comparison_frame,
     comparison_markdown,
+    credit_actions,
     ew_fund_mark,
     flows_with_off_market,
     is_autonomous,
@@ -122,6 +125,26 @@ def _flows(trades: Sequence[TradebookTrade], credits: Sequence[object]) -> list[
         f"(the broker's closing balance was ₹{record.closing_balance:,.2f})"
     )
     return flows
+
+
+def _actions() -> list[CorporateAction]:
+    """The corporate actions the replay may apply: reconciled ones only, or none with a reason.
+
+    Unreconciled actions are named here rather than silently dropped — a dividend whose amount does
+    not match the panel's own price adjustment is a thing to look at, not a rounding difference.
+    """
+    record = actions_record.load()
+    if record is None:
+        print(
+            "[twin] no corporate actions imported (data/twin/corporate_actions.json) — dividends "
+            "are NOT credited, while the baselines are marked on a total-return index that "
+            "reinvests theirs. Run: uv run python scripts/corporate_actions.py --import"
+        )
+        return []
+    if record.unreconciled:
+        for r in record.unreconciled:
+            print(f"[twin] NOT applied — {r.action.ticker} {r.action.ex_date}: {r.note}")
+    return record.for_replay()
 
 
 def _benchmark_series() -> pd.Series:
@@ -189,7 +212,19 @@ def _ew_fund_series() -> pd.Series | None:
         return None
     panel = load_parquet(str(NIFTY50_PANEL))
     universe = Universe.from_csv(str(NIFTY50_UNIVERSE))
-    return equal_weight_pit(panel, universe, pd.DatetimeIndex(panel.dates), Decimal("100"))
+    index = pd.DatetimeIndex(panel.dates)
+    # A member the panel cannot price is left out of the equal weighting. That is the right number
+    # and the wrong silence: the bar is then fifty names' worth of label over forty-nine names'
+    # worth of arithmetic, so it is said out loud on every run.
+    missing = unpriceable_members(panel, universe, index)
+    if missing:
+        named = ", ".join(f"{t.removesuffix('.NS')} ({n})" for t, n in list(missing.items())[:8])
+        print(
+            f"[twin] BASELINE_EW excludes {len(missing)} index member(s) the panel cannot price, "
+            f"on this many sessions each: {named}. TATAMOTORS is the live case — its NSE symbol "
+            "retired at the 2025 demerger and the membership file still carries no end date for it."
+        )
+    return equal_weight_pit(panel, universe, index, Decimal("100"))
 
 
 def cmd_seed(cfg: Config) -> int:
@@ -326,8 +361,13 @@ def replay_real(book: TwinBook, trades: list[TradebookTrade], cfg: Config) -> No
     record a balance, so before funding was imported this was ₹0 — an account that plainly held two
     lakh showed none, and every book was compared on money that had reached the market rather than
     money the user had put in.
+
+    Corporate actions are interleaved into the replay by date, so a dividend credits cash on its
+    ex-date before that day's trades (buying on the ex-date does not earn it) and a split reshapes
+    the lots the broker's own share count has to match. Because the replay recomputes the book from
+    the trades every run, nothing here can be credited twice.
     """
-    replay = replay_tradebook(trades, cfg)
+    replay = replay_tradebook(trades, cfg, corporate_actions=_actions())
     book.portfolio = replay.portfolio
     apply_off_market(book.portfolio, load_off_market())
     funded = sum((f.amount for f in book.flows), Decimal("0"))
@@ -379,6 +419,9 @@ def cmd_daily(cfg: Config) -> int:
         if book is None:
             continue
         if autonomous:
+            # Before it decides: a dividend is cash it may spend, and a split changes what it holds.
+            for note in credit_actions(book, _actions(), through=market.as_of):
+                print(f"[twin] {name}: {note}")
             failure = step_system(book, market, now=datetime.now(IST))
             continue
         if book.stepped_through == market.as_of:
