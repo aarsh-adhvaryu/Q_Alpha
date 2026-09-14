@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Muthoot+Finance%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-12T16:20:58Z",
+ "http_status": 200,
+ "bytes": 57685,
+ "sha256": "01f0b1305fa48a7cc309aab80a1a2b5fb06301997a5f9f13dce6ed2dd7666a5e",
+ "document_date": "2026-09-12",
+ "feed": "gnews-muthootfin",
+ "kind": "name",
+ "ticker": "MUTHOOTFIN.NS"
+}

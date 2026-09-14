@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Jio+Financial%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-12T16:20:57Z",
+ "http_status": 200,
+ "bytes": 55814,
+ "sha256": "d9180f95a8ce7be22545480b5e3ed2ff8e6e9088e06f7057ccc6307e1695f8fd",
+ "document_date": "2026-09-12",
+ "feed": "gnews-jiofin",
+ "kind": "name",
+ "ticker": "JIOFIN.NS"
+}

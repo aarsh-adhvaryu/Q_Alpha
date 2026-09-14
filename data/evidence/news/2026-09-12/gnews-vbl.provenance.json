@@ -1,0 +1,11 @@
+{
+ "source_url": "https://news.google.com/rss/search?q=%22Varun+Beverages%22+when%3A7d&hl=en-IN&gl=IN&ceid=IN:en",
+ "retrieved_at_utc": "2026-09-12T16:21:01Z",
+ "http_status": 200,
+ "bytes": 46561,
+ "sha256": "b066450ed6a531aa8fc2d79f930095dc4e9ef3e03a7d832571b8e46cf7a8f970",
+ "document_date": "2026-09-12",
+ "feed": "gnews-vbl",
+ "kind": "name",
+ "ticker": "VBL.NS"
+}
