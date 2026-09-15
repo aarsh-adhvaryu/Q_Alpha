@@ -122,8 +122,15 @@ def events(
                     "type": str(row.get("event_type", "")),
                     "materiality": str(row.get("materiality", "")),
                     "stance": str(row.get("stance", "")),
+                    # When it happened, else when it became public. Never when it was READ: 811 filing
+                    # events carry no event date, and falling back to ``as_of`` dated a filing
+                    # published a year earlier on the evening a backfill read it — an old event
+                    # shown as fresh, and counted by the scorecard and attention as news.
                     "date": str(
-                        row.get("event_date") or row.get("published_at") or row.get("as_of") or ""
+                        row.get("event_date")
+                        or row.get("disseminated_at")
+                        or row.get("published_at")
+                        or ""
                     )[:10],
                     "summary": str(row.get("summary", "")),
                     "quote": str(row.get("passage", ""))[:400],

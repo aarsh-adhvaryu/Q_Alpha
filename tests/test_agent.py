@@ -597,3 +597,114 @@ def test_failed_steps_are_read_from_tonights_ledger(tmp_path: Path) -> None:
 def test_ai_pm3_is_not_active_until_a_start_date_is_registered() -> None:
     assert agent.REGISTRATION.start is None and not agent.active(date(2030, 1, 1))
     assert agent.active(date(2026, 10, 1), replace(agent.REGISTRATION, start=date(2026, 10, 1)))
+
+
+# ---- the evening run's caller ------------------------------------------------------------------
+
+
+def _evening_step(world: dict[str, Any], monkeypatch: pytest.MonkeyPatch, start: date) -> Any:
+    """``scripts/twin.py``'s step, with AI-PM-3 registered to start on ``start`` and its records in tmp."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import twin as twin_script
+
+    real = agent.review
+    brain = _brain(world, lambda p: [_intent("DDD.NS", "open", share=4.0, cites=["DDD:1"])])
+    monkeypatch.setattr(
+        agent,
+        "review",
+        lambda *a, **k: real(
+            *a, **{**k, "files": world["files"], "graph_log": world["log"], "make_brain": brain}
+        ),
+    )
+    monkeypatch.setattr(agent, "failed_steps_today", lambda today: [])
+    monkeypatch.setattr(agent, "REGISTRATION", replace(agent.REGISTRATION, start=start))
+    return twin_script
+
+
+def test_the_evening_run_is_ai_pm3_from_its_start_and_nothing_before_it(
+    world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rule 4: the scheduled caller, with holdings and cash. AI-PM-3 is the only investor."""
+    manager._append(
+        world["files"].scope,
+        [{"as_of": (MON - timedelta(days=1)).isoformat(), "full_review": True}],
+    )
+    evidence_log.EVENT_LOG.write_text(
+        json.dumps(
+            {**_customer_event(MON), "_key": "DDD:1", "ticker": "DDD", "summary": "order win"}
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    twin_script = _evening_step(world, monkeypatch, start=TUE)
+    book, store = world["book"], world["store"]
+    before = book.portfolio.positions()
+
+    assert (
+        twin_script.step_system(book, _market(world["panel"], MON), now=_evening(MON), store=store)
+        is None
+    )
+    assert world["calls"] == [] and book.portfolio.positions() == before, (
+        "before its start: nothing"
+    )
+
+    assert (
+        twin_script.step_system(book, _market(world["panel"], TUE), now=_evening(TUE), store=store)
+        is None
+    )
+    assert world["calls"] and book.manager["pending"]["orders"][0]["ticker"] == "DDD.NS"
+    assert book.portfolio.positions() == before, "never filled at the close it decided on"
+
+    twin_script.step_system(book, _market(world["panel"], WED), now=_evening(WED), store=store)
+    assert book.portfolio.positions()["DDD.NS"] > 0, "the next evening fills first"
+
+
+def test_a_fill_cut_before_the_book_is_saved_is_not_written_twice(world: dict[str, Any]) -> None:
+    manager._append(
+        world["files"].scope,
+        [{"as_of": (MON - timedelta(days=1)).isoformat(), "full_review": True}],
+    )
+    evidence_log.EVENT_LOG.write_text(
+        json.dumps(
+            {**_customer_event(TUE), "_key": "DDD:1", "ticker": "DDD", "summary": "order win"}
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _run(
+        world, TUE, _brain(world, lambda p: [_intent("DDD.NS", "open", share=4.0, cites=["DDD:1"])])
+    )
+    saved = world["book"].portfolio.clone(), dict(world["book"].manager)
+    for _ in range(2):  # the second pass is the retry from the book as it was saved
+        world["book"].portfolio, world["book"].manager = (
+            saved[0].clone(),
+            json.loads(json.dumps(saved[1])),
+        )
+        agent.fill_live(
+            world["book"],
+            _market(world["panel"], WED),
+            now=_evening(WED),
+            store=world["store"],
+            registration=agent.REGISTRATION,
+        )
+    fills = [f for f in manager._jsonl(world["store"].fills) if f["on"] == WED.isoformat()]
+    assert len(fills) == 1 and world["book"].portfolio.positions()["DDD.NS"] > 0
+
+
+def test_the_scorecard_shows_ai_pm3_its_own_decisions(world: dict[str, Any]) -> None:
+    manager._append(
+        world["store"].decisions,
+        [
+            {
+                "version": agent.VERSION,
+                "as_of": MON.isoformat(),
+                "ticker": "AAA.NS",
+                "action": "HOLD",
+                "price_at_decision": "100",
+            }
+        ],
+    )
+    card = manager.update_scorecard(_market(world["panel"], TUE), world["store"])
+    assert [(r["ticker"], r["version"]) for r in card["decisions"]] == [("AAA.NS", agent.VERSION)]

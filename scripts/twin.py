@@ -4,7 +4,8 @@
     uv run python scripts/twin.py daily    # credit new flows → step SYSTEM → mark → append history
     uv run python scripts/twin.py status   # print the comparison without writing anything
     uv run python scripts/twin.py refund   # re-fund every book from the imported ledger
-    uv run python scripts/twin.py shadow   # one investor review on a COPY of SYSTEM; changes no book
+
+A review on a copy of SYSTEM is ``scripts/agent.py shadow-review`` (AI-PM-3).
 
 **Paper books only.** No broker client is imported; nothing here can place an order.
 
@@ -18,7 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -35,7 +36,7 @@ from qalpha.live import calendar as nse
 from qalpha.live import funding as funding_record
 from qalpha.live.benchmarks import equal_weight_pit, unpriceable_members
 from qalpha.live.console import use_utf8
-from qalpha.live.decisions import Decision, decisions_markdown
+from qalpha.live.decisions import decisions_markdown
 from qalpha.live.flows import Flow
 from qalpha.live.market import Market
 from qalpha.live.panels import (
@@ -62,7 +63,6 @@ from qalpha.live.twin import (
     DECIDING,
     EVALUATION_START,
     REAL,
-    SYSTEM,
     TWIN_HISTORY,
     TWIN_STATE,
     BookMark,
@@ -523,13 +523,13 @@ def step_system(
     market: Market,
     *,
     now: datetime,
-    make_brain: Callable[[], manager.Brain] = manager.brain,
     store: manager.Store = manager.STORE,
 ) -> str | None:
-    """One evening for the investor's book: fill what was queued, then review. The reason it failed, or None.
+    """One evening for the investor's book: AI-PM-3 fills, attends and reviews. The reason it failed, or None.
 
     Fills first, so a review sees the book its earlier orders produced. A fill that is still waiting
-    for its session is not a failure; a review that cannot happen is.
+    for its session is not a failure; a review that cannot happen is. **AI-PM-3 is the only investor**:
+    before its registered start nothing decides, and there is no other review to fall back to.
     """
     today = now.astimezone(IST).date()
     if market.as_of != today:
@@ -545,72 +545,20 @@ def step_system(
         print(f"[investor] {nse.describe(today, traded=False)} — nothing to review.")
     from qalpha.live import agent
 
-    if agent.active(today):
-        # AI-PM-3's evening fills its own orders, then attends and reviews. Never both investors.
-        if market.as_of != today:
-            agent.fill_live(book, market, now=now, store=store, registration=agent.REGISTRATION)
-            return None
-        try:
-            decisions = agent.review(
-                book, market, now=now, store=store, failed_steps=agent.failed_steps_today(today)
-            )
-        except manager.IncompleteReviewError as exc:
-            return str(exc)
-        print(decisions_markdown(decisions) if decisions else "[investor] already reviewed today")
+    if not agent.active(today):
+        print(f"[investor] AI-PM-3 has no registered start on or before {today}; nothing decides.")
         return None
-    for fill in manager.fill_pending(book, market, now=now, store=store):
-        print(
-            f"[investor] {fill['action']} {fill['filled']}/{fill['requested']} {fill['ticker']} "
-            f"@ ₹{fill['price']} — {fill['status']}"
-        )
     if market.as_of != today:
-        return None  # the exchange was shut; the fills above are all this evening had to do
+        agent.fill_live(book, market, now=now, store=store, registration=agent.REGISTRATION)
+        return None
     try:
-        decisions = manager.review(book, market, now=now, make_brain=make_brain, store=store)
+        decisions = agent.review(
+            book, market, now=now, store=store, failed_steps=agent.failed_steps_today(today)
+        )
     except manager.IncompleteReviewError as exc:
         return str(exc)
     print(decisions_markdown(decisions) if decisions else "[investor] already reviewed today")
     return None
-
-
-def cmd_shadow(cfg: Config) -> int:
-    """One real review on a COPY of SYSTEM. Nothing is saved to the books; its records go to shadow/.
-
-    This is how a version is checked before its start date is registered: a real model call, a
-    real receipt, real limits — and no book that has to live with it.
-    """
-    books = load_books(cfg)
-    book = books.get(SYSTEM)
-    market = _market(date.today())
-    if book is None or market is None:
-        print("[shadow] no SYSTEM book or no market data", file=sys.stderr)
-        return ABORTED
-    copy = TwinBook(
-        name=f"{SYSTEM}-shadow", portfolio=book.portfolio.clone(), flows=list(book.flows)
-    )
-    store = manager.Store(manager.STORE.root / "shadow")
-    try:
-        now = datetime.now(IST)
-        decisions: list[Decision] = manager.review(
-            copy, market, now=now, store=store, require_today=False, known_on=now.date()
-        )
-    except manager.IncompleteReviewError as exc:
-        print(f"[shadow] INCOMPLETE: {exc}", file=sys.stderr)
-        return ABORTED
-    print(decisions_markdown(decisions))
-    pending = copy.manager.get("pending") or {}
-    orders = pending.get("orders", [])
-    print(
-        f"[shadow] {len(decisions)} decision(s); "
-        + (
-            "would queue "
-            + ", ".join(f"{o['action']} {o['quantity']} {o['ticker']}" for o in orders)
-            if orders
-            else "nothing to queue"
-        )
-    )
-    print(f"[shadow] receipt, notes and scorecard in {store.root} — no book was changed.")
-    return 0
 
 
 def cmd_status(cfg: Config) -> int:
@@ -632,13 +580,11 @@ def cmd_status(cfg: Config) -> int:
 def main(argv: list[str] | None = None) -> int:
     use_utf8()  # first: Windows pipes fall back to cp1252 and die on a rupee sign
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("cmd", choices=["seed", "daily", "status", "shadow", "refund"])
+    ap.add_argument("cmd", choices=["seed", "daily", "status", "refund"])
     args = ap.parse_args(argv)
     cfg = Config()
     if args.cmd == "seed":
         return cmd_seed(cfg)
-    if args.cmd == "shadow":
-        return cmd_shadow(cfg)
     if args.cmd == "refund":
         return cmd_refund(cfg)
     return cmd_daily(cfg) if args.cmd == "daily" else cmd_status(cfg)

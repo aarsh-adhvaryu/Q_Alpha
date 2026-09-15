@@ -8,7 +8,6 @@ network or the real records.
 from __future__ import annotations
 
 import json
-import sys
 from collections.abc import Callable
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -444,35 +443,6 @@ def test_the_next_review_sees_its_own_notes_and_how_its_decisions_went(
 
 
 # ---- the caller ---------------------------------------------------------------------------------
-
-
-def test_the_evening_step_fills_then_reviews_and_reports_an_incomplete_review(
-    world: dict[str, Any],
-) -> None:
-    """Rule 4: the scheduled caller, with holdings and cash — not only the functions."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-    import twin as twin_script
-
-    book = world["book"]
-    ok = twin_script.step_system(
-        book,
-        world["market"],
-        now=_evening(DECIDE),
-        make_brain=_brain(world, lambda p: [*_hold_all(p), _decision("EEE.NS", "BUY", 50)]),
-        store=world["store"],
-    )
-    assert ok is None and book.manager["pending"]
-
-    next_market = _market(world["panel"], NEXT)
-    failure = twin_script.step_system(
-        book,
-        next_market,
-        now=_evening(NEXT),
-        make_brain=_brain(world, lambda p: _hold_all(p)[:-1]),
-        store=world["store"],
-    )
-    assert book.portfolio.positions()["EEE.NS"] == 50, "yesterday's order filled first"
-    assert failure is not None and "did not review" in failure
 
 
 def test_a_decision_date_is_never_the_fill_date(world: dict[str, Any]) -> None:
