@@ -30,7 +30,7 @@ the build plan. Read it first. Keep it true: edit the line that changed; never a
 
 **The investor is AI-PM-3** (`live/agent.py`), the only one. AI-PM-1 and AI-PM-2 were retired on
 2026-09-15 without making a decision; `live/manager.py` remains as the packet, limits and fills
-AI-PM-3 is built on. **It starts 2026-09-16** (`live/twin.EVALUATION_START`, read by
+AI-PM-3 is built on. **It starts 2026-09-15** (`live/twin.EVALUATION_START`, read by
 `agent.Registration.start`; checks recorded in its registration §7). **The first month is frozen:** no
 change to code, model ids, prompts or sizing rules; a serious integrity failure stops the run and is
 repaired as a new, recorded version. Steps A–E and the five-phase plan are built; step F (training)

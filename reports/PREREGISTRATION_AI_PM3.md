@@ -90,9 +90,11 @@ save, so recovery restores the same result without spending the allowance or app
 
 ## 7. Start
 
-**Start date: 2026-09-16.** Written here and in `twin.EVALUATION_START` in one commit on 2026-09-15,
-before that evening. The first review is the evening of Wednesday 16 September; an order it queues
-can first fill at Thursday 17 September's close. Sections 1–6 are now frozen for the first month.
+**Start date: 2026-09-15.** Written here and in `twin.EVALUATION_START` on 2026-09-15, after the checks
+below passed that evening and before that evening's run. The first review is the evening of Tuesday
+15 September, on that day's close; an order it queues can first fill at Wednesday 16 September's
+close. Sections 1–6 are now frozen for the first month. This is earlier than the rule above ("the
+trading evening after all of these hold") allows, at the user's instruction — see §8.
 
 AI-PM-3 starts the trading evening after all of these hold, and the date is then written here and in
 `twin.EVALUATION_START` in the same commit, before that evening:
@@ -148,3 +150,11 @@ rules are frozen for the first month; prices, evidence, memory, holdings and rec
   names and settles actions around missed-session fills; the shadow receives its own entitlements.
   Evaluation excludes HOLD from the count of reduced/cancelled trade intentions. These are
   correctness fixes before registration opens, not evidence of investment performance.
+- **2026-09-15, the start moved from 16 to 15 September, at the user's instruction.** §7 said AI-PM-3
+  starts the trading evening *after* its checks hold; they held on the evening of the 15th, which made
+  the 16th. The start was set to the 15th instead, written before that evening's run. What this does
+  not change: the review still decides on the 15th's close after it is final, and its orders still fill
+  at a later session's close, so no decision sees a price it acts on. What it does change: the shadow
+  review that satisfied check 3 ran on the 11 September close, not the 15th's, and there is no
+  evening between the checks and the first real decision. Recorded here rather than rewritten into §7.
+

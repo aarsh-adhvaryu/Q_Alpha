@@ -23,7 +23,7 @@ plan and report are in git history.
 |---|---|
 | **Working** | The evening run: prices → filings → headlines → filed results → four paper books marked against two index funds. Tax-exact FIFO accounting. Resumes where it stopped. |
 | **The investor** | **AI-PM-3**, the only one (`live/agent.py`), registered in [reports/PREREGISTRATION_AI_PM3.md](reports/PREREGISTRATION_AI_PM3.md). AI-PM-1 and AI-PM-2 were retired on 2026-09-15 without making a decision. |
-| **Start date** | **2026-09-16.** The first review is that evening after 17:00 IST; its first possible fill is the 17th. Code, models, prompts and sizing rules are frozen for the first month. |
+| **Start date** | **2026-09-15** (moved forward a day at the user's instruction; see the registration §8). The first review is that evening after 17:00 IST; its first possible fill is the 16th. Code, models, prompts and sizing rules are frozen for the first month. |
 | **Proven edge** | None. See §6. |
 
 ---
