@@ -595,8 +595,11 @@ def test_failed_steps_are_read_from_tonights_ledger(tmp_path: Path) -> None:
 
 
 def test_ai_pm3_is_not_active_until_a_start_date_is_registered() -> None:
-    assert agent.REGISTRATION.start is None and not agent.active(date(2030, 1, 1))
-    assert agent.active(date(2026, 10, 1), replace(agent.REGISTRATION, start=date(2026, 10, 1)))
+    unset = replace(agent.REGISTRATION, start=None)
+    assert not agent.active(date(2030, 1, 1), unset), "no start date is never, not the past"
+    registered = replace(agent.REGISTRATION, start=date(2026, 10, 1))
+    assert not agent.active(date(2026, 9, 30), registered)
+    assert agent.active(date(2026, 10, 1), registered)
 
 
 # ---- the evening run's caller ------------------------------------------------------------------

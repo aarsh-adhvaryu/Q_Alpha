@@ -1,0 +1,74 @@
+{
+ "suite": "SCENARIOS-1",
+ "model": "claude-sonnet-5",
+ "results": [
+  {
+   "scenario": "contradicted_thesis",
+   "passed": true,
+   "problems": [],
+   "intentions": {
+    "AAA.NS": "exit",
+    "BBB.NS": "hold"
+   },
+   "usage": {
+    "input": 3145,
+    "output": 1490,
+    "truncated": 0
+   }
+  },
+  {
+   "scenario": "no_buy_without_evidence",
+   "passed": true,
+   "problems": [],
+   "intentions": {
+    "AAA.NS": "hold"
+   },
+   "usage": {
+    "input": 2817,
+    "output": 2949,
+    "truncated": 0
+   }
+  },
+  {
+   "scenario": "supply_chain",
+   "passed": true,
+   "problems": [],
+   "intentions": {
+    "MOTHERSON.NS": "reduce",
+    "TCS.NS": "hold"
+   },
+   "usage": {
+    "input": 3526,
+    "output": 2971,
+    "truncated": 0
+   }
+  },
+  {
+   "scenario": "missing_feed",
+   "passed": true,
+   "problems": [],
+   "intentions": {
+    "AAA.NS": "hold"
+   },
+   "usage": {
+    "input": 3037,
+    "output": 2595,
+    "truncated": 0
+   }
+  },
+  {
+   "scenario": "limits",
+   "passed": true,
+   "problems": [],
+   "intentions": {
+    "AAA.NS": "reduce",
+    "BBB.NS": "hold"
+   },
+   "usage": {
+    "input": 3071,
+    "output": 2684,
+    "truncated": 0
+   }
+  }
+ ]
+}

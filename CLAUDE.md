@@ -30,16 +30,16 @@ the build plan. Read it first. Keep it true: edit the line that changed; never a
 
 **The investor is AI-PM-3** (`live/agent.py`), the only one. AI-PM-1 and AI-PM-2 were retired on
 2026-09-15 without making a decision; `live/manager.py` remains as the packet, limits and fills
-AI-PM-3 is built on. **Its start date is not set** (`live/twin.EVALUATION_START`, read by
-`agent.Registration.start`): until it is, SYSTEM mirrors REAL and nothing decides. Steps A–E and the
-five-phase plan are built; step F (training) is deliberately not started.
+AI-PM-3 is built on. **It starts 2026-09-16** (`live/twin.EVALUATION_START`, read by
+`agent.Registration.start`; checks recorded in its registration §7). **The first month is frozen:** no
+change to code, model ids, prompts or sizing rules; a serious integrity failure stops the run and is
+repaired as a new, recorded version. Steps A–E and the five-phase plan are built; step F (training)
+is deliberately not started.
 
 **Open, in order** (the user runs anything that spends money or reads the network):
 
-1. **AI-PM-3's start checks** (`reports/PREREGISTRATION_AI_PM3.md` §7): `uv sync --extra graph`;
-   `graph.py ingest`; `agent.py scenarios --model claude-sonnet-5` passes every scenario;
-   `agent.py shadow-review` runs once and its receipt is read. Then the start date is set in §7 and in
-   `twin.EVALUATION_START` in one PR, before the evening it opens.
+1. **Run it:** one click after 17:00 IST each trading evening, and read what it wrote. After a
+   month, `scripts/evaluate.py` reports operation and decisions (no outcome figure below 60 sessions).
 2. **EX-5** (does not block the start). Adjudication batches partly collected — repeat `readers.py
    adjudicate collect` / `submit --budget-usd 30`; the user reads 20 documents and fills 25 claim
    checks; `readers.py score`. **Open decision for the user:** no reader has reached the registered

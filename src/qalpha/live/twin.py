@@ -308,7 +308,7 @@ def baseline_mark(flows: Sequence[Flow], series: pd.Series, as_of: date) -> Book
 #:
 #: ``None``: not started. SYSTEM mirrors REAL and nothing is measured. AI-PM-1 and AI-PM-2, whose
 #: starts were set here before, were retired on 2026-09-15 without making a decision.
-EVALUATION_START: date | None = None
+EVALUATION_START: date | None = date(2026, 9, 16)
 
 
 def is_autonomous(as_of: date, *, start: date | None = EVALUATION_START) -> bool:
