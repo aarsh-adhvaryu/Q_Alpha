@@ -123,6 +123,11 @@ AI-PM-3 starts the trading evening after all of these hold, and the date is then
 
 **Released code:** main at `8bb6375` (#163) plus this commit. Code, model ids, prompts and sizing
 rules are frozen for the first month; prices, evidence, memory, holdings and records keep updating.
+**What the freeze covers** is what decides and what it is shown: `live/agent.py`, `manager.py`,
+`sizing.py`, `mandate.py`, `tools.py`, `attention.py`, `evidence_log.py`, the graph and quant cards,
+the prompts and the model ids. The display page (`live/record.py`, `record_assets.py`) is not
+an input to any decision — a test asserts the investor never imports it — and was redesigned on
+2026-09-15 before the first review.
 
 ## 8. Corrections
 
