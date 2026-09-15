@@ -32,8 +32,10 @@ the build plan. Read it first. Keep it true: edit the line that changed; never a
 2026-09-15 without making a decision; `live/manager.py` remains as the packet, limits and fills
 AI-PM-3 is built on. **It starts 2026-09-15** (`live/twin.EVALUATION_START`, read by
 `agent.Registration.start`; checks recorded in its registration §7). **The first month is frozen:** no
-change to code, model ids, prompts or sizing rules; a serious integrity failure stops the run and is
-repaired as a new, recorded version. Steps A–E and the five-phase plan are built; step F (training)
+change to what decides or what it is shown (agent, manager, sizing, mandate, tools, attention, evidence,
+graph, prompts, model ids); the display page (`live/record.py`) may change, and a test asserts the
+investor never imports it. A serious integrity failure stops the run and is repaired as a new,
+recorded version. Steps A–E and the five-phase plan are built; step F (training)
 is deliberately not started.
 
 **Open, in order** (the user runs anything that spends money or reads the network):

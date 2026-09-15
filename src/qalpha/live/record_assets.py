@@ -6,38 +6,95 @@ files, and has no opinion about which book is the bar.
 
 No CDN and no bundler: the page is served from ``127.0.0.1`` by Python's own ``http.server`` and
 has to work with the network unplugged, so the charts are hand-drawn SVG over the inlined data.
+
+The layout follows a brokerage terminal — a market strip and tabs across the top, the holdings down
+the left, a statement's figures and table in the middle — in the app's own colours and mark.
 """
 
 from __future__ import annotations
 
 CSS = """
-:root{--bg:#f7f7f5;--card:#fff;--ink:#17171a;--dim:#6b6b76;--line:#e3e3de;
- --up:#127a4b;--down:#b3261e;--accent:#2f5fd0;--warn:#8a6d00;--grid:#ececE6}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#141416;--card:#1c1c20;
- --ink:#ececef;--dim:#9a9aa6;--line:#2c2c33;--up:#3fbe84;--down:#ff6b5e;--accent:#7aa2ff;
- --warn:#d6b14a;--grid:#26262c}}
+:root{--bg:#131313;--panel:#1b1b1b;--card:#1b1b1b;--raise:#242424;--ink:#e3e3e3;--dim:#8d8d8d;
+ --line:#2b2b2b;--up:#4caf7a;--down:#e5534b;--accent:#4a8df0;--brand:#ff6a3d;--warn:#d6a73a;
+ --grid:#262626}
+@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f5f5f4;--panel:#fff;
+ --card:#fff;--raise:#f3f3f1;--ink:#1f1f1f;--dim:#6d6d6d;--line:#e6e6e3;--up:#1f8a4c;
+ --down:#c7372f;--accent:#2f6fd6;--brand:#e8552a;--warn:#8a6d00;--grid:#eeeeea}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
- font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding-block:28px;padding-left:20px;padding-right:20px}
-h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
-h2{font-size:15px;margin:0 0 2px;letter-spacing:-.01em}
-.sub{color:var(--dim);font-size:13px;margin:0 0 20px}
-.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
-.card .note{color:var(--dim);font-size:12px;margin:2px 0 12px}
-.wide{grid-column:1/-1}
-.kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+ font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none}
+.top{position:sticky;top:0;z-index:5;display:grid;
+ grid-template-columns:minmax(240px,420px) auto 1fr auto;align-items:center;gap:18px;
+ padding:0 24px;height:56px;background:var(--panel);border-bottom:1px solid var(--line)}
+.strip{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ font-variant-numeric:tabular-nums}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.01em}
+.mark{width:13px;height:13px;background:var(--brand);transform:rotate(45deg);border-radius:3px}
+.tabs{display:flex;gap:2px;justify-content:flex-end;overflow-x:auto}
+.tabs a{color:var(--ink);padding:17px 12px;border-bottom:2px solid transparent;white-space:nowrap}
+.tabs a:hover{color:var(--brand)}
+.tabs a[aria-current=page]{color:var(--brand);border-bottom-color:var(--brand)}
+.who{display:flex;gap:10px;align-items:center;font-size:12px;white-space:nowrap}
+.state{border:1px solid var(--line);border-radius:999px;padding:2px 10px;color:var(--dim)}
+.state.on{color:var(--up);border-color:var(--up)}
+.shell{display:grid;grid-template-columns:minmax(300px,430px) 1fr;min-height:calc(100vh - 56px)}
+.side{border-right:1px solid var(--line);background:var(--panel)}
+.side-h{padding:14px 18px;color:var(--dim);font-size:12px;border-bottom:1px solid var(--line)}
+.wl{display:grid;grid-template-columns:1fr auto 62px 66px 84px;gap:8px;align-items:center;
+ padding:12px 18px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;
+ font-size:13.5px}
+.wl:hover{background:var(--raise)}
+.wl span{text-align:right}.wl .nm{text-align:left;font-weight:500}
+.wl .qty{color:var(--dim);font-size:12px}
+.pad{padding:12px 18px;font-size:12px}
+.main{padding:22px 28px 60px;min-width:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.sub{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+.tab{display:none}.tab.show{display:block}
+h2{font-size:17px;font-weight:500;margin:0 0 4px}
+h3{font-size:15px;font-weight:500;margin:0 0 8px}
+h3.sec{margin:22px 0 10px}
+.panel,.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;
+ padding:18px 20px;margin-bottom:16px}
+.note,.card .note{color:var(--dim);font-size:12px;margin:2px 0 12px}
+.duo{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
  margin-bottom:16px}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
-.kpi .k{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
-.kpi .v{font-size:20px;font-variant-numeric:tabular-nums;margin-top:2px}
+.duo>.panel{margin-bottom:0}
+.big{font-size:40px;font-weight:300;letter-spacing:-.02em;line-height:1.15;
+ font-variant-numeric:tabular-nums;margin:4px 0 2px}
+.big small{font-size:13px;margin-left:6px;font-weight:400}
+.kv{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:9px 0 0;
+ margin-top:10px;font-size:13px;font-variant-numeric:tabular-nums}
+.kv span{color:var(--dim)}.kv b{font-weight:500}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+ background:var(--panel);border:1px solid var(--line);border-radius:6px;margin-bottom:16px}
+.fig{padding:14px 18px;border-right:1px solid var(--line)}
+.fig .k{color:var(--dim);font-size:12.5px}
+.fig .v{font-size:21px;font-variant-numeric:tabular-nums;margin-top:3px;display:flex;gap:8px;
+ align-items:center;flex-wrap:wrap}
+.pill{font-size:11px;padding:1px 6px;border-radius:3px;background:var(--raise)}
+.tiles{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+ margin-bottom:16px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;
+ font-variant-numeric:tabular-nums}
+.tile .k{font-size:12px;color:var(--dim)}.tile .v{font-size:20px}.small{font-size:11.5px}
+.dec{display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+.tag{font-size:11px;padding:1px 7px;border-radius:3px;background:var(--raise);color:var(--accent)}
+.alloc{display:flex;height:56px;border-radius:3px;overflow:hidden;background:var(--raise)}
+.alloc div{height:100%;min-width:2px}
+.alloc-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;
+ flex-wrap:wrap;gap:8px}
+.alloc-total{font-size:18px;font-variant-numeric:tabular-nums}
+.alloc-mode{display:flex;gap:14px;font-size:13px;color:var(--dim)}
+.alloc-mode input{accent-color:var(--accent)}
 .up{color:var(--up)}.down{color:var(--down)}.warn{color:var(--warn)}.dim{color:var(--dim)}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th,td{text-align:right;padding:11px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 th:first-child,td:first-child{text-align:left}
-th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
-.scroll{overflow-x:auto}
+th{color:var(--dim);font-weight:400;font-size:12.5px}
+tr.total td{font-weight:600;border-bottom:none}
+.scroll{overflow-x:auto;margin-bottom:14px}
 .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:12px}
 .legend button{display:flex;align-items:center;gap:6px;background:none;border:1px solid var(--line);
  border-radius:999px;padding:3px 10px;color:var(--ink);cursor:pointer;font:inherit}
@@ -47,13 +104,19 @@ th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;lett
  border-radius:999px;padding:3px 10px;font-size:12px;margin:0 6px 6px 0}
 .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
 svg{display:block;width:100%;height:auto;overflow:visible}
-.tip{position:fixed;pointer-events:none;background:var(--card);border:1px solid var(--line);
- border-radius:8px;padding:6px 9px;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.18);opacity:0;
+.tip{position:fixed;pointer-events:none;background:var(--raise);border:1px solid var(--line);
+ border-radius:6px;padding:6px 9px;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.35);opacity:0;
  transition:opacity .1s;z-index:9;font-variant-numeric:tabular-nums}
-.banner{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--card);
- border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:13px}
-a{color:var(--accent)}
-@media (max-width:520px){.wrap{padding-left:16px;padding-right:16px}h1{font-size:19px}}
+.banner{border:1px solid var(--line);border-left:3px solid var(--brand);background:var(--panel);
+ border-radius:6px;padding:11px 14px;margin-bottom:16px;font-size:13px}
+.grid{display:grid;gap:16px}.wide{grid-column:1/-1}
+ul{padding-left:18px}
+@media (max-width:1100px){.top{grid-template-columns:1fr auto;height:auto;padding:8px 16px;
+ row-gap:4px}.strip{grid-column:1/-1}.tabs{grid-column:1/-1;justify-content:flex-start}
+ .tabs a{padding:10px}.shell{grid-template-columns:1fr}
+ .side{border-right:none;border-bottom:1px solid var(--line)}}
+@media (max-width:520px){.main{padding:16px}.big{font-size:32px}
+ .wl{grid-template-columns:1fr 64px 80px;padding:10px 16px}.wl .qty,.wl span:nth-child(3){display:none}}
 """
 
 JS = r"""
@@ -108,7 +171,7 @@ function lineChart(mount, series, opts){
     pts.forEach(p=>{
       const c=el("circle",{cx:X(xi.get(p.x)),cy:Y(p.y),
         r:p.suspect?5:(pts.length>=D.min_for_a_line?3:5),
-        fill:p.suspect?"none":s.color,stroke:p.suspect?css("--warn"):css("--card"),
+        fill:p.suspect?"none":s.color,stroke:p.suspect?css("--warn"):css("--panel"),
         "stroke-width":p.suspect?2:1.5});
       c.style.cursor="crosshair";
       c.addEventListener("mousemove",e=>show(
@@ -157,7 +220,7 @@ function donut(mount, rows){
       "A"+R+","+R+" 0 "+big+" 1 "+(cx+R*Math.cos(a1))+","+(cy+R*Math.sin(a1)),
       "L"+(cx+r0*Math.cos(a1))+","+(cy+r0*Math.sin(a1)),
       "A"+r0+","+r0+" 0 "+big+" 0 "+(cx+r0*Math.cos(a0))+","+(cy+r0*Math.sin(a0)),"Z"].join(" ");
-    const seg=el("path",{d:p,fill:row.color,stroke:css("--card"),"stroke-width":1.5});
+    const seg=el("path",{d:p,fill:row.color,stroke:css("--panel"),"stroke-width":1.5});
     seg.style.cursor="crosshair";
     seg.addEventListener("mousemove",e=>show("<b>"+row.label+"</b><br>"+inr(row.value)+
       " &middot; "+(row.value/total*100).toFixed(1)+"%",e));
@@ -167,11 +230,12 @@ function donut(mount, rows){
   mount.innerHTML=""; mount.appendChild(svg);
 }
 
-const PALETTE=["#2f5fd0","#127a4b","#b3261e","#8a6d00","#6d4aa8","#0f7d8c","#a8541d","#5a6472"];
+const PALETTE=["#4f6ef7","#03a9f4","#2196f3","#9c27b0","#673ab7","#3f51b5","#00bcd4","#009688",
+  "#8bc34a","#ff9800"];
 
 (function(){
-  const colors={SYSTEM:css("--accent"),BASELINE_EW:css("--up"),BASELINE:css("--dim"),
-    REAL:css("--warn")};
+  const colors={SYSTEM:css("--brand"),BASELINE_EW:css("--up"),BASELINE:css("--dim"),
+    REAL:css("--accent")};
   const series=Object.keys(D.series).sort().map(name=>({
     name:name, color:colors[name]||css("--accent"), hidden:false,
     points:D.series[name].map(p=>({x:p.date,y:p.value,extra:"contributed "+inr(p.invested)}))
@@ -189,12 +253,16 @@ const PALETTE=["#2f5fd0","#127a4b","#b3261e","#8a6d00","#6d4aa8","#0f7d8c","#a85
     legend.appendChild(b);
   });
 
+  // The same book values, without the legend, on the dashboard.
+  const overview=document.getElementById("overview-chart");
+  if(overview) lineChart(overview,series,{height:220});
+
   barChart(document.getElementById("holdings-chart"),
     D.holdings.filter(h=>h.value!=null).sort((a,b)=>b.value-a.value).map(h=>({
       label:h.ticker, value:h.value,
       color:(h.pnl>=0?css("--up"):css("--down")),
       right:inr(h.value),
-      tip:h.quantity+" @ "+inr(h.cost)+" cost<br>mark "+inr(h.mark)+"<br>"+
+      tip:h.quantity+" @ "+inr(h.cost)+" paid<br>last close "+inr(h.mark)+"<br>"+
         '<span class="'+(h.pnl>=0?"up":"down")+'">'+(h.pnl>=0?"+":"")+inr(h.pnl)+
         "</span> &middot; "+h.sector
     })));
@@ -206,5 +274,43 @@ const PALETTE=["#2f5fd0","#127a4b","#b3261e","#8a6d00","#6d4aa8","#0f7d8c","#a85
   sl.innerHTML=D.sectors.map((s,i)=>
     '<span class="chip"><span class="dot" style="background:'+PALETTE[i%PALETTE.length]+
     '"></span>'+s.sector+" "+(s.value/tot*100).toFixed(0)+"%</span>").join("");
+
+  // Allocation: one segment per holding, by current value or by what was paid. A holding with no
+  // close makes the current-value bar unknown rather than drawing the others as the whole.
+  const exact = n => "₹"+n.toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.querySelectorAll("[data-alloc]").forEach(bar=>{
+    const foot=bar.nextElementSibling, total=foot.querySelector("[data-alloc-total]");
+    const held=D.holdings.slice().sort((a,b)=>a.ticker<b.ticker?-1:1);
+    const paint=mode=>{
+      const rows=held.map((h,i)=>({h:h,i:i,v:mode==="value"?h.value:h.invested}));
+      bar.innerHTML="";
+      if(!rows.length){ total.innerHTML='<span class="dim">Nothing held.</span>'; return; }
+      if(rows.some(r=>r.v==null)){
+        total.innerHTML='<span class="dim">unknown — a holding has no close</span>'; return; }
+      const sum=rows.reduce((a,r)=>a+r.v,0)||1;
+      rows.forEach(r=>{ const d=document.createElement("div");
+        d.style.width=(r.v/sum*100)+"%"; d.style.background=PALETTE[r.i%PALETTE.length];
+        d.addEventListener("mousemove",e=>show("<b>"+r.h.ticker+"</b><br>"+exact(r.v)+
+          " &middot; "+(r.v/sum*100).toFixed(1)+"%",e));
+        d.addEventListener("mouseleave",hide); bar.appendChild(d); });
+      total.textContent=exact(sum);
+    };
+    foot.querySelectorAll("input").forEach(inp=>inp.addEventListener("change",()=>paint(inp.value)));
+    paint("value");
+  });
+
+  // Tabs: the address names the open section, so the reload after a run lands where it was.
+  const tabs=[...document.querySelectorAll("section.tab")];
+  const links=[...document.querySelectorAll(".tabs a")];
+  const open=()=>{
+    // Sections are "tab-<name>", not "<name>": an id equal to the hash makes the browser jump to it.
+    const want=(location.hash||"#dashboard").slice(1);
+    const hit=tabs.some(t=>t.id==="tab-"+want)?want:"dashboard";
+    tabs.forEach(t=>t.classList.toggle("show",t.id==="tab-"+hit));
+    links.forEach(a=>{ if(a.getAttribute("href")==="#"+hit) a.setAttribute("aria-current","page");
+      else a.removeAttribute("aria-current"); });
+    window.scrollTo(0,0);
+  };
+  addEventListener("hashchange",open); open();
 })();
 """

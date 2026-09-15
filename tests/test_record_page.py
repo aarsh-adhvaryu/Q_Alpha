@@ -231,3 +231,54 @@ def test_a_history_row_written_before_cash_was_recorded_is_unknown_not_zero(repo
     page = record.dashboard_html(date(2026, 9, 15))
     assert "not recorded" in page
     assert "₹0" not in page.split("<h2>The four books</h2>", 1)[1][:2000]
+
+
+def test_a_day_change_never_spans_a_missing_session(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """B has no close on the panel's middle session: its change is unknown, not a two-day move."""
+    panel = repo / "gappy.parquet"
+    pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-09-10", "2026-09-11", "2026-09-14"] * 2),
+            "ticker": ["A.NS"] * 3 + ["B.NS"] * 3,
+            "close": [50.0, 55.0, 66.0, 10.0, float("nan"), 12.0],
+            "adj_close": [50.0, 55.0, 66.0, 10.0, float("nan"), 12.0],
+            "volume": [1] * 6,
+        }
+    ).to_parquet(panel)
+    closes = record._panel_closes(panel)
+    assert closes["A.NS"] == (66.0, 55.0, "2026-09-14")
+    assert closes["B.NS"] == (12.0, None, "2026-09-14")
+
+
+def test_the_page_names_the_close_its_holdings_are_marked_at(repo: Path) -> None:
+    page = record.dashboard_html(date(2026, 9, 15))
+    assert "close of 2026-09-14" in page
+
+
+def test_no_section_shares_an_id_with_a_tab_link(repo: Path) -> None:
+    """A section whose id equals the link's hash makes the browser scroll to it on every click."""
+    import re
+
+    page = record.dashboard_html(date(2026, 9, 15))
+    links = set(re.findall(r'<a href="#([a-z]+)"', page))
+    ids = set(re.findall(r'id="([a-z-]+)"', page))
+    assert links and not links & ids
+    assert {f"tab-{name}" for name in links} <= ids
+
+
+def test_the_investor_never_reads_the_page() -> None:
+    """The page may change during a frozen month only because nothing that decides imports it."""
+    import ast
+
+    root = Path(__file__).resolve().parents[1] / "src" / "qalpha" / "live"
+    for name in ("agent", "manager", "sizing", "tools", "attention", "evidence_log", "mandate"):
+        tree = ast.parse((root / f"{name}.py").read_text(encoding="utf-8"))
+        imported = {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import | ast.ImportFrom)
+            for alias in node.names
+        } | {node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+        assert not any("record" in i for i in imported), f"{name} imports the page"
