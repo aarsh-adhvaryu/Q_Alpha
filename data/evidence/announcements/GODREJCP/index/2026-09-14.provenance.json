@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=GODREJCP",
+ "retrieved_at_utc": "2026-09-14T09:29:17Z",
+ "http_status": 200,
+ "bytes": 1303573,
+ "sha256": "8336bdb422940a46fdad10d050c4e48e086ae0a74638afbab908fffd71b36b81",
+ "document_date": "2026-09-14",
+ "symbol": "GODREJCP",
+ "kind": "announcement_index"
+}

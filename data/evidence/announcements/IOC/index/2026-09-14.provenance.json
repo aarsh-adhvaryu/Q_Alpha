@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=IOC",
+ "retrieved_at_utc": "2026-09-14T09:37:48Z",
+ "http_status": 200,
+ "bytes": 851271,
+ "sha256": "2d1508727ecc75a137ef089895f11f4e0778b69db5d51f6c40979a74f3e0ea3e",
+ "document_date": "2026-09-14",
+ "symbol": "IOC",
+ "kind": "announcement_index"
+}
