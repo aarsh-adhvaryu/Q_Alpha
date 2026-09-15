@@ -186,6 +186,26 @@ calls for it.
 
 Private account files go in `data/account/` and are never committed.
 
+### The knowledge graph and quant cards (built; not yet in the evening)
+
+What Q-Alpha retrieves is kept, connected, and dated, so the investor can follow a chain — two
+holdings that supply the same customer — instead of re-reading a year of filings.
+
+- **The record is an append-only log** (`data/graph/assertions.jsonl`, `live/graph.py`); Neo4j is a
+  projection rebuilt from it (`live/graph_neo4j.py`), so a correction can never rewrite history.
+- **Every assertion is DISCLOSED** (document hash + verbatim quote), **COMPUTED** (inputs + code
+  version), **INFERRED** (model + confidence, never returned as a fact) **or MISSING** (a known gap).
+- **Two time axes:** when a fact applied, and when Q-Alpha knew it. A restatement filed today leaves
+  yesterday's answer exactly as it was — tested.
+- **Filled at $0** from what is on disk (`scripts/graph.py ingest`): filing and headline events,
+  filed results, the investor's decisions and theses. Connections between companies (supplier,
+  owner, subsidiary, competitor, related party) are read by a model from filings
+  (`scripts/graph.py relations`), kept only with a verbatim quote. Ratings, board and shareholding
+  feeds are not ingested yet and show as MISSING.
+- **Quant cards** (`live/quant.py`): trailing P/E against its own three-year point-in-time range,
+  growth, margin trend, bank ratios, volatility, drawdown, beta to NIFTYBEES, correlation with the
+  book, and what adding ₹15,000 would do to the book's volatility. Measurements, not signals.
+
 ### Which reader, at what cost — EX-5 (built, not yet run)
 
 Reading every filing with `claude-sonnet-5` ran the API key dry. EX-5 measures, on 150 fixed archived
@@ -383,10 +403,11 @@ src/qalpha/
   live/        announcements · evidence · extraction · news · pretrade · localmodel   (reading)
                triage · readers · reference · reader_scoring     (EX-5: measuring the readers)
                spend · model_identity                        (what a model call may cost, and who answered)
+               graph · graph_ingest · graph_neo4j · graph_tools · relations · quant   (knowledge)
                manager · evidence_log · decisions                                 (the investor)
                twin · flows · nav · benchmarks · tradebook · taxpnl · market · screen (books)
                daily · session · server · record · panels · progress · atomic · console (running)
-scripts/       local_run (the app) · twin · evidence · news · reconcile_taxpnl · ocr_scans · readers · models
+scripts/       local_run (the app) · twin · evidence · news · reconcile_taxpnl · ocr_scans · readers · models · graph
                build_nifty_universe · build_nifty100_watchlist · build_nifty100_pit
 reports/       pre-registrations still in force
 data/          evidence archive · twin books and history · universes · tradebooks (private)
