@@ -206,6 +206,22 @@ holdings that supply the same customer — instead of re-reading a year of filin
   growth, margin trend, bank ratios, volatility, drawdown, beta to NIFTYBEES, correlation with the
   book, and what adding ₹15,000 would do to the book's volatility. Measurements, not signals.
 
+### Sizing that expands (built; runs on a shadow book first)
+
+The investor will state **intentions** — open, add, hold, reduce or exit; conviction; desired share
+of the book; why — and code turns them into orders for each book (`live/sizing.py`).
+
+- **Selling is decided, never forced.** Every rule limits purchases. A name that drifts from 20% to
+  28% on price is not sold; buying it pauses and it is flagged for review.
+- **Depth:** positions aim at a conviction tier — core 8–12%, standard 4–6%, starter 2–3% of the book.
+- **Breadth:** new names up to 40; a new position opens at ₹15,000 or more, or not at all. Neither
+  rule ever sells an existing position.
+- **Rollover:** `A(m) = min(unspent last month + ₹50,000, ₹1,00,000)`, less purchases and queued buys.
+  The allowance limits buying; it is not cash, and cash never expires.
+- **Tested before use:** the live book keeps AI-PM-2's limits (`CURRENT_SIZING`); a shadow book
+  applies `EXPAND_SIZING` to the same intentions, and the two are compared on capital deployed, idle
+  cash, names, effective names, concentration, turnover and tax.
+
 ### Which reader, at what cost — EX-5 (built, not yet run)
 
 Reading every filing with `claude-sonnet-5` ran the API key dry. EX-5 measures, on 150 fixed archived
@@ -402,6 +418,7 @@ src/qalpha/
   data/        price panels (yfinance → Parquet, atomic writes) · point-in-time universes
   live/        announcements · evidence · extraction · news · pretrade · localmodel   (reading)
                triage · readers · reference · reader_scoring     (EX-5: measuring the readers)
+               sizing                                        (intentions → orders, per book)
                spend · model_identity                        (what a model call may cost, and who answered)
                graph · graph_ingest · graph_neo4j · graph_tools · relations · quant   (knowledge)
                manager · evidence_log · decisions                                 (the investor)
