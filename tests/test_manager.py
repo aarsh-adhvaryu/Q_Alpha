@@ -304,7 +304,7 @@ def test_a_filing_that_could_not_be_read_is_named_rather_than_freezing_the_name(
     monkeypatch.setattr(
         manager,
         "evidence_coverage",
-        lambda names, as_of: {
+        lambda names, as_of, **_: {
             t.removesuffix(".NS"): evidence_log.Coverage(
                 ticker=t.removesuffix(".NS"),
                 opened=True,

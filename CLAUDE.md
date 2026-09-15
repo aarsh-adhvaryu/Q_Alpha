@@ -33,9 +33,10 @@ The build plan (README § "What is being built") is **done through step E**. The
 bounded read-only research once before deciding. Step F (training) is deliberately not started —
 there is no measured deficiency to train against, and the standard for starting is in the README.
 
-Its forward start is **withdrawn** (none registered). Next: replay it over past sessions on a copy of
-the book — a plumbing test, never a performance result, because the model may know those outcomes —
-then register a start and run one month with code, prompt and limits frozen.
+Its forward start is **withdrawn** (none registered). The replay (`scripts/replay.py`) is built;
+next is its registered nine-session rehearsal (REPLAY-1) — a plumbing test, never a performance
+result, because the model may know those outcomes — then a registered forward month with code,
+prompt and limits frozen.
 
 ---
 
@@ -112,6 +113,9 @@ uv run python scripts/corporate_actions.py --import  # dividends and splits, cro
 uv run python scripts/financials.py --import         # filed XBRL results (no model calls)
 uv run python scripts/evaluate.py                    # the three tests; no gate, no tuning
 uv run python scripts/readers.py status              # EX-5 reader comparison (steps in its docstring)
+uv run python scripts/replay.py coverage --start 2026-09-01 --end 2026-09-11   # no model, no writes
+uv run python scripts/replay.py run pilot-1          # register (first call) / resume; SPENDS
+uv run python scripts/replay.py report pilot-1       # the consolidated evaluation of a run
 uv run python scripts/models.py list                 # local models: served vs pinned digests
 uv run python scripts/models.py pin qwen3.5:9b       # register a measured local model's weights
 ```

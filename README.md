@@ -17,13 +17,14 @@ plan and report are in git history.
 
 ---
 
-## 1. Where it stands — 2026-09-14
+## 1. Where it stands — 2026-09-15
 
 | | |
 |---|---|
 | **Working** | The evening run: prices → filings → headlines → filed results → four paper books marked against two index funds. Tax-exact FIFO accounting. Resumes where it stopped. |
 | **Built, starting** | The investor (AI-PM-2, `live/manager.py`), registered in [reports/PREREGISTRATION_AI_PM2.md](reports/PREREGISTRATION_AI_PM2.md). AI-PM-1 was closed before it made a decision. Until its first review `SYSTEM` mirrors the user's holdings. |
-| **Start date** | **None registered.** The 2026-09-14 start was withdrawn before any review ran. Next: replay the investor over past sessions as a plumbing test (not a performance result), then register a forward start and run a month with the code frozen. |
+| **Start date** | **None registered.** The 2026-09-14 start was withdrawn before any review ran. |
+| **Next** | A nine-session replay rehearsal (`scripts/replay.py`, registered in [reports/PREREGISTRATION_REPLAY_1.md](reports/PREREGISTRATION_REPLAY_1.md)), then a registered forward month with the code frozen. |
 | **Proven edge** | None. See §6. |
 
 ---
@@ -204,6 +205,24 @@ anything material. Registered in
 
 `scripts/readers.py` runs it step by step; the evening run is unchanged until a result is registered.
 
+### Replay — the investor over past sessions (built, not yet run)
+
+`scripts/replay.py` runs AI-PM-2's own review, fill and accounting over a window of past sessions,
+on its own book in `data/replay/<run>/`. **A plumbing test, never a performance record**: the model
+may know how those sessions went.
+
+- **Starts from the book that existed then** — the tradebook and ledger replayed to the start date.
+- **Nothing after the session**: prices cut at the session, adjusted closes re-based to that day's
+  close, filings shown only if **published** by then (read later is allowed, and the corpus is
+  frozen at registration), and a source that did not exist yet named as UNKNOWN in the packet.
+- **Registered first**: model, mandate and prompt digest, code commit, and a digest of the prices,
+  tradebook, ledger and actions. A resume under anything different is refused; a change is a new run.
+- **Checkpoint after every session**; an interrupted session is neither decided nor paid for twice.
+- **Its own spend job and ceiling**, outside every month's operating budget.
+- `coverage` shows, with no model call, what each session would put in front of the investor.
+- `report` writes one evaluation: operation, decisions, what it was shown, accounting, descriptive
+  figures beside both baselines, and whether the evening run's records changed.
+
 ---
 
 ## 6. What is proven, and what is not
@@ -253,6 +272,7 @@ Everything measured on the way here. Full reports are in git at commit `53e2588`
 | EX-3 reader | Which model reads filings? | `claude-sonnet-5`: 29% quotes discarded vs Haiku's 59%, twice the events. Readers agree on 22% of findings. |
 | EX-4 | Does a tighter prompt fix unverifiable quotes? | **Worse**: 155 events vs 200, 34.9% discarded vs 25.1% (220 documents). Reverted. |
 | EX-5 | Which reader is good enough at the lowest cost, and which filings need no reading? | **Built, not run.** Rule registered first. |
+| REPLAY-1 | Does the investor research, decide, fill, remember and resume correctly over nine real past sessions? | **Registered, not run.** A plumbing test; returns descriptive only. |
 | Forward run 1 | 6 weeks of paper trading | **Void**: flows were injected on a calendar the real account never had. |
 | Research track | QUBO ×2, HMM regime overlay, LPPLS crash signal, futures hedge | All negative. Archived in `Q_Alpha_Research`. |
 

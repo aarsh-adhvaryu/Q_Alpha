@@ -8,6 +8,12 @@ Three rules, each of which has been a defect in this repository:
   recorded, is a real reading of something — not a reading of this corpus.
 - **Nothing from after the date.** A row recorded, published or dated after ``as_of`` was not knowable
   on ``as_of``.
+
+**A replay reads the corpus differently, and says so.** ``recorded_by`` is the date the corpus was
+frozen for a replay of an earlier evening. A filing *read* after the evening being replayed is used
+when the **document** was public by then — the exchange's dissemination time, or a headline's
+publication time, on or before ``as_of``. A row that carries neither is not knowable: an undated row
+is unknown, not early. Left as ``None``, every reader keeps the evening run's rule above.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
+from qalpha.live.announcements import Announcement
 from qalpha.live.extraction import EXTRACTION_VERSION, reader_matches
 from qalpha.live.news import NEWS_EVENTS, NEWS_VERSION
 
@@ -31,6 +38,11 @@ NEWS_EVENT_LOG = NEWS_EVENTS
 
 #: A coverage row older than this cannot speak for today.
 MAX_COVERAGE_AGE_DAYS = 4
+
+#: The window the evening run assesses once a name has been read before (``LOOKBACK_DAYS`` in
+#: ``scripts/evidence.py``, asserted equal by a test). A replayed evening counts filings over the same
+#: window, so its packet says what an evening run on that date would have said.
+DAILY_WINDOW_DAYS = 10
 
 _MATERIALITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
@@ -82,22 +94,32 @@ def filings_read(tickers: Iterable[str], *, as_of: date, path: Path | None = Non
     return read
 
 
-def _knowable(row: dict[str, object], as_of: date) -> bool:
+def _knowable(row: dict[str, object], as_of: date, recorded_by: date | None = None) -> bool:
     limit = as_of.isoformat()
-    return all(
-        str(row.get(field) or "")[:10] <= limit
-        for field in ("as_of", "event_date", "disseminated_at", "published_at")
-    )
+    if any(
+        str(row.get(field) or "")[:10] > limit
+        for field in ("event_date", "disseminated_at", "published_at")
+    ):
+        return False
+    if recorded_by is None:
+        return str(row.get("as_of") or "")[:10] <= limit
+    public = str(row.get("disseminated_at") or row.get("published_at") or "")[:10]
+    return bool(public) and str(row.get("as_of") or "")[:10] <= recorded_by.isoformat()
 
 
 def events(
-    tickers: Iterable[str], *, as_of: date, per_ticker: int, paths: tuple[Path, Path] | None = None
+    tickers: Iterable[str],
+    *,
+    as_of: date,
+    per_ticker: int,
+    paths: tuple[Path, Path] | None = None,
+    recorded_by: date | None = None,
 ) -> dict[str, list[dict[str, str]]]:
     """Verified filing and headline events per bare ticker: most material first, then newest.
 
     Every event carries its ``id`` (the log's ``_key``), so a decision can cite it and code can check
     the citation. Headlines are labelled as reports, not events: nine outlets carrying one court order
-    are nine reports.
+    are nine reports. ``recorded_by`` is for a replay only — see the module docstring.
     """
     filing_log, news_log = paths or (EVENT_LOG, NEWS_EVENT_LOG)
     wanted = {_bare(t) for t in tickers}
@@ -113,7 +135,7 @@ def events(
                 continue
             if source == "headline" and row.get("news_version") != NEWS_VERSION:
                 continue
-            if not row.get("_key") or not _knowable(row, as_of):
+            if not row.get("_key") or not _knowable(row, as_of, recorded_by):
                 continue
             found.setdefault(ticker, []).append(
                 {
@@ -122,8 +144,15 @@ def events(
                     "type": str(row.get("event_type", "")),
                     "materiality": str(row.get("materiality", "")),
                     "stance": str(row.get("stance", "")),
+                    # When it happened, else when it became public. Never when it was READ: 811 filing
+                    # events carry no event date, and falling back to ``as_of`` dated a filing
+                    # published a year earlier on the evening a backfill read it — an old event
+                    # shown as fresh, and counted by the scorecard as news since a decision.
                     "date": str(
-                        row.get("event_date") or row.get("published_at") or row.get("as_of") or ""
+                        row.get("event_date")
+                        or row.get("disseminated_at")
+                        or row.get("published_at")
+                        or ""
                     )[:10],
                     "summary": str(row.get("summary", "")),
                     "quote": str(row.get("passage", ""))[:400],
@@ -241,9 +270,18 @@ def unread_documents(
 
 
 def coverage(
-    tickers: Iterable[str], *, as_of: date, path: Path | None = None
+    tickers: Iterable[str],
+    *,
+    as_of: date,
+    path: Path | None = None,
+    corpus: Corpus | None = None,
 ) -> dict[str, Coverage]:
-    """Per name: was it opened, how much was read, and exactly which documents were not."""
+    """Per name: was it opened, how much was read, and exactly which documents were not.
+
+    ``corpus`` is for a replay only: see :func:`replay_coverage`.
+    """
+    if corpus is not None:
+        return replay_coverage(tickers, as_of=as_of, corpus=corpus, path=path)
     oldest = (as_of - timedelta(days=MAX_COVERAGE_AGE_DAYS)).isoformat()
     latest: dict[str, dict[str, object]] = {}
     for row in rows(path or COVERAGE_LOG):
@@ -278,5 +316,153 @@ def coverage(
             filed=filed,
             unread=tuple(gaps),
             as_of=str(latest_row.get("as_of", "")),
+        )
+    return out
+
+
+@dataclass(frozen=True)
+class Corpus:
+    """The corpus as a replay reads it, fixed when the replay is registered.
+
+    Rows recorded after ``recorded_by`` are not used, and a document counts as read only if its
+    extraction receipt was on file at registration — receipts carry no date, so the set itself is
+    kept. Without it, filings read by an evening run between an interrupted session and its resume
+    would change that session's packet, and the session would be decided a second time.
+    """
+
+    recorded_by: date
+    read: frozenset[str]
+    declined: frozenset[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "recorded_by": self.recorded_by.isoformat(),
+            "read": sorted(self.read),
+            "declined": sorted(self.declined),
+        }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, object]) -> Corpus:
+        return cls(
+            recorded_by=date.fromisoformat(str(raw["recorded_by"])),
+            read=frozenset(str(h) for h in raw["read"]),  # type: ignore[attr-defined]
+            declined=frozenset(str(h) for h in raw["declined"]),  # type: ignore[attr-defined]
+        )
+
+
+def corpus_as_of(recorded_by: date) -> Corpus:
+    """The corpus now, for a replay registered today with this corpus date."""
+    return Corpus(recorded_by, frozenset(_extracted_hashes()), frozenset(refused_hashes()))
+
+
+def _listing(bare: str, archive: Path | None = None) -> list[Announcement]:
+    """Every announcement any archived index for this name has listed, once each.
+
+    The union rather than the newest file: the exchange's index has been seen to drop rows between
+    fetches (INFY: 2,926 listed on 2026-09-13, 2,924 the next day), and a filing that was public on a
+    replayed date is not un-filed by a later listing.
+    """
+    from qalpha.live.announcements import parse_index
+
+    index_dir = (archive or ANNOUNCEMENTS) / bare / "index"
+    seen: dict[str, Announcement] = {}
+    files = sorted(index_dir.glob("*.json")) if index_dir.exists() else []
+    for file in files:
+        if file.name.endswith(".provenance.json"):
+            continue
+        try:
+            for ann in parse_index(file.read_text(encoding="utf-8"), symbol=bare):
+                seen.setdefault(ann.seq_id, ann)
+        except (OSError, ValueError):
+            continue
+    return list(seen.values())
+
+
+def replay_coverage(
+    tickers: Iterable[str],
+    *,
+    as_of: date,
+    corpus: Corpus,
+    path: Path | None = None,
+    archive: Path | None = None,
+    window_days: int = DAILY_WINDOW_DAYS,
+) -> dict[str, Coverage]:
+    """What an evening on ``as_of`` could have been told about each name's filings, from ``corpus``.
+
+    The evening run's rule, read point in time:
+
+    - **Opened** — this corpus's reader has a coverage run for the name, recorded by the corpus date.
+      Nobody having looked at a company stops a review in both; a replay does not relax it.
+    - **Filed** — every document the exchange had disseminated in the ``window_days`` up to
+      ``as_of``, from the archived indexes.
+    - **Read** — those with an extraction receipt in the corpus. Each of the rest is named in
+      ``unread`` with the exchange's own subject and the reason, including one that was listed but
+      never fetched. A document filed before the reader first opened the name is exactly such a gap,
+      and says so rather than stopping every session.
+    """
+    import json as _json
+
+    earliest = as_of - timedelta(days=window_days)
+    opened: dict[str, str] = {}
+    for row in rows(path or COVERAGE_LOG):
+        day = str(row.get("as_of", ""))[:10]
+        if not day or day > corpus.recorded_by.isoformat():
+            continue
+        if row.get("extraction_version") != EXTRACTION_VERSION or not reader_matches(
+            row.get("reader")
+        ):
+            continue
+        opened.setdefault(_bare(row.get("ticker")), day)
+    out: dict[str, Coverage] = {}
+    for ticker in tickers:
+        bare = _bare(ticker)
+        if bare not in opened:
+            out[bare] = Coverage(ticker=bare, opened=False, read=0, filed=0)
+            continue
+        base = (archive or ANNOUNCEMENTS) / bare
+        filed = sorted(
+            (
+                a
+                for a in _listing(bare, archive)
+                if a.has_document and earliest <= a.disseminated_at.date() <= as_of
+            ),
+            key=lambda a: a.disseminated_at,
+        )
+        unread: list[dict[str, str]] = []
+        for ann in filed:
+            prov = base / f"{ann.seq_id}.provenance.json"
+            try:
+                sha = (
+                    str(_json.loads(prov.read_text(encoding="utf-8")).get("sha256", ""))
+                    if prov.exists()
+                    else ""
+                )
+            except (OSError, ValueError):
+                sha = ""
+            if sha and sha in corpus.read:
+                continue
+            unread.append(
+                {
+                    "on": ann.disseminated_at.date().isoformat(),
+                    "subject": ann.subject or "(no subject given)",
+                    "why": (
+                        "listed by the exchange but never fetched"
+                        if not sha
+                        else "the reader declined to read it"
+                        if sha in corpus.declined
+                        else "a scan with no text, and transcription failed"
+                        if not (base / f"{ann.seq_id}.txt.gz").exists()
+                        else "not read yet"
+                    ),
+                    "url": ann.attachment_url,
+                }
+            )
+        out[bare] = Coverage(
+            ticker=bare,
+            opened=True,
+            read=len(filed) - len(unread),
+            filed=len(filed),
+            unread=tuple(unread),
+            as_of=opened[bare],
         )
     return out

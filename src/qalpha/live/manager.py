@@ -47,6 +47,7 @@ from qalpha.live import atomic, mandate
 from qalpha.live import financials as company_facts
 from qalpha.live import tools as research_tools
 from qalpha.live.decisions import BUY, HOLD, SELL, Decision
+from qalpha.live.evidence_log import Corpus
 from qalpha.live.evidence_log import coverage as evidence_coverage
 from qalpha.live.evidence_log import events as evidence_events
 from qalpha.live.market import Market
@@ -92,8 +93,13 @@ class Brain:
     generate: GenerateFn
 
 
-def brain() -> Brain:
-    """The pinned model over the API. Without a key there is no investor, and that is said."""
+def brain(*, ledger: Any = None, partition: str = "decisions") -> Brain:
+    """The pinned model over the API. Without a key there is no investor, and that is said.
+
+    The evening run charges the ``decisions`` partition of this month's operating budget. A replay
+    passes a :class:`~qalpha.live.spend.Ledger` naming its own job and ceiling, with the ``research``
+    partition, so simulating three months cannot spend the operating allowance of any month.
+    """
     from qalpha.live.credentials import load_env
     from qalpha.live.extraction import default_generate
 
@@ -103,7 +109,13 @@ def brain() -> Brain:
         raise IncompleteReviewError("ANTHROPIC_API_KEY is not set, so the investor could not run.")
     return Brain(
         MODEL,
-        default_generate(key, max_tokens=MAX_OUTPUT_TOKENS, timeout=600.0, partition="decisions"),
+        default_generate(
+            key,
+            max_tokens=MAX_OUTPUT_TOKENS,
+            timeout=600.0,
+            partition=partition,
+            ledger=ledger,
+        ),
     )
 
 
@@ -270,7 +282,9 @@ def memory(names: Sequence[str], *, before: date, store: Store = STORE) -> dict[
     }
 
 
-def update_scorecard(market: Market, store: Store = STORE) -> dict[str, Any]:
+def update_scorecard(
+    market: Market, store: Store = STORE, *, corpus: Corpus | None = None
+) -> dict[str, Any]:
     """How the investor's past decisions have gone, computed by code from its own records.
 
     Each row: what it decided, the close it saw, the latest close, the change since, and how many
@@ -284,7 +298,16 @@ def update_scorecard(market: Market, store: Store = STORE) -> dict[str, Any]:
     ]
     recent = decided[-SCORECARD_ROWS:]
     names = sorted({str(r["ticker"]) for r in recent})
-    later = evidence_events(names, as_of=market.as_of, per_ticker=200) if names else {}
+    later = (
+        evidence_events(
+            names,
+            as_of=market.as_of,
+            per_ticker=200,
+            recorded_by=corpus.recorded_by if corpus else None,
+        )
+        if names
+        else {}
+    )
     rows = []
     for r in recent:
         ticker = str(r["ticker"])
@@ -403,12 +426,22 @@ def _financials(names: list[str], known: date) -> dict[str, Any]:
 
 
 def build_packet(
-    book: TwinBook, market: Market, store: Store = STORE, *, known_on: date | None = None
+    book: TwinBook,
+    market: Market,
+    store: Store = STORE,
+    *,
+    known_on: date | None = None,
+    corpus: Corpus | None = None,
+    gaps: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Everything the model will know. Raises :class:`IncompleteReviewError` when a holding cannot be shown.
 
     ``known_on`` is the date the evidence may run up to. It is the price date in the evening run. A
     shadow review on a weekend uses Friday's close with what is known today, and says so in the packet.
+
+    ``corpus`` and ``gaps`` are for a replay (:mod:`qalpha.live.replay`): the corpus as it stood
+    when the replay was registered, read for documents public by ``known_on``, and a named list of
+    sources that did not exist for the replayed date. Both absent, the packet is the evening run's, byte for byte.
     """
     as_of = market.as_of
     known = known_on or as_of
@@ -425,7 +458,7 @@ def build_packet(
         n=CANDIDATES,
     )
     pullback = dict(picked)
-    covered = evidence_coverage([*held, *pullback], as_of=known)
+    covered = evidence_coverage([*held, *pullback], as_of=known, corpus=corpus)
 
     # AN UNOPENED NAME AND AN UNREADABLE PAGE ARE DIFFERENT FACTS. Nobody having looked at a company
     # stops the review — that is a hole where the evidence should be. A filing that was fetched and
@@ -523,7 +556,7 @@ def build_packet(
             }
         )
 
-    return {
+    packet: dict[str, Any] = {
         "version": VERSION,
         "as_of": as_of.isoformat(),
         "evidence_known_on": known.isoformat(),
@@ -552,7 +585,12 @@ def build_packet(
             for t in names
         },
         "exchange": _exchange_flags(names, known),
-        "evidence": evidence_events(names, as_of=known, per_ticker=EVENTS_PER_NAME),
+        "evidence": evidence_events(
+            names,
+            as_of=known,
+            per_ticker=EVENTS_PER_NAME,
+            recorded_by=corpus.recorded_by if corpus else None,
+        ),
         "coverage": {
             t: {
                 "documents_read": covered[t.removesuffix(".NS")].read,
@@ -566,7 +604,7 @@ def build_packet(
         },
         "financials": _financials(names, known),
         "memory": memory(names, before=as_of, store=store),
-        "scorecard": update_scorecard(market, store),
+        "scorecard": update_scorecard(market, store, corpus=corpus),
         "limits": {
             "max_names_after_buying": MAX_NAMES,
             "a_purchase_may_take_a_name_to_pct": _pct(float(NAME_CAP)),
@@ -591,6 +629,11 @@ def build_packet(
             "days; 13% above Rs 1.25 lakh a year on gains held longer",
         },
     }
+    if gaps:
+        # Sources that did not exist for this date. Said, because an empty list of headlines reads
+        # as a quiet week, and a week nobody archived is not a quiet one.
+        packet["data_gaps"] = dict(gaps)
+    return packet
 
 
 PROMPT = f"""You are the investor managing a long-only paper portfolio of large Indian companies (version {VERSION}).
@@ -877,9 +920,18 @@ def fill_pending(
         trial, pending["orders"], prices, pending["sectors"], day, allowance=budget_left(day, store)
     )
     book.portfolio = trial
+    # A run that dies after this append and before its book is saved fills the same orders again on
+    # the retry, from the same saved book. The book is right either way; the fills file must not carry
+    # the purchase twice, because the monthly allowance is counted from it.
+    written = any(
+        f.get("decision") == pending["digest"] and f.get("on") == day.isoformat()
+        for f in _jsonl(store.fills)
+    )
     _append(
         store.fills,
-        [
+        []
+        if written
+        else [
             {**r, "on": day.isoformat(), "decision": pending["digest"], "version": VERSION}
             for r in results
         ],
@@ -916,8 +968,17 @@ def review(
     store: Store = STORE,
     require_today: bool = True,
     known_on: date | None = None,
+    corpus: Corpus | None = None,
+    gaps: Mapping[str, str] | None = None,
 ) -> list[Decision]:
-    """One review on the evening's close. Queues orders; fills nothing."""
+    """One review on the evening's close. Queues orders; fills nothing.
+
+    **A retry of the same evening pays nothing and decides nothing new.** The receipt is filed under
+    the digest of the first prompt — the evening's inputs — whether or not research was asked, and a
+    retry answers from it. It was filed under the digest of the *second* prompt, which a retry cannot
+    compute without calling the model again, so a review that had used research was paid for twice
+    and could decide differently the second time.
+    """
     today = now.astimezone(IST).date()
     if require_today and market.as_of != today:
         raise IncompleteReviewError(f"no close for {today} yet — the latest bar is {market.as_of}")
@@ -935,12 +996,14 @@ def review(
     if pinned and pinned != MODEL:
         raise IncompleteReviewError(f"the book was run by {pinned}; {MODEL} would be a new version")
 
-    packet = build_packet(book, market, store, known_on=known_on)
+    packet = build_packet(book, market, store, known_on=known_on, corpus=corpus, gaps=gaps)
     prompt = PROMPT + json.dumps(packet, sort_keys=True, default=str)
     digest = hashlib.sha256(f"{VERSION}|{MODEL}|{prompt}".encode()).hexdigest()[:24]
     receipt_path = store.receipts / f"{market.as_of.isoformat()}-{digest}.json"
     if receipt_path.exists():
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        # The packet the reply was judged against, research answers included, and its digest.
+        packet, digest = receipt["packet"], str(receipt["digest"])
     else:
         mind = make_brain()
         if mind.model != MODEL:
@@ -955,6 +1018,7 @@ def review(
                 known=known_on or market.as_of,
                 adj=market.adj_close,
                 names=[*packet["prices"]],
+                recorded_by=corpus.recorded_by if corpus else None,
             )
             packet = {**packet, "research": research}
             prompt = PROMPT + json.dumps(packet, sort_keys=True, default=str)
@@ -968,7 +1032,6 @@ def review(
                 "research_requests": len(asked),
             }
             digest = hashlib.sha256(f"{VERSION}|{MODEL}|{prompt}".encode()).hexdigest()[:24]
-            receipt_path = store.receipts / f"{market.as_of.isoformat()}-{digest}.json"
         receipt = {
             "version": VERSION,
             "model": MODEL,
@@ -1070,6 +1133,7 @@ def review(
         "last_review": {
             "as_of": market.as_of.isoformat(),
             "digest": digest,
+            "receipt": receipt_path.name,
             "decisions": len(rows),
             "queued": len(queued),
             "usage": receipt["usage"],

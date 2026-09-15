@@ -166,3 +166,17 @@ NIFTYBEES, which is the do-nothing floor.
   filings are read back to 2025-09 for 25 names. `EVALUATION_START` is `None`; SYSTEM keeps mirroring
   REAL. A forward start is set in §2 before it opens; anything the replay changes in the model,
   prompt, packet or limits makes that start a new version.
+- **2026-09-15** — **five defects fixed while building the replay, before any review ran.** They change
+  what AI-PM-2 is shown or how its record is counted, so they are part of AI-PM-2 from its first review:
+  1. *Event dates.* 811 filing events carry no event date, and the packet dated them by the evening
+     they were **read** — a filing published a year earlier and backfilled on 2026-09-12 appeared as a
+     12 September event, and the scorecard counted it as news since a decision. They are now dated by
+     publication.
+  2. *The `filings` research tool* answered "0 verified events" to every request: it filtered on a
+     field the events do not carry, under a ticker spelling they are not filed under.
+  3. *A retried evening that had used research* was paid for, and could be decided, twice: its receipt
+     was filed under a digest a retry cannot compute without calling the model.
+  4. *A run cut between a fill and the book's save* wrote the fill twice on retry, and the monthly
+     allowance is counted from that file.
+  5. *The evaluation harness* never counted a purchase against the monthly limit (it read fields no
+     fill carries) and counted a failed receipt as a review.

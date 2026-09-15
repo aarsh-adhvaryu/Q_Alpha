@@ -75,10 +75,16 @@ def _months_before(when: date, months: int) -> date:
     return date(year, month, min(when.day, 28))
 
 
-def _filings(ticker: str, known: date, months: int) -> dict[str, Any]:
-    rows = evidence_events([ticker], as_of=known, per_ticker=FILINGS_PER_REQUEST).get(ticker, [])
+def _filings(
+    ticker: str, known: date, months: int, recorded_by: date | None = None
+) -> dict[str, Any]:
+    rows = evidence_events(
+        [ticker], as_of=known, per_ticker=FILINGS_PER_REQUEST, recorded_by=recorded_by
+    ).get(ticker.removesuffix(".NS"), [])
     since = _months_before(known, months).isoformat()
-    kept = [r for r in rows if str(r.get("event_date", "")) >= since]
+    # ``date`` is the field :func:`evidence_events` returns. This read ``event_date``, which no
+    # returned event carries, so every answer was "0 verified event(s)" whatever was on file.
+    kept = [r for r in rows if str(r.get("date", "")) >= since]
     return {
         "ticker": ticker,
         "since": since,
@@ -166,12 +172,18 @@ def _prices(ticker: str, adj: pd.DataFrame, known: date, months: int) -> dict[st
 
 
 def answer(
-    requests: list[Any], *, known: date, adj: pd.DataFrame, names: list[str]
+    requests: list[Any],
+    *,
+    known: date,
+    adj: pd.DataFrame,
+    names: list[str],
+    recorded_by: date | None = None,
 ) -> list[dict[str, Any]]:
     """Answer each request, in order, refusing anything outside the tools or the name scope.
 
     A refusal is an **answer**, not an omission: the investor is told which request was refused and
     why, so a second pass that silently lost a request is impossible to mistake for one that got it.
+    ``recorded_by`` is a replay's corpus date (see :mod:`qalpha.live.evidence_log`).
     """
     scope = set(names)
     out: list[dict[str, Any]] = []
@@ -197,7 +209,9 @@ def answer(
         months = max(1, min(int(raw.get("months", 12) or 12), 60))
         try:
             if tool == "filings" and tickers:
-                out.append({"request": raw, "result": _filings(tickers[0], known, months)})
+                out.append(
+                    {"request": raw, "result": _filings(tickers[0], known, months, recorded_by)}
+                )
             elif tool == "quarters" and tickers:
                 out.append({"request": raw, "result": _quarters(tickers[0], known)})
             elif tool == "compare" and tickers:

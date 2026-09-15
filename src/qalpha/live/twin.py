@@ -676,6 +676,38 @@ def navs_from_history(
     return out
 
 
+def book_state(book: TwinBook) -> dict[str, Any]:
+    """One book as JSON-ready state. The one serialization, used by the books file and by a replay."""
+    return {
+        "portfolio": book.portfolio.to_state(),
+        "flows": [{"on": f.on.isoformat(), "amount": str(f.amount)} for f in book.flows],
+        "stepped_through": book.stepped_through.isoformat() if book.stepped_through else None,
+        "actions_through": book.actions_through.isoformat() if book.actions_through else None,
+        "earliest_trade": book.earliest_trade.isoformat() if book.earliest_trade else None,
+        "manager": book.manager,
+    }
+
+
+def book_from_state(name: str, entry: Mapping[str, Any], cfg: Config) -> TwinBook:
+    """The inverse of :func:`book_state`."""
+
+    def day(key: str) -> date | None:
+        return date.fromisoformat(entry[key]) if entry.get(key) else None
+
+    return TwinBook(
+        name=name,
+        portfolio=Portfolio.from_state(entry["portfolio"], cfg.cost, cfg.tax),
+        flows=[
+            Flow(on=date.fromisoformat(f["on"]), amount=Decimal(f["amount"]))
+            for f in entry["flows"]
+        ],
+        stepped_through=day("stepped_through"),
+        actions_through=day("actions_through"),
+        earliest_trade=day("earliest_trade"),
+        manager=dict(entry.get("manager") or {}),
+    )
+
+
 def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
     """Persist every book's portfolio and flows.
 
@@ -686,23 +718,7 @@ def save_books(books: dict[str, TwinBook], path: Path = TWIN_STATE) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "saved_at": date.today().isoformat(),
-        "books": {
-            name: {
-                "portfolio": book.portfolio.to_state(),
-                "flows": [{"on": f.on.isoformat(), "amount": str(f.amount)} for f in book.flows],
-                "stepped_through": (
-                    book.stepped_through.isoformat() if book.stepped_through else None
-                ),
-                "actions_through": (
-                    book.actions_through.isoformat() if book.actions_through else None
-                ),
-                "earliest_trade": (
-                    book.earliest_trade.isoformat() if book.earliest_trade else None
-                ),
-                "manager": book.manager,
-            }
-            for name, book in books.items()
-        },
+        "books": {name: book_state(book) for name, book in books.items()},
     }
     # Atomic: a failure mid-write must leave yesterday's books, not a truncated file.
     from qalpha.live import atomic
@@ -715,31 +731,7 @@ def load_books(cfg: Config, path: Path = TWIN_STATE) -> dict[str, TwinBook]:
     if not path.exists():
         return {}
     raw = json.loads(path.read_text(encoding="utf-8"))
-    books = {
-        name: TwinBook(
-            name=name,
-            portfolio=Portfolio.from_state(entry["portfolio"], cfg.cost, cfg.tax),
-            flows=[
-                Flow(on=date.fromisoformat(f["on"]), amount=Decimal(f["amount"]))
-                for f in entry["flows"]
-            ],
-            stepped_through=(
-                date.fromisoformat(entry["stepped_through"])
-                if entry.get("stepped_through")
-                else None
-            ),
-            actions_through=(
-                date.fromisoformat(entry["actions_through"])
-                if entry.get("actions_through")
-                else None
-            ),
-            earliest_trade=(
-                date.fromisoformat(entry["earliest_trade"]) if entry.get("earliest_trade") else None
-            ),
-            manager=dict(entry.get("manager") or {}),
-        )
-        for name, entry in raw["books"].items()
-    }
+    books = {name: book_from_state(name, entry, cfg) for name, entry in raw["books"].items()}
     assert_identical_flows(list(books.values()))
     return books
 

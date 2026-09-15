@@ -74,7 +74,12 @@ def _operation(store: manager.Store) -> tuple[list[str], int]:
     """Did the machine run as registered? Pass/fail, from its own records."""
     lines: list[str] = []
     problems = 0
-    receipts = sorted(store.receipts.glob("*.json")) if store.receipts.exists() else []
+    # A failed attempt is kept as `<receipt>.failed-HHMMSS.json` and is not a review that happened.
+    receipts = (
+        sorted(p for p in store.receipts.glob("*.json") if ".failed-" not in p.name)
+        if store.receipts.exists()
+        else []
+    )
     decisions = _rows(store.decisions)
     fills = _rows(store.fills)
 
@@ -98,14 +103,18 @@ def _operation(store: manager.Store) -> tuple[list[str], int]:
         problems += 1
         lines.append(f"- **{len(unattributed)} decision(s) name no model or version.** FAIL")
 
-    # The monthly budget, counted from fills, which is what actually happened.
+    # The monthly budget, counted from fills, which is what actually happened — the same arithmetic as
+    # `manager.spent_this_month`. This read `side` and `cash`, which no fill carries, so every fill was
+    # skipped and the report said the budget was untested whatever had been bought.
     spent: dict[str, Decimal] = {}
     for f in fills:
-        if str(f.get("side", "")).upper() != "BUY":
+        if f.get("action") != "BUY" or not int(f.get("filled", 0) or 0):
             continue
         month = str(f.get("on", ""))[:7]
-        cost = Decimal(str(f.get("cash", f.get("cost", "0")) or "0"))
-        spent[month] = spent.get(month, Decimal("0")) + abs(cost)
+        money = Decimal(str(f["filled"])) * Decimal(str(f.get("price", "0"))) + Decimal(
+            str(f.get("cost", "0"))
+        )
+        spent[month] = spent.get(month, Decimal("0")) + money
     over = {m: v for m, v in spent.items() if v > manager.MONTHLY_BUDGET}
     if spent:
         worst = max(spent.values())
