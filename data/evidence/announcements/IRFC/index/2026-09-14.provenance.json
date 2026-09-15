@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=IRFC",
+ "retrieved_at_utc": "2026-09-14T09:20:06Z",
+ "http_status": 200,
+ "bytes": 354437,
+ "sha256": "db75cb726800bdec4613022a00f4fe0ac8d2f856f3d6a4c4a507b52265ef2959",
+ "document_date": "2026-09-14",
+ "symbol": "IRFC",
+ "kind": "announcement_index"
+}

@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=ITC",
+ "retrieved_at_utc": "2026-09-14T09:23:02Z",
+ "http_status": 200,
+ "bytes": 1264572,
+ "sha256": "ad90bcf24b91c22ff1ce8a5eca6d2301befa62329f0de14e61c25e14269a4c16",
+ "document_date": "2026-09-14",
+ "symbol": "ITC",
+ "kind": "announcement_index"
+}
