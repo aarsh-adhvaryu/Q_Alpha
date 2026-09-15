@@ -76,9 +76,13 @@ def _months_before(when: date, months: int) -> date:
 
 
 def _filings(ticker: str, known: date, months: int) -> dict[str, Any]:
-    rows = evidence_events([ticker], as_of=known, per_ticker=FILINGS_PER_REQUEST).get(ticker, [])
+    rows = evidence_events([ticker], as_of=known, per_ticker=FILINGS_PER_REQUEST).get(
+        ticker.removesuffix(".NS"), []
+    )
     since = _months_before(known, months).isoformat()
-    kept = [r for r in rows if str(r.get("event_date", "")) >= since]
+    # Events are filed under the bare ticker and dated in ``date``. This looked up "ABC.NS" and read
+    # ``event_date``, so every answer was "0 verified event(s)" whatever was on file.
+    kept = [r for r in rows if str(r.get("date", "")) >= since]
     return {
         "ticker": ticker,
         "since": since,

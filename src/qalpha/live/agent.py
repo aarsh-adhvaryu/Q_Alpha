@@ -48,7 +48,7 @@ from qalpha.live.decisions import HOLD, Decision
 from qalpha.live.mandate import CURRENT_SIZING, EXPAND_SIZING, Sizing
 from qalpha.live.market import Market
 from qalpha.live.progress import IST
-from qalpha.live.twin import TwinBook
+from qalpha.live.twin import EVALUATION_START, TwinBook
 
 VERSION = "AI-PM-3"
 AGENT_DIR = Path("data/twin/agent")
@@ -66,8 +66,9 @@ class Registration:
     confirmer: str = "claude-sonnet-5"
     live_sizing: Sizing = CURRENT_SIZING
     shadow_sizing: Sizing = EXPAND_SIZING
-    #: The first evening AI-PM-3 runs the SYSTEM book. ``None``: not started — AI-PM-2 runs it.
-    start: date | None = None
+    #: The first evening AI-PM-3 runs the SYSTEM book: ``twin.EVALUATION_START``, the one start date.
+    #: ``None``: not started, and SYSTEM mirrors REAL.
+    start: date | None = EVALUATION_START
     max_research: int = 6
     candidates_in_scope: int = 8
 
@@ -392,6 +393,13 @@ def fill_live(
             return []
         prices[ticker] = close
     trial = book.portfolio.clone()
+    # A run cut after this fill and before the book is saved fills the same orders again from the same
+    # saved book. The book is right either way; the fills file must not carry the purchase twice,
+    # because this month's allowance is counted from it.
+    written = any(
+        f.get("decision") == pending["digest"] and f.get("on") == day.isoformat()
+        for f in manager._jsonl(store.fills)
+    )
     left = sizing.available(
         sizing.month_of(day),
         purchases_by_month(store),
@@ -405,7 +413,9 @@ def fill_live(
     book.portfolio = trial
     manager._append(
         store.fills,
-        [
+        []
+        if written
+        else [
             {
                 **r,
                 "on": day.isoformat(),

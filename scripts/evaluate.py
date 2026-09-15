@@ -70,17 +70,32 @@ def _rows(path: Path) -> list[dict[str, Any]]:
     return out
 
 
-def _operation(store: manager.Store) -> tuple[list[str], int]:
-    """Did the machine run as registered? Pass/fail, from its own records."""
+def _operation(store: manager.Store, receipts: Path | None = None) -> tuple[list[str], int]:
+    """Did the machine run as registered? Pass/fail, from its own records.
+
+    ``receipts`` is AI-PM-3's receipt directory. It counted the manager store's, where AI-PM-3 writes
+    none, so every evening it reviewed would have read as no review at all.
+    """
+    from qalpha.live import agent
+
     lines: list[str] = []
     problems = 0
-    receipts = sorted(store.receipts.glob("*.json")) if store.receipts.exists() else []
+    folder = agent.FILES.receipts if receipts is None else receipts
+    # Evenings, not files: a review that used research has two review receipts. A failed attempt kept
+    # as `<receipt>.failed-HHMMSS.json` is not a review that happened.
+    reviewed = sorted(
+        {
+            p.name[:10]
+            for p in (folder.glob("*-review-*.json") if folder.exists() else [])
+            if ".failed-" not in p.name
+        }
+    )
     decisions = _rows(store.decisions)
     fills = _rows(store.fills)
 
     versions = Counter(str(r.get("version", "?")) for r in decisions)
     models = Counter(str(r.get("model", "?")) for r in decisions)
-    lines.append(f"- Reviews with a saved receipt: **{len(receipts)}**")
+    lines.append(f"- Evenings with a saved review receipt: **{len(reviewed)}**")
     lines.append(f"- Decisions recorded: **{len(decisions)}**, fills recorded: **{len(fills)}**")
     lines.append(
         f"- Versions in the record: {dict(versions) or 'none'} · models: {dict(models) or 'none'}"
@@ -99,13 +114,17 @@ def _operation(store: manager.Store) -> tuple[list[str], int]:
         lines.append(f"- **{len(unattributed)} decision(s) name no model or version.** FAIL")
 
     # The monthly budget, counted from fills, which is what actually happened.
+    # This read `side` and `cash`, which no fill carries, so every purchase was skipped and the report
+    # said the budget was untested whatever had been bought.
     spent: dict[str, Decimal] = {}
     for f in fills:
-        if str(f.get("side", "")).upper() != "BUY":
+        if f.get("action") != "BUY" or not int(f.get("filled", 0) or 0):
             continue
         month = str(f.get("on", ""))[:7]
-        cost = Decimal(str(f.get("cash", f.get("cost", "0")) or "0"))
-        spent[month] = spent.get(month, Decimal("0")) + abs(cost)
+        money = Decimal(str(f["filled"])) * Decimal(str(f.get("price", "0"))) + Decimal(
+            str(f.get("cost", "0"))
+        )
+        spent[month] = spent.get(month, Decimal("0")) + money
     over = {m: v for m, v in spent.items() if v > manager.MONTHLY_BUDGET}
     if spent:
         worst = max(spent.values())

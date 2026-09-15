@@ -28,38 +28,25 @@ only when he asks. When he asks about the maths: formula → example → why.
 **[README.md](README.md) is the project** — what it is, how it runs, what was learned, the maths, and
 the build plan. Read it first. Keep it true: edit the line that changed; never append a log.
 
-**The investor running SYSTEM is AI-PM-2** (registered; first review 2026-09-15). Steps A–E are done;
-step F (training) is deliberately not started — no measured deficiency to train against.
-
-**The five-phase plan to make it an agent is built** (plan: `~/.claude/plans/this-is-a-big-hidden-mango.md`):
-
-| Phase | What | State |
-|---|---|---|
-| 1 Spend controls | `live/spend.py`, `live/model_identity.py` | merged |
-| 2 Readers + triage (EX-5) | `live/readers.py`, `reference.py`, `reader_scoring.py`, `triage.py`, `scripts/readers.py` | merged; **measurement in progress** |
-| 3 Knowledge graph + quant cards | `live/graph*.py`, `relations.py`, `quant.py`, `scripts/graph.py` | PR #155 |
-| 5 Sizing that expands | `live/sizing.py`, `mandate.Sizing` | PR #156 (stacked on #155) |
-| 4 AI-PM-3 agent | `live/agent.py`, `attention.py`, `scenarios.py`, `scripts/agent.py` | PR #157 (stacked on #156) |
-| Records | backfill, EX-5 runs and reference, spend ledger | PR #158 (independent) |
-
-Merge order: #155 → #156 → #157; #158 any time.
+**The investor is AI-PM-3** (`live/agent.py`), the only one. AI-PM-1 and AI-PM-2 were retired on
+2026-09-15 without making a decision; `live/manager.py` remains as the packet, limits and fills
+AI-PM-3 is built on. **Its start date is not set** (`live/twin.EVALUATION_START`, read by
+`agent.Registration.start`): until it is, SYSTEM mirrors REAL and nothing decides. Steps A–E and the
+five-phase plan are built; step F (training) is deliberately not started.
 
 **Open, in order** (the user runs anything that spends money or reads the network):
 
-1. **EX-5.** Local runs done (qwen3.5-9b-16k, gemma4-12b-16k, qwen3-8b-32k: 149/149). Opus reference
-   collected for all 149; adjudication batches partly collected — repeat `readers.py adjudicate
-   collect` / `submit --budget-usd 30` until nothing is left. Then the user reads 20 documents
-   (`data/readers/human/`) and fills 25 claim checks, then `readers.py score`. **Open decision for the
-   user:** no reader has reached the registered ≥90% verbatim threshold (Sonnet measured 71% under
-   EX-3); changing it after seeing results would be moving the goalposts — the registered fallback is
-   "best reader on material filings only".
-2. **After merging #155–#157:** `uv sync --extra graph`; `graph.py ingest`; `graph.py relations` for
-   holdings; `agent.py attention`; `agent.py scenarios --model claude-sonnet-5`; `agent.py shadow-review`.
-3. **Start AI-PM-3** only when `reports/PREREGISTRATION_AI_PM3.md` §7 holds: set the start date there
-   and in `agent.Registration.start` in one PR. Until then `twin.py` runs AI-PM-2.
-4. **Known gaps:** ratings / board / shareholding / related-party feeds not ingested (graph says
-   MISSING); Neo4j projection untested against a live database; agreement on ~30 reconstructed past
-   packets not built (needs AI-PM-2 receipts); the shadow book re-checks only cash at fill.
+1. **AI-PM-3's start checks** (`reports/PREREGISTRATION_AI_PM3.md` §7): `uv sync --extra graph`;
+   `graph.py ingest`; `agent.py scenarios --model claude-sonnet-5` passes every scenario;
+   `agent.py shadow-review` runs once and its receipt is read. Then the start date is set in §7 and in
+   `twin.EVALUATION_START` in one PR, before the evening it opens.
+2. **EX-5** (does not block the start). Adjudication batches partly collected — repeat `readers.py
+   adjudicate collect` / `submit --budget-usd 30`; the user reads 20 documents and fills 25 claim
+   checks; `readers.py score`. **Open decision for the user:** no reader has reached the registered
+   ≥90% verbatim threshold; the registered fallback is "best reader on material filings only".
+3. **Known gaps:** ratings / board / shareholding / related-party feeds not ingested (graph says
+   MISSING); Neo4j projection untested against a live database; the shadow book re-checks only cash
+   at fill.
 
 From here the job is to **run it** — one evening a day — and to finish the measurements above.
 
@@ -132,7 +119,6 @@ uv run python scripts/evidence.py daily              # filings for held names an
 uv run python scripts/evidence.py backfill --only INFY --workers 8   # a year of one name, once
 uv run python scripts/news.py daily                  # headlines
 uv run python scripts/twin.py daily                  # the books (and the investor, once started)
-uv run python scripts/twin.py shadow                 # one real review on a COPY of SYSTEM
 uv run python scripts/reconcile_account.py --import  # the broker's ledger: funding + cash check
 uv run python scripts/corporate_actions.py --import  # dividends and splits, cross-checked
 uv run python scripts/financials.py --import         # filed XBRL results (no model calls)

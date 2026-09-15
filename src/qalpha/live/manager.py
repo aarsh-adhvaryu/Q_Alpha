@@ -277,10 +277,10 @@ def update_scorecard(market: Market, store: Store = STORE) -> dict[str, Any]:
     high-materiality verified events have been recorded for that name since. It does not judge whether
     a thesis was right — it shows the facts the model can judge that from.
     """
+    # Every version's decisions: SYSTEM is one continuous book, and each row carries its version.
+    # Filtering on this module's label kept AI-PM-3 from ever seeing a single one of its own results.
     decided = [
-        r
-        for r in _jsonl(store.decisions)
-        if r.get("version") == VERSION and str(r.get("as_of", "")) < market.as_of.isoformat()
+        r for r in _jsonl(store.decisions) if str(r.get("as_of", "")) < market.as_of.isoformat()
     ]
     recent = decided[-SCORECARD_ROWS:]
     names = sorted({str(r["ticker"]) for r in recent})
@@ -303,6 +303,7 @@ def update_scorecard(market: Market, store: Store = STORE) -> dict[str, Any]:
         rows.append(
             {
                 "as_of": r["as_of"],
+                "version": r.get("version"),
                 "ticker": ticker,
                 "action": r["action"],
                 "accepted_quantity": r.get("accepted_quantity"),
@@ -312,7 +313,7 @@ def update_scorecard(market: Market, store: Store = STORE) -> dict[str, Any]:
                 "high_events_since": len(since),
             }
         )
-    fills = [f for f in _jsonl(store.fills) if f.get("version") == VERSION]
+    fills = _jsonl(store.fills)
     card = {
         "as_of": market.as_of.isoformat(),
         "decisions": rows,

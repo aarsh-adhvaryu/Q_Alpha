@@ -299,19 +299,16 @@ def baseline_mark(flows: Sequence[Flow], series: pd.Series, as_of: date) -> Book
     )
 
 
-#: **The day the AI investor starts deciding for itself.**
+#: **The first evening AI-PM-3 decides for SYSTEM** — the one start date in the repository.
 #:
-#: Registered 2026-09-13 in ``reports/PREREGISTRATION_AI_PM1.md``, forward-dated: starting an
-#: experiment on days whose outcome is already known is selection on the outcome.
+#: Written in ``reports/PREREGISTRATION_AI_PM3.md`` §7 in the same commit, and read by
+#: ``agent.Registration.start``, so the evening run, the investor, the page and the evaluation cannot
+#: disagree about when deciding began. Forward-dated: starting on days whose outcome is already known
+#: is selection on the outcome. On a holiday the first review is the first session on or after it.
 #:
-#: 2026-09-14 is Ganesh Chaturthi and the exchange is shut, which needs no special case — the day a
-#: book is stepped on is the day its prices come from, so the first review happens on the first
-#: session on or after this date. A start date that fell on a holiday used to be the sort of thing
-#: that silently skipped a day or reviewed Friday's close twice.
-#:
-#: It replaced ``None``, which is what the withdrawn rulebook start left behind (2026-09-13, before
-#: that window opened). ``None`` still means "no autonomous window is registered".
-EVALUATION_START: date | None = date(2026, 9, 14)
+#: ``None``: not started. SYSTEM mirrors REAL and nothing is measured. AI-PM-1 and AI-PM-2, whose
+#: starts were set here before, were retired on 2026-09-15 without making a decision.
+EVALUATION_START: date | None = None
 
 
 def is_autonomous(as_of: date, *, start: date | None = EVALUATION_START) -> bool:

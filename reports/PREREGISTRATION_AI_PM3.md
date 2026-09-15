@@ -1,9 +1,12 @@
 # Pre-registration — AI-PM-3: the investor as an agent
 
 **Registered 2026-09-15, before any AI-PM-3 review of a real book.** Sections 1–6 are frozen once the
-start date in section 7 is filled in; corrections go in a dated section at the bottom. AI-PM-2's
-record is not relabelled: the paper book is one continuous book, and every decision carries the
-version that made it.
+start date in section 7 is filled in; corrections go in a dated section at the bottom. The paper
+book is one continuous book, and every decision carries the version that made it.
+
+**AI-PM-3 is the only investor.** AI-PM-1 and AI-PM-2 were retired on 2026-09-15 before either made a
+decision (their registrations are in git history). "AI-PM-2" below names the design this one changes
+and the original purchase limits, which the live book keeps.
 
 ## 1. What changes from AI-PM-2
 
@@ -79,12 +82,31 @@ answered, queues nothing twice and writes no record twice (tested).
 
 ## 7. Start
 
-**Start date: not set.** `agent.Registration.start` is `None`, so AI-PM-2 runs SYSTEM.
+**Start date: not set.** `twin.EVALUATION_START` — read by `agent.Registration.start` — is `None`,
+so SYSTEM mirrors REAL and nothing decides.
 
 AI-PM-3 starts the trading evening after all of these hold, and the date is then written here and in
-`agent.Registration.start` in the same commit:
+`twin.EVALUATION_START` in the same commit, before that evening:
 
 1. Phases 3, 4 and 5 are merged and `scripts/graph.py ingest` has run on the real archive.
 2. `scripts/agent.py scenarios --model claude-sonnet-5` passes every scenario.
 3. `scripts/agent.py shadow-review` has run once on real data, and its receipt has been read by a person.
-4. AI-PM-2 has no order waiting to fill.
+4. SYSTEM has no order waiting to fill.
+
+## 8. Corrections
+
+*(Dated. Sections 1–6 are not edited after the start date is set.)*
+
+- **2026-09-15, before any start** — found while retiring AI-PM-2, all fixed and tested:
+  1. *The scorecard never showed AI-PM-3 a single one of its own decisions*: it counted only rows
+     labelled AI-PM-2. It now counts every version's decisions and names the version on each row.
+  2. *Filing events dated by the evening they were read.* 811 events have no event date and fell back
+     to the reading date, so a filing published a year earlier and backfilled on 2026-09-12 looked like
+     fresh news to the packet and to attention. They are dated by publication.
+  3. *The `filings` research tool answered "0 verified events" to every request.*
+  4. *A run cut between a fill and the book's save wrote the fill twice*, and the month's allowance is
+     counted from that file.
+  5. *The evaluation harness* counted AI-PM-2's receipt folder, where AI-PM-3 writes none, and never
+     counted a purchase against the monthly limit.
+  6. *One start date.* The evening run read AI-PM-2's start (2026-09-14) and would have run AI-PM-2
+     tonight; AI-PM-3's start is now the only one.

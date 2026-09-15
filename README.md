@@ -17,13 +17,13 @@ plan and report are in git history.
 
 ---
 
-## 1. Where it stands — 2026-09-14
+## 1. Where it stands — 2026-09-15
 
 | | |
 |---|---|
 | **Working** | The evening run: prices → filings → headlines → filed results → four paper books marked against two index funds. Tax-exact FIFO accounting. Resumes where it stopped. |
-| **Built, starting** | The investor (AI-PM-2, `live/manager.py`), registered in [reports/PREREGISTRATION_AI_PM2.md](reports/PREREGISTRATION_AI_PM2.md). AI-PM-1 was closed before it made a decision. Until its first review `SYSTEM` mirrors the user's holdings. |
-| **Start date** | 2026-09-14 (Ganesh Chaturthi, exchange closed): the first review is the evening of Tue 2026-09-15, filling on the 16th. |
+| **The investor** | **AI-PM-3**, the only one (`live/agent.py`), registered in [reports/PREREGISTRATION_AI_PM3.md](reports/PREREGISTRATION_AI_PM3.md). AI-PM-1 and AI-PM-2 were retired on 2026-09-15 without making a decision. |
+| **Start date** | **Not set.** Until it is, `SYSTEM` mirrors the user's holdings and nothing decides. It is set once the checks in the registration's §7 pass. |
 | **Proven edge** | None. See §6. |
 
 ---
@@ -131,36 +131,38 @@ A gap between books is **descriptive**. One book over months is mostly timing an
 
 ## 5. The investor — what is being built
 
-### AI-PM-2: the version that runs
+### AI-PM-3: the investor
 
-- **Brain:** `claude-sonnet-5`, pinned by id. A different model is a different version.
-- **Sees:** every holding and 8 candidates; verified filing and headline events; a year of prices;
-  each company's own filed quarterly results, as published by that date (banks under the banking
-  taxonomy); its own memory (below). **May ask once** for up to 6 read-only look-ups before deciding
-  (`live/tools.py`). **Not given:** valuation multiples, which would need share counts and prices
-  joined point in time — a calculation not yet built.
-- **Decides:** HOLD / BUY / SELL with a quantity, a reason, a thesis, what would prove it wrong, and
-  the evidence it relied on.
-- **Code enforces on purchases**, and may cut or cancel an order with a stated reason: long-only;
-  enough paper cash including costs; at most 8 names; a buy may take a name to 20% and a sector to
-  30%; every holding reviewed; every cited evidence id real and about that company.
-- **Drift is not a breach.** A holding that appreciates past 20% is tolerated to 22% (a sector to
-  32%). Beyond that the investor is told and decides — a forced trim pays tax to undo a gain.
+Registered in [reports/PREREGISTRATION_AI_PM3.md](reports/PREREGISTRATION_AI_PM3.md); it decides for
+`SYSTEM` from the start date in its §7, which is also `live/twin.EVALUATION_START` — the one start date.
+
+- **Attention first** (`live/attention.py`): each evening code flags what changed — a high-materiality
+  event, new results, a 2σ move, a valuation extreme, a contradicted thesis, trouble at a customer it
+  supplies, concentration, a missing feed, idle cash. Only flagged names are reviewed; every holding
+  weekly. A name not reviewed is shown as "not reviewed tonight: no trigger", never a fresh HOLD.
+- **Sees** for the names under review: verified filing and headline events; a year of prices; each
+  company's own filed quarterly results as published by that date; a quant card; graph connections
+  with quotes; its own memory. **May ask once** for up to 6 read-only look-ups (`live/tools.py`, graph
+  tools).
+- **Intentions, sized by code** (`live/agent.py`, `live/sizing.py`): open / add / hold / reduce / exit
+  with conviction and desired share of the book, a reason, a thesis and what would prove it wrong.
+  The live book sizes them under the original limits (8 names, 20% a name, 30% a sector, ₹50,000 a
+  month); a shadow book sizes the same intentions under the expanding rules, for comparison.
+- **Two models**: a decider reviews; a confirmer must confirm every new position and every exit.
 - **Fills** at the **next** trading session's close, never at a price the decision had already seen.
-- **Incomplete is never HOLD.** No reply, a truncated reply, a missing holding or unread filings mean
-  the review did not happen, and the page says so.
-- **Memory:** a logbook the model writes each review (per company and for the portfolio), and a
-  scorecard code computes from its past decisions — both fed into the next review, labelled as its
-  own earlier beliefs and results, never as evidence.
-- **Starts** the next trading day after: it is merged, every held name's filings are read, and one
-  shadow review (`scripts/twin.py shadow`) has run on real data and been read by a person.
+- **Incomplete is never HOLD.** No reply, a truncated reply or a citation that is not the company's
+  own means the review did not happen, and the page says so.
+- **Memory:** a logbook the model writes each review and a scorecard code computes from its past
+  decisions — fed into the next review, labelled as its own earlier beliefs and results.
+- **Scenario suite** (`live/scenarios.py`): fixed situations that rule a cheaper decision model in or
+  out before it may replace the registered one.
+- **Resumes at any step** without a second model call, a second order or a second record.
 
 ### What a "version" means
 
 A version is a fixed description of the investor: model, prompt, what it is shown, what tools it
 has, how fills work, its limits. **The paper book is one continuous book across versions**; every
-decision is stamped with the version that made it. AI-PM-2 is the same investor once it also sees
-financial statements. Nothing is reset — versioning stops a better-informed investor's results being
+decision is stamped with the version that made it. Nothing is reset — versioning stops a better-informed investor's results being
 credited to an earlier one.
 
 ### The build order
@@ -171,7 +173,7 @@ calls for it.
 | Step | What | Done when |
 |---|---|---|
 | **A. Accounts** ✓ | Deposits and withdrawals as explicit flows, from the broker's ledger. Dividends as dated cash on the ex-date, each cross-checked against the price panel's own adjustment before any book receives it. Splits and bonuses through the replay, checked by the share count against the broker's statement. | Done: `tests/test_accounting_scenario.py` runs one book through a deposit, a dividend, a split, a partial sale with tax, an unpriced holding and a restart, and reconciles with no manual edit. |
-| **B. Company facts** ✓ | The companies' own filed quarterly results, from both of the exchange's feeds — the old results feed (to Dec 2024) and SEBI's Integrated Filing feed (2025 on) — keyed by the time each was published; banks read under the banking taxonomy (interest earned, provisions, NPAs); growth and margin computed by code; refreshed every evening, and a re-import is byte-identical. **This is what makes the investor AI-PM-2.** | Done: every filing is checked against its own statement's identities and refused if it does not add up; a filing is invisible to a packet dated before it was published, a restatement supersedes only from its own date, a full year is never stored as a quarter, and a fetch never deletes a stored filing — all pinned by tests. `financials.py` prints the counts. |
+| **B. Company facts** ✓ | The companies' own filed quarterly results, from both of the exchange's feeds — the old results feed (to Dec 2024) and SEBI's Integrated Filing feed (2025 on) — keyed by the time each was published; banks read under the banking taxonomy (interest earned, provisions, NPAs); growth and margin computed by code; refreshed every evening, and a re-import is byte-identical. | Done: every filing is checked against its own statement's identities and refused if it does not add up; a filing is invisible to a packet dated before it was published, a restatement supersedes only from its own date, a full year is never stored as a quarter, and a fetch never deletes a stored filing — all pinned by tests. `financials.py` prints the counts. |
 | **C. Mandate** ✓ | One versioned mandate (`live/mandate.py`): every limit in one place, read by the manager, stated in the prompt, and written into every receipt. | Done: the prompt's numbers are asserted to be the numbers code enforces, a mandate file that sets an unknown field is refused rather than silently ignored, and the whole mandate is in the packet. |
 | **D. Research tools** ✓ | Four read-only look-ups (`live/tools.py`) the investor may ask for **once**, before deciding: more filings, every filed quarter, one metric across names, a finer price history. Answers join the packet and the receipt. | Done: every tool is bounded by the review's own date and by the names in front of it; requests beyond the limit are refused out loud; research surfaces archived ids and never mints one, so a citation earned by research is checked like any other. |
 | **E. Evaluation** ✓ | `scripts/evaluate.py` — one command, immutable inputs, three separate tests, no gate. It prints **no outcome figure** below 60 observations, and names what it cannot measure. | Done. Point-in-time Nifty-100 is **still unsourced and stays that way**: `NEXT_50_CHANGES` is empty, and filling it from today's constituents would look complete while reintroducing ~3.8%/yr of survivorship bias. The harness reports that as a named limit. |
@@ -187,24 +189,6 @@ calls for it.
 | Point-in-time Nifty-100 membership | Step E | NSE Next-50 circulars → `scripts/build_nifty100_pit.py` |
 
 Private account files go in `data/account/` and are never committed.
-
-### AI-PM-3: the agent (built; starts when registered)
-
-Registered in [reports/PREREGISTRATION_AI_PM3.md](reports/PREREGISTRATION_AI_PM3.md); start date not
-yet set, so AI-PM-2 runs SYSTEM until it is.
-
-- **Attention first** (`live/attention.py`): each evening code flags what changed — a high-materiality
-  event, new results, a 2σ move, a valuation extreme, a contradicted thesis, trouble at a customer it
-  supplies, concentration, a missing feed, idle cash. Only flagged names are reviewed; every holding
-  weekly. A name not reviewed is shown as "not reviewed tonight: no trigger", never a fresh HOLD.
-- **Intentions, sized by code** (`live/agent.py`, `live/sizing.py`): open / add / hold / reduce / exit
-  with conviction and desired share of the book. The live book sizes them under AI-PM-2's limits; a
-  shadow book sizes the same intentions under the expanding rules, for comparison.
-- **Two models**: a decider reviews; a confirmer must confirm every new position and every exit.
-- **Scenario suite** (`live/scenarios.py`): fixed situations — a contradicted thesis, a price-only
-  buy, a supply-chain shock with a missing revenue share, a failed feed, a drifted holding — that rule
-  a cheaper decision model in or out before it may replace the registered one.
-- **Resumes at any step** without a second model call, a second order or a second record.
 
 ### The knowledge graph and quant cards (built; not yet in the evening)
 
@@ -309,6 +293,7 @@ Everything measured on the way here. Full reports are in git at commit `53e2588`
 | EX-3 reader | Which model reads filings? | `claude-sonnet-5`: 29% quotes discarded vs Haiku's 59%, twice the events. Readers agree on 22% of findings. |
 | EX-4 | Does a tighter prompt fix unverifiable quotes? | **Worse**: 155 events vs 200, 34.9% discarded vs 25.1% (220 documents). Reverted. |
 | EX-5 | Which reader is good enough at the lowest cost, and which filings need no reading? | **Built, not run.** Rule registered first. |
+| AI-PM-1, AI-PM-2 | The first two investor versions: one review of every name each evening, share counts chosen by the model | **Retired 2026-09-15 before either made a decision** (one shadow review between them). Superseded by AI-PM-3; their registrations are in git history. |
 | Forward run 1 | 6 weeks of paper trading | **Void**: flows were injected on a calendar the real account never had. |
 | Research track | QUBO ×2, HMM regime overlay, LPPLS crash signal, futures hedge | All negative. Archived in `Q_Alpha_Research`. |
 
