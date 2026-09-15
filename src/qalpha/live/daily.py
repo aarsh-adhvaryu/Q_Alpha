@@ -351,6 +351,13 @@ def _step_financials() -> None:
     _checked("financials", financials.main(["--import"]))
 
 
+def _step_graph() -> None:
+    """Everything read tonight into the knowledge graph. No model calls, no network."""
+    import graph
+
+    _checked("graph", graph.main(["ingest"]))
+
+
 def _step_twin() -> None:
     import twin
 
@@ -391,6 +398,7 @@ def research_steps() -> list[Step]:
             "Checking the exchange for newly filed quarterly results",
             _step_financials,
         ),
+        Step("graph", "Filing what was read into the knowledge graph", _step_graph),
         Step("twin", "Marking the books against the fund", _step_twin),
     ]
 

@@ -61,6 +61,8 @@ headlines  4 market feeds + one Google News search per name → archive → map 
   ↓
 results    each company's filed quarterly results, both NSE feeds → check → store  scripts/financials.py
   ↓
+graph      everything read tonight → the knowledge graph ($0)              scripts/graph.py ingest
+  ↓
 books      credit flows → fill yesterday's orders → the investor reviews → mark   scripts/twin.py
   ↓
 page       data/session/qalpha.html, served by live/server.py
@@ -185,6 +187,24 @@ calls for it.
 | Point-in-time Nifty-100 membership | Step E | NSE Next-50 circulars → `scripts/build_nifty100_pit.py` |
 
 Private account files go in `data/account/` and are never committed.
+
+### AI-PM-3: the agent (built; starts when registered)
+
+Registered in [reports/PREREGISTRATION_AI_PM3.md](reports/PREREGISTRATION_AI_PM3.md); start date not
+yet set, so AI-PM-2 runs SYSTEM until it is.
+
+- **Attention first** (`live/attention.py`): each evening code flags what changed — a high-materiality
+  event, new results, a 2σ move, a valuation extreme, a contradicted thesis, trouble at a customer it
+  supplies, concentration, a missing feed, idle cash. Only flagged names are reviewed; every holding
+  weekly. A name not reviewed is shown as "not reviewed tonight: no trigger", never a fresh HOLD.
+- **Intentions, sized by code** (`live/agent.py`, `live/sizing.py`): open / add / hold / reduce / exit
+  with conviction and desired share of the book. The live book sizes them under AI-PM-2's limits; a
+  shadow book sizes the same intentions under the expanding rules, for comparison.
+- **Two models**: a decider reviews; a confirmer must confirm every new position and every exit.
+- **Scenario suite** (`live/scenarios.py`): fixed situations — a contradicted thesis, a price-only
+  buy, a supply-chain shock with a missing revenue share, a failed feed, a drifted holding — that rule
+  a cheaper decision model in or out before it may replace the registered one.
+- **Resumes at any step** without a second model call, a second order or a second record.
 
 ### The knowledge graph and quant cards (built; not yet in the evening)
 
@@ -419,12 +439,13 @@ src/qalpha/
   live/        announcements · evidence · extraction · news · pretrade · localmodel   (reading)
                triage · readers · reference · reader_scoring     (EX-5: measuring the readers)
                sizing                                        (intentions → orders, per book)
+               agent · attention · scenarios                 (AI-PM-3)
                spend · model_identity                        (what a model call may cost, and who answered)
                graph · graph_ingest · graph_neo4j · graph_tools · relations · quant   (knowledge)
                manager · evidence_log · decisions                                 (the investor)
                twin · flows · nav · benchmarks · tradebook · taxpnl · market · screen (books)
                daily · session · server · record · panels · progress · atomic · console (running)
-scripts/       local_run (the app) · twin · evidence · news · reconcile_taxpnl · ocr_scans · readers · models · graph
+scripts/       local_run (the app) · twin · evidence · news · reconcile_taxpnl · ocr_scans · readers · models · graph · agent
                build_nifty_universe · build_nifty100_watchlist · build_nifty100_pit
 reports/       pre-registrations still in force
 data/          evidence archive · twin books and history · universes · tradebooks (private)
