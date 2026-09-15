@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+import pytest
+
 from qalpha.live.announcements import Announcement, SourceDocument
 from qalpha.live.evidence import Provenance
 from qalpha.live.extraction import (
@@ -379,3 +381,32 @@ def test_the_cloud_reader_reports_the_same_fact(monkeypatch) -> None:
 
     _text, usage = default_generate("sk-test")("claude-haiku-4-5", "read this")
     assert usage["truncated"] == 1
+
+
+def test_a_read_stopped_partway_has_already_checkpointed_every_finished_document() -> None:
+    """The checkpoint fires as each batch lands, not after the whole run: a stop keeps the work."""
+    docs = [_doc(sha=c * 64) for c in "abcd"]
+    saved: list[frozenset[str]] = []
+    calls = 0
+
+    def generate(model: str, prompt: str) -> tuple[str, dict[str, int]]:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise KeyboardInterrupt  # the user closes the window during the third call
+        return _line(), {"input": 10, "output": 10}
+
+    def checkpoint(fresh: object, finished: frozenset[str]) -> None:
+        saved.append(finished)
+
+    with pytest.raises(KeyboardInterrupt):
+        extract(
+            docs,
+            generate=generate,
+            model="m",
+            batch_chars=len(TEXT),
+            workers=1,
+            checkpoint=checkpoint,
+        )
+    assert calls == 3
+    assert set().union(*saved) == {"a" * 64, "b" * 64}

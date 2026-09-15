@@ -285,14 +285,14 @@ def cmd_score(args: argparse.Namespace) -> int:
         model_ref, human, read_docs, reader_scoring.read_claim_checks()
     )
     scores = [reader_scoring.score_reader(run, full_ref, adjudications) for run in runs]
-    selection = reader_scoring.select(scores, validation, len(sample))
+    selection = reader_scoring.select(scores, validation, readers.unique_documents(sample))
     triage_result = reader_scoring.triage_check(sample, full_ref)
     text = reader_scoring.render_report(
         scores,
         selection,
         validation,
         triage_result,
-        sample_size=len(sample),
+        sample_size=readers.unique_documents(sample),
         reference_events=len(full_ref),
     )
     write_text(REPORT, text)
@@ -303,11 +303,13 @@ def cmd_score(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     sample = readers.load_sample()
-    print(f"sample: {len(sample)} documents")
+    print(f"sample: {len(sample)} filings, {readers.unique_documents(sample)} distinct documents")
     for slug in readers.READERS:
         if readers.run_path(slug).exists():
             run = readers.load_run(slug)
-            print(f"  {slug:<24} {len(run.get('done', []))}/{len(sample)} read")
+            print(
+                f"  {slug:<24} {len(run.get('done', []))}/{readers.unique_documents(sample)} read"
+            )
         else:
             print(f"  {slug:<24} not started")
     for record in reference.load_batches():

@@ -643,3 +643,24 @@ def test_paid_steps_refuse_without_a_budget(capsys: pytest.CaptureFixture[str]) 
     assert "--budget-usd" in capsys.readouterr().err
     assert cli.main(["reference", "submit"]) == 2
     assert cli.main(["sample"]) == 1  # a sample is never silently redrawn
+
+
+def test_one_pdf_filed_under_two_announcements_is_one_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Read once, counted once: a reader that read it is not marked short of the sample."""
+    from qalpha.live import announcements
+
+    doc = _doc("a" * 64)
+    monkeypatch.setattr(announcements, "load_document", lambda ann: (doc.text, doc.provenance))
+    sample = [
+        _sample_doc("a" * 64, seq_id="106517358", subject="Change in Director(s)"),
+        _sample_doc("a" * 64, seq_id="106517331", subject="Updates"),
+    ]
+    documents, problems = readers.load_documents(sample)
+    assert len(documents) == 1 and problems == []
+    assert readers.unique_documents(sample) == 1
+    sel = reader_scoring.select(
+        [_score("r", recall=0.95, done=1)], GOOD, readers.unique_documents(sample)
+    )
+    assert sel.winner == "r" and sel.qualified == ["r"]
