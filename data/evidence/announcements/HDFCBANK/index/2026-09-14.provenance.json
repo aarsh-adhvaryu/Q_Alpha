@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=HDFCBANK",
+ "retrieved_at_utc": "2026-09-14T09:35:58Z",
+ "http_status": 200,
+ "bytes": 1626347,
+ "sha256": "57cb7a81fba71b1d3d8b2ed78571065e86e0d2e72f6856214939c1f059722ce8",
+ "document_date": "2026-09-14",
+ "symbol": "HDFCBANK",
+ "kind": "announcement_index"
+}

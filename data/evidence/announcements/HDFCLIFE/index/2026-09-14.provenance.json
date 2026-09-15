@@ -1,0 +1,10 @@
+{
+ "source_url": "https://www.nseindia.com/api/corporate-announcements?index=equities&symbol=HDFCLIFE",
+ "retrieved_at_utc": "2026-09-14T09:26:03Z",
+ "http_status": 200,
+ "bytes": 526129,
+ "sha256": "4ee2e5245252dc5a9de62b17d73b3c524d9ff09af47ea304c14025d719c986b0",
+ "document_date": "2026-09-14",
+ "symbol": "HDFCLIFE",
+ "kind": "announcement_index"
+}

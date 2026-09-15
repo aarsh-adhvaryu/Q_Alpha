@@ -1,0 +1,1674 @@
+{
+ "done": [
+  "008af1da55004d1d308852ff4552594385166a16bf82735862427a5b3c309282",
+  "057f570402599a29128ef34dad4820247500d238339da04e902092212fe3dff1",
+  "0834a51d48610dae11945b3311ce84486cc9ddef528237ed5a746f3b7238a455",
+  "088710f01ff4d3cd04a5a23438b64080bb1cb1ef5f067c0b0d4fecc650e5dbec",
+  "08f98210a14162cedcac1019e4f1aeeb67066655424da28fbfaa8663faf1e43b",
+  "0a6396e228ee22a49cab9ccc72b51c34ba90252ad94e9f328992270b9a98f8a7",
+  "0b45c8c0ed0810093d6aabe76d80c0b30a58a9e44bee8013995892b1157bbd1d",
+  "1031579d3fbd0f05de7639b761764ab995979ef264cf74e4e39667eae8b45b68",
+  "106706ec68ebed5115c2c522c60f1ec482c6f82ef44e1b9cb0bbff7a2063be13",
+  "137c165fddddaecf650936693569262417d95b2c76c846c2b1b71d2acfcb2636",
+  "17b021ed964e0a0732eb10294482ac0be0b3274f398b958014e340a1b07ee1d3",
+  "17f3210de240975366e9ebf0d6a8e5af7d54ae55e421c05c92190f4aabc0d401",
+  "1e32df1526c0a1025d9dafd2b2a98b803fea933689969b7c35fb990b1ec37f17",
+  "2022df3dfb4c55e237661e9b3a7ec1ca26f69b4462e21e51eeee2855f8865dcf",
+  "23e86c293f3733dc036d111fa3ae59d98985d09ac659f1d2d9218b6ac312e2d2",
+  "242ccc447722792e1e6026c2c0f6d517b148aedefd5ac26f1de89fd6b0bf3d99",
+  "28bdf1d45b151905868304df25f34a8a7edcde4ba92ba7ecaca6f9a77ce5fe5c",
+  "29d0904567ca7c511b4f46fe004d9ef01f8447bdf18263d1b67132e5f3a4e33d",
+  "2ad456c58d60a08b7f2c15cb6b00486c8ab943ebec7e7e4171c344a2619e85a4",
+  "2bf9e1bca172f894c6152b75062c33ab02fa2f6eb1e348b651722fa1905ff1d8",
+  "323f24e26ea5cdcdf53230c162edaf7c0a92f759aacd854b3e82f98f4f6254b1",
+  "3485bdd4deab138c9657e96a3c5ce9fb8e08c267d902e4a6e366f49693f837ce",
+  "34a636c43f323f5e357a6e658c819361f4b9d3bd22528dc84e628b34546bda67",
+  "35485756877b9bb75a6429b34ccd52b6da8209bf033553bdbf617f14a02cb974",
+  "35c3c541562856a50dddb4c3d446c74856286448ef4a44b4281af8dec14f6b9d",
+  "35ded195e2c7bf60f28ea32a191f721a9a9cb3512497dbedc75cae3998adc18a",
+  "361e4c2de2bd1d86b1648e5f3e7adc5d05bdbb724f0073e111eaf76731326832",
+  "392665323baf48503e24911936083050eba5ac8c2db8caf906de2fc29924f3ba",
+  "39313da266e565975da1a2d0684d4729ef13650282b049312bad6c6073c443fb",
+  "3b69696ed0a93415fe221392e520d4b4adc06b745970dd126a975510810e0f98",
+  "3ce54f243451167165ad0feb67a1aecf53302b8018866e9bfb916c3e89cb3630",
+  "3cfd71d1793e902fd460a322e8dda2199a4283208054fb87fd53cbdb42f5f336",
+  "3f41bfa59741e3146991f698679e96155f95dbc396c2c95f61cacab4bac4fb24",
+  "438efcef806ffef3e24914abe384b42796cb5d38c34706a4dcb3a9ac274b9f64",
+  "450319cac6e8fab86cc70f3b5f9c76195e9b7e318d4e9fac5662abaebd64dd3e",
+  "46833862c020dbf922bfa7acaea17d7a665b92a28980ef0b6c148c179aa602ea",
+  "46c08335e4c881594a734282a975d948eaa2e6dbc716927ac1d58ef20ed0b8b3",
+  "489d6fb04a6d398f8eb8c1d68d641b38ef01ed53487adf13e3d9b466421bdcdc",
+  "49b87a0ce20a648d8a56aa7066e86cc7f11e8dab3ec29bcf2c5af384812e63af",
+  "4d0052b967270b15af07c3114ad8c3806ab17b49432ab0517851ec60acdfef72",
+  "4d1c756059fdf75a5670c047aa926ae454be1f1ddb2e1f2c8d5878eae531505d",
+  "50246c8964782638c36943f58cc777722fbf540db566e5a63f99b2cd5f4178c0",
+  "50c890a457e2956eba2b48fb776d627ab81790b52492393fb3b7954045bb8b0a",
+  "50db117dea9252e554381f89a21be1b90a9944fe261030734e162f95fab9077e",
+  "50f7c299efb79d186ec23a3f8c6517feb7b3061aede5e02d812c90a60c3ad19c",
+  "517fe73ef28be9a2f443f2dcb680d70373352851245822da7337f90037a372c2",
+  "526a4c6d5506925300ee5e1209c2146be278ac41d3904cda95bf5414e7492b71",
+  "527ad1c160d3a3ee7b3b159cb8f17013ccb2bef3af1c6fa9d9cbbcf8894ee6ff",
+  "530009ef8130178f6d5888b418551ebb8cde88a0b38238837234b33d895872a4",
+  "56781c0770f8f2d06f0136561573175c4dd5270ce35a70e6118d57085cf3cb2f",
+  "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+  "58d09fbab9ec1d2caad40f857dccd3bda8377143d7dcccaca3df1ea21a4d16f2",
+  "59fb088b6e2bf9d1f97365970d2f67e9d62ed0aeed01d50e2d24632b707d510e",
+  "5bf51372667dc06ee17819e8d51bcfa314167e7119e5063396302c167bfad1f0",
+  "5ce90f9bc2a46b4b68a8bcf28907839fdb1189d52e124b1b922d2df51985789f",
+  "5e48cb81c79df7b438059b6b5c31320228f0f0a0f72ca1ad6225ffcc909e8d4e",
+  "601e2c002f4112a54149f75dc55b6be7bb5e68ec6696c1841a11b775e95044be",
+  "6221cbabed6dac762fa28fcd43b727fa8df3a1df8951818da09cd5edd594febc",
+  "6359aded00b73a6b2fc1c83e1691e88f6dde0ce6e54f64d0b2b8ace5fd554f3b",
+  "64559bd314dd9b11074294535aee2bf4b088abe708be19614eb8ac5039881b29",
+  "6589a50e16ede5ccbdb051341a07005e54eab9735b505123b4fab16735bfa3ee",
+  "65bd923c4dc66cb590b01482a5a08c56984acd29c532a1fb0c3ade24bdd53ca5",
+  "681075ca9861ac50facfa0805eb6db0bf239129d7f37cbb1d6050cacef4bcd73",
+  "7159c93b342f1dfb60062ccec534b55feb0552267ff06ddc9ec58172f1ef8ab7",
+  "745c7d165e2edaaf669adcecaed5c162ec44aa1e9f2b2596714c229df187d505",
+  "770f81a84b847134ec4eae8e5becf6d62c217fc9fe787e37a6f4cec8d2515503",
+  "77352da0f3c108e355ab5ea8889df6a60574555ede2fe56f5e99f40cdfd8f62e",
+  "78d4bee41b1a6f38270a5fb1b783bc382653b517483dcb4c21ff43c1b9171e54",
+  "796426bc908ee93d41163937ef021c23e6cff28c7587560679bc1b598ecae4f0",
+  "79822b8b9daca95a7d23765e149453b7db8c97d53e51fd9e01dc8576db50393b",
+  "7994420f5bb70891141e3afc2073b29855daf961bf76e6b1c5efb2c26f97ffb2",
+  "7f8894f32a9993ac7d94b46cf4a6937e740ca4149ed1a60facd1c92a7a81f3fa",
+  "7f8e43e61cf91d1bb05761874db42b5f75565ff8e98fee14361e06a1dc6ebcde",
+  "8047fc198589311ba1dcdbba980cbc74e5093d889e0809d51919f3aeed4f92bf",
+  "8193fcf3b0d60bb1397031e58cfe61bb0efe3111a4e74bb723406f4d03326a83",
+  "831e9c4b980b0911362716e43f77ac10e170c9354af7e6f526db7b9840e83eb5",
+  "83ec6de98ed16f5d0415bc9059aa06f3479ff404e420b939355e4b93500f2417",
+  "84ba04c3c22e54559fdddf35f22a024575dac1c81453ac76ac7ad5a5f17e4aec",
+  "851166c9b6745d072b8131aa07894294ff002b37598969e51abaad6728ea7de3",
+  "87c390d39dd2646a34f5704ed05527039a5f6e6cbed44426452d8843801c3d94",
+  "89277d7470560f0ac8b4feef443cd4469cc70d08baa31ab59f3e1d5d137c478b",
+  "8a7d45b00b93bd8611e9eb7d3168cf1c4dc8724ec5d3d8578d7400d431e82d46",
+  "8aa997bf8d1535a8b920e07f26cf6d7785cbc2df54abb4935c6e01818d7e1b94",
+  "8ac8370c62172c3c6787ab80b02c21966218ff85fc0bb47dd942e9175c2f6eca",
+  "8f55d80d2c8b2ac450591e89db213f1bbc3135503ff55637090816afc8fc60d8",
+  "91210c3118355d5cb7a2d49723f58b16427d13e2c6698f77fdccb952680a06d3",
+  "938cde02bc6fcc5aab6ac1505c6bd4b573ecc55fba6662553458d04026500a53",
+  "94dba87b0b41345b5b4b729354311812caca8d7da45acb60dd28473b47bf936b",
+  "952f60beb0c6a66694496e294b2b90a82a55059842a1c3c9fa6a163149e0edd0",
+  "95fa1021dbf8d83b98a0341e0ea4ab3201f7e5ebab41797671beee5482628fcb",
+  "999e5384d82800ea0365eebce86f39dfcb4eb8604e563c029b6c3bdb0f37e2c0",
+  "9a37da497a9a05bcf4b974152ad14e912654d3d5175d6e6a656d8889456a623c",
+  "9c7f6c0a250fc14ca50f6370c7c446c048d0ea3340f05db7e381323028a1359f",
+  "9f8c5fa04a719561699c4726f49cf340ba19077160d6b553d989f3411d38bf6a",
+  "a024c637734170961a4daf4904e0005d31b1d9cd4553e5a63f6dd065036b8861",
+  "a15dd678117e9ac7861016856c1829e6969528d616169f17e044f8159535310c",
+  "a238494e20ac42ea312f9e454ea23121d3d73ca68a1e11b2c0a1a7a395ceba09",
+  "a3c6cbabc4c4f34588af81a1b74800e0054f8f8b3a9320d7c9d7c9b33fa5cb50",
+  "a5ec652bdc67a6f50507d4836ab10ae95fbececc96e1a48a42021d869b0d619e",
+  "a60ee696d3ec69931f84809bc778e54bc3c4015c59e8596fa5f6c421c19af886",
+  "a68aa772d191379cf04ef9f70917dec00cb5fab0b80568706d38a7291d9b934c",
+  "a90efcd038139acce4af999c98ffa8a311e96cbcc1a318309796b410df842315",
+  "a93aea1c4a7c02a9e71d6abd9efc92b662b90b3a105c3c89214eb27e2fa0ba68",
+  "aa04cd86dc2a7d7c33cdf649fa5ba2074b84ec26bfc178f54be19c44699151a9",
+  "ab5239e667ca505ed63ad5e013e283158ce76fa6ad741a25537bf7621d35d4b2",
+  "ac0d7ffde65e320b36f9c3abaf27036b8a65bd6cb435868665688008f66e672e",
+  "b079063ce94a74acb62da95888b60ddd272ce7d22692f582cf83bccbc642e47f",
+  "b16c64b847c486d461d485420584294dea4f1f3a5d322cd01f02493bb9fb0e3d",
+  "b2e9d41f6b9a631f347f6d81389cd81728852169d9ee6d597e53c544767f5d4c",
+  "b61ceb61b6c3f6fdfe8de5b344795319064e8ea07591b8c5643814f18a77d51c",
+  "b6c5a3438d23d5625456b875000b037aff18b2d54c53f0690b30b96ee5c80ecd",
+  "b7da838751880c63a0c2896a9f1ed781a4f9056cca75d3b9e40cc0ca547cfdaf",
+  "b9832a8bc7897af0f7540d45477748c0140814c61555b4723e1fd727c2bf6ecf",
+  "bb3853db45505a467db0c3a7e7e68ce33f723e188b000cbde0bfde82898faa64",
+  "bc1a3cd360dbd1345707cb4ffafe72efb933be7cd427ef8a56467500d6ba2f07",
+  "bc7b3258ef425fb83895597356352aea035467d08b3b5685e87af31bd575ae09",
+  "bc97fa2461eb531e53a9234bea4246d8dc05b388b74e753673a0955954c65f20",
+  "bccd3905369bf1070ec6f528874a8b26abed5acc74e85bdfa941368b78170e39",
+  "bd7cbace537f0cefa02281519e37279378460a50eafb324565845c48620da938",
+  "c0427539307aa1ae34f2e57734789ee9d7ab82777f2e266eb8700e87366dcbc5",
+  "c35fcc7d74f81b9fc76feb461351ee20bfb7dd87c97347749d18502c44e50e40",
+  "c488663a857d8faf3d8314961db1fdc2b24b7b992a35c92fba2be19d15d7d8e4",
+  "c923b003fcf3120872029b101ab0b5fb500ea465b10390ae186b74ac1db27365",
+  "c941bd756326b54a376c347efedd0ebe48ab085f3a54dffc82a4b809290cfdd8",
+  "c992eb7b55ec72634efcfa623d6e3449a80331d508bd7b93b0ef7f028509fe81",
+  "cc2cd4875ee27e43507d088112875682948d7f0c7b2a30ad3698b618ed78ce93",
+  "ccd52bc90ea26b92d9d850d40935baa207b8e98bb684ea634cd36f55d7e70903",
+  "cdd4de63281939f18e064d2194c74611f3e1a311ccda08302a9b1f6f9a20774b",
+  "ce40ffaf1eaa86469f88bfb774c112aa60b5b206be954c6ba98daaa94081257a",
+  "d1108bfb5890de44615716d604e2c7ef665408cd6e4bbb3663a6bbc35e7a2598",
+  "d26bd59c19ef018601c631a42934acefe0c7a914b2a3345c9089f3ae2e0d20c5",
+  "d3fe0374b724c2f8ff113267541fc159400ca20c08ddf7bc650e49f841a86c00",
+  "d40d7991f5cb600c43b6ba1421c8c7f7a2523e195235bb0f3aeea040c5ca8732",
+  "d538466cd89021860e367d1bc38ee5a29aae2a809a9a0e4c99b0dfa16342dd04",
+  "d70a1a0ca7cbbc4e7054bd6b61efe7d0e245d5bcc532d6e23647947603ed6c81",
+  "db34a628d97aaf666f6a323b401bc67c35ded11df24ccb5b4b9e4d7233ade475",
+  "e38ebe8e2955f2b40989315e033c7302ba28a79c925d64af8d7f92572b690216",
+  "e4ac47ca0eecdee37b16b5701e3bd7bf6c605cab49b2a32fefd19ff61dfdb05f",
+  "e5422f5515950c6e46d94e3ef97fe6775eb7e229751d5a5db15721536e9fc43a",
+  "eb1f9cda37525f86403211af9af05a79be70e94b84000302d82614a826fce110",
+  "eca6fd7d34cf9c32878e7fb5d6e0f5f3908c5048f37c5370b7ab6599b5889a26",
+  "ee50b8dc596cf4675c8a3d1a96a0df60bde63e60573f4b21fc049cb891a0ff75",
+  "ee782e7443d2653eed4643347cd7d7362c729b309bc2afbce53e43e01faee533",
+  "f066d4a26746953d9352dd351bfb6cf41d6246cfd26a532a36a991a871af0084",
+  "f32089cad117b478534be836043535b8cf8ab94ba4f87f0fd2b1c14b343d4177",
+  "f67b345a6b17ec17d7a3f5c26fc26f6ac470fadc3cebba2c7a8f7381b29a9fb8",
+  "fbe72ee5a8e45c7af338cd8e290e54a9ac6e4627173735efc83f95288641e5d8",
+  "fc2370b3e35d64321ff6651c4362101cd562bbff53dfc30dacd0121a2bd040d2",
+  "fd549c86ac074fed13f0dd4f003ccf879608a90d4cf93710f2635654e27d2abe"
+ ],
+ "events": [
+  {
+   "doc_sha256": "35485756877b9bb75a6429b34ccd52b6da8209bf033553bdbf617f14a02cb974",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Pursuant to the provisions of Regulation 30 read with Schedule III of SEBI Listing Regulations, we wish to inform you that the Company is organizing a site visit for its Institutional Investors as per the below schedule:",
+   "summary": "Company organizing site visit for institutional investors",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "35485756877b9bb75a6429b34ccd52b6da8209bf033553bdbf617f14a02cb974",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Please note above schedule may undergo changes.",
+   "summary": "Schedule of analyst/institutional investor meetings may change",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "b079063ce94a74acb62da95888b60ddd272ce7d22692f582cf83bccbc642e47f",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Whether resolution is Pass or Not. Yes",
+   "summary": "Resolution passed",
+   "ticker": "BPCL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "b079063ce94a74acb62da95888b60ddd272ce7d22692f582cf83bccbc642e47f",
+   "event_type": "board_change",
+   "materiality": "medium",
+   "passage": "Appointment of Shri Pushp Kumar Nayar as Director (Human Resources)",
+   "summary": "\"Appointment of a new director to the Human Resources role\"",
+   "ticker": "BPCL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "b079063ce94a74acb62da95888b60ddd272ce7d22692f582cf83bccbc642e47f",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "uity Shares of the Nominal Value of Rs. 10/- each (Votes cast) A. Remote e-Voting Total Votes received  3,291 3,90,82,95,266 Less: Total Number of Invalid Votes NIL NIL Total Number of Valid Votes 3,291 3,90,82,95,266 B. e-Voting during the AGM Total Votes received  37 1,94,085 Less: Total Number of Invalid Votes NIL NIL Total Number of Valid Votes 37 1,94,085 C. Combined (A+B) Total Votes received  3,328 3,90,84,89,351 Less: Total Number of Invalid Votes NIL NIL Total Number of Valid Votes 3,328 3,90,84,89,351",
+   "summary": "\"Vote counts and distribution for the shareholders meeting\"",
+   "ticker": "BPCL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "91210c3118355d5cb7a2d49723f58b16427d13e2c6698f77fdccb952680a06d3",
+   "event_type": "board_change",
+   "materiality": "medium",
+   "passage": "Re-appointment of Mr. Bhaskaran N (DIN: 10808853) as Whole-time Director, designated as 'Chief Operating Officer' of the Company",
+   "summary": "Key management change involving re-appointment of a director",
+   "ticker": "DMART",
+   "verified": true
+  },
+  {
+   "doc_sha256": "d3fe0374b724c2f8ff113267541fc159400ca20c08ddf7bc650e49f841a86c00",
+   "event_type": "operational_disruption",
+   "materiality": "high",
+   "passage": "The Borrower / Guarantors in particular and the public in general is hereby cautioned not to deal with said Property and any dealings with the Property will be subject to the charge of the BANK OF INDIA, Asset Recovery Branch Ghaziabad: 1st Floor, E-52, Sector-9, Noida, Distt. Gautam Buddha Nagar for amount Rs. 2,21,19,133.21 (Rupees Two Crore Twenty One Lac, Nineteen Thousand One Hundred Thirty Three And Paisa Twenty One Only) as on 25.09.2024, with further interest at the rates mentioned in the demand notice dated 25.09.2024 , costs, expenses and other incidental charges etc. thereon .",
+   "summary": "\"Bank of India has taken physical possession of the secured assets\"",
+   "ticker": "SHREECEM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "ab5239e667ca505ed63ad5e013e283158ce76fa6ad741a25537bf7621d35d4b2",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "The Board of Directors of the Bank at its meeting held today i.e., 27.07.2026 (Monday) has considered and approved the Unaudited (Reviewed) Financial Results (Standalone & Consolidated) for the Quarter ended 30.06.2026.",
+   "summary": "\"Board approved financial results for the quarter ended 30.06.2026\"",
+   "ticker": "CANBK",
+   "verified": true
+  },
+  {
+   "doc_sha256": "ab5239e667ca505ed63ad5e013e283158ce76fa6ad741a25537bf7621d35d4b2",
+   "event_type": "divestment",
+   "materiality": "medium",
+   "passage": "* The Bank has decided to disinvest its stake in Canbank Factors Ltd and has obtained requisite regulatory approvals.",
+   "summary": "Bank decided to disinvest stake in Canbank Factors Ltd",
+   "ticker": "CANBK",
+   "verified": true
+  },
+  {
+   "doc_sha256": "ab5239e667ca505ed63ad5e013e283158ce76fa6ad741a25537bf7621d35d4b2",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The auditors of Can bank Factors Limited a subsidiary , have reported under 'Emphasis of Matter' para of their limited review report that there is a stoppage of factoring business by the company as on the date of the balance sheet.",
+   "summary": "Stoppage of factoring business reported by subsidiary",
+   "ticker": "CANBK",
+   "verified": true
+  },
+  {
+   "doc_sha256": "2022df3dfb4c55e237661e9b3a7ec1ca26f69b4462e21e51eeee2855f8865dcf",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "The Tata Power Company Limited Q1 FY27 Earnings Conference Call",
+   "summary": "\"Earnings call transcript for Q1 FY27 released\"",
+   "ticker": "TATAPOWER",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The technology industry is undergoing a tectonic shift as AI reshapes how work gets done, with its promise of agility and productivity.",
+   "summary": "\"HCLTech discusses AI's transformative impact on the industry\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "For the third straight year, HCLTech outperformed its comparable peers in FY26, with the fastest constant currency overall revenue growth.",
+   "summary": "outperformed peers with constant currency revenue growth",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "HCLTech was declared the \u2018Innovation Award\u2019 winner in the 2025 Ericsson Supplier Awards. The award has been given in recognition of HCLTech\u2019s contribution to enhancing Ericsson\u2019s operational efficiency through AI-driven capabilities and automation.",
+   "summary": "HCLTech received an Innovation Award in the 2025 Ericsson Supplier Awards",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "SW has significantly reduced inspection costs, lowered carbon emissions through fewer site visits and improved operational efficiency, enabling proactive, data-driven water and ecosystem management.",
+   "summary": "\"HCLTech reduced inspection costs and emissions through operational efficiency improvements\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "HCLTech also secured a strategic, multi-year engagement with a leading global information management enterprise to transform customer operations and revenue lifecycle management across North America, APAC, ANZ and India.",
+   "summary": "\"HCLTech secured a strategic, multi-year engagement with a global information management enterprise\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "HCL T ech Integrated Annual Report 2025-26",
+   "summary": "Annual report highlights transformation initiatives, talent development, and business growth",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "We are focused on building differentiated IP to accelerate enterprise transformation. During FY26, a total of 165 patents were filed and 73 granted.",
+   "summary": "HCLTech filed and received patents in FY26",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Dairy Intervention by Samuday, launched in February 2017 in Hardoi, aims to strengthen the dairy value chain and improve livelihoods of small and marginal farmers by addressing challenges related to animal health, productivity, milking practices and market access.",
+   "summary": "\"Samuday launched a dairy intervention in Hardoi to improve farmer livelihoods\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "\u2022 55.84% reduction in absolute Scope 1 and 2 emissions from FY20",
+   "summary": "\"Significant reduction in Scope 1 and 2 emissions\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "HCLTech is the only service provider rated as a \u201cCustomers\u2019 Choice\u201d across all six published Gartner Peer Insights\u00ae Voice of the Customer assessments for IT services.",
+   "summary": "\"HCLTech is recognized as a 'Customers\u2019 Choice' by Gartner\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Agentic capabilities, has been deployed across more than 75 priority accounts.",
+   "summary": "Agentic capabilities deployed across 75 priority accounts",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "acquisition",
+   "materiality": "medium",
+   "passage": "we signed an agreement in FY26 to acquire the Telco Solutions Business from Hewlett Packard Enterprise (HPE).",
+   "summary": "HCLTech agreed to acquire Telco Solutions Business from HPE in FY26",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "HCLTech has developed an enterprise-level strategy and AI Risk Management Framework, integrating best practices from global standards and guidelines, including the EU AI Act, NIST AS RMF and ISO/IEC 42001 and emphasizing self-regulation and adherence to Responsible AI principles.",
+   "summary": "HCLTech has developed an enterprise-level AI Risk Management Framework",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech recognizes the risk of failing to comply with terms and conditions, including meeting contractual commitments and service level agreements (SLAs) with its clients. This is considered a significant enterprise risk, emphasizing the need to effectively identify, monitor and report on SLAs to relevant stakeholders.",
+   "summary": "\"HCLTech faces significant risk of failing to meet contractual commitments and SLAs with clients\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "Energy volatility, while indirect in nature, carry material consequences for cloud infrastructure, data centers, network operations and hardware-dependent programs.",
+   "summary": "\"Energy volatility could have material consequences for cloud and hardware-dependent operations\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech employs an integrated business planning and execution process in which the sales and delivery teams regularly engage with clients to ensure seamless execution of engagements within SLAs.",
+   "summary": "\"HCLTech uses an integrated process to ensure SLA compliance with clients\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "We have implemented a robust vendor risk management framework to minimize the potential business impact to us and our clients arising from breaches and liabilities that may occur when leveraging third or fourth parties (vendors, suppliers, contractors, or service providers).",
+   "summary": "\"HCLTech has a vendor risk management framework to mitigate breaches and liabilities\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech recognizes effective cost management as a crucial aspect of our operations, particularly during periods of higher inflation. Poor budget planning, inaccurate cost estimation and external factors such as rising costs of talent and other resources can all contribute to the risk of cost overruns.",
+   "summary": "\"HCLTech faces risk of cost overruns due to inflation and rising costs\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "Lack of processes or poorly designed processes and controls in HCLTech can lead to operational inefficiency and impact business.",
+   "summary": "\"Poorly designed processes and controls could lead to operational inefficiency\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech faces a fundamental risk if it is not operationally agile. This means it may not be able to respond and adapt to changing market conditions or meet various stakeholder preferences, including clients, employees and the community. Slow adoption of AI enabled processes and operating model transformation may further weaken competitiveness.",
+   "summary": "\"HCLTech risks losing competitiveness due to lack of operational agility and slow AI adoption\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "This lack of agility could result in significant financial losses and negatively impact the company\u2019s brand.",
+   "summary": "\"Lack of operational agility could lead to financial losses and brand damage\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "Advances in AI are reshaping both cyber defense and cyber-attacks \u2014 and HCLTech is responding with deep modernization, AI powered security platforms and strategic ecosystem partnerships.",
+   "summary": "\"AI is reshaping cyber defense and attacks, requiring HCLTech to modernize its security\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech has cyber insurance that covers different types of breaches and cyber events.",
+   "summary": "\"HCLTech has cyber insurance to cover breaches and cyber events\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech\u2019s reputation as a leading technology company depends on its resilience to disruptions and ability to adapt to a complex and rapidly changing global risk landscape.",
+   "summary": "\"HCLTech's reputation depends on resilience to disruptions and adaptability\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "Failure to meet contractual continuity requirements due to a lack of preparedness can negatively impact an organization\u2019s ability to provide uninterrupted service.",
+   "summary": "\"Failure to meet continuity requirements could impact service delivery\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech faces significant risks from international political events, including wars, trade disputes, sanctions, political instability and social unrest. These factors can disrupt our operations, trigger demand shocks, impact our security posture and workforce, affect supply chains, influence market access and ultimately diminish profitability in regions where HCLTech operates.",
+   "summary": "\"HCLTech faces geopolitical risks including wars, trade disputes, and sanctions\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "Future global economic or political uncertainties could further impact IT spending, decrease profitability, limit talent mobility, lead to contract terminations, project deferrals and client purchase delays. Additionally, increasing regulatory mandates around the localization of data, talent and service delivery further heighten risk.",
+   "summary": "\"Global economic and political uncertainties could impact IT spending and profitability\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech has established a comprehensive framework for the continuous monitoring and mitigation of significant geopolitical risks through an enhanced PESTEL risk assessment framework. This approach facilitates proactive detective monitoring, predictive modelling and mitigation measures in response to emerging geopolitical and economic threats.",
+   "summary": "\"HCLTech has a framework to monitor and mitigate geopolitical risks\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech has established a comprehensive framework for the continuous monitoring and mitigation of significant geopolitical risks through an enhanced PESTEL risk assessment framework. This approach facilitates proactive detective monitoring, predictive modelling and mitigation measures in response to emerging geopolitical and economic threats.",
+   "summary": "\"HCLTech has a framework to monitor and mitigate geopolitical risks\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech has established a robust privacy information management system to safeguard personal data and ensure compliance with applicable legal, regulatory and contractual obligations regarding data privacy and protection.",
+   "summary": "\"HCLTech has a privacy information management system to ensure data compliance\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech has implemented a robust Data Governance Program covering Policy Framework and integrated data management practices across the firm.",
+   "summary": "\"HCLTech has a data governance program to ensure compliance with data management practices\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech has implemented a comprehensive framework adhering to ISO56005 to drive innovation and safeguard the company\u2019s IP to prevent potential losses in ownership rights and financial losses.",
+   "summary": "\"HCLTech has a framework to safeguard intellectual property and prevent financial losses\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech continues to strengthen its established fraud risk control environment by sustaining the effectiveness of its core governance mechanisms, including COBEC (Code of Business Ethics and Conduct-Global), the whistleblower framework, investigation capabilities, ABAC (anti-bribery and anti-corruption) framework, internal audit and management audit, IFC (internal financial controls) framework, employee awareness campaigns and others.",
+   "summary": "\"HCLTech strengthens fraud risk control environment with governance mechanisms\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "Given the growing complexity of fraud, Company has established a comprehensive Fraud Risk Management (FrRM) framework covering preventive, detective and corrective elements.",
+   "summary": "\"HCLTech has a comprehensive fraud risk management framework\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "HCLTech operates in diverse global regions where talent mobility serves as a strategic lever to address critical work disruptions and specialized project demands. Rather than a routine practice, mobility is focused on deploying niche, high-demand skill sets that are often unavailable in local talent markets.",
+   "summary": "\"HCLTech relies on talent mobility to address specialized project demands\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "Non-compliance with these complex legal frameworks can result in significant financial penalties, operational stoppages and lasting reputational damage.",
+   "summary": "\"Non-compliance with immigration and work permit regulations could lead to penalties and reputational damage\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "Wobby BV, headquartered in Belgium, an Agentic AI software startup that provides AI Data Analyst \u2018Agents\u2019 for data warehouses was acquired by Actian Germany GmbH, a company incorporated in Germany and a step-down wholly owned subsidiary of the Company.",
+   "summary": "HCLTech's subsidiary acquired an AI software startup",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "There are no proceedings initiated/pending against the Company under the Insolvency and Bankruptcy Code, 2016.",
+   "summary": "No insolvency or bankruptcy proceedings are pending against HCLTECH",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "During the financial year ended March 31, 2026, HCL Technologies Limited (\u201cHCLTech\u201d) has not entered into any contract or arrangement or transaction with its related parties which is not at arm\u2019s length.",
+   "summary": "No non-arm's-length transactions with related parties",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "nts) Regulations, 2015 were undertaken with the following step-down wholly owned subsidiaries, being the related parties: S. No. Name of the step-down wholly owned subsidiaries Registration Number Place of Incorporation Amount of transaction (\u20b9 in crores) 1. HCL Technologies Corporate Services Limited 11234311 UK 26,341 2. HCL America Inc. C 1505609 USA 9,476",
+   "summary": "\"Related-party transactions with subsidiaries\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Project objective: To enhance WASH practices by addressing environmental challenges including greywater stagnation, plastic waste, groundwater contamination and strengthening local systems and practices to mitigate environmental and public health risks.",
+   "summary": "Description of a CSR project focusing on water and sanitation",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "ned income/visibility via ADS supported melas. 74% expressed intent to start enterprises, indicating emerging livelihood sustainability (n=35).",
+   "summary": "CSR initiatives show positive impact on livelihood sustainability",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "ngaluru and Hyderabad marked a key milestone in advancing our sustainable mobility initiatives. Through structured long-term contracts and phased scaling, EV adoption significantly increased across both locations. We achieved a total reduction of 934.30 tCO2e projecting emission reduction compared to Petrol/Diesel -operated vehicles for FY 2025-26. (Till March 2026).",
+   "summary": "Company achieved emission reduction through EV adoption in key locations",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "board_change",
+   "materiality": "medium",
+   "passage": "Mr. Amitabh Kant (DIN - 00222708) was appointed as an Independent Director of the Company, not liable to retire by rotation, for a term of five consecutive years, w.e.f. September 8, 2025 to September 7, 2030 (both days inclusive).",
+   "summary": "\"Independent Director Amitabh Kant appointed for five-year term\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "board_change",
+   "materiality": "medium",
+   "passage": "The Board, pursuant to the provisions of the Act and the Listing Regulations has carried out an Annual Evaluation of its own performance, performance of the Board Committees and of the individual directors (including the Independent Directors) on various parameters.",
+   "summary": "The Board conducted an annual evaluation of its performance and that of individual directors and committees.",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "During FY 2025-26, the Company has not entered into any materially significant related party transactions that may have any potential conflict with the interest of the Company at large.",
+   "summary": "No materially significant related party transactions occurred",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "We have examined the relevant disclosures provided by the Directors (as enlisted in Table A) to HCL Technologies Limited having CIN: L74140DL1991PLC046369 and having registered office at 806, Siddharth 96, Nehru Place, New Delhi, India (hereinafter referred to as \u2018the Company\u2019) for the purpose of issuing this Certificate, in accordance with Regulation 34 (3) read with Schedule V Para C clause 10 (i) of the Securities and Exchange Board of India (Listing Obligations and Disclosure Requirements) Regulations, 2015.",
+   "summary": "Certificate of compliance with corporate governance requirements",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "regulatory_action",
+   "materiality": "medium",
+   "passage": "A material data privacy or information security incident may result in regulatory fines & penalties, client contract penalties including potential indemnification claims, remediation costs, and reputational damage. Such events may adversely affect revenue continuity, client retention, and brand value.",
+   "summary": "\"Potential regulatory fines and penalties from data privacy or information security incidents\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "HCLTech is currently in the process of implementing an internal sustainability accounting framework aligned with the EU Taxonomy. Once operationalized, this will enable more precise and structured tracking of R&D and capex investments directed towards improving environmental and social outcomes across our products and processes.",
+   "summary": "HCLTech is implementing a sustainability accounting framework aligned with the EU Taxonomy",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "HCLTech extends its focus beyond occupational safety by enabling access to on-campus, non-occupational healthcare services for employees and their families in India. These services include diagnostics and laboratory support, consultations (physical and virtual) with specialists, as well as eye and dental care.",
+   "summary": "HCLTech provides on-campus non-occupational healthcare services for employees and families",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Corrective actions included strengthening Root Cause Analysis (RCA) and Corrective and Preventive Action (CAPA) capabilities to ensure continuity of safety controls and effective incident response during workforce and vendor transitions.",
+   "summary": "Corrective actions to strengthen RCA and CAPA capabilities were implemented",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Company has established processes to ensure that all employees are compensated in line with or above applicable minimum wage requirements in each jurisdiction and maintains ongoing monitoring mechanisms to support compliance with local laws.",
+   "summary": "Company ensures compliance with minimum wage requirements",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Firstly, a substantial portion of our real estate portfolio is aligned with globally recognized green building standards. During the reporting period, 13.80 million square feet of our building space\u2014has been certified under several leading Green Building Certification programs. These include certifications such as LEED by the USGBC, IGBC, BREEAM, CASBEE, NABERS, Green Star (Australia), EDGE, and TRUE (Total Resource Use and Efficiency), among others. This demonstrates our dedication to high standards across diverse geographies.",
+   "summary": "Green building certifications achieved",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "No reported incident is underway with Regulators",
+   "summary": "No regulatory incidents are currently underway",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "DNV conducted Reasonable Level of assurance for BRSR Core KPIs under 9 ESG attributes; and Limited Level of assurance for rest non-financial disclosures in BRSR.",
+   "summary": "DNV provided assurance on ESG disclosures with varying levels of assurance",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "litigation",
+   "materiality": "high",
+   "passage": "The Company has material tax positions and litigations on a range of tax matters. This requires management to make significant judgments to determine the possible outcome of uncertain tax positions and litigations and their consequent impact on related accounting and disclosures in the standalone financial statements",
+   "summary": "HCLTech has material tax litigations requiring significant management judgment",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "Profit for the year 7,627 12,266",
+   "summary": "Profit for the year decreased from \u20b912,266 crores to \u20b97,627 crores",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "In instances when revenue is derived from sales of third-party vendor services, material or licenses, revenue is recorded on a gross basis when the Company is a principal to the transaction and net of costs when the Company is acting as an agent between the customer and the vendor, once control of a promised good is transferred to a customer.",
+   "summary": "revenue recognition policy for third-party services",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "acquisition",
+   "materiality": "medium",
+   "passage": "On 18 December 2025, the Company and its certain subsidiaries have signed a definitive agreement to carve-out and acquire Telco Solutions Business from HPE for \u20b9 1,517 crores ($160 million), including \u20b9 142 crores ($15 million) incentive payable based on performance.",
+   "summary": "HCLTech has signed a definitive agreement to acquire Telco Solutions Business from HPE",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "acquisition",
+   "materiality": "medium",
+   "passage": "On 22 December 2025, the Company and its certain subsidiaries have signed a definitive agreement to carve-out and acquire Jaspersoft, a business unit of CSG providing a leading embedded analytics and pixel-perfect reporting platform, for \u20b9 2,275 crores ($240 million).",
+   "summary": "HCLTech signed a definitive agreement to acquire Jaspersoft for \u20b92,275 crores",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The details of activity under the plan has been summarized below: Y ear ended 31 March 2026 31 March 2025 No. of RSUs Weighted average exercise price (\u20b9) No. of RSUs Weighted average exercise price (\u20b9) Outstanding at the beginning of the year 5,259,604 2 6,920,967 2 Add: Granted during the year 7,454,080 2 4,724,516 2 Less: Forfeited during the year (449,974) - (559,946) - Less: Exercised during the year (including pending allotment) (1,365,677) 2 (5,763,771) 2 Less: Expired during the year (1,177) - (62,162) - RSUs outstanding at the end of the year 10,896,856 2 5,259,604 2 RSUs exercisable at the end of the year 79,344 2 145,630 2",
+   "summary": "\"RSUs outstanding and exercisable details provided\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The estimated net amount of existing loss that is expected to be reclassified into the statement of profit and loss within the next twelve months is \u20b9 476 crores (previous year, gain of \u20b9 129 crores).",
+   "summary": "Estimated loss reclassification within next twelve months",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "The Company has not received any funds from any persons or entities, including foreign entities (\u201cFunding Parties\u201d), with the understanding, whether recorded in writing or otherwise, that the Company shall whether, directly or indirectly, lend or invest in other persons or entities identified in any manner whatsoever by or on behalf of the Funding Parties (\u201cUltimate Beneficiaries\u201d) or provide any guarantee, security or the like on behalf of the Ultimate Beneficiaries.",
+   "summary": "\"Company has not received funds with conditions on lending/investing\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "The New Labour Codes has resulted in estimated one time increase in provision for employee benefits of \u20b9 948 crores (along with consequential tax benefit of \u20b9 235 crores, resulting in decrease in profit after tax by \u20b9 713 crores), and the same has been recognized as an employee benefit expense (exceptional item) in the current year.",
+   "summary": "One-time increase in employee benefits provision due to New Labour Codes",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Group did not have any material foreseeable losses on long-term contracts including derivative contracts during the year ended 31 March 2026.",
+   "summary": "No material foreseeable losses on long-term contracts",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The accompanying notes including material accounting policies are an integral part of the consolidated financial statements",
+   "summary": "Notes on accounting policies are included in financial statements",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "An impairment loss on goodwill recognized in the statement of profit and loss is not reversed in the subsequent period.",
+   "summary": "\"Impairment loss on goodwill is not reversed in subsequent periods\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "acquisition",
+   "materiality": "medium",
+   "passage": "On 18 December 2025, the Group has signed a definitive agreement to carve-out and acquire Telco Solutions Business from HPE for \u20b9 1,517 crores ($160 million), including \u20b9 142 crores ($15 million) incentive payable based on performance.",
+   "summary": "HCLTech signed a definitive agreement to acquire Telco Solutions Business from HPE",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Company has two substantially similar types of RSU plans and summary of the general terms of grants under respective plans are as below: RSU Plan 2021 RSU Plan 2024",
+   "summary": "Description of RSU plans",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Company\u2019s subsidiaries have recognized deferred tax assets on carry forward business losses which can be utilized against profits within the limit and carry over period permitted under laws of respective jurisdictions.",
+   "summary": "Deferred tax assets recognized on carry forward business losses",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "The Group has contributed \u20b9 1,348 crores (previous year \u20b9 1,180 crores) towards other defined contribution plans of subsidiaries outside India.",
+   "summary": "Group contributed \u20b9 1,348 crores to defined contribution plans of subsidiaries outside India",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "litigation",
+   "materiality": "high",
+   "passage": "The Group is involved in various lawsuits, claims and proceedings that arise in the ordinary course of business, the outcome of which is inherently uncertain. Some of these matters include speculative and frivolous claims for substantial or indeterminate amounts of damages.",
+   "summary": "The company is involved in lawsuits with uncertain outcomes",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "high",
+   "passage": "The New Labour Codes has resulted in estimated one time increase in provision for employee benefits of \u20b9 956 crores (along with consequential tax benefit of \u20b9 237 crores, resulting in decrease in profit after tax by \u20b9 719 crores) and same has been recognized as an employee benefit expense (exceptional item) in the current year.",
+   "summary": "\"One-time increase in employee benefits provision due to New Labour Codes\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "9. On 30 September 2017, the Group has terminated its existing arrangements with DXC. Accordingly, CeleritiFinTech Limited which was dissolved w.e.f. October 28, 2025 and Celeritifintech Services Limited which is under liquidation have not been consolidated with the Group from that date. Accordingly, their standalone financial statements are not considered for the purpose of this statement.",
+   "summary": "\"CeleritiFinTech Limited and Celeritifintech Services Limited are no longer consolidated with the Group\"",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "7994420f5bb70891141e3afc2073b29855daf961bf76e6b1c5efb2c26f97ffb2",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Company is promoting the use of Compressed Biogas (CBG) as a process fuel in its manufacturing operations. To further enhance the adoption of renewable fuels, it plans to commission an in-house CBG plant with a capacity of 10 TPD at the Kharkhoda facility by 2027.",
+   "summary": "Company plans to commission a CBG plant for renewable fuel adoption",
+   "ticker": "MARUTI",
+   "verified": true
+  },
+  {
+   "doc_sha256": "7994420f5bb70891141e3afc2073b29855daf961bf76e6b1c5efb2c26f97ffb2",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "There are no fines/ penalties/ punishment/ award/ compounding fees/ settlement amount paid in proceedings (by the Company or by directors/KMPs) with regulators/ law enforcement agencies/ judicial institutions in the financial year which are material as specified in Regulation 30(4)((i)(c) of SEBI (Listing Obligations and Disclosure Obligations) Regulations, 2015 (\u201cLODR\u201d). Please refer to Company\u2019s filings with regard to the disclosures made to the Stock Exchanges under Regulation 30 of LODR.",
+   "summary": "No material fines or penalties were paid by the company or its directors/KMPs",
+   "ticker": "MARUTI",
+   "verified": true
+  },
+  {
+   "doc_sha256": "7994420f5bb70891141e3afc2073b29855daf961bf76e6b1c5efb2c26f97ffb2",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Company has implemented a comprehensive Occupational Health and Safety Management System (OHSMS) across all its operational locations, including manufacturing facilities, the R&D Centre, Head Office, Zonal and Regional Offices, Stockyards, Port Facilities, Transit Vehicle Parks and Regional Parts Distribution Centres.",
+   "summary": "Company has implemented an occupational health and safety management system across operational locations",
+   "ticker": "MARUTI",
+   "verified": true
+  },
+  {
+   "doc_sha256": "7994420f5bb70891141e3afc2073b29855daf961bf76e6b1c5efb2c26f97ffb2",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Company has established mechanisms to prevent any adverse consequences to complainants in cases of discrimination and harassment. It maintains a gender-neutral Prevention of Sexual Harassment (POSH) Policy and a Whistle-Blower Policy, both of which include stringent provisions to protect the identity of the complainant and safeguard against retaliation.",
+   "summary": "Company has mechanisms to prevent adverse consequences for complainants",
+   "ticker": "MARUTI",
+   "verified": true
+  },
+  {
+   "doc_sha256": "7994420f5bb70891141e3afc2073b29855daf961bf76e6b1c5efb2c26f97ffb2",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "The increase in air emissions during FY 2025\u201326 is primarily attributable to the commencement of operations at the Company\u2019s greenfield manufacturing facility in Kharkhoda, Haryana.",
+   "summary": "Increase in air emissions due to new greenfield facility",
+   "ticker": "MARUTI",
+   "verified": true
+  },
+  {
+   "doc_sha256": "7994420f5bb70891141e3afc2073b29855daf961bf76e6b1c5efb2c26f97ffb2",
+   "event_type": "regulatory_action",
+   "materiality": "high",
+   "passage": "A penalty of H 4,711.4 million was imposed on the company. The Company contested this matter before the Delhi High Court primarily on the ground that it was not a named party in the investigation and that the investigation ought not to have been conducted against it. On the contrary, the Company was named in the information given by the informant stating that MSIL made spare parts easily accessible in the open market. The Delhi High Court, on 16 th May 2019, disposed the petition stating that the MSIL had alternative remedies available. Thereafter, it filed a Special Leave Petition before the Supreme Court of India, wherein a stay on the CCI\u2019s order was granted. The stay is continuing and the matter is pending adjudication.",
+   "summary": "\"Maruti faces a regulatory penalty from CCI with a stay in place\"",
+   "ticker": "MARUTI",
+   "verified": true
+  },
+  {
+   "doc_sha256": "65bd923c4dc66cb590b01482a5a08c56984acd29c532a1fb0c3ade24bdd53ca5",
+   "event_type": "board_change",
+   "materiality": "medium",
+   "passage": "2. Recommended, for approval of the shareholders in the upcoming Annual General Meeting, the appointment of Mr. Alexander George (DIN: 00938073) as the Managing Director of the Company with effect from October 01, 2026;",
+   "summary": "Board recommends appointment of new Managing Director",
+   "ticker": "MUTHOOTFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "65bd923c4dc66cb590b01482a5a08c56984acd29c532a1fb0c3ade24bdd53ca5",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "rward-looking statements are based on certain assumptions and expectations of future events. The company cannot guarantee that these assumptions and expectations are accurate or will be realised. The actual results, performance or achievements, could thus differ materially from those projected in any such forward-looking statements.",
+   "summary": "Forward-looking statements disclaimer",
+   "ticker": "MUTHOOTFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "65bd923c4dc66cb590b01482a5a08c56984acd29c532a1fb0c3ade24bdd53ca5",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "Consolidated Profit after Tax at \u20b9 2,825 Crores for the quarter, up by 43% YoY",
+   "summary": "\"Consolidated profit after tax increased by 43% YoY\"",
+   "ticker": "MUTHOOTFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "35c3c541562856a50dddb4c3d446c74856286448ef4a44b4281af8dec14f6b9d",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Includes income tax deposited with tax authorities which is contested by the company and Advance Tax (net of provision for taxation). As per Accounting Standard 17 -Segment Reporting, income tax asset and liabilities cannot be allocated across reporting segments.",
+   "summary": "Income tax asset and liabilities are not allocated across reporting segments",
+   "ticker": "HDFCLIFE",
+   "verified": true
+  },
+  {
+   "doc_sha256": "db34a628d97aaf666f6a323b401bc67c35ded11df24ccb5b4b9e4d7233ade475",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "The Company would like to mention that Deloitte Haskins & Sells LLP, Chartered Accountants, Statutory Auditors of the Company, have issued Audit Reports with unmodified opinion on the Financial Statements.",
+   "summary": "Audit reports with unmodified opinion issued",
+   "ticker": "TATACONSUM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "db34a628d97aaf666f6a323b401bc67c35ded11df24ccb5b4b9e4d7233ade475",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "Our report on the Statement is not modified in respect of the above matters with respect to our reliance on the work done and the reports of the other auditors.",
+   "summary": "Independent auditors' report indicates reliance on other auditors' work",
+   "ticker": "TATACONSUM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "d538466cd89021860e367d1bc38ee5a29aae2a809a9a0e4c99b0dfa16342dd04",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "VEDanta Limited (VEDL) today announced its Audited Consolidated Results for the fourth quarter and full year ended 31st March 2026.",
+   "summary": "\"Company announced audited consolidated results for Q4 and FY26\"",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "e38ebe8e2955f2b40989315e033c7302ba28a79c925d64af8d7f92572b690216",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "According to information and explanation given to us by the management, these unaudited interim financial results are not material to the Group.",
+   "summary": "Unaudited interim financial results are not material to the Group",
+   "ticker": "BPCL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "c941bd756326b54a376c347efedd0ebe48ab085f3a54dffc82a4b809290cfdd8",
+   "event_type": "related_party",
+   "materiality": "high",
+   "passage": "Resolution Required :Ordinary 6 - To approve material related party transactions for sale of goods to Avenue E-Commerce Limited, Subsidiary Company for the period from date of this meeting till the date of next Annual General Meeting, up to a maximum aggregate value of Rs. 35,000,000,000/- (Rupees Three Thousand Five Hundred crores only) plus applicable taxes.",
+   "summary": "\"Approval of large related-party transaction for sale of goods\"",
+   "ticker": "DMART",
+   "verified": true
+  },
+  {
+   "doc_sha256": "938cde02bc6fcc5aab6ac1505c6bd4b573ecc55fba6662553458d04026500a53",
+   "event_type": "regulatory_action",
+   "materiality": "high",
+   "passage": "Further to our disclosures on the subject matter, we would like to inform you that the Hon\u2019ble National Company Law Tribunal, Ahmedabad Bench (\u201c NCLT Ahmedabad\u201d) has today, i.e. March 30, 2026 pronounced the order sanctioning the Scheme of Arrangement between Penna Cement Industries Limited (\u201c Transferor Company\u201d) and Ambuja Cements Limited (\u201cTransferee Company\u201d) and their respective shareholders.",
+   "summary": "\"NCLT Ahmedabad sanctioned the Scheme of Arrangement between Penna Cement Industries Limited and Ambuja Cements Limited\"",
+   "ticker": "AMBUJACEM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "938cde02bc6fcc5aab6ac1505c6bd4b573ecc55fba6662553458d04026500a53",
+   "event_type": "regulatory_action",
+   "materiality": "medium",
+   "passage": "This Tribunal may, therefore, be pleased to direct the petitioner companies to place on record the reason for cash consideration instead of equity shares to the shareholder of Transferor Company (other than the Transferee Company).",
+   "summary": "Tribunal directs companies to explain cash consideration over equity shares",
+   "ticker": "AMBUJACEM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "938cde02bc6fcc5aab6ac1505c6bd4b573ecc55fba6662553458d04026500a53",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "The Transferee Company is directed to comply with the provisions of FEMA and RBI guidelines specifically reporting relating to non-resident shareholders/ stakeholders (if any), as required.",
+   "summary": "Transferee Company must comply with FEMA and RBI guidelines for non-resident shareholders",
+   "ticker": "AMBUJACEM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "b61ceb61b6c3f6fdfe8de5b344795319064e8ea07591b8c5643814f18a77d51c",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "~e~c5JoM6 a,;irtr., ~clr.ief\\1i ~aC'il~f\\ M li& ~do~ob~~M . ~d~ /1.Jp:, c,?odeo:;lo:i6' ~~",
+   "summary": "Non-material event related to company's operations",
+   "ticker": "CANBK",
+   "verified": true
+  },
+  {
+   "doc_sha256": "84ba04c3c22e54559fdddf35f22a024575dac1c81453ac76ac7ad5a5f17e4aec",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Members, whose name appears at the close of business hours on Friday. 13'\"day of March, 2026 (cut-oil date) may cast their vote electronically on the Special Business as set out in the Notice of the EGM though remote e-voting system o1 National Securities Depository Limited (NSDL).",
+   "summary": "\"Notice of electronic voting for Special Business at EGM\"",
+   "ticker": "TATAPOWER",
+   "verified": true
+  },
+  {
+   "doc_sha256": "84ba04c3c22e54559fdddf35f22a024575dac1c81453ac76ac7ad5a5f17e4aec",
+   "event_type": "operational_disruption",
+   "materiality": "medium",
+   "passage": "Several big projects of last year shelved or scaled down",
+   "summary": "\"BMC has shelved or scaled down several big projects from last year's budget\"",
+   "ticker": "TATAPOWER",
+   "verified": true
+  },
+  {
+   "doc_sha256": "aa04cd86dc2a7d7c33cdf649fa5ba2074b84ec26bfc178f54be19c44699151a9",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "Grove Holdings 2 S.a.r.l. has transfer red its entire shareholding in Capco Consulting Midd le East FZE to Wipro IT Serv ices UK Societas , effective September 19, 2025.",
+   "summary": "Related-party transaction involving transfer of shareholding",
+   "ticker": "WIPRO",
+   "verified": true
+  },
+  {
+   "doc_sha256": "3485bdd4deab138c9657e96a3c5ce9fb8e08c267d902e4a6e366f49693f837ce",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "That, the observations of the Registrar of Companies are as under: - (i) That, the Registrar of Companies, Ahmedabad has reported that there are no complaints, Inquiry, inspection, Investigation and prosecution are pending against the Petitioner companies. Further, the ROC office has made some observations at para 8 and 14 of ROC report dated 04.09.2025 including non -compliance of section 90 of Companies Act, 2013 which is enclosed herewith and marked as Annexure -A to the representation.",
+   "summary": "ROC has reported no pending complaints or investigations against the petitioner companies",
+   "ticker": "MARUTI",
+   "verified": true
+  },
+  {
+   "doc_sha256": "3485bdd4deab138c9657e96a3c5ce9fb8e08c267d902e4a6e366f49693f837ce",
+   "event_type": "insolvency",
+   "materiality": "high",
+   "passage": "there are no winding up proceedings pending against the Petitioner/Transferor Company under the provisions of the Companies Act, 1956 or the provisions of the 2013 Act. I t is further stated that no proceedings are pending against the Petitioner/ Transferor Company under the provisions of the Insolvency and Bankruptcy Code, 2013.",
+   "summary": "No insolvency proceedings are pending against the company",
+   "ticker": "MARUTI",
+   "verified": true
+  },
+  {
+   "doc_sha256": "3f41bfa59741e3146991f698679e96155f95dbc396c2c95f61cacab4bac4fb24",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "Approved incremental fund raising up to Rs. 35,000 crores by issuing Redeemable Non-Convertible Debentures by way of private placement, in multiple tranches, as may be decided by the Board of Directors or a Committee thereof from time to time",
+   "summary": "Company approved raising up to Rs. 35,000 crores through private placement of debentures",
+   "ticker": "MUTHOOTFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "3f41bfa59741e3146991f698679e96155f95dbc396c2c95f61cacab4bac4fb24",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "Total Revenue from operations 72,827,89 64,501.31 49,288.22 137,329.20 94,()26.82",
+   "summary": "\"Total revenue from operations reported\"",
+   "ticker": "MUTHOOTFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "3f41bfa59741e3146991f698679e96155f95dbc396c2c95f61cacab4bac4fb24",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Gold jewellery kept as security (In tonnes) 131 142 149 155 169 176 171 187 180 188 199 208 209 209",
+   "summary": "\"Gold jewellery kept as security in tonnes increased from 131 to 209\"",
+   "ticker": "MUTHOOTFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "3f41bfa59741e3146991f698679e96155f95dbc396c2c95f61cacab4bac4fb24",
+   "event_type": "other",
+   "materiality": "high",
+   "passage": "International Credit Rating Upgrade: Fitch Ratings upgraded the debt rating from \u2018BB' to \u2018BB+' with a \u2018Stable' outlook",
+   "summary": "\"Fitch upgraded Muthoot Finance's debt rating from BB to BB+ with stable outlook\"",
+   "ticker": "MUTHOOTFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "3f41bfa59741e3146991f698679e96155f95dbc396c2c95f61cacab4bac4fb24",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "Muthoot Finance Ltd. was held today to consider and approve the unaudited standalone and consolidated results for the quarter and half year ended September 30, 2025.",
+   "summary": "Board meeting to approve unaudited results",
+   "ticker": "MUTHOOTFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "1031579d3fbd0f05de7639b761764ab995979ef264cf74e4e39667eae8b45b68",
+   "event_type": "results",
+   "materiality": "low",
+   "passage": "The audited standalone and consolidated financial results for the quarter and year ended March 31, 2026.",
+   "summary": "\"Audited financial results for the quarter and year ended March 31, 2026.\"",
+   "ticker": "HDFCLIFE",
+   "verified": true
+  },
+  {
+   "doc_sha256": "1031579d3fbd0f05de7639b761764ab995979ef264cf74e4e39667eae8b45b68",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The persistency ratios for the quarter ended March 31, 2026 have been calculated for the policies issued in the December to February period of the relevant years. E.g.: the 13th month persistency for the current quarter is calculated for the policies issued from December 2024 to February 2025. The persistency ratios for quarter ended March 31, 2025 have been calculated in a similar manner.",
+   "summary": "\"Persistency ratios for the quarter ended March 31, 2026 are calculated based on policies issued in the December to February period.\"",
+   "ticker": "HDFCLIFE",
+   "verified": true
+  },
+  {
+   "doc_sha256": "1031579d3fbd0f05de7639b761764ab995979ef264cf74e4e39667eae8b45b68",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "The Holding Company has utilised2,420 lakh for payment of pre-deposit for appeals filing, out of25,600 lakh deposited under protestwith the GST Authority in these matters, and filed a refund application for the balance amount of23,180 lakh. Post passing of the order of refund of2,000 lakh, theHolding Company has filed an appeal for the balance amount of21,180 lakh against the said order. The Holding Company continues to disclose such amounts of taxdemand (excluding interest and penalty) as contingent liabilities.",
+   "summary": "\"HDFC Life has filed appeals against GST tax demands and continues to disclose contingent liabilities\"",
+   "ticker": "HDFCLIFE",
+   "verified": true
+  },
+  {
+   "doc_sha256": "17f3210de240975366e9ebf0d6a8e5af7d54ae55e421c05c92190f4aabc0d401",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "There are certain restatements in the comparative year due to changes in accounting policy of Revenue from Operations and Other Expenses with financial statements, change in methodology, and rectification of physical output metrics. These restatements would enable consistency and comparability of information for the current year and previous year.",
+   "summary": "Restatements due to accounting policy changes",
+   "ticker": "GODREJCP",
+   "verified": true
+  },
+  {
+   "doc_sha256": "17f3210de240975366e9ebf0d6a8e5af7d54ae55e421c05c92190f4aabc0d401",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "No significant social or environmental risks found",
+   "summary": "\"No significant social or environmental risks identified\"",
+   "ticker": "GODREJCP",
+   "verified": true
+  },
+  {
+   "doc_sha256": "17f3210de240975366e9ebf0d6a8e5af7d54ae55e421c05c92190f4aabc0d401",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "We have set up a complaints committee for grievance redressal, and we have this communicated through our policy roll-out to share points of contact. We use Conduct, a virtual platform for the reporting and redressal of complaints against sexual harassment to enable anonymous reporting and discussions. We also have a POSH Hotline for all our facilities in India. Our gender-neutral policy enables our employees from all genders to avail the protection against sexual harassment at the workplace. Post resolution of POSH complaints, decisions such as change of teams, locations, working arrangements, termination of respondent etc. further prevent adverse consequences.",
+   "summary": "\"Company has established mechanisms for reporting and redressing sexual harassment complaints\"",
+   "ticker": "GODREJCP",
+   "verified": true
+  },
+  {
+   "doc_sha256": "17f3210de240975366e9ebf0d6a8e5af7d54ae55e421c05c92190f4aabc0d401",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Note 1: Indicate if any Independent Assessment / Evaluation / Assurance has been carried out by an external agency (Y/N). If yes, Name of the External Agency: Yes, reasonable independent assurance carried out by KPMG Assurance and Consulting Services LLP.",
+   "summary": "Independent assurance conducted by KPMG",
+   "ticker": "GODREJCP",
+   "verified": true
+  },
+  {
+   "doc_sha256": "d40d7991f5cb600c43b6ba1421c8c7f7a2523e195235bb0f3aeea040c5ca8732",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "In continuation to our letter no. VEDL/Sec./SE/2 6-27/04 dated April 06, 2026, and pursuant to Regulation 30 read with Schedule III Part A Para A of the Securities and Exchange Board of India (Listing Obligations and Disclosure Requirements) Regulations, 2015, as amended from time to time, please find enclosed herewith the copies of the newspaper advertisement published today i.e. April 07, 2026, with regard to the completion of dispatch of Postal Ballot Notice in the following newspapers:",
+   "summary": "Company published newspaper advertisement regarding postal ballot notice",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "d40d7991f5cb600c43b6ba1421c8c7f7a2523e195235bb0f3aeea040c5ca8732",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "\ufffd\ufffd\ufffd \ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd \ufffd\ufffd\ufffd \ufffd\ufffd\ufffd \ufffd\ufffd\ufffd\ufffd\ufffd \ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd",
+   "summary": "\"Newspaper publication related to VEDL\"",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "d40d7991f5cb600c43b6ba1421c8c7f7a2523e195235bb0f3aeea040c5ca8732",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "g^mgXm\u00a7Zm B\u00a9-\u2018VXmZmMr godm Xo\u00ca\u00b6mgmR>r Ho${\u2019$Zgh OmoS>br Jobr Amho. B\u00a9-\u2018VXmZ gw{dYm Imbrb H$mbmdYr Xa\u00e5\u00b6mZ Cnb\u00e3Y amhrb:",
+   "summary": "\"Notice of meeting and agenda\"",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "2bf9e1bca172f894c6152b75062c33ab02fa2f6eb1e348b651722fa1905ff1d8",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "During the period, BPRL Ventures BV (wholly owned subsidiary of BPRL) acquired the remaining stake in Joint Venture, IBV Brazil Petroleo Limitada (IBV), from Videocon Energy Brazil Limited (VEBL) resulting in IBV being classified as an indirect wholly owned subsidiary of BPRL, effective 30th June 2026.",
+   "summary": "\"BPRL acquired remaining stake in IBV from VEBL\"",
+   "ticker": "BPCL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "2bf9e1bca172f894c6152b75062c33ab02fa2f6eb1e348b651722fa1905ff1d8",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "Consequent ly, the cumulative Foreign Currency Translation Reserve (FCTR) relating to IBV amounting to~ 1,884.56 Crore has been reclassified to Statement of Profit and Loss.",
+   "summary": "\"FCTR reclassified to P&L\"",
+   "ticker": "BPCL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "7159c93b342f1dfb60062ccec534b55feb0552267ff06ddc9ec58172f1ef8ab7",
+   "event_type": "board_change",
+   "materiality": "medium",
+   "passage": "The Board, based on recommendation of the Nomination and Remuneration Committee, considered and approved the following changes in the Senior Management Personnel of the Company w.e.f. 2 nd May, 2026:",
+   "summary": "\"Senior management changes approved by the Board\"",
+   "ticker": "DMART",
+   "verified": true
+  },
+  {
+   "doc_sha256": "527ad1c160d3a3ee7b3b159cb8f17013ccb2bef3af1c6fa9d9cbbcf8894ee6ff",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "\u00a6\u00bc\u00c2 @\u00bc\u00f9y\u00c6\u00ff\u00bc\u0095d\u00bcK @\u00bc\u00bcA. \u00fb\u00bc\u00bc\u00ff\u00bc\u00ccK (y\u00cc\u00a1\u00bc\u00bcy\u00bc\u0095), \u00a6\u00bc\u00c2\u00fb\u00bct\u00bc\u00c2 \u0095\u00cc\u00a3\u00fb\u00bc\u00bc\u00f9\u00bc\u00cc\u2021\u00bc @\u00bc\u00f9y\u00c6\u00ff\u00bc \u0095d\u00bcK \u00fb\u00bc\u00bc\u00ff\u00bc\u00ccK (\u00ac\u00bc\u00b0-y\u00cc\u00a1\u00bc\u00bcy\u00bc\u0095)",
+   "summary": "\"Company publishes contact details\"",
+   "ticker": "AMBUJACEM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "527ad1c160d3a3ee7b3b159cb8f17013ccb2bef3af1c6fa9d9cbbcf8894ee6ff",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "\u00ac\u00bc\u00c6\u2020\u00bc\u00c2  ( h\u00cc\u2021m\u0095 y\u00act\u00bc\u00bc\u00a1\u00bc\u00cc^\u00cc\u2021\u00bc\u00c2 \u00a3\u00bc\u0095t\u00bc\u00bc\u00cc \u00fb\u00bc\u00c6]\u00f9\u00bc 5 \u00bd\u00fb\u00bc\u2021\u00bch\u2021\u00bc\u00bc @\u00bc\u00bc\u00cch\u00bc\u00cc\u00fb\u00bc\u00cch\u00ccm @\u00bc\u00ccL\u00ac\u00bch\u00cc\u2021\u00a3\u00bc\u2021\u00bc \u00ac\u00bc\u00bcx\u00bc\u00cc)",
+   "summary": "\"Document contains non-material information such as newspaper publication details and financial figures\"",
+   "ticker": "AMBUJACEM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "d26bd59c19ef018601c631a42934acefe0c7a914b2a3345c9089f3ae2e0d20c5",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Please find attached herewith copies of newspaper advertisements published in the Indian Express (English) and Financial Express (Gujarati) on August 11, 2026, both newspapers having electronic editions, intimating that the Extra Ordinary General Meeting (\"EGM\") of the Company will be held on Thursday, September 03, 2026 at 11.00 a.m. through VC / OAVM facility and information regarding remote e-Voting for the EGM of the Company in terms of Section 108 of the Companies Act, 2013 read with Rule 20 of Companies (Management and Administration) Rules, 2014 (as amended) and Regulation 44 of SEBI (Listing Obligations and Disclosure Requirements) Regulations, 2015.",
+   "summary": "Notice of Extraordinary General Meeting",
+   "ticker": "ADANIGREEN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "50246c8964782638c36943f58cc777722fbf540db566e5a63f99b2cd5f4178c0",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "The discovery further reinforces the hydrocarbon potential of the Area 95/96 Block. Detailed appraisal and evaluation activities are planned to assess reservoir characteristics, firm up resource estimates, and examine the commercial potential of the discovery, paving the way for future development planning.",
+   "summary": "Hydrocarbon discovery in Libya's Area 95/96 Block",
+   "ticker": "IOC",
+   "verified": true
+  },
+  {
+   "doc_sha256": "39313da266e565975da1a2d0684d4729ef13650282b049312bad6c6073c443fb",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Under it, 4 new companies were listed on stock exchanges on a single day, marking the beginning of an exciting new chapter.",
+   "summary": "Announced listing of 4 new companies on a single day",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "39313da266e565975da1a2d0684d4729ef13650282b049312bad6c6073c443fb",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Each of our pure-play businesses is now free to pursue its own ambitions, unlock its full potential and grow with greater focus.",
+   "summary": "Announced separation of pure-play businesses for focused growth",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "39313da266e565975da1a2d0684d4729ef13650282b049312bad6c6073c443fb",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Our remaining four demerged entities are also pursuing major production scale-ups.",
+   "summary": "Announced major production scale-ups for demerged entities",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "39313da266e565975da1a2d0684d4729ef13650282b049312bad6c6073c443fb",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Our goal is simple: To become smarter. Faster. Safer. And better.",
+   "summary": "Announced strategic goals for operational improvement",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "39313da266e565975da1a2d0684d4729ef13650282b049312bad6c6073c443fb",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Growth should create opportunity, give people dignity and build a better future.",
+   "summary": "Announced commitment to growth with social impact",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "46c08335e4c881594a734282a975d948eaa2e6dbc716927ac1d58ef20ed0b8b3",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Payments industry races toward AI-driven future, but lacks guardrails and confidence, according to new HCLTech report",
+   "summary": "Released report on AI in payments industry",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "a238494e20ac42ea312f9e454ea23121d3d73ca68a1e11b2c0a1a7a395ceba09",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "The Additional Commissioner (Appeals), SGST, Patna has dismissed the appeal filed against the demand order passed by Deputy Commissioner, State Tax, Patna for technical reasons thereby reinstating Demand including penalty.",
+   "summary": "Appeal dismissed, tax demand and penalty reinstated",
+   "ticker": "SHREECEM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "796426bc908ee93d41163937ef021c23e6cff28c7587560679bc1b598ecae4f0",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "AGEL UAE shall invest in JVCo. for upto 20% interest, as per the JVA.",
+   "summary": "Announced joint venture with Minerva Holding RSC Ltd",
+   "ticker": "ADANIGREEN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "95fa1021dbf8d83b98a0341e0ea4ab3201f7e5ebab41797671beee5482628fcb",
+   "event_type": "operational_disruption",
+   "materiality": "low",
+   "passage": "This is to inform you that the Company has opened a new store at Madhapar, Rajkot (Gujarat) today.",
+   "summary": "\"New store opened in Rajkot\"",
+   "ticker": "DMART",
+   "verified": true
+  },
+  {
+   "doc_sha256": "5bf51372667dc06ee17819e8d51bcfa314167e7119e5063396302c167bfad1f0",
+   "event_type": "regulatory_action",
+   "materiality": "medium",
+   "passage": "You are kindly informed that the Company has received an Adjudication Order from West Bengal GST Authority.",
+   "summary": "Company received Adjudication Order from West Bengal GST Authority",
+   "ticker": "MARUTI",
+   "verified": true
+  },
+  {
+   "doc_sha256": "a024c637734170961a4daf4904e0005d31b1d9cd4553e5a63f6dd065036b8861",
+   "event_type": "operational_disruption",
+   "materiality": "high",
+   "passage": "Tata Power Renewable Energy Limited Commissions 100.8 MW Jewali Wind Project in Maharashtra",
+   "summary": "Commissioning of 100.8 MW Jewali Wind Project",
+   "ticker": "TATAPOWER",
+   "verified": true
+  },
+  {
+   "doc_sha256": "438efcef806ffef3e24914abe384b42796cb5d38c34706a4dcb3a9ac274b9f64",
+   "event_type": "fundraise",
+   "materiality": "medium",
+   "passage": "the Company has allotted Commercial Paper of Rs. 200 crores",
+   "summary": "Allotment of Commercial Paper of Rs. 200 crores",
+   "ticker": "DMART",
+   "verified": true
+  },
+  {
+   "doc_sha256": "78d4bee41b1a6f38270a5fb1b783bc382653b517483dcb4c21ff43c1b9171e54",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "BPCL has issued the following letters of intent to M/s. Technip Energies Limited on 24th November 2025 for: i. Engineering, Procurement, Construction and Commissioning  ( EPCC) package of Polypropylene (PP) and Butene-1 unit for Bina Refinery, at an estimated cash outflow of Rs.3600 crore; ii. Engineering, Procurement and Construction Management (EPCM) services for Petro Resid Fluidized Catalytic Cracking (PRFCC) Unit for Mumbai Refinery, at an estimated cash outflow of Rs.467 crore; iii. Engineering, Procurement and Construction Management  ( EPCM) services for Hydrocracker Unit ( HCU) revamp for Mumbai Refinery, at an estimated cash outflow of Rs.50 crore; All the above contracts are in the ordinary course of business and in the nature of company\u2019s capital expenditure. We do not envisage price movement in the BPCL shares owing to the above.",
+   "summary": "BPCL has entered into several large related-party contracts with Technip Energies",
+   "ticker": "BPCL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "64559bd314dd9b11074294535aee2bf4b088abe708be19614eb8ac5039881b29",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "To approve Material Related Party Transactions with HDB Financial Services Limited",
+   "summary": "Shareholders approved related party transaction with HDB Financial Services Limited",
+   "ticker": "HDFCBANK",
+   "verified": true
+  },
+  {
+   "doc_sha256": "3cfd71d1793e902fd460a322e8dda2199a4283208054fb87fd53cbdb42f5f336",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "Jio Credit\u2019s AUM crosses Rs. 25,000 crore in FY26",
+   "summary": "Related-party transaction involving Jio Credit's AUM growth",
+   "ticker": "JIOFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "8f55d80d2c8b2ac450591e89db213f1bbc3135503ff55637090816afc8fc60d8",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "The Company has received a n Income Tax Order on March 23, 2026 from the Assistant Commissioner of Income Tax, Central Circle 6 (2), Mumbai.",
+   "summary": "\"Company received an Income Tax Order\"",
+   "ticker": "HDFCLIFE",
+   "verified": true
+  },
+  {
+   "doc_sha256": "f32089cad117b478534be836043535b8cf8ab94ba4f87f0fd2b1c14b343d4177",
+   "event_type": "related_party",
+   "materiality": "medium",
+   "passage": "Corporate Guarantee to the Lender for an amount of \u20b9 1,725 crores as security for the term loan facility availed by FACOR.",
+   "summary": "\"Corporate Guarantee issued for subsidiary\"",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "0b45c8c0ed0810093d6aabe76d80c0b30a58a9e44bee8013995892b1157bbd1d",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "The Company has been declared as the Preferred Bidder for the said block which spreads over an area of 373 hectares of land.",
+   "summary": "\"Company declared preferred bidder for mining lease\"",
+   "ticker": "SHREECEM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "4d0052b967270b15af07c3114ad8c3806ab17b49432ab0517851ec60acdfef72",
+   "event_type": "other",
+   "materiality": "medium",
+   "passage": "This disclosure pertains to rescission of the Facilities Agreement pursuant to repayment of the facilities and all the other liabilities under the respective Facilities Agreements. Accordingly, all restrictions on Vedanta Limited as disclosed under the Earlier Disclosures stand released.",
+   "summary": "Rescission of Facilities Agreements with restrictions lifted",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "cc2cd4875ee27e43507d088112875682948d7f0c7b2a30ad3698b618ed78ce93",
+   "event_type": "dividend",
+   "materiality": "low",
+   "passage": "We are pleased to inform you that the Board of Directors at their Meeting held on Friday, October 31, 2025 have declared an interim dividend of 75% i.e. Rs. 7.5/- per equity share of face value of Rs.10/- for the financial year 2025-26.",
+   "summary": "\"The company declared an interim dividend of 75% for the financial year 2025-26.\"",
+   "ticker": "BPCL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "6221cbabed6dac762fa28fcd43b727fa8df3a1df8951818da09cd5edd594febc",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "The Company is not aware of any undisclosed information or event which could explain any movement in the price or trading volume of its securities",
+   "summary": "\"No undisclosed information affecting securities price or volume\"",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "8ac8370c62172c3c6787ab80b02c21966218ff85fc0bb47dd942e9175c2f6eca",
+   "event_type": "regulatory_action",
+   "materiality": "low",
+   "passage": "The Company has received demand order (including penalty and interest) under Section 74 of the GST Act, 2017 from Superintendent (ADJ.) CGST and CX Nagpur-I.",
+   "summary": "\"Demand order received under GST Act\"",
+   "ticker": "AMBUJACEM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "49b87a0ce20a648d8a56aa7066e86cc7f11e8dab3ec29bcf2c5af384812e63af",
+   "event_type": "board_change",
+   "materiality": "medium",
+   "passage": "*Due to completion of tenure of Independent Directors in March 2026, presently the Company does not have any Independent Director on the Board. Consequently, the Company is not able to constitute the Board, Audit Committee, Nomination & Remuneration Committee, Stakeholders Relationship Committee and Risk Management Committee in terms of SEBI (Listing Obligations and Disclosure Requirements) Regulations, 2015.",
+   "summary": "\"Company lacks Independent Directors and related committees\"",
+   "ticker": "BPCL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "fbe72ee5a8e45c7af338cd8e290e54a9ac6e4627173735efc83f95288641e5d8",
+   "event_type": "board_change",
+   "materiality": "medium",
+   "passage": "The Board of Directors, on the recommendation of the Nomination and Remuneration Committee approved the appointment of Shri Venkata Peri as Group Chief Operating Officer forming part of the Senior Management Personnel effective December 22, 2025.",
+   "summary": "\"Appointment of new Group Chief Operating Officer\"",
+   "ticker": "JIOFIN",
+   "verified": true
+  },
+  {
+   "doc_sha256": "94dba87b0b41345b5b4b729354311812caca8d7da45acb60dd28473b47bf936b",
+   "event_type": "acquisition",
+   "materiality": "medium",
+   "passage": "the Company has today, i.e., September 1, 2026, acquired the residual stake held by Wildflower Private Trust in Capital Foods (representing 5% of its total share capital).",
+   "summary": "\"Acquisition of residual stake in Capital Foods\"",
+   "ticker": "TATACONSUM",
+   "verified": true
+  },
+  {
+   "doc_sha256": "8a7d45b00b93bd8611e9eb7d3168cf1c4dc8724ec5d3d8578d7400d431e82d46",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "To, KFin Technologies Limited Unit: Vedanta Limited Selenium Building, Tower B, Plot 31-32 Gachibowli, Financial District, Nanakramguda, Serilingampally, Hyderabad - 500 032 Reference: I / We hereby confirm that I / we have not encashed, negotiated or otherwise dealt in the dividend paid by the Company in last seven years, so as to create any adverse claim upon the amount of the dividend warrant(s).",
+   "summary": "Notice of unclaimed dividends and transfer to IEPF",
+   "ticker": "VEDL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "b2e9d41f6b9a631f347f6d81389cd81728852169d9ee6d597e53c544767f5d4c",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "Launching Today: Infosys Customer Experience Suite for Salesforce",
+   "summary": "\"Infosys launched a new Customer Experience Suite for Salesforce\"",
+   "ticker": "INFY",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "To support holistic development of underprivileged children through structured football training and competitive exposure, skill growth, education continuity, and safe routines.",
+   "summary": "CSR initiative focused on holistic development of underprivileged children through football training and education",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "acquisition",
+   "materiality": "medium",
+   "passage": "The Group paid \u20b9148 crores on acquisition date and balance consideration of \u20b914 crores payable over two years as per the terms of the agreement.",
+   "summary": "Acquisition of a business with a purchase price of \u20b9162 crores",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "572fd9f53d6b7b1e7e094c741068dcc8167878ebb4972b37850da466de2bc7ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "As at 31 March 2026 and 31 March 2025, the estimated recoverable amount of each CGU exceeded the carrying amount and accordingly, no impairment was recognized.",
+   "summary": "no impairment recognized for CGUs",
+   "ticker": "HCLTECH",
+   "verified": true
+  },
+  {
+   "doc_sha256": "a90efcd038139acce4af999c98ffa8a311e96cbcc1a318309796b410df842315",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "This has no material impact on the Bank.",
+   "summary": "The event has no material impact on the Bank",
+   "ticker": "HDFCBANK",
+   "verified": true
+  },
+  {
+   "doc_sha256": "6359aded00b73a6b2fc1c83e1691e88f6dde0ce6e54f64d0b2b8ace5fd554f3b",
+   "event_type": "board_change",
+   "materiality": "medium",
+   "passage": "Pursuant to regulation 30 & 51 (2) read with Schedule III of SEBI (LODR) Regulations, 2015 as amended from time to time and other applicable regulations this is to inform that Ministry of Railways (MoR), Government of India vide its Order No. 2024/E(O)II/40/1 dated 29th June 2026 has communicated that, the competent authority has approved the following: - (i) Appointment of Shri Ranjay Choudhary, CGM, Power Finance Corporation Ltd. (PFC) to the post of Director (Finance), Indian Railway Finance Corporation Ltd. (IRFC), in the scale of pay of Rs.1,80,000 -3,40,000/- (IDA) for a period of five years w.e.f. the date of assumption of charge or until further orders whichever is earlier, and (ii) Ex-post facto approval for extension of additional charge of the post of Director (Finance), IRFC, entrusted to Shri Randhir Sahay, IRAS, ED/F(S), Railway Board, for a period of 06 months w.e.f. 01.05.26 or till assumption of charge of the post by the regular incumbent or until further orders, which",
+   "summary": "Appointment of new Director (Finance) and extension of existing director's charge",
+   "ticker": "IRFC",
+   "verified": true
+  },
+  {
+   "doc_sha256": "35ded195e2c7bf60f28ea32a191f721a9a9cb3512497dbedc75cae3998adc18a",
+   "event_type": "acquisition",
+   "materiality": "medium",
+   "passage": "Acquisition of 100% stake in Twizza (Pty) Limited, South Africa: \u2022 The Company has consummated the acquisition of Twizza (Pty) Limited, South Africa (\u201cTwizza\u201d) through its subsidiary, The Beverages Company Proprietary Limited. (\"BevCo\") at an Enterprise value (post due diligence adjustments) of ZAR 2,053 million. Consequently, Twizza has become a step -down subsidiary of the Company with effect from 18 March 2026",
+   "summary": "\"Varun Beverages acquired Twizza in South Africa through its subsidiary BevCo\"",
+   "ticker": "VBL",
+   "verified": true
+  },
+  {
+   "doc_sha256": "46833862c020dbf922bfa7acaea17d7a665b92a28980ef0b6c148c179aa602ea",
+   "event_type": "other",
+   "materiality": "low",
+   "passage": "We wish to inform that the Stakeholders\u2019 Relationship Committee of the Board of Directors of the Company, on August 26 , 2026, has allotted 1,14,000 equity shares to the eligible option holders pursuant to the exercise of stock options under the Company\u2019s various Employee Stock Option Schemes.",
+   "summary": "Employee stock options were exercised and shares allotted to eligible holders",
+   "ticker": "HDFCLIFE",
+   "verified": true
+  }
+ ],
+ "kind": "local",
+ "model": "qwen3-8b-32k",
+ "reader": "qwen3-8b-32k",
+ "segments": [
+  {
+   "baseline_ram_mb": 19909,
+   "baseline_vram_mb": 10082,
+   "batch_chars": 24000,
+   "discarded": 62,
+   "documents": 150,
+   "identity": {
+    "context": "16384",
+    "digest": "b3e2287c81ab3732bf229ac1df0e7b7d1824129fec4bc7e30b9ce361fee2d2e9",
+    "url": "http://127.0.0.1:11434/v1/chat/completions"
+   },
+   "peak_ram_mb": 19909,
+   "peak_vram_mb": 10952,
+   "seconds": 1153.3,
+   "started": "2026-09-14T18:24:31+00:00",
+   "stopped": null,
+   "tokens_per_second": 30.98,
+   "unread": [],
+   "usage": {
+    "calls": 179,
+    "failed_batches": 0,
+    "input": 1401206,
+    "output": 35730,
+    "refused_batches": 0,
+    "retried_batches": 3,
+    "truncated_batches": 0
+   },
+   "usd": "0"
+  }
+ ]
+}
