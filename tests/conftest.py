@@ -25,6 +25,7 @@ _LIVE = (
     "data/spend",
     "data/models",
     "data/readers",
+    "data/graph",
 )
 
 
@@ -85,3 +86,7 @@ def _private_spend_and_pins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(spend, "LEDGER_PATH", tmp_path / "spend" / "ledger.jsonl")
     monkeypatch.setattr(model_identity, "PINS_PATH", tmp_path / "models" / "pins.json")
     monkeypatch.setattr(readers, "READERS_DIR", tmp_path / "readers")
+
+    from qalpha.live import graph
+
+    monkeypatch.setattr(graph, "GRAPH_DIR", tmp_path / "graph")

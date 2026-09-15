@@ -31,6 +31,12 @@ dev = [
 ai = [
     "anthropic>=0.40",
 ]
+# The knowledge graph's database driver. Optional: the graph's record is a log on disk, and every
+# graph question can be answered from it; Neo4j is the projection you traverse and look at.
+# `uv sync --extra dev --extra ai --extra graph`.
+graph = [
+    "neo4j>=5.20",
+]
 
 [build-system]
 requires = ["hatchling"]
