@@ -18,6 +18,7 @@ allowed anywhere near a book: a dividend of D on ex-date T must move ``adj_close
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -32,6 +33,7 @@ import twin as twin_script
 from qalpha.accounting.corporate_actions import CorporateAction, CorporateActionType
 from qalpha.config import Config
 from qalpha.live import actions as actions_record
+from qalpha.live import agent, manager
 from qalpha.live.console import use_utf8
 from qalpha.live.panels import WATCHLIST_PANEL
 from qalpha.live.tradebook import TradebookTrade, replay_tradebook
@@ -47,7 +49,15 @@ def _trades_and_names(cfg: Config) -> tuple[list[TradebookTrade], list[str]]:
     trades, notes = twin_script._tradebook()
     if notes:
         print(f"[actions] tradebook: {'; '.join(notes)}", file=sys.stderr)
-    return trades, sorted({t.ticker for t in trades})
+    names = {t.ticker for t in trades}
+    for book in load_books(cfg).values():
+        names.update(book.portfolio.positions())
+    names.update(str(r["ticker"]) for r in manager._jsonl(manager.STORE.fills) if r.get("ticker"))
+    if agent.FILES.shadow.exists():
+        shadow = json.loads(agent.FILES.shadow.read_text(encoding="utf-8"))
+        names.update(str(lot["ticker"]) for lot in shadow["portfolio"]["lots"])
+        names.update(str(r["ticker"]) for r in shadow.get("fills", []) if r.get("ticker"))
+    return trades, sorted(names)
 
 
 def _fetch(tickers: list[str], *, since: date) -> list[CorporateAction]:
@@ -120,8 +130,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[actions] asking the price vendor about {len(names)} name(s) since {start}")
         panel = pd.read_parquet(WATCHLIST_PANEL)
         fetched = _fetch(names, since=start)
+        previous = actions_record.load()
+        by_key = (
+            {(r.action.ticker, r.action.ex_date, r.action.action_type): r for r in previous.actions}
+            if previous
+            else {}
+        )
+        by_key.update(
+            {(a.ticker, a.ex_date, a.action_type): actions_record.check(a, panel) for a in fetched}
+        )
         record = actions_record.Record(
-            actions=tuple(actions_record.check(a, panel) for a in fetched),
+            actions=tuple(by_key.values()),
             source="yfinance dividends/splits, cross-checked against the panel's own adjustment",
             fetched_at=datetime.now(UTC).isoformat(timespec="seconds"),
         )
@@ -136,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
+    record = stored
     print(f"\n[actions] {record.source}")
     print(f"[actions] fetched {record.fetched_at}")
     credited = Decimal("0")

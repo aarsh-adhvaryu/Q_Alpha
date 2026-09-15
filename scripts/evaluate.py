@@ -140,11 +140,26 @@ def _operation(store: manager.Store, receipts: Path | None = None) -> tuple[list
 
     # Code cutting an order is the system working, not a fault. It is counted so that a version
     # which constantly proposes the impossible is visible.
-    cut = [r for r in decisions if r.get("requested_quantity") != r.get("accepted_quantity")]
-    if decisions:
+    trade_intentions = [
+        r
+        for r in decisions
+        if r.get("intent") in ("open", "add", "reduce", "exit")
+        or r.get("action") in ("BUY", "SELL")
+    ]
+    cut = [
+        r
+        for r in trade_intentions
+        if not r.get("accepted_quantity")
+        or str(r.get("status", "")).startswith("cut")
+        or (
+            r.get("requested_quantity") is not None
+            and r["requested_quantity"] != r.get("accepted_quantity")
+        )
+    ]
+    if trade_intentions:
         lines.append(
-            f"- Orders code reduced or cancelled: **{len(cut)} of {len(decisions)}** "
-            f"({len(cut) / len(decisions):.0%}) — the limits binding is the design, not a fault"
+            f"- Trade intentions reduced or left without an order: **{len(cut)} of {len(trade_intentions)}** "
+            f"({len(cut) / len(trade_intentions):.0%}) — HOLD decisions are excluded"
         )
     return lines, problems
 
@@ -172,9 +187,9 @@ def _decision_quality(store: manager.Store) -> tuple[list[str], int]:
             lines.append(f"- **{len(rows)} decision(s) {label}.** FAIL")
     if not (no_cite or no_invalidate or no_thesis):
         lines.append(
-            f"- All {len(decisions)} decisions cite verified evidence, carry a thesis, and state "
-            "what would falsify them. Enforced at parse time, so this is a check that the "
-            "enforcement is still on, not a compliment to the model."
+            f"- All {len(decisions)} decisions carry citation ids, a thesis, and a falsification "
+            "condition. The parser checks ids against the packet (including price and quant ids); "
+            "this structural check does not establish that the reasoning is supported."
         )
 
     # A thesis repeated unchanged for months is not conviction; it may be a model not reading. This

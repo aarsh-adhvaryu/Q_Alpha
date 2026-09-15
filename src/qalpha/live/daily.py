@@ -147,6 +147,9 @@ def _step_prices() -> None:
         save_parquet(frame, str(panel))
         LOG.say(f"{panel.name} → {PriceData.from_long(frame).dates[-1].date()}", "detail")
 
+    if failures:
+        raise RuntimeError("; ".join(failures))
+
     b_start, b_existing = _fetch_window(BENCHMARK_PANEL)
     LOG.say(f"{BENCHMARK_PANEL.name}: the Nifty TRI proxy from {b_start}…", "detail")
     save_parquet(
@@ -155,9 +158,6 @@ def _step_prices() -> None:
         ),
         str(BENCHMARK_PANEL),
     )
-
-    if failures:
-        raise RuntimeError("; ".join(failures))
 
 
 #: The panels start here. Only used when a panel does not exist yet.
@@ -358,6 +358,13 @@ def _step_graph() -> None:
     _checked("graph", graph.main(["ingest"]))
 
 
+def _step_actions() -> None:
+    """Refresh the dividend/split record for real and simulated holdings before either book steps."""
+    import corporate_actions
+
+    _checked("corporate_actions", corporate_actions.main(["--import"]))
+
+
 def _step_twin() -> None:
     import twin
 
@@ -399,6 +406,9 @@ def research_steps() -> list[Step]:
             _step_financials,
         ),
         Step("graph", "Filing what was read into the knowledge graph", _step_graph),
+        Step(
+            "corporate_actions", "Checking dividends and splits for both paper books", _step_actions
+        ),
         Step("twin", "Marking the books against the fund", _step_twin),
     ]
 

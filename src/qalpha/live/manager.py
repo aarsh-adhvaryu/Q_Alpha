@@ -738,6 +738,7 @@ def apply_orders(
     on: date,
     *,
     allowance: Decimal | None = None,
+    rules: mandate.Sizing | None = None,
 ) -> list[dict[str, Any]]:
     """Execute sells, then buys, within the limits. Mutates ``portfolio``; returns what happened to each.
 
@@ -759,12 +760,32 @@ def apply_orders(
             sector = sectors.get(ticker)
             if not sector:
                 qty, status = 0, "cancelled: sector unknown"
-            elif ticker not in held and len(held) >= MAX_NAMES:
+            elif ticker not in held and len(held) >= (
+                MAX_NAMES if rules is None else rules.max_names
+            ):
                 qty, status = 0, f"cancelled: already {len(held)} names"
             else:
-                qty = _largest_allowed_buy(portfolio, ticker, wanted, prices, sectors, on)
+                qty = _largest_allowed_buy(
+                    portfolio, ticker, wanted, prices, sectors, on, rules=rules
+                )
                 affordable = int(left / price) if price > 0 else 0
-                capped = min(qty, affordable)
+                capped = _largest_allowed_buy(
+                    portfolio,
+                    ticker,
+                    min(qty, affordable),
+                    prices,
+                    sectors,
+                    on,
+                    allowance=left,
+                    rules=rules,
+                )
+                below_minimum = (
+                    rules is not None
+                    and ticker not in held
+                    and Decimal(capped) * price < rules.min_new_position
+                )
+                if below_minimum:
+                    capped = 0
                 trade = portfolio.buy(on, ticker, Decimal(capped), price) if capped else None
                 if trade is not None:
                     left -= Decimal(trade.quantity) * price + trade.cost
@@ -774,6 +795,8 @@ def apply_orders(
                         if qty and not affordable
                         else "cancelled: cash or the 20%/30% limits allow none"
                     )
+                    if below_minimum:
+                        status = "cancelled: the minimum new position does not fit on the fill day"
                 elif capped < wanted:
                     status = (
                         f"cut from {wanted} to {capped}: this month's allowance"
@@ -808,6 +831,9 @@ def _largest_allowed_buy(
     prices: Mapping[str, Decimal],
     sectors: Mapping[str, str],
     on: date,
+    *,
+    allowance: Decimal | None = None,
+    rules: mandate.Sizing | None = None,
 ) -> int:
     """The most shares, up to ``wanted``, whose purchase keeps cash ≥ 0 and the name and sector caps."""
 
@@ -815,6 +841,8 @@ def _largest_allowed_buy(
         trial = portfolio.clone()
         trade = trial.buy(on, ticker, Decimal(qty), prices[ticker])
         if trade is None or int(trade.quantity) != qty or trial.cash < 0:
+            return False
+        if allowance is not None and Decimal(qty) * prices[ticker] + trade.cost > allowance:
             return False
         nav = trial.cash + sum(
             (q * prices[t] for t, q in trial.positions().items() if t in prices), Decimal("0")
@@ -828,7 +856,9 @@ def _largest_allowed_buy(
             ),
             Decimal("0"),
         )
-        return name_value <= nav * NAME_CAP and sector_value <= nav * SECTOR_CAP
+        name_cap = NAME_CAP if rules is None else rules.name_cap
+        sector_cap = SECTOR_CAP if rules is None else rules.sector_cap
+        return name_value <= nav * name_cap and sector_value <= nav * sector_cap
 
     lo, hi = 0, max(0, wanted)
     while lo < hi:
