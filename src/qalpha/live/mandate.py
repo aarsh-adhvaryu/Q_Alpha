@@ -142,3 +142,95 @@ def load(path: Path | None = None) -> Mandate:
         else:
             changes[key] = value
     return replace(DEFAULT, **changes)
+
+
+@dataclass(frozen=True)
+class Sizing:
+    """How intentions become orders when a portfolio is meant to **expand**: breadth and depth.
+
+    Separate from :class:`Mandate` on purpose. AI-PM-2's mandate is written into every AI-PM-2
+    receipt; adding these numbers to it would change what a registered version was shown. A version
+    that sizes by these rules registers them itself.
+
+    **Nothing here ever sells.** Every rule limits *purchases*. A position that grows past a limit by
+    price alone pauses further buying of it and asks for a review; a sale needs its own recorded
+    investment or risk reason from the investor.
+    """
+
+    name: str
+    #: Most names after a **new** purchase. Never a reason to sell; a count above it after a rule
+    #: change simply stops new names.
+    max_names: int
+    #: A purchase may take a name / sector to this share of the book (cash included).
+    name_cap: Decimal
+    sector_cap: Decimal
+    #: Conviction tier → (low, high) target share of the book. ``None``: the investor's desired
+    #: exposure is used as given, capped by ``name_cap``.
+    tiers: dict[str, tuple[Decimal, Decimal]] | None
+    #: A new position opens at least this large, or not at all. ``0``: no minimum. New purchases only.
+    min_new_position: Decimal
+    #: Monthly purchase allowance, and what unspent allowance may roll up to.
+    monthly_allowance: Decimal
+    allowance_ceiling: Decimal
+    #: Above these, buying that name / sector pauses and the investor is asked to review it.
+    review_name_above: Decimal
+    review_sector_above: Decimal
+    #: A name above this must be addressed at the weekly review (keep, with a reason, or reduce).
+    address_name_above: Decimal
+    #: Cash above this share of the book for this many months, while candidates qualify, is flagged.
+    idle_cash_above: Decimal
+    idle_months: int
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for key, value in asdict(self).items():
+            if isinstance(value, Decimal):
+                out[key] = str(value)
+            elif isinstance(value, dict):
+                out[key] = {k: [str(v) for v in band] for k, band in value.items()}
+            else:
+                out[key] = value
+        return out
+
+
+#: AI-PM-2's purchase limits, as a sizing rule set: eight names, 20% / 30%, ₹50,000 a month, no
+#: rollover, no tiers. The live book keeps these.
+CURRENT_SIZING = Sizing(
+    name="AI-PM-2-LIMITS",
+    max_names=8,
+    name_cap=Decimal("0.20"),
+    sector_cap=Decimal("0.30"),
+    tiers=None,
+    min_new_position=Decimal("0"),
+    monthly_allowance=Decimal("50000"),
+    allowance_ceiling=Decimal("50000"),
+    review_name_above=Decimal("0.22"),
+    review_sector_above=Decimal("0.32"),
+    address_name_above=Decimal("0.30"),
+    idle_cash_above=Decimal("0.25"),
+    idle_months=2,
+)
+
+#: The expanding rules, run first on a shadow book. Each number is a registered choice:
+#: tiers scale positions with capital (depth); the name ceiling is the research capacity reviews can
+#: sustain (breadth); ₹15,000 is the smallest position worth researching and paying costs on; unspent
+#: allowance rolls over up to ₹1,00,000 so a month without conviction is not a month's money lost.
+EXPAND_SIZING = Sizing(
+    name="EXPAND-1",
+    max_names=40,
+    name_cap=Decimal("0.20"),
+    sector_cap=Decimal("0.30"),
+    tiers={
+        "core": (Decimal("0.08"), Decimal("0.12")),
+        "standard": (Decimal("0.04"), Decimal("0.06")),
+        "starter": (Decimal("0.02"), Decimal("0.03")),
+    },
+    min_new_position=Decimal("15000"),
+    monthly_allowance=Decimal("50000"),
+    allowance_ceiling=Decimal("100000"),
+    review_name_above=Decimal("0.20"),
+    review_sector_above=Decimal("0.30"),
+    address_name_above=Decimal("0.30"),
+    idle_cash_above=Decimal("0.25"),
+    idle_months=2,
+)
