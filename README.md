@@ -42,6 +42,18 @@ plan and report are in git history.
 That is all. There is no broker login. Missing two days costs the two days, not the work: the next
 run resumes what it had not finished.
 
+**Before the first autonomous evening:** finish the checks in
+[AI-PM-3 §7](reports/PREREGISTRATION_AI_PM3.md#7-start) on this computer: graph ingestion, every
+model scenario passing, and one shadow review whose receipt a person has inspected. Then record
+the future start date in the registration and code in the same commit. Installing the lockfile and
+passing unit tests does not stand in for these checks. Use
+`uv sync --frozen --extra dev --extra ai --extra graph` to install the release.
+
+**The first month is a frozen operating trial.** Keep that commit, models, prompts and limits;
+prices, filings, memory and holdings continue changing. Run after 17:00 IST and leave the window
+open until it finishes. An incomplete run is a recorded failure to investigate, never a reason to
+invent a HOLD. Review `scripts/evaluate.py` after the month; this trial does not establish alpha.
+
 **Check a tax figure by hand the first time you sell something complicated.** The engine has matched
 a real Zerodha Tax P&L exactly once — a single lot, short-term, no loss (§6).
 
@@ -63,7 +75,9 @@ results    each company's filed quarterly results, both NSE feeds → check → 
   ↓
 graph      everything read tonight → the knowledge graph ($0)              scripts/graph.py ingest
   ↓
-books      credit flows → fill yesterday's orders → the investor reviews → mark   scripts/twin.py
+actions    dividends and splits for real + AI-held names → reconcile        scripts/corporate_actions.py
+  ↓
+books      credit flows → settle actions and queued fills by date → review → mark   scripts/twin.py
   ↓
 page       data/session/qalpha.html, served by live/server.py
 ```
@@ -114,9 +128,11 @@ turned out to be the equal-weight premium — which anyone can buy in five minut
 
 **Dividends.** The baselines are marked on adjusted (total-return) series, so their dividends are
 reinvested for them. The twin's holdings are marked on raw closes, so its dividends have to be
-credited explicitly, on the ex-date, or the bar wins on arithmetic alone. They are
-(`corporate_actions.py --import`), and each is cross-checked against the price panel's own
-adjustment factor before it is applied. Between the first trade and 2026-09-11 the book earned
+credited explicitly, on the ex-date, or the bar wins on arithmetic alone. The evening imports them
+for names held or traded by REAL, SYSTEM and the sizing shadow; each dividend is cross-checked
+against the price panel's own adjustment factor before it is applied. Previously recorded actions
+survive an empty vendor response. Actions settle before their ex-date's trades in each book, so a
+catch-up run credits the quantity that was entitled to them. Between the first trade and 2026-09-11 the book earned
 ₹0 of them: everything but the starter position was bought on 2026-08-28, after every ex-date.
 
 **Names the bar cannot price.** Seven Nifty-50 members have no price in the panel at all —
@@ -225,6 +241,9 @@ of the book; why — and code turns them into orders for each book (`live/sizing
 - **Tested before use:** the live book keeps AI-PM-2's limits (`CURRENT_SIZING`); a shadow book
   applies `EXPAND_SIZING` to the same intentions, and the two are compared on capital deployed, idle
   cash, names, effective names, concentration, turnover and tax.
+- Both books re-check costs, allowance, purchase caps and positive trading volume at fill time.
+  The shadow receives later funding changes once. An open/add target is applied to its own holdings;
+  an already-held name is an add, and reducing a name it does not hold makes no order.
 
 ### Which reader, at what cost — EX-5 (built, not yet run)
 

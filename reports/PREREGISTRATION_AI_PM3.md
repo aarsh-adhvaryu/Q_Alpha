@@ -68,6 +68,10 @@ its last decision record and is shown as "not reviewed tonight: no trigger".
   sector above 30% pause; allowance `A(m) = min(carry + ₹50,000, ₹1,00,000)` less purchases and queued
   buys, counted from the month the shadow is seeded. Seeded as a copy of SYSTEM on AI-PM-3's first
   evening. Its orders fill at the same session the live book's would.
+- Both books check traded volume, affordability including charges, purchase limits and caps again
+  at the fill price. The shadow receives subsequent external cash flows once and interprets the
+  same intentions against its own holdings. Each book receives dividends and splits on its own
+  eligible holdings, with ex-date actions before that session's trades.
 - **No rule sells.** Sales come only from reduce or exit intentions with a reason.
 - Compared by `scripts/agent.py compare`: capital deployed, cash, names, effective names, largest name
   and sector, traded value, costs and tax. Switching the live book to the expanding rules is a later
@@ -78,7 +82,11 @@ its last decision record and is shown as "not reviewed tonight: no trigger".
 Receipts are written before they are parsed; the journal (`data/twin/agent/journal.jsonl`) records
 attention, review, confirmation and queue per evening; decision, logbook, intention and scope rows are
 keyed by the review digest. A rerun after an interruption at any step makes no model call already
-answered, queues nothing twice and writes no record twice (tested).
+answered successfully, queues nothing twice and writes no record twice (tested). Refused and
+truncated receipts remain failures on retry. The queue journal restores orders after a crash before
+the outer book save; each record file completes independently. A durable fill batch records the
+before/after portfolio (including lot identities and tax state) before either the fill log or book
+save, so recovery restores the same result without spending the allowance or applying tax again.
 
 ## 7. Start
 
@@ -110,3 +118,12 @@ AI-PM-3 starts the trading evening after all of these hold, and the date is then
      counted a purchase against the monthly limit.
   6. *One start date.* The evening run read AI-PM-2's start (2026-09-14) and would have run AI-PM-2
      tonight; AI-PM-3's start is now the only one.
+- **2026-09-15, release checks before any start** — interrupted fills previously rebuilt a different
+  portfolio after counting the saved purchase against its allowance; queued orders and partially
+  written review records could be lost; cached failed replies could pass on retry. Recovery now
+  restores the committed state. Fill costs fit inside the monthly allowance, both sizing books
+  enforce their rules at fill time and receive later funding, and divergent holdings no longer
+  invalidate the same investment intention. The daily path imports corporate actions for AI-held
+  names and settles actions around missed-session fills; the shadow receives its own entitlements.
+  Evaluation excludes HOLD from the count of reduced/cancelled trade intentions. These are
+  correctness fixes before registration opens, not evidence of investment performance.

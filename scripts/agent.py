@@ -132,7 +132,10 @@ def cmd_shadow_review(args: argparse.Namespace) -> int:
                 live, store.root / name
             )  # its memory, on a copy: nothing live is written
     copy = TwinBook(
-        name="SYSTEM-shadow-v3", portfolio=book.portfolio.clone(), flows=list(book.flows)
+        name="SYSTEM-shadow-v3",
+        portfolio=book.portfolio.clone(),
+        flows=list(book.flows),
+        actions_through=book.actions_through or book.stepped_through or market.as_of,
     )
     now = datetime.now(IST)
     try:

@@ -45,8 +45,7 @@ five-phase plan are built; step F (training) is deliberately not started.
    checks; `readers.py score`. **Open decision for the user:** no reader has reached the registered
    ≥90% verbatim threshold; the registered fallback is "best reader on material filings only".
 3. **Known gaps:** ratings / board / shareholding / related-party feeds not ingested (graph says
-   MISSING); Neo4j projection untested against a live database; the shadow book re-checks only cash
-   at fill.
+   MISSING); Neo4j projection untested against a live database.
 
 From here the job is to **run it** — one evening a day — and to finish the measurements above.
 

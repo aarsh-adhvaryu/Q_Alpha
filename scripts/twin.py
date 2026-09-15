@@ -75,7 +75,6 @@ from qalpha.live.twin import (
     compare,
     comparison_frame,
     comparison_markdown,
-    credit_actions,
     ew_fund_mark,
     flows_with_off_market,
     is_autonomous,
@@ -453,9 +452,7 @@ def cmd_daily(cfg: Config) -> int:
         if book is None:
             continue
         if autonomous:
-            # Before it decides: a dividend is cash it may spend, and a split changes what it holds.
-            for note in credit_actions(book, _actions(), through=market.as_of):
-                print(f"[twin] {name}: {note}")
+            # The agent settles actions around each pending fill, including missed sessions.
             failure = step_system(book, market, now=datetime.now(IST))
             continue
         if book.stepped_through == market.as_of:
@@ -548,10 +545,17 @@ def step_system(
     if not agent.active(today):
         print(f"[investor] AI-PM-3 has no registered start on or before {today}; nothing decides.")
         return None
-    if market.as_of != today:
-        agent.fill_live(book, market, now=now, store=store, registration=agent.REGISTRATION)
-        return None
     try:
+        if market.as_of != today:
+            agent.settle(
+                book,
+                market,
+                now=now,
+                store=store,
+                files=agent.FILES,
+                registration=agent.REGISTRATION,
+            )
+            return None
         decisions = agent.review(
             book, market, now=now, store=store, failed_steps=agent.failed_steps_today(today)
         )

@@ -32,13 +32,15 @@ import hashlib
 import json
 import os
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from qalpha.accounting.corporate_actions import CorporateAction
 from qalpha.accounting.portfolio import Portfolio
+from qalpha.live import actions as action_records
 from qalpha.live import attention as att
 from qalpha.live import financials as company_facts
 from qalpha.live import graph as g
@@ -48,7 +50,7 @@ from qalpha.live.decisions import HOLD, Decision
 from qalpha.live.mandate import CURRENT_SIZING, EXPAND_SIZING, Sizing
 from qalpha.live.market import Market
 from qalpha.live.progress import IST
-from qalpha.live.twin import EVALUATION_START, TwinBook
+from qalpha.live.twin import EVALUATION_START, TwinBook, credit_actions
 
 VERSION = "AI-PM-3"
 AGENT_DIR = Path("data/twin/agent")
@@ -160,6 +162,37 @@ def _mark(files: Files, as_of: date, step: str, **detail: Any) -> None:
             }
         ],
     )
+
+
+def _append_once(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Each record file commits independently; an earlier file is not proof this one was written."""
+    if not rows:
+        return
+    key = tuple(rows[0].get(k) for k in ("version", "as_of", "digest"))
+    if any(
+        tuple(row.get(k) for k in ("version", "as_of", "digest")) == key
+        for row in manager._jsonl(path)
+    ):
+        return
+    manager._append(path, rows)
+
+
+def _recover_queue(book: TwinBook, files: Files, through: date) -> bool:
+    """Restore a completed review whose journal survived but whose outer book save did not."""
+    candidates = [
+        row
+        for row in _journal(files)
+        if row.get("step") == "queued"
+        and row.get("manager") is not None
+        and str(row.get("as_of", "")) <= through.isoformat()
+        and (book.stepped_through is None or str(row["as_of"]) > book.stepped_through.isoformat())
+    ]
+    if not candidates:
+        return False
+    next_row = min(candidates, key=lambda row: str(row["as_of"]))
+    book.manager = json.loads(json.dumps(next_row["manager"]))
+    book.stepped_through = date.fromisoformat(str(next_row["as_of"]))
+    return True
 
 
 def failed_steps_today(today: date, path: Path | None = None) -> list[str]:
@@ -276,6 +309,8 @@ class ShadowBook:
     purchases: dict[str, Decimal] = field(default_factory=dict)
     fills: list[dict[str, Any]] = field(default_factory=list)
     queued_digests: list[str] = field(default_factory=list)
+    net_funded: Decimal = Decimal("0")
+    actions_through: date | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -286,6 +321,8 @@ class ShadowBook:
             "purchases": {k: str(v) for k, v in self.purchases.items()},
             "fills": self.fills,
             "queued_digests": self.queued_digests,
+            "net_funded": str(self.net_funded),
+            "actions_through": self.actions_through.isoformat() if self.actions_through else None,
         }
 
 
@@ -295,6 +332,7 @@ def load_shadow(
     if files.shadow.exists():
         raw = json.loads(files.shadow.read_text(encoding="utf-8"))
         pf = Portfolio.from_state(raw["portfolio"], live.portfolio.cost_cfg, live.portfolio.tax_cfg)
+        pf.cash += live.net_invested - Decimal(str(raw.get("net_funded", live.net_invested)))
         return ShadowBook(
             portfolio=pf,
             first_month=str(raw["first_month"]),
@@ -303,12 +341,32 @@ def load_shadow(
             purchases={k: Decimal(v) for k, v in (raw.get("purchases") or {}).items()},
             fills=list(raw.get("fills") or []),
             queued_digests=list(raw.get("queued_digests") or []),
+            net_funded=live.net_invested,
+            actions_through=date.fromisoformat(raw.get("actions_through") or raw["seeded_on"]),
         )
     return ShadowBook(
         portfolio=live.portfolio.clone(),
         first_month=sizing.month_of(on),  # the allowance counts from the month the shadow is seeded
         seeded_on=on.isoformat(),
+        net_funded=live.net_invested,
+        actions_through=live.actions_through or on,
     )
+
+
+def _shadow_intentions(
+    shadow: ShadowBook, intentions: Sequence[sizing.Intention]
+) -> list[sizing.Intention]:
+    """Apply the same investment target to this book's own holdings, which may have diverged."""
+    held = shadow.portfolio.positions()
+    out: list[sizing.Intention] = []
+    for intention in intentions:
+        if intention.intent in (sizing.OPEN, sizing.ADD):
+            out.append(
+                replace(intention, intent=sizing.ADD if intention.ticker in held else sizing.OPEN)
+            )
+        elif intention.ticker in held:
+            out.append(intention)
+    return out
 
 
 def save_shadow(files: Files, shadow: ShadowBook) -> None:
@@ -317,53 +375,103 @@ def save_shadow(files: Files, shadow: ShadowBook) -> None:
     atomic.write_text(files.shadow, json.dumps(shadow.to_json(), indent=1, sort_keys=True) + "\n")
 
 
-def fill_shadow(shadow: ShadowBook, market: Market, *, now: datetime) -> list[dict[str, Any]]:
-    """Each queued decision fills at the first session after it, as the live book's would, or waits."""
+def _credit_through(book: TwinBook, actions: Sequence[CorporateAction], through: date) -> None:
+    watermark = book.actions_through or book.stepped_through or book.start
+    if watermark is None or through > watermark:
+        credit_actions(book, actions, through=through)
+
+
+def fill_shadow(
+    shadow: ShadowBook,
+    market: Market,
+    *,
+    now: datetime,
+    rules: Sizing | None = None,
+    corporate_actions: Sequence[CorporateAction] = (),
+) -> list[dict[str, Any]]:
+    """Fill at a later traded close, rechecking this book's own caps, minimum and allowance."""
+    rules = REGISTRATION.shadow_sizing if rules is None else rules
     results: list[dict[str, Any]] = []
     waiting: list[dict[str, Any]] = []
+    action_book = TwinBook(
+        "SHADOW",
+        shadow.portfolio,
+        actions_through=shadow.actions_through or date.fromisoformat(shadow.seeded_on),
+    )
     for pending in shadow.pending:
         sessions = manager._sessions_after(market, date.fromisoformat(pending["as_of"]))
         if not sessions or not manager.bar_is_final(sessions[0], now):
             waiting.append(pending)
             continue
         day = sessions[0]
-        prices = {
-            o["ticker"]: manager.raw_close(market, day, o["ticker"]) for o in pending["orders"]
-        }
-        if any(p is None for p in prices.values()):
-            waiting.append(pending)  # a missing close keeps the order waiting; no other day's price
+        _credit_through(action_book, corporate_actions, day)
+        needed = set(shadow.portfolio.positions()) | {o["ticker"] for o in pending["orders"]}
+        prices = {t: manager.raw_close(market, day, t) for t in needed}
+        if any(p is None for p in prices.values()) or any(
+            (manager._volume(market, day, o["ticker"]) or 0) <= 0 for o in pending["orders"]
+        ):
+            waiting.append(pending)
             continue
-        for o in sorted(pending["orders"], key=lambda o: o["action"] != sizing.SELL):
-            price = prices[o["ticker"]]
-            assert price is not None
-            qty = Decimal(int(o["quantity"]))
-            if o["action"] == sizing.SELL:
-                qty = min(qty, shadow.portfolio.positions().get(o["ticker"], Decimal("0")))
-                trade = shadow.portfolio.sell(day, o["ticker"], qty, price) if qty > 0 else None
-            else:
-                trade = shadow.portfolio.buy(day, o["ticker"], qty, price)
-                if trade is not None:
-                    month = sizing.month_of(day)
-                    shadow.purchases[month] = (
-                        shadow.purchases.get(month, Decimal("0"))
-                        + trade.quantity * price
-                        + trade.cost
-                    )
-            results.append(
-                {
-                    "on": day.isoformat(),
-                    "ticker": o["ticker"],
-                    "action": o["action"],
-                    "requested": o["quantity"],
-                    "filled": 0 if trade is None else int(trade.quantity),
-                    "price": str(price),
-                    "cost": "0" if trade is None else str(trade.cost),
-                    "tax": "0" if trade is None else str(trade.tax),
-                    "decision": pending["digest"],
-                }
-            )
+        left = sizing.available(
+            sizing.month_of(day),
+            shadow.purchases,
+            pending_commitments=Decimal("0"),
+            first_month=shadow.first_month,
+            rules=rules,
+        )
+        fills = manager.apply_orders(
+            shadow.portfolio,
+            pending["orders"],
+            {t: p for t, p in prices.items() if p is not None},
+            market.sector_of or {},
+            day,
+            allowance=left,
+            rules=rules,
+        )
+        for fill in fills:
+            if fill["action"] == sizing.BUY:
+                month = sizing.month_of(day)
+                shadow.purchases[month] = (
+                    shadow.purchases.get(month, Decimal("0"))
+                    + Decimal(str(fill["filled"])) * Decimal(str(fill["price"]))
+                    + Decimal(str(fill["cost"]))
+                )
+            results.append({**fill, "on": day.isoformat(), "decision": pending["digest"]})
     shadow.fills.extend(results)
     shadow.pending = waiting
+    if not waiting:
+        _credit_through(action_book, corporate_actions, market.as_of)
+    shadow.actions_through = action_book.actions_through
+    return results
+
+
+def _commit_fill(
+    book: TwinBook, store: manager.Store, commit: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Complete a durable fill batch, retaining lot ids and any subsequently credited cash."""
+    current = book.portfolio.to_state()
+    before, after = commit["before"], commit["after"]
+    same_before = all(current[k] == before[k] for k in ("lots", "ltcg_by_fy"))
+    same_after = all(current[k] == after[k] for k in ("lots", "ltcg_by_fy"))
+    if not same_before and not same_after:
+        raise IncompleteReviewError(
+            "saved holdings changed since the fill checkpoint; reconcile before continuing"
+        )
+    base = before if same_before else after
+    state = {
+        **after,
+        "cash": str(
+            Decimal(str(after["cash"])) + Decimal(str(current["cash"])) - Decimal(str(base["cash"]))
+        ),
+    }
+    results = list(commit["fills"])
+    if not any(
+        r.get("decision") == commit["decision"] and r.get("on") == commit["on"]
+        for r in manager._jsonl(store.fills)
+    ):
+        manager._append(store.fills, results)
+    book.portfolio = Portfolio.from_state(state, book.portfolio.cost_cfg, book.portfolio.tax_cfg)
+    book.manager["pending"] = None
     return results
 
 
@@ -375,14 +483,21 @@ def fill_live(
     store: manager.Store,
     registration: Registration,
 ) -> list[dict[str, Any]]:
-    """The live book's queued orders, re-checked on the fill day against AI-PM-2's limits and this month's allowance."""
+    """Fill within the registered limits; resume a committed batch without sizing or taxing it again."""
     pending = book.manager.get("pending")
     if not pending:
         return []
+    checkpoint = store.root / "fill_batches" / f"{pending['as_of']}-{pending['digest']}.json"
+    if checkpoint.exists():
+        return _commit_fill(book, store, json.loads(checkpoint.read_text(encoding="utf-8")))
     sessions = manager._sessions_after(market, date.fromisoformat(pending["as_of"]))
     if not sessions or not manager.bar_is_final(sessions[0], now):
         return []
     day = sessions[0]
+    if any(r.get("decision") == pending["digest"] for r in manager._jsonl(store.fills)):
+        raise IncompleteReviewError(
+            "recorded fill has no recovery checkpoint; reconcile before continuing"
+        )
     prices: dict[str, Decimal] = {}
     for ticker in sorted(
         {o["ticker"] for o in pending["orders"]} | set(book.portfolio.positions())
@@ -392,14 +507,11 @@ def fill_live(
             pending["waiting"] = f"no usable close on {day} for {ticker}"
             return []
         prices[ticker] = close
+    for order in pending["orders"]:
+        if (manager._volume(market, day, order["ticker"]) or 0) <= 0:
+            pending["waiting"] = f"no positive traded volume on {day} for {order['ticker']}"
+            return []
     trial = book.portfolio.clone()
-    # A run cut after this fill and before the book is saved fills the same orders again from the same
-    # saved book. The book is right either way; the fills file must not carry the purchase twice,
-    # because this month's allowance is counted from it.
-    written = any(
-        f.get("decision") == pending["digest"] and f.get("on") == day.isoformat()
-        for f in manager._jsonl(store.fills)
-    )
     left = sizing.available(
         sizing.month_of(day),
         purchases_by_month(store),
@@ -408,14 +520,20 @@ def fill_live(
         rules=registration.live_sizing,
     )
     results = manager.apply_orders(
-        trial, pending["orders"], prices, pending["sectors"], day, allowance=left
+        trial,
+        pending["orders"],
+        prices,
+        pending["sectors"],
+        day,
+        allowance=left,
+        rules=registration.live_sizing,
     )
-    book.portfolio = trial
-    manager._append(
-        store.fills,
-        []
-        if written
-        else [
+    commit = {
+        "decision": pending["digest"],
+        "on": day.isoformat(),
+        "before": book.portfolio.to_state(),
+        "after": trial.to_state(),
+        "fills": [
             {
                 **r,
                 "on": day.isoformat(),
@@ -424,9 +542,56 @@ def fill_live(
             }
             for r in results
         ],
+    }
+    from qalpha.live import atomic
+
+    # One durable transaction precedes both the public fill log and the outer books.json save.
+    atomic.write_text(checkpoint, json.dumps(commit, sort_keys=True) + "\n")
+    return _commit_fill(book, store, commit)
+
+
+def settle(
+    book: TwinBook,
+    market: Market,
+    *,
+    now: datetime,
+    store: manager.Store,
+    files: Files,
+    registration: Registration,
+) -> ShadowBook:
+    """Recover and settle each book in date order, without making a new model decision."""
+    record = action_records.load()
+    actions = record.for_replay() if record else []
+    # Queue recovery advances stepped_through. Preserve the prior action watermark first.
+    book.actions_through = book.actions_through or book.stepped_through or book.start
+
+    def pending_fill() -> None:
+        pending = book.manager.get("pending")
+        if not pending:
+            return
+        sessions = manager._sessions_after(market, date.fromisoformat(pending["as_of"]))
+        if sessions and manager.bar_is_final(sessions[0], now):
+            # Ex-date entitlement is decided before that session's trades. On a catch-up run,
+            # actions AFTER the fill must see the newly purchased (or sold) quantity.
+            _credit_through(book, actions, sessions[0])
+        for fill in fill_live(book, market, now=now, store=store, registration=registration):
+            print(
+                f"[agent] {fill['action']} {fill['filled']}/{fill['requested']} {fill['ticker']} @ ₹{fill['price']} — {fill['status']}"
+            )
+
+    pending_fill()
+    while _recover_queue(book, files, market.as_of):
+        pending_fill()
+        if book.manager.get("pending"):
+            break
+    if not book.manager.get("pending"):
+        _credit_through(book, actions, market.as_of)
+    shadow = load_shadow(files, book, on=market.as_of, registration=registration)
+    fill_shadow(
+        shadow, market, now=now, rules=registration.shadow_sizing, corporate_actions=actions
     )
-    book.manager["pending"] = None
-    return results
+    save_shadow(files, shadow)
+    return shadow
 
 
 # ---- the packet --------------------------------------------------------------------------------
@@ -556,7 +721,7 @@ def build(
         (
             date.fromisoformat(str(r["as_of"]))
             for r in reversed(manager._jsonl(files.scope))
-            if r.get("full_review")
+            if r.get("full_review") and str(r.get("as_of", "")) < market.as_of.isoformat()
         ),
         None,
     )
@@ -888,25 +1053,29 @@ def _call(
     """One model call whose receipt is written before anything reads it; a rerun reuses the receipt."""
     path = _receipt(files, as_of, kind, model, prompt)
     if path.exists():
-        return dict(json.loads(path.read_text(encoding="utf-8")))
-    mind = make_brain(model)
-    if mind.model != model:
-        raise IncompleteReviewError(f"asked to run {model}; the brain is {mind.model}")
-    reply, usage = _ask(mind, model, prompt)
-    receipt = {
-        "version": VERSION,
-        "kind": kind,
-        "model": model,
-        "digest": path.stem.rsplit("-", 1)[-1],
-        "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "as_of": as_of.isoformat(),
-        "reply": reply,
-        "usage": usage,
-        **extra,
-    }
-    from qalpha.live import atomic
+        receipt = dict(json.loads(path.read_text(encoding="utf-8")))
+    else:
+        mind = make_brain(model)
+        if mind.model != model:
+            raise IncompleteReviewError(f"asked to run {model}; the brain is {mind.model}")
+        reply, usage = _ask(mind, model, prompt)
+        receipt = {
+            "version": VERSION,
+            "kind": kind,
+            "model": model,
+            "digest": path.stem.rsplit("-", 1)[-1],
+            "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "as_of": as_of.isoformat(),
+            "reply": reply,
+            "usage": usage,
+            **extra,
+        }
+        from qalpha.live import atomic
 
-    atomic.write_text(path, json.dumps(receipt, indent=2, default=str) + "\n")
+        atomic.write_text(path, json.dumps(receipt, indent=2, default=str) + "\n")
+    usage = receipt["usage"]
+    if usage.get("refused") or usage.get("truncated"):
+        path.replace(path.with_suffix(f".failed-{datetime.now(UTC):%H%M%S%f}.json"))
     if usage.get("refused"):
         raise IncompleteReviewError(f"the {kind} model refused")
     if usage.get("truncated"):
@@ -931,13 +1100,7 @@ def review(
     """One AI-PM-3 evening on ``book``: fills, attention, review, confirmation, sizing for both books, records."""
     registration = REGISTRATION if registration is None else registration
     today = now.astimezone(IST).date()
-    for fill in fill_live(book, market, now=now, store=store, registration=registration):
-        print(
-            f"[agent] {fill['action']} {fill['filled']}/{fill['requested']} {fill['ticker']} @ ₹{fill['price']} — {fill['status']}"
-        )
-    shadow = load_shadow(files, book, on=market.as_of, registration=registration)
-    fill_shadow(shadow, market, now=now)
-    save_shadow(files, shadow)
+    shadow = settle(book, market, now=now, store=store, files=files, registration=registration)
 
     if require_today and market.as_of != today:
         raise IncompleteReviewError(f"no close for {today} yet — the latest bar is {market.as_of}")
@@ -965,7 +1128,7 @@ def review(
     _mark(files, market.as_of, "attention", reviewed=reviewed, full_review=attention.full_review)
     held = [h["ticker"] for h in packet["portfolio"]["holdings"]]
     if not packet["under_review"]:
-        manager._append(
+        _append_once(
             files.scope,
             [
                 {
@@ -978,7 +1141,6 @@ def review(
                 }
             ],
         )
-        _mark(files, market.as_of, "queued", digest=None, orders=0)
         book.stepped_through = market.as_of
         book.manager = {
             **book.manager,
@@ -990,6 +1152,7 @@ def review(
                 "queued": 0,
             },
         }
+        _mark(files, market.as_of, "queued", digest=None, orders=0, manager=book.manager)
         return [
             Decision(
                 on=market.as_of,
@@ -1139,7 +1302,7 @@ def review(
     )
     shadow_plan = sizing.plan(
         shadow.portfolio,
-        final,
+        _shadow_intentions(shadow, final),
         prices=closes,
         sectors=sectors,
         on=market.as_of,
@@ -1153,78 +1316,73 @@ def review(
         "digest": digest,
         "as_of": market.as_of.isoformat(),
     }
-    recorded = any(
-        r.get("digest") == digest and r.get("version") == VERSION
-        for r in manager._jsonl(store.decisions)
+    live_by = {o.ticker: o for o in live}
+    shadow_by = {o.ticker: o for o in shadow_plan}
+    triggers = attention.as_dict()["by_name"]
+    rows_out = []
+    for i, r in zip(parsed.intentions, parsed.rows, strict=True):
+        outcome = live_by.get(i.ticker)
+        shadow_outcome = shadow_by.get(i.ticker)
+        rows_out.append(
+            {
+                **stamp,
+                "ticker": i.ticker,
+                "action": i.intent.upper(),
+                "intent": i.intent,
+                "conviction": i.conviction,
+                "desired_exposure_pct": r.get("desired_exposure_pct"),
+                "accepted_quantity": 0
+                if outcome is None or outcome.order is None
+                else outcome.order.quantity,
+                # An open the confirmer refused was never sized: its status says so.
+                "status": outcome.status
+                if outcome is not None
+                else confirmation_status.get(i.ticker, ""),
+                "shadow_status": "" if shadow_outcome is None else shadow_outcome.status,
+                "confirmation": confirmation_status.get(i.ticker),
+                "confirmed_by": confirmed_by if i.ticker in confirmation_status else None,
+                "price_at_decision": str(closes.get(i.ticker, "")),
+                "reason": i.reason,
+                "thesis": i.thesis,
+                "invalidate_if": i.invalidate_if,
+                "evidence_ids": list(i.evidence_ids),
+                "triggers": triggers.get(i.ticker, []),
+            }
+        )
+    _append_once(store.decisions, rows_out)
+    _append_once(
+        store.logbook,
+        [{**stamp, "ticker": "PORTFOLIO", "note": parsed.note}]
+        + [{**stamp, "ticker": r["ticker"], "note": r["note"]} for r in parsed.rows],
     )
-    if not recorded:
-        live_by = {o.ticker: o for o in live}
-        shadow_by = {o.ticker: o for o in shadow_plan}
-        triggers = attention.as_dict()["by_name"]
-        rows_out = []
-        for i, r in zip(parsed.intentions, parsed.rows, strict=True):
-            outcome = live_by.get(i.ticker)
-            shadow_outcome = shadow_by.get(i.ticker)
-            rows_out.append(
-                {
-                    **stamp,
-                    "ticker": i.ticker,
-                    "action": i.intent.upper(),
-                    "intent": i.intent,
-                    "conviction": i.conviction,
-                    "desired_exposure_pct": r.get("desired_exposure_pct"),
-                    "accepted_quantity": 0
-                    if outcome is None or outcome.order is None
-                    else outcome.order.quantity,
-                    # An open the confirmer refused was never sized: its status says so.
-                    "status": outcome.status
-                    if outcome is not None
-                    else confirmation_status.get(i.ticker, ""),
-                    "shadow_status": "" if shadow_outcome is None else shadow_outcome.status,
-                    "confirmation": confirmation_status.get(i.ticker),
-                    "confirmed_by": confirmed_by if i.ticker in confirmation_status else None,
-                    "price_at_decision": str(closes.get(i.ticker, "")),
-                    "reason": i.reason,
-                    "thesis": i.thesis,
-                    "invalidate_if": i.invalidate_if,
-                    "evidence_ids": list(i.evidence_ids),
-                    "triggers": triggers.get(i.ticker, []),
-                }
-            )
-        manager._append(store.decisions, rows_out)
-        manager._append(
-            store.logbook,
-            [{**stamp, "ticker": "PORTFOLIO", "note": parsed.note}]
-            + [{**stamp, "ticker": r["ticker"], "note": r["note"]} for r in parsed.rows],
-        )
-        manager._append(
-            files.intentions,
-            [
-                {
-                    **stamp,
-                    "ticker": r["ticker"],
-                    "intent": r.get("intent"),
-                    "invalidate_drawdown_pct": r.get("invalidate_drawdown_pct"),
-                    "price_at_decision": str(closes.get(r["ticker"], "")),
-                }
-                for r in parsed.rows
-            ],
-        )
-        manager._append(
-            files.scope,
-            [
-                {
-                    **stamp,
-                    "reviewed": list(packet["under_review"]),
-                    "full_review": attention.full_review,
-                    "full_review_why": attention.full_review_why,
-                    "not_reviewed": {
-                        t: "not reviewed tonight: no trigger" for t in held if t not in reviewed
-                    },
-                    "ignored": parsed.ignored,
-                }
-            ],
-        )
+    _append_once(
+        files.intentions,
+        [
+            {
+                **stamp,
+                "ticker": r["ticker"],
+                "intent": r.get("intent"),
+                "invalidate_drawdown_pct": r.get("invalidate_drawdown_pct"),
+                "price_at_decision": str(closes.get(r["ticker"], "")),
+            }
+            for r in parsed.rows
+        ],
+    )
+    _append_once(
+        files.scope,
+        [
+            {
+                **stamp,
+                "reviewed": list(packet["under_review"]),
+                "full_review": attention.full_review,
+                "full_review_why": attention.full_review_why,
+                "not_reviewed": {
+                    t: "not reviewed tonight: no trigger" for t in held if t not in reviewed
+                },
+                "ignored": parsed.ignored,
+            }
+        ],
+    )
     queued = [
         {"ticker": o.order.ticker, "action": o.order.action, "quantity": o.order.quantity}
         for o in live
@@ -1272,7 +1430,7 @@ def review(
         },
     }
     book.stepped_through = market.as_of
-    _mark(files, market.as_of, "queued", digest=digest, orders=len(queued))
+    _mark(files, market.as_of, "queued", digest=digest, orders=len(queued), manager=book.manager)
     decisions = [
         Decision(
             on=market.as_of,

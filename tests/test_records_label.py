@@ -92,3 +92,25 @@ def test_the_harness_counts_purchases_and_ai_pm3_evenings(tmp_path: Path) -> Non
     assert "Evenings with a saved review receipt: **1**" in text
     assert "₹60,072" in text and "**OVER**" in text
     assert problems == 1
+
+
+def test_holding_is_not_counted_as_a_cancelled_trade(tmp_path: Path) -> None:
+    import evaluate
+
+    store = manager.Store(tmp_path / "manager")
+    manager._append(
+        store.decisions,
+        [
+            {"version": "AI-PM-3", "model": "test", "intent": "hold", "accepted_quantity": 0},
+            {
+                "version": "AI-PM-3",
+                "model": "test",
+                "intent": "open",
+                "accepted_quantity": 10,
+                "status": "bought",
+            },
+        ],
+    )
+    lines, problems = evaluate._operation(store, tmp_path / "receipts")
+    assert "Trade intentions reduced or left without an order: **0 of 1**" in "\n".join(lines)
+    assert problems == 0
