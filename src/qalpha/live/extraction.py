@@ -26,7 +26,7 @@ import hashlib
 import os
 import re
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -501,18 +501,24 @@ def _run_round(
     generate: GenerateFn,
     model: str,
     workers: int,
-) -> list[_Outcome]:
-    """Run one round of batches, returning outcomes **in the order given**, not the order finished.
+) -> Iterator[_Outcome]:
+    """Run one round of batches, yielding outcomes **in the order given**, not the order finished.
+
+    **Yielded as each lands, never collected first.** A round is every batch of a run, so returning a
+    list meant the per-batch checkpoint in :func:`extract` ran only after the last call: a 160-batch
+    local read stopped at batch 100 had saved nothing, and resumed from zero.
 
     ``workers <= 1`` takes the sequential path and starts no pool at all, so the daily run behaves
     exactly as it did before concurrency existed.
     """
     if workers <= 1:
-        return [_call_one(path, batch, generate, model) for path, batch in work]
+        for path, batch in work:
+            yield _call_one(path, batch, generate, model)
+        return
     from concurrent.futures import ThreadPoolExecutor
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        return list(pool.map(lambda item: _call_one(item[0], item[1], generate, model), work))
+        yield from pool.map(lambda item: _call_one(item[0], item[1], generate, model), work)
 
 
 def extract(

@@ -170,11 +170,20 @@ def load_sample(path: Path | None = None) -> list[SampleDoc]:
     ]
 
 
+def unique_documents(sample: Sequence[SampleDoc]) -> int:
+    """How many distinct documents the sample holds — what "read all of them" is measured against."""
+    return len({d.sha256 for d in sample})
+
+
 def load_documents(sample: Sequence[SampleDoc]) -> tuple[list[Any], list[str]]:
     """The archived filings, **hash re-verified**. ``(documents, problems)``.
 
     A document whose bytes no longer match its provenance is left out and named: measuring readers
     on an edited primary source would measure the edit.
+
+    **One entry per document.** A company sometimes files the same PDF under two announcements
+    (VBL filed one under both "Change in Director(s)" and "Updates"). It is one document: read once,
+    counted once, and never sent twice in one batch.
     """
     from qalpha.live.announcements import Announcement, SourceDocument, load_document
 
@@ -195,6 +204,8 @@ def load_documents(sample: Sequence[SampleDoc]) -> tuple[list[Any], list[str]]:
             continue
         if prov.sha256 != item.sha256:
             problems.append(f"{item.symbol}/{item.seq_id}: bytes changed since sampling")
+            continue
+        if any(d.provenance.sha256 == prov.sha256 for d in docs):
             continue
         docs.append(SourceDocument(announcement=ann, text=text, provenance=prov))
     return docs, problems

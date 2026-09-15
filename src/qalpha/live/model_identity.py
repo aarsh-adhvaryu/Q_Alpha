@@ -29,13 +29,18 @@ class ModelChangedError(RuntimeError):
     """The model that answered is not the model that was registered."""
 
 
+def _local_name(name: str) -> str:
+    """``qwen3.5-9b-16k`` and ``qwen3.5-9b-16k:latest`` are one Ollama model; no API id ends so."""
+    return name.removesuffix(":latest")
+
+
 def check_returned(requested: str, returned: str) -> None:
     """A reply that names a different model than the request is refused.
 
     An empty ``returned`` is recorded as unknown by the caller rather than treated as a match or a
     mismatch: some servers omit the field, and inventing a mismatch would stop every call to them.
     """
-    if returned and returned != requested:
+    if returned and _local_name(returned) != _local_name(requested):
         raise ModelChangedError(
             f"asked for {requested!r} but {returned!r} answered; a redirected model is a different "
             "treatment — revalidate before using it"

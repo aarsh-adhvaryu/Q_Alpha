@@ -272,6 +272,9 @@ def test_a_redirected_model_stops_the_call_but_its_cost_is_still_recorded(
 def test_the_returned_model_must_be_the_requested_one() -> None:
     check_returned("deepseek-flash", "deepseek-flash")
     check_returned("deepseek-flash", "")  # not reported: unknown, recorded by the caller
+    check_returned("qwen3.5-9b-16k", "qwen3.5-9b-16k:latest")  # Ollama's default tag, same weights
+    with pytest.raises(ModelChangedError):
+        check_returned("qwen3.5-9b-16k", "qwen3.5-9b-16k:q8")
     with pytest.raises(ModelChangedError):
         check_returned("deepseek-flash", "deepseek-v4.1-flash")
 
