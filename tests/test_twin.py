@@ -221,26 +221,25 @@ def test_the_start_in_the_code_is_the_start_in_the_registration() -> None:
 
     from qalpha.live.twin import EVALUATION_START
 
-    recorded = Path(__file__).resolve().parents[1] / "reports/PREREGISTRATION_AI_PM1.md"
-    dates = set(
-        re.findall(r"start date set to (\d{4}-\d{2}-\d{2})", recorded.read_text(encoding="utf-8"))
-    )
-    assert EVALUATION_START is not None
-    assert dates == {EVALUATION_START.isoformat()}, (
+    recorded = Path(__file__).resolve().parents[1] / "reports/PREREGISTRATION_AI_PM2.md"
+    rows = re.findall(r"^\| Start \| \*\*([^*]+)\*\*", recorded.read_text(encoding="utf-8"), re.M)
+    assert len(rows) == 1, "the registration must state exactly one start"
+    expected = None if rows[0] == "none" else rows[0]
+    assert (EVALUATION_START.isoformat() if EVALUATION_START else None) == expected, (
         "the registration must record the start date the code runs on"
     )
 
 
-def test_the_start_holds_across_a_holiday() -> None:
-    """The start falls on Ganesh Chaturthi. A book is stepped on the day its prices come from, so
-    the first review lands on the first session on or after it — not on Friday's close twice."""
+def test_a_start_holds_across_a_holiday() -> None:
+    """A start on Ganesh Chaturthi. A book is stepped on the day its prices come from, so the first
+    review lands on the first session on or after it — not on Friday's close twice."""
     from qalpha.live import calendar as nse
-    from qalpha.live.twin import EVALUATION_START, is_autonomous
+    from qalpha.live.twin import is_autonomous
 
-    assert EVALUATION_START is not None
-    assert nse.closure_reason(EVALUATION_START), "this test is about a start on a closed day"
-    assert is_autonomous(date(2026, 9, 11)) is False, "Friday's close is before the window"
-    assert is_autonomous(date(2026, 9, 15)) is True, "the first session on or after it decides"
+    start = date(2026, 9, 14)
+    assert nse.closure_reason(start), "this test is about a start on a closed day"
+    assert is_autonomous(date(2026, 9, 11), start=start) is False, "Friday is before the window"
+    assert is_autonomous(date(2026, 9, 15), start=start) is True, "the first session after decides"
 
 
 def test_the_daily_caller_asks_the_registered_start() -> None:

@@ -27,7 +27,7 @@ is as readable as a positive one, and so that neither can be reinterpreted after
 | Filing reader | `claude-sonnet-5` under EX-3; headlines under NEWS-1. Pinned into the corpus label. |
 | Cadence | One review per trading evening, after 17:00 IST, on that day's close. |
 | Horizon | Years. Holding is a decision. |
-| Start | **2026-09-15**, the first session on or after the registered start of 2026-09-14 (Ganesh Chaturthi). |
+| Start | **none** — the start of 2026-09-14 was withdrawn on 2026-09-15 before any review ran (§8). A new date is registered here, before it opens, after the historical replay. |
 
 ## 3. The mandate
 
@@ -158,3 +158,11 @@ NIFTYBEES, which is the do-nothing floor.
   contains, so they are part of AI-PM-2 **only if merged and imported before the first review on
   2026-09-15**; after it, the same change would be a new version. Six candidates still have unread
   filings and are shown to the investor as not shown, with the reason, until a backfill reads them.
+- **2026-09-15** — **start withdrawn, before any review ran**, at the user's instruction. The record
+  under AI-PM-2 is still one shadow review and no real decision, so nothing is relabelled. Reason: run
+  the investor over past sessions first, on a copy of the book, to find operational failures before a
+  forward record begins. That replay is **a plumbing test, not a performance result**: the model may
+  already know how those sessions turned out, headlines are archived only from 2026-09-10, and
+  filings are read back to 2025-09 for 25 names. `EVALUATION_START` is `None`; SYSTEM keeps mirroring
+  REAL. A forward start is set in §2 before it opens; anything the replay changes in the model,
+  prompt, packet or limits makes that start a new version.

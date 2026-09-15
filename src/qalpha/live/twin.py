@@ -309,9 +309,10 @@ def baseline_mark(flows: Sequence[Flow], series: pd.Series, as_of: date) -> Book
 #: session on or after this date. A start date that fell on a holiday used to be the sort of thing
 #: that silently skipped a day or reviewed Friday's close twice.
 #:
-#: It replaced ``None``, which is what the withdrawn rulebook start left behind (2026-09-13, before
-#: that window opened). ``None`` still means "no autonomous window is registered".
-EVALUATION_START: date | None = date(2026, 9, 14)
+#: **Withdrawn 2026-09-15, before any review ran** (``reports/PREREGISTRATION_AI_PM2.md`` §2): the
+#: investor is first replayed over past sessions, and the forward start is registered after that.
+#: ``None`` means "no autonomous window is registered" — SYSTEM mirrors REAL and nothing is measured.
+EVALUATION_START: date | None = None
 
 
 def is_autonomous(as_of: date, *, start: date | None = EVALUATION_START) -> bool:

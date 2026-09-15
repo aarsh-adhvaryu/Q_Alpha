@@ -23,7 +23,7 @@ plan and report are in git history.
 |---|---|
 | **Working** | The evening run: prices → filings → headlines → filed results → four paper books marked against two index funds. Tax-exact FIFO accounting. Resumes where it stopped. |
 | **Built, starting** | The investor (AI-PM-2, `live/manager.py`), registered in [reports/PREREGISTRATION_AI_PM2.md](reports/PREREGISTRATION_AI_PM2.md). AI-PM-1 was closed before it made a decision. Until its first review `SYSTEM` mirrors the user's holdings. |
-| **Start date** | 2026-09-14 (Ganesh Chaturthi, exchange closed): the first review is the evening of Tue 2026-09-15, filling on the 16th. |
+| **Start date** | **None registered.** The 2026-09-14 start was withdrawn before any review ran. Next: replay the investor over past sessions as a plumbing test (not a performance result), then register a forward start and run a month with the code frozen. |
 | **Proven edge** | None. See §6. |
 
 ---

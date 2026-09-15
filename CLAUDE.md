@@ -33,7 +33,9 @@ The build plan (README § "What is being built") is **done through step E**. The
 bounded read-only research once before deciding. Step F (training) is deliberately not started —
 there is no measured deficiency to train against, and the standard for starting is in the README.
 
-From here the job is to **run it**: one evening a day, and read what it wrote.
+Its forward start is **withdrawn** (none registered). Next: replay it over past sessions on a copy of
+the book — a plumbing test, never a performance result, because the model may know those outcomes —
+then register a start and run one month with code, prompt and limits frozen.
 
 ---
 
