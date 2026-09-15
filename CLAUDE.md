@@ -28,12 +28,40 @@ only when he asks. When he asks about the maths: formula → example → why.
 **[README.md](README.md) is the project** — what it is, how it runs, what was learned, the maths, and
 the build plan. Read it first. Keep it true: edit the line that changed; never append a log.
 
-The build plan (README § "What is being built") is **done through step E**. The investor is
-**AI-PM-2**: it sees the companies' own filed quarterly results, point in time, and may ask for
-bounded read-only research once before deciding. Step F (training) is deliberately not started —
-there is no measured deficiency to train against, and the standard for starting is in the README.
+**The investor running SYSTEM is AI-PM-2** (registered; first review 2026-09-15). Steps A–E are done;
+step F (training) is deliberately not started — no measured deficiency to train against.
 
-From here the job is to **run it**: one evening a day, and read what it wrote.
+**The five-phase plan to make it an agent is built** (plan: `~/.claude/plans/this-is-a-big-hidden-mango.md`):
+
+| Phase | What | State |
+|---|---|---|
+| 1 Spend controls | `live/spend.py`, `live/model_identity.py` | merged |
+| 2 Readers + triage (EX-5) | `live/readers.py`, `reference.py`, `reader_scoring.py`, `triage.py`, `scripts/readers.py` | merged; **measurement in progress** |
+| 3 Knowledge graph + quant cards | `live/graph*.py`, `relations.py`, `quant.py`, `scripts/graph.py` | PR #155 |
+| 5 Sizing that expands | `live/sizing.py`, `mandate.Sizing` | PR #156 (stacked on #155) |
+| 4 AI-PM-3 agent | `live/agent.py`, `attention.py`, `scenarios.py`, `scripts/agent.py` | PR #157 (stacked on #156) |
+| Records | backfill, EX-5 runs and reference, spend ledger | PR #158 (independent) |
+
+Merge order: #155 → #156 → #157; #158 any time.
+
+**Open, in order** (the user runs anything that spends money or reads the network):
+
+1. **EX-5.** Local runs done (qwen3.5-9b-16k, gemma4-12b-16k, qwen3-8b-32k: 149/149). Opus reference
+   collected for all 149; adjudication batches partly collected — repeat `readers.py adjudicate
+   collect` / `submit --budget-usd 30` until nothing is left. Then the user reads 20 documents
+   (`data/readers/human/`) and fills 25 claim checks, then `readers.py score`. **Open decision for the
+   user:** no reader has reached the registered ≥90% verbatim threshold (Sonnet measured 71% under
+   EX-3); changing it after seeing results would be moving the goalposts — the registered fallback is
+   "best reader on material filings only".
+2. **After merging #155–#157:** `uv sync --extra graph`; `graph.py ingest`; `graph.py relations` for
+   holdings; `agent.py attention`; `agent.py scenarios --model claude-sonnet-5`; `agent.py shadow-review`.
+3. **Start AI-PM-3** only when `reports/PREREGISTRATION_AI_PM3.md` §7 holds: set the start date there
+   and in `agent.Registration.start` in one PR. Until then `twin.py` runs AI-PM-2.
+4. **Known gaps:** ratings / board / shareholding / related-party feeds not ingested (graph says
+   MISSING); Neo4j projection untested against a live database; agreement on ~30 reconstructed past
+   packets not built (needs AI-PM-2 receipts); the shadow book re-checks only cash at fill.
+
+From here the job is to **run it** — one evening a day — and to finish the measurements above.
 
 ---
 
@@ -95,7 +123,7 @@ From here the job is to **run it**: one evening a day, and read what it wrote.
 ## Commands
 
 ```bash
-uv sync --extra dev --extra ai          # --extra ai alone drops ruff and mypy
+uv sync --extra dev --extra ai --extra graph   # --extra ai alone drops ruff and mypy; graph = neo4j driver
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src scripts
 uv run pytest
@@ -115,6 +143,7 @@ uv run python scripts/graph.py coverage --only INFY  # known / MISSING / unknown
 uv run python scripts/agent.py attention             # AI-PM-3: tonight's triggers, no model call
 uv run python scripts/agent.py scenarios --model claude-sonnet-5 --budget-usd 2
 uv run python scripts/agent.py shadow-review         # one real AI-PM-3 review on a COPY of SYSTEM
+uv run python scripts/agent.py compare               # live book vs the expanding shadow book
 uv run python scripts/models.py list                 # local models: served vs pinned digests
 uv run python scripts/models.py pin qwen3.5:9b       # register a measured local model's weights
 ```
