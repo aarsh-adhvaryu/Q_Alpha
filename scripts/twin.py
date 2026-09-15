@@ -543,6 +543,21 @@ def step_system(
                 "Refresh prices; nothing was reviewed."
             )
         print(f"[investor] {nse.describe(today, traded=False)} — nothing to review.")
+    from qalpha.live import agent
+
+    if agent.active(today):
+        # AI-PM-3's evening fills its own orders, then attends and reviews. Never both investors.
+        if market.as_of != today:
+            agent.fill_live(book, market, now=now, store=store, registration=agent.REGISTRATION)
+            return None
+        try:
+            decisions = agent.review(
+                book, market, now=now, store=store, failed_steps=agent.failed_steps_today(today)
+            )
+        except manager.IncompleteReviewError as exc:
+            return str(exc)
+        print(decisions_markdown(decisions) if decisions else "[investor] already reviewed today")
+        return None
     for fill in manager.fill_pending(book, market, now=now, store=store):
         print(
             f"[investor] {fill['action']} {fill['filled']}/{fill['requested']} {fill['ticker']} "
