@@ -90,8 +90,9 @@ save, so recovery restores the same result without spending the allowance or app
 
 ## 7. Start
 
-**Start date: not set.** `twin.EVALUATION_START` — read by `agent.Registration.start` — is `None`,
-so SYSTEM mirrors REAL and nothing decides.
+**Start date: 2026-09-16.** Written here and in `twin.EVALUATION_START` in one commit on 2026-09-15,
+before that evening. The first review is the evening of Wednesday 16 September; an order it queues
+can first fill at Thursday 17 September's close. Sections 1–6 are now frozen for the first month.
 
 AI-PM-3 starts the trading evening after all of these hold, and the date is then written here and in
 `twin.EVALUATION_START` in the same commit, before that evening:
@@ -100,6 +101,26 @@ AI-PM-3 starts the trading evening after all of these hold, and the date is then
 2. `scripts/agent.py scenarios --model claude-sonnet-5` passes every scenario.
 3. `scripts/agent.py shadow-review` has run once on real data, and its receipt has been read by a person.
 4. SYSTEM has no order waiting to fill.
+
+**How each held, 2026-09-15:**
+
+1. Phases 3–5 merged (#155–#157), AI-PM-3 made the only investor (#162) with release fixes (#163,
+   758 tests passed). `graph.py ingest` ran on the real archive: 16,166 assertion versions.
+2. `agent.py scenarios --model claude-sonnet-5`: **5 of 5 passed** —
+   `data/twin/agent/scenarios/claude-sonnet-5.json`.
+3. `agent.py shadow-review` ran on real data — the close of 2026-09-11, the latest the panel held
+   when it ran — a full Friday review of 8 holdings and 8 candidates, no research round, 104,216
+   input and 14,371 output tokens. Receipt:
+   `data/twin/agent/shadow-review/receipts/2026-09-11-review-d7a3e4861179c83191988fa5.json`.
+   Intentions: reduce JIOFIN, TATAPOWER, VBL; add TCS, WIPRO; hold HCLTECH, INFY, MUTHOOTFIN. Every
+   cited event exists in the packet, is dated on or before 2026-09-11, and its quote supports the
+   reason. One wording overreach was noted: TATAPOWER's reason calls the SIAC award "fresh", while
+   the cited filing says it was made in July 2025; the new fact is the 2026-09-10 headline. Read by
+   the user before this date was merged.
+4. SYSTEM's `pending` is `None`.
+
+**Released code:** main at `8bb6375` (#163) plus this commit. Code, model ids, prompts and sizing
+rules are frozen for the first month; prices, evidence, memory, holdings and records keep updating.
 
 ## 8. Corrections
 
